@@ -5,10 +5,17 @@ options:
     iOS: "17.0"
   xcodeVersion: "16.0"
 
+packages:
+  KontextVideoSDK:
+    path: ../
+
 targets:
   Example:
     type: application
     platform: iOS
+    dependencies:
+      - package: KontextVideoSDK
+        product: KontextVideoSDK
     sources:
       - path: Example
         excludes:

@@ -1,3 +1,4 @@
+import KontextVideoSDK
 import SwiftUI
 
 /// Fullscreen vertical feed of a story's episodes — swipe up/down to change episode.
@@ -6,6 +7,7 @@ struct StoryPlayerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentEpisodeID: Episode.ID?
+    @State private var currentAds: VideoAds?
 
     init(story: Story) {
         self.story = story
@@ -38,6 +40,15 @@ struct StoryPlayerView: View {
             closeButton
         }
         .statusBarHidden()
+        .onChange(of: currentEpisodeID, initial: true) {
+            guard let episode = story.episodes.first(where: { $0.id == currentEpisodeID }) else {
+                return
+            }
+            currentAds = Ads.session.startVideo(
+                externalId: episode.id,
+                title: "\(story.title) — Episode \(episode.number): \(episode.title)"
+            )
+        }
     }
 
     private var closeButton: some View {
