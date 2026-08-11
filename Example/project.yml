@@ -10,7 +10,11 @@ targets:
     type: application
     platform: iOS
     sources:
-      - Example
+      - path: Example
+        excludes:
+          - Resources
+      - path: Example/Resources
+        buildPhase: resources
     settings:
       base:
         SWIFT_VERSION: "5.9"

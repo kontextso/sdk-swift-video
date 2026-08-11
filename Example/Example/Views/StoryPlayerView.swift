@@ -7,6 +7,11 @@ struct StoryPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var currentEpisodeID: Episode.ID?
 
+    init(story: Story) {
+        self.story = story
+        _currentEpisodeID = State(initialValue: story.episodes.first?.id)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ScrollView(.vertical) {
@@ -31,9 +36,6 @@ struct StoryPlayerView: View {
         .background(.black)
         .overlay(alignment: .topTrailing) {
             closeButton
-        }
-        .onAppear {
-            currentEpisodeID = story.episodes.first?.id
         }
         .statusBarHidden()
     }

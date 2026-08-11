@@ -100,7 +100,7 @@ private struct PlayerLayerView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PlayerLayerUIView {
         let view = PlayerLayerUIView()
-        view.playerLayer.videoGravity = .resizeAspect
+        view.playerLayer.videoGravity = .resizeAspectFill
         view.playerLayer.player = player
         return view
     }

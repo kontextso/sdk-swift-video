@@ -15,63 +15,60 @@ struct Episode: Identifiable, Hashable {
     let videoURL: URL
 }
 
+/// Bundled portrait (9:16) sample clip — every episode plays this same video.
+/// Source: Mixkit free stock footage (ocean waves), re-used under the Mixkit license.
+private let sampleVideoURL = Bundle.main.url(forResource: "sample-episode", withExtension: "mp4")!
+
 extension Story {
-    /// Sample stories backed by public test videos (Google's gtv-videos-bucket).
     static let samples: [Story] = [
         Story(
             id: "ceo-secret",
             title: "The CEO's Secret",
             genre: "Romance",
             coverGradient: [.pink, .purple],
-            episodes: [
-                .sample(story: "ceo-secret", number: 1, title: "The Interview", file: "ForBiggerBlazes"),
-                .sample(story: "ceo-secret", number: 2, title: "Late Night at the Office", file: "ForBiggerEscapes"),
-                .sample(story: "ceo-secret", number: 3, title: "The Gala", file: "ForBiggerFun"),
-            ]
+            episodes: .samples(story: "ceo-secret", titles: [
+                "The Interview", "Late Night at the Office", "The Gala",
+            ])
         ),
         Story(
             id: "revenge-heiress",
             title: "Revenge of the Heiress",
             genre: "Drama",
             coverGradient: [.orange, .red],
-            episodes: [
-                .sample(story: "revenge-heiress", number: 1, title: "Disinherited", file: "ForBiggerJoyrides"),
-                .sample(story: "revenge-heiress", number: 2, title: "The Return", file: "ForBiggerMeltdowns"),
-                .sample(story: "revenge-heiress", number: 3, title: "Checkmate", file: "ForBiggerBlazes"),
-            ]
+            episodes: .samples(story: "revenge-heiress", titles: [
+                "Disinherited", "The Return", "Checkmate",
+            ])
         ),
         Story(
             id: "moonlit-contract",
             title: "Moonlit Contract",
             genre: "Fantasy",
             coverGradient: [.indigo, .blue],
-            episodes: [
-                .sample(story: "moonlit-contract", number: 1, title: "The Pact", file: "ForBiggerEscapes"),
-                .sample(story: "moonlit-contract", number: 2, title: "Blood Moon", file: "ForBiggerFun"),
-                .sample(story: "moonlit-contract", number: 3, title: "Broken Vows", file: "ForBiggerJoyrides"),
-            ]
+            episodes: .samples(story: "moonlit-contract", titles: [
+                "The Pact", "Blood Moon", "Broken Vows",
+            ])
         ),
         Story(
             id: "second-chance",
             title: "Second Chance Love",
             genre: "Romance",
             coverGradient: [.teal, .green],
-            episodes: [
-                .sample(story: "second-chance", number: 1, title: "Ten Years Later", file: "ForBiggerMeltdowns"),
-                .sample(story: "second-chance", number: 2, title: "The Reunion", file: "ForBiggerBlazes"),
-                .sample(story: "second-chance", number: 3, title: "One More Try", file: "ForBiggerEscapes"),
-            ]
+            episodes: .samples(story: "second-chance", titles: [
+                "Ten Years Later", "The Reunion", "One More Try",
+            ])
         ),
     ]
 }
 
-private extension Episode {
-    static func sample(story: String, number: Int, title: String, file: String) -> Episode {
-        Episode(
-            id: "\(story)-ep\(number)",
-            number: number,
-            title: title,
-            videoURL: URL(string: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/\(file).mp4")!
-        )
+private extension [Episode] {
+    static func samples(story: String, titles: [String]) -> [Episode] {
+        titles.enumerated().map { index, title in
+            Episode(
+                id: "\(story)-ep\(index + 1)",
+                number: index + 1,
+                title: title,
+                videoURL: sampleVideoURL
+            )
+        }
     }
 }

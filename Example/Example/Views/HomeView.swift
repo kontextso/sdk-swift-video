@@ -29,6 +29,13 @@ struct HomeView: View {
         .fullScreenCover(item: $selectedStory) { story in
             StoryPlayerView(story: story)
         }
+        .onAppear {
+            // Debug/CI hook: jump straight into the player, e.g.
+            // SIMCTL_CHILD_AUTO_OPEN_STORY=1 xcrun simctl launch ...
+            if ProcessInfo.processInfo.environment["AUTO_OPEN_STORY"] != nil {
+                selectedStory = Story.samples.first
+            }
+        }
     }
 }
 
