@@ -45,7 +45,7 @@ struct StoryPlayerView: View {
                 return
             }
             currentAds = Ads.session.startVideo(
-                externalId: episode.id,
+                externalId: Ads.demoTitleId,
                 title: "\(story.title) — Episode \(episode.number): \(episode.title)"
             )
         }

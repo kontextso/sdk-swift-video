@@ -12,7 +12,9 @@ public final class VideoAds {
     public let externalId: String
 
     private weak var session: VideoSession?
-    private var preparedAds: [PreloadedAd] = []
+
+    /// Overlay ads prepared for this video, in timeline order.
+    public private(set) var overlays: [InstreamAd] = []
 
     init(externalId: String, session: VideoSession) {
         self.externalId = externalId
@@ -26,14 +28,13 @@ public final class VideoAds {
     /// video the banner belongs to, even if the next episode is already
     /// preloading.
     public func showSwipeBanner() {
-        // TODO: present the prepared swipe banner over the attached player.
-        guard preparedAds.contains(where: { $0.format == .swipeBanner }) else { return }
-        session?.emit(.shown(VideoAdEvent.AdData(format: .swipeBanner, externalId: externalId)))
+        // TODO: the current /ads endpoint serves only overlays; wire this up
+        // once the server adds the swipeBanner format.
     }
 
     // MARK: - Internal
 
-    func apply(_ response: PreloadResponse) {
-        preparedAds = response.ads
+    func apply(_ slots: [InstreamAd]) {
+        overlays = slots
     }
 }
