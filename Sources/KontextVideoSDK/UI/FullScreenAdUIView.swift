@@ -1,13 +1,30 @@
 import UIKit
 
-/// Full-screen swipe banner shown between episodes. Dismissed via the close
-/// button; tapping the card opens the click-through URL.
-final class SwipeBannerUIView: UIView {
+/// Full-screen ad takeover, used by both the swipe banner (between
+/// episodes) and the pause ad (over the paused frame). Dismissed via the
+/// close button; tapping the CTA opens the click-through URL.
+final class FullScreenAdUIView: UIView {
+    enum Style {
+        /// Nearly opaque — shown between episodes.
+        case swipeBanner
+        /// Translucent — the paused frame stays visible behind the ad.
+        case pauseAd
+
+        var backgroundAlpha: CGFloat {
+            switch self {
+            case .swipeBanner: 0.94
+            case .pauseAd: 0.78
+            }
+        }
+    }
+
     private let creative: InstreamAdCreative
+    private let style: Style
     var onClose: (() -> Void)?
 
-    init(creative: InstreamAdCreative) {
+    init(creative: InstreamAdCreative, style: Style) {
         self.creative = creative
+        self.style = style
         super.init(frame: .zero)
         setUp()
     }
@@ -18,7 +35,7 @@ final class SwipeBannerUIView: UIView {
     }
 
     private func setUp() {
-        backgroundColor = UIColor.black.withAlphaComponent(0.94)
+        backgroundColor = UIColor.black.withAlphaComponent(style.backgroundAlpha)
 
         let adLabel = UILabel()
         adLabel.text = "AD"

@@ -33,8 +33,8 @@ public final class VideoSession {
     private var hasStartedPlayback = false
     private var overlayView: OverlayAdUIView?
     private var overlayBidId: String?
-    private var pauseAdView: OverlayAdUIView?
-    private var swipeBannerView: SwipeBannerUIView?
+    private var pauseAdView: FullScreenAdUIView?
+    private var swipeBannerView: FullScreenAdUIView?
 
     init(options: VideoSessionOptions) {
         self.options = options
@@ -244,13 +244,18 @@ public final class VideoSession {
 
     private func showPauseAd(creative: InstreamAdCreative, externalId: String) {
         guard let playerView, pauseAdView == nil else { return }
-        let view = OverlayAdUIView(creative: creative)
+        let view = FullScreenAdUIView(creative: creative, style: .pauseAd)
         view.translatesAutoresizingMaskIntoConstraints = false
+        view.onClose = { [weak self] in
+            // Dismisses the ad only — the video stays paused.
+            self?.hidePauseAd()
+        }
         playerView.addSubview(view)
         NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor, constant: 16),
-            view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor, constant: -16),
-            view.centerYAnchor.constraint(equalTo: playerView.centerYAnchor),
+            view.topAnchor.constraint(equalTo: playerView.topAnchor),
+            view.bottomAnchor.constraint(equalTo: playerView.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor),
         ])
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
@@ -270,7 +275,7 @@ public final class VideoSession {
               let host = playerView?.window ?? playerView else {
             return
         }
-        let view = SwipeBannerUIView(creative: creative)
+        let view = FullScreenAdUIView(creative: creative, style: .swipeBanner)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onClose = { [weak self] in
             self?.swipeBannerView?.removeFromSuperview()
