@@ -1,30 +1,13 @@
 import UIKit
 
-/// Full-screen ad takeover, used by both the swipe banner (between
-/// episodes) and the pause ad (over the paused frame). Dismissed via the
-/// close button; tapping the CTA opens the click-through URL.
+/// Full-screen swipe banner shown between episodes. Dismissed via the close
+/// button; tapping the CTA opens the click-through URL.
 final class FullScreenAdUIView: UIView {
-    enum Style {
-        /// Nearly opaque — shown between episodes.
-        case swipeBanner
-        /// Translucent — the paused frame stays visible behind the ad.
-        case pauseAd
-
-        var backgroundAlpha: CGFloat {
-            switch self {
-            case .swipeBanner: 0.94
-            case .pauseAd: 0.78
-            }
-        }
-    }
-
     private let creative: InstreamAdCreative
-    private let style: Style
     var onClose: (() -> Void)?
 
-    init(creative: InstreamAdCreative, style: Style) {
+    init(creative: InstreamAdCreative) {
         self.creative = creative
-        self.style = style
         super.init(frame: .zero)
         setUp()
     }
@@ -35,7 +18,7 @@ final class FullScreenAdUIView: UIView {
     }
 
     private func setUp() {
-        backgroundColor = UIColor.black.withAlphaComponent(style.backgroundAlpha)
+        backgroundColor = UIColor.black.withAlphaComponent(0.94)
 
         let adLabel = UILabel()
         adLabel.text = "AD"
@@ -50,7 +33,7 @@ final class FullScreenAdUIView: UIView {
         imageView.backgroundColor = UIColor.white.withAlphaComponent(0.08)
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor, multiplier: 0.6).isActive = true
-        loadImage(into: imageView)
+        AdImageLoader.load(creative.image.url, into: imageView)
 
         let headline = UILabel()
         headline.text = creative.headline
@@ -96,19 +79,11 @@ final class FullScreenAdUIView: UIView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 28),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -28),
             imageView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            close.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 12),
+            close.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 16),
             close.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             close.widthAnchor.constraint(equalToConstant: 32),
             close.heightAnchor.constraint(equalToConstant: 32),
         ])
-    }
-
-    private func loadImage(into imageView: UIImageView) {
-        guard let url = URL(string: creative.image.url) else { return }
-        Task { [weak imageView] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
-            imageView?.image = UIImage(data: data)
-        }
     }
 
     @objc private func didTapCTA() {
@@ -118,5 +93,17 @@ final class FullScreenAdUIView: UIView {
 
     @objc private func didTapClose() {
         onClose?()
+    }
+}
+
+/// Shared one-shot image loader for ad views.
+enum AdImageLoader {
+    @MainActor
+    static func load(_ urlString: String, into imageView: UIImageView) {
+        guard let url = URL(string: urlString) else { return }
+        Task { [weak imageView] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+            imageView?.image = UIImage(data: data)
+        }
     }
 }

@@ -16,7 +16,7 @@
             <AdTitle>Mock overlay</AdTitle>
             <Creatives><Creative id="slot-0-creative">
               <CreativeExtensions><CreativeExtension type="kontext-overlay">
-                <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="0" format="overlay" position="bottom" endMs="16000">
+                <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="0" format="overlay" position="bottom" endMs="4000">
                   <kontext:Creative>
                     <kontext:Image url="https://storage.googleapis.com/ad-creatives-public/video-ads-sourced/c709183aafdad6d9600252af48814031e188f0d2917aca0b0a90504dc0126da5" w="578" h="346"/>
                     <kontext:Headline>Keep laundry day running smoothly</kontext:Headline>
@@ -25,7 +25,7 @@
                   </kontext:Creative>
                 </kontext:Overlay>
               </CreativeExtension></CreativeExtensions>
-              <NonLinearAds><NonLinear width="390" height="152" minSuggestedDuration="00:00:15.000" scalable="false">
+              <NonLinearAds><NonLinear width="390" height="152" minSuggestedDuration="00:00:03.000" scalable="false">
                 <IFrameResource><![CDATA[https://example.invalid/api/frame/00000000-0000-7000-8000-0000000000f1]]></IFrameResource>
               </NonLinear></NonLinearAds>
             </Creative></Creatives>
@@ -47,8 +47,9 @@
                 <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="1" format="pauseAd" position="bottom">
                   <kontext:Creative>
                     <kontext:Image url="https://storage.googleapis.com/ad-creatives-public/video-ads-sourced/c709183aafdad6d9600252af48814031e188f0d2917aca0b0a90504dc0126da5" w="578" h="346"/>
+                    <kontext:Advertiser>Tide</kontext:Advertiser>
                     <kontext:Headline>Taking a break? Perfect timing</kontext:Headline>
-                    <kontext:Body>A paused moment is a good moment — stock up on Tide before the story continues.</kontext:Body>
+                    <kontext:Body>A paused moment is a good moment — stock up on Tide before the story continues. From $12.</kontext:Body>
                     <kontext:CTA text="Shop now" url="https://kontext.so"/>
                   </kontext:Creative>
                 </kontext:Overlay>

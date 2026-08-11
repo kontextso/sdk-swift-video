@@ -40,6 +40,7 @@ enum VMAPParser {
         private var ctaAttributes: [String: String] = [:]
         private var headlineText = ""
         private var bodyText = ""
+        private var advertiserText = ""
 
         func parser(
             _ parser: XMLParser,
@@ -59,6 +60,7 @@ enum VMAPParser {
                 adJsonText = ""
                 headlineText = ""
                 bodyText = ""
+                advertiserText = ""
             case "kontext:Overlay":
                 overlayAttributes = attributes
             case "kontext:AdJson":
@@ -70,6 +72,8 @@ enum VMAPParser {
                 textTarget = "headline"
             case "kontext:Body":
                 textTarget = "body"
+            case "kontext:Advertiser":
+                textTarget = "advertiser"
             case "kontext:CTA":
                 ctaAttributes = attributes
             case "NonLinear":
@@ -94,6 +98,7 @@ enum VMAPParser {
             case "adJson": adJsonText += string
             case "headline": headlineText += string
             case "body": bodyText += string
+            case "advertiser": advertiserText += string
             default: break
             }
         }
@@ -105,7 +110,7 @@ enum VMAPParser {
             qualifiedName: String?
         ) {
             switch elementName {
-            case "kontext:AdJson", "kontext:Headline", "kontext:Body":
+            case "kontext:AdJson", "kontext:Headline", "kontext:Body", "kontext:Advertiser":
                 textTarget = nil
             case "vmap:AdBreak":
                 appendAd()
@@ -148,7 +153,10 @@ enum VMAPParser {
                 ),
                 headline: headlineText.trimmingCharacters(in: .whitespacesAndNewlines),
                 body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
-                cta: InstreamAdCreative.CTA(text: ctaText, mode: "button", url: ctaURL)
+                cta: InstreamAdCreative.CTA(text: ctaText, mode: "button", url: ctaURL),
+                advertiser: advertiserText.isEmpty
+                    ? nil
+                    : advertiserText.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
     }

@@ -61,7 +61,7 @@ final class KontextVideoSDKTests: XCTestCase {
         XCTAssertEqual(ads.map(\.format), [.overlay, .pauseAd, .swipeBanner])
         let overlay = try XCTUnwrap(ads.first)
         XCTAssertEqual(overlay.startMs, 1000)
-        XCTAssertEqual(overlay.endMs, 16000)
+        XCTAssertEqual(overlay.endMs, 4000)
         XCTAssertEqual(overlay.position, "bottom")
         for ad in ads {
             let creative = try XCTUnwrap(ad.creative, "mock ad \(ad.bidId) should carry an inline creative")

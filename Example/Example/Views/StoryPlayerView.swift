@@ -36,8 +36,8 @@ struct StoryPlayerView: View {
         }
         .ignoresSafeArea()
         .background(.black)
-        .overlay(alignment: .topTrailing) {
-            closeButton
+        .overlay(alignment: .topLeading) {
+            backButton
         }
         .statusBarHidden()
         .onChange(of: currentEpisodeID, initial: true) {
@@ -53,17 +53,19 @@ struct StoryPlayerView: View {
         }
     }
 
-    private var closeButton: some View {
+    // A back chevron, not an X — the X is reserved for closing ads, and two
+    // different Xs on screen would be confusing.
+    private var backButton: some View {
         Button {
             dismiss()
         } label: {
-            Image(systemName: "xmark")
+            Image(systemName: "chevron.left")
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(10)
                 .background(.black.opacity(0.4), in: Circle())
         }
-        .padding(.trailing, 16)
+        .padding(.leading, 16)
     }
 }
 

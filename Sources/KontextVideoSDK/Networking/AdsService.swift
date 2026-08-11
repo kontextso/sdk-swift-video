@@ -49,6 +49,9 @@ public struct InstreamAdCreative: Sendable, Decodable {
     public let headline: String
     public let body: String
     public let cta: CTA
+    /// Advertiser/brand display name. Not sent by the server yet — carried
+    /// by the mock response and shown by the pause ad.
+    public let advertiser: String?
 }
 
 struct InstreamAdJson: Decodable {

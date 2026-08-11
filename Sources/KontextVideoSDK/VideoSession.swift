@@ -33,7 +33,7 @@ public final class VideoSession {
     private var hasStartedPlayback = false
     private var overlayView: OverlayAdUIView?
     private var overlayBidId: String?
-    private var pauseAdView: FullScreenAdUIView?
+    private var pauseAdView: PauseAdUIView?
     private var swipeBannerView: FullScreenAdUIView?
 
     init(options: VideoSessionOptions) {
@@ -244,11 +244,12 @@ public final class VideoSession {
 
     private func showPauseAd(creative: InstreamAdCreative, externalId: String) {
         guard let playerView, pauseAdView == nil else { return }
-        let view = FullScreenAdUIView(creative: creative, style: .pauseAd)
+        let view = PauseAdUIView(creative: creative)
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.onClose = { [weak self] in
-            // Dismisses the ad only — the video stays paused.
-            self?.hidePauseAd()
+        view.onResume = { [weak self] in
+            // Resuming playback also hides the ad via the
+            // timeControlStatus observation.
+            self?.player?.play()
         }
         playerView.addSubview(view)
         NSLayoutConstraint.activate([
@@ -275,7 +276,7 @@ public final class VideoSession {
               let host = playerView?.window ?? playerView else {
             return
         }
-        let view = FullScreenAdUIView(creative: creative, style: .swipeBanner)
+        let view = FullScreenAdUIView(creative: creative)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onClose = { [weak self] in
             self?.swipeBannerView?.removeFromSuperview()
