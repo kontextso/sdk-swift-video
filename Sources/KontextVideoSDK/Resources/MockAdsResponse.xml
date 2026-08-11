@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mock of the ad server's /ads (instream VMAP) response, extended with what
+  the server does NOT serve yet: three formats instead of one. The kontext:
+  extension carries a proposed `format` attribute (overlay | pauseAd |
+  swipeBanner) and an inline kontext:Creative so no network is needed.
+  Real responses today: format=overlay only, creative via kontext:AdJson URL.
+-->
+<vmap:VMAP xmlns:vmap="http://www.iab.net/videosuite/vmap" version="1.0">
+  <vmap:AdBreak breakType="nonlinear" breakId="slot-0" timeOffset="00:00:01.000">
+    <vmap:AdSource id="0" allowMultipleAds="false" followRedirects="false">
+      <vmap:VASTAdData>
+        <VAST version="4.2" xmlns="http://www.iab.com/VAST">
+          <Ad id="slot-0"><InLine>
+            <AdSystem version="1.0">Kontext</AdSystem>
+            <AdTitle>Mock overlay</AdTitle>
+            <Creatives><Creative id="slot-0-creative">
+              <CreativeExtensions><CreativeExtension type="kontext-overlay">
+                <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="0" format="overlay" position="bottom" endMs="16000">
+                  <kontext:Creative>
+                    <kontext:Image url="https://storage.googleapis.com/ad-creatives-public/video-ads-sourced/c709183aafdad6d9600252af48814031e188f0d2917aca0b0a90504dc0126da5" w="578" h="346"/>
+                    <kontext:Headline>Keep laundry day running smoothly</kontext:Headline>
+                    <kontext:Body>Tide cuts through tough stains and odors so you get reliable results every single wash.</kontext:Body>
+                    <kontext:CTA text="Shop now" url="https://kontext.so"/>
+                  </kontext:Creative>
+                </kontext:Overlay>
+              </CreativeExtension></CreativeExtensions>
+              <NonLinearAds><NonLinear width="390" height="152" minSuggestedDuration="00:00:15.000" scalable="false">
+                <IFrameResource><![CDATA[https://example.invalid/api/frame/00000000-0000-7000-8000-0000000000f1]]></IFrameResource>
+              </NonLinear></NonLinearAds>
+            </Creative></Creatives>
+          </InLine></Ad>
+        </VAST>
+      </vmap:VASTAdData>
+    </vmap:AdSource>
+  </vmap:AdBreak>
+
+  <vmap:AdBreak breakType="nonlinear" breakId="pause-0" timeOffset="00:00:00.000">
+    <vmap:AdSource id="1" allowMultipleAds="false" followRedirects="false">
+      <vmap:VASTAdData>
+        <VAST version="4.2" xmlns="http://www.iab.com/VAST">
+          <Ad id="pause-0"><InLine>
+            <AdSystem version="1.0">Kontext</AdSystem>
+            <AdTitle>Mock pause ad</AdTitle>
+            <Creatives><Creative id="pause-0-creative">
+              <CreativeExtensions><CreativeExtension type="kontext-overlay">
+                <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="1" format="pauseAd" position="bottom">
+                  <kontext:Creative>
+                    <kontext:Image url="https://storage.googleapis.com/ad-creatives-public/video-ads-sourced/c709183aafdad6d9600252af48814031e188f0d2917aca0b0a90504dc0126da5" w="578" h="346"/>
+                    <kontext:Headline>Taking a break? Perfect timing</kontext:Headline>
+                    <kontext:Body>A paused moment is a good moment — stock up on Tide before the story continues.</kontext:Body>
+                    <kontext:CTA text="Shop now" url="https://kontext.so"/>
+                  </kontext:Creative>
+                </kontext:Overlay>
+              </CreativeExtension></CreativeExtensions>
+              <NonLinearAds><NonLinear width="390" height="152" scalable="false">
+                <IFrameResource><![CDATA[https://example.invalid/api/frame/00000000-0000-7000-8000-0000000000f2]]></IFrameResource>
+              </NonLinear></NonLinearAds>
+            </Creative></Creatives>
+          </InLine></Ad>
+        </VAST>
+      </vmap:VASTAdData>
+    </vmap:AdSource>
+  </vmap:AdBreak>
+
+  <vmap:AdBreak breakType="nonlinear" breakId="swipe-0" timeOffset="00:00:00.000">
+    <vmap:AdSource id="2" allowMultipleAds="false" followRedirects="false">
+      <vmap:VASTAdData>
+        <VAST version="4.2" xmlns="http://www.iab.com/VAST">
+          <Ad id="swipe-0"><InLine>
+            <AdSystem version="1.0">Kontext</AdSystem>
+            <AdTitle>Mock swipe banner</AdTitle>
+            <Creatives><Creative id="swipe-0-creative">
+              <CreativeExtensions><CreativeExtension type="kontext-overlay">
+                <kontext:Overlay xmlns:kontext="urn:kontext:vast-ext:1.0" sessionId="mock-session" index="2" format="swipeBanner">
+                  <kontext:Creative>
+                    <kontext:Image url="https://storage.googleapis.com/ad-creatives-public/video-ads-sourced/c709183aafdad6d9600252af48814031e188f0d2917aca0b0a90504dc0126da5" w="578" h="346"/>
+                    <kontext:Headline>Before the next episode…</kontext:Headline>
+                    <kontext:Body>Keep every plot twist stain-free. Tide has your back between the drama.</kontext:Body>
+                    <kontext:CTA text="Shop now" url="https://kontext.so"/>
+                  </kontext:Creative>
+                </kontext:Overlay>
+              </CreativeExtension></CreativeExtensions>
+              <NonLinearAds><NonLinear width="1170" height="2532" scalable="true">
+                <IFrameResource><![CDATA[https://example.invalid/api/frame/00000000-0000-7000-8000-0000000000f3]]></IFrameResource>
+              </NonLinear></NonLinearAds>
+            </Creative></Creatives>
+          </InLine></Ad>
+        </VAST>
+      </vmap:VASTAdData>
+    </vmap:AdSource>
+  </vmap:AdBreak>
+</vmap:VMAP>

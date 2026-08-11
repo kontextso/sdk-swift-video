@@ -18,6 +18,7 @@ let package = Package(
             path: "Sources/KontextVideoSDK",
             resources: [
                 .copy("PrivacyInfo.xcprivacy"),
+                .copy("Resources/MockAdsResponse.xml"),
             ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),

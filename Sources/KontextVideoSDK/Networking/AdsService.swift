@@ -3,9 +3,14 @@ import Foundation
 /// One preloaded instream ad, parsed from a `/instream/vmap` (aka `/v1/ads`)
 /// ad break.
 public struct InstreamAd: Sendable {
+    /// The ad's format. The real server serves only `.overlay` today; the
+    /// mock response also carries `.pauseAd` and `.swipeBanner` via the
+    /// proposed `format` attribute on the kontext:Overlay extension.
+    public let format: VideoAdFormat
     /// Slot index within the video (0-based).
     public let index: Int
-    /// When the ad should appear, in content time.
+    /// When the ad should appear, in content time. Only meaningful for
+    /// `.overlay` — pause and swipe ads are event-triggered.
     public let startMs: Int
     /// When the ad should be dismissed, in content time.
     public let endMs: Int?
@@ -21,6 +26,9 @@ public struct InstreamAd: Sendable {
     /// Server-assigned viewing-session ID carried in the kontext:Overlay
     /// extension.
     public let sessionId: String?
+    /// Inline creative, when the response carries one (mock does; the real
+    /// server delivers creatives via `adJsonURL` instead).
+    public let creative: InstreamAdCreative?
 }
 
 /// Minimal render-ready creative, decoded from the ad's JSON endpoint.

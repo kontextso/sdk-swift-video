@@ -24,8 +24,17 @@ public final class VideoSession {
     private(set) var sessionId: String = ""
 
     private weak var playerView: UIView?
-    private weak var player: AVPlayer?
+    private var player: AVPlayer?
     private let adsService: AdsService
+
+    private var currentAds: VideoAds?
+    private var timeObserver: Any?
+    private var statusObservation: NSKeyValueObservation?
+    private var hasStartedPlayback = false
+    private var overlayView: OverlayAdUIView?
+    private var overlayBidId: String?
+    private var pauseAdView: OverlayAdUIView?
+    private var swipeBannerView: SwipeBannerUIView?
 
     init(options: VideoSessionOptions) {
         self.options = options
@@ -40,9 +49,31 @@ public final class VideoSession {
     /// point is the baseline and will grow richer variants as design
     /// partners need them.
     public func attachPlayer(playerView: UIView, player: AVPlayer) {
+        detachPlayerObservers()
+        hideOverlay()
+        hidePauseAd()
         self.playerView = playerView
         self.player = player
-        // TODO: observe player state (pause/resume/end) to drive pause ads.
+        hasStartedPlayback = false
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(value: 1, timescale: 4),
+            queue: .main
+        ) { [weak self] time in
+            Task { @MainActor in self?.tick(time) }
+        }
+        statusObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            let status = player.timeControlStatus
+            Task { @MainActor in self?.playbackStatusChanged(status) }
+        }
+    }
+
+    private func detachPlayerObservers() {
+        if let timeObserver, let player {
+            player.removeTimeObserver(timeObserver)
+        }
+        timeObserver = nil
+        statusObservation?.invalidate()
+        statusObservation = nil
     }
 
     /// Tells the SDK a new video is loading. Fires the ads request for the
@@ -68,13 +99,36 @@ public final class VideoSession {
         description: String? = nil
     ) -> VideoAds {
         let ads = VideoAds(externalId: externalId, session: self)
-        Task {
-            await requestAds(for: ads)
+        currentAds = ads
+        hideOverlay()
+        hidePauseAd()
+        switch options.adsSource {
+        case .mock:
+            loadMockAds(for: ads)
+        case .server:
+            Task {
+                await requestAds(for: ads)
+            }
         }
         return ads
     }
 
     // MARK: - Internal
+
+    private func loadMockAds(for ads: VideoAds) {
+        do {
+            let slots = try MockAdsLoader.load()
+            sessionId = slots.first?.sessionId ?? "mock-session"
+            ads.apply(slots)
+            log("/ads (mock) → \(slots.count) ad(s) for \(ads.externalId)")
+            for slot in slots {
+                log("  \(slot.format) @\(Self.timestamp(ms: slot.startMs))–\(slot.endMs.map(Self.timestamp(ms:)) ?? "-") \"\(slot.creative?.headline ?? "")\"")
+                emit(.filled(VideoAdEvent.AdData(format: slot.format, externalId: ads.externalId)))
+            }
+        } catch {
+            emit(.error(VideoAdEvent.ErrorData(externalId: ads.externalId, message: "\(error)")))
+        }
+    }
 
     private func requestAds(for ads: VideoAds) async {
         do {
@@ -112,6 +166,7 @@ public final class VideoSession {
             for attempt in 1...3 {
                 do {
                     let ad = try await adsService.fetchCreative(adJsonURL: url)
+                    currentAds?.setCreative(ad.creative, forBidId: slot.bidId)
                     log("  creative \(slot.index) [\(ad.format)] \"\(ad.creative.headline)\" — \(ad.creative.body.prefix(80))… CTA: \(ad.creative.cta.text)")
                     break
                 } catch {
@@ -123,6 +178,115 @@ public final class VideoSession {
                 }
             }
         }
+    }
+
+    // MARK: - Rendering
+
+    private func tick(_ time: CMTime) {
+        guard let ads = currentAds else { return }
+        let ms = Int(CMTimeGetSeconds(time) * 1000)
+        let active = ads.overlays.first { slot in
+            slot.format == .overlay && ms >= slot.startMs && ms < (slot.endMs ?? .max)
+        }
+        if let active, let creative = creative(for: active, in: ads) {
+            showOverlay(creative: creative, slot: active, externalId: ads.externalId)
+        } else {
+            hideOverlay()
+        }
+    }
+
+    private func playbackStatusChanged(_ status: AVPlayer.TimeControlStatus) {
+        switch status {
+        case .playing:
+            hasStartedPlayback = true
+            hidePauseAd()
+        case .paused:
+            guard hasStartedPlayback, let ads = currentAds,
+                  let slot = ads.overlays.first(where: { $0.format == .pauseAd }),
+                  let creative = creative(for: slot, in: ads) else {
+                return
+            }
+            showPauseAd(creative: creative, externalId: ads.externalId)
+        default:
+            break
+        }
+    }
+
+    private func creative(for slot: InstreamAd, in ads: VideoAds) -> InstreamAdCreative? {
+        slot.creative ?? ads.creatives[slot.bidId]
+    }
+
+    private func showOverlay(creative: InstreamAdCreative, slot: InstreamAd, externalId: String) {
+        guard let playerView, overlayBidId != slot.bidId else { return }
+        hideOverlay()
+        let view = OverlayAdUIView(creative: creative)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        playerView.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor, constant: 16),
+            view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor, constant: -16),
+            slot.position == "top"
+                ? view.topAnchor.constraint(equalTo: playerView.safeAreaLayoutGuide.topAnchor, constant: 16)
+                : view.bottomAnchor.constraint(equalTo: playerView.safeAreaLayoutGuide.bottomAnchor, constant: -100),
+        ])
+        view.alpha = 0
+        UIView.animate(withDuration: 0.3) { view.alpha = 1 }
+        overlayView = view
+        overlayBidId = slot.bidId
+        emit(.shown(VideoAdEvent.AdData(format: .overlay, externalId: externalId)))
+    }
+
+    private func hideOverlay() {
+        overlayView?.removeFromSuperview()
+        overlayView = nil
+        overlayBidId = nil
+    }
+
+    private func showPauseAd(creative: InstreamAdCreative, externalId: String) {
+        guard let playerView, pauseAdView == nil else { return }
+        let view = OverlayAdUIView(creative: creative)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        playerView.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: playerView.leadingAnchor, constant: 16),
+            view.trailingAnchor.constraint(equalTo: playerView.trailingAnchor, constant: -16),
+            view.centerYAnchor.constraint(equalTo: playerView.centerYAnchor),
+        ])
+        view.alpha = 0
+        UIView.animate(withDuration: 0.3) { view.alpha = 1 }
+        pauseAdView = view
+        emit(.shown(VideoAdEvent.AdData(format: .pauseAd, externalId: externalId)))
+    }
+
+    private func hidePauseAd() {
+        pauseAdView?.removeFromSuperview()
+        pauseAdView = nil
+    }
+
+    func presentSwipeBanner(for ads: VideoAds) {
+        guard swipeBannerView == nil,
+              let slot = ads.overlays.first(where: { $0.format == .swipeBanner }),
+              let creative = creative(for: slot, in: ads),
+              let host = playerView?.window ?? playerView else {
+            return
+        }
+        let view = SwipeBannerUIView(creative: creative)
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.onClose = { [weak self] in
+            self?.swipeBannerView?.removeFromSuperview()
+            self?.swipeBannerView = nil
+        }
+        host.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: host.topAnchor),
+            view.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+        ])
+        view.alpha = 0
+        UIView.animate(withDuration: 0.25) { view.alpha = 1 }
+        swipeBannerView = view
+        emit(.shown(VideoAdEvent.AdData(format: .swipeBanner, externalId: ads.externalId)))
     }
 
     private var playerSize: (width: Int, height: Int)? {

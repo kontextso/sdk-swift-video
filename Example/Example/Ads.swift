@@ -19,6 +19,7 @@ enum Ads {
         publisherToken: publisherToken,
         userId: userId,
         adServerURL: URL(string: "https://server.develop.megabrain.co")!,
+        adsSource: .mock,  // change to .server for real ads (use demoTitleId as externalId)
         onEvent: { event in
             print("[Example] event: \(event)")
         }

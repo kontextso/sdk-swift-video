@@ -56,6 +56,20 @@ final class KontextVideoSDKTests: XCTestCase {
         XCTAssertEqual(ad.sessionId, "69f23ae7-591c-41aa-81e3-d077c53bfe4e")
     }
 
+    func testMockResponseCarriesAllThreeFormats() throws {
+        let ads = try MockAdsLoader.load()
+        XCTAssertEqual(ads.map(\.format), [.overlay, .pauseAd, .swipeBanner])
+        let overlay = try XCTUnwrap(ads.first)
+        XCTAssertEqual(overlay.startMs, 1000)
+        XCTAssertEqual(overlay.endMs, 16000)
+        XCTAssertEqual(overlay.position, "bottom")
+        for ad in ads {
+            let creative = try XCTUnwrap(ad.creative, "mock ad \(ad.bidId) should carry an inline creative")
+            XCTAssertFalse(creative.headline.isEmpty)
+            XCTAssertFalse(creative.cta.text.isEmpty)
+        }
+    }
+
     func testTimeOffsetParsing() {
         XCTAssertEqual(VMAPParser.milliseconds(fromTimeOffset: "00:20:18.401"), 1_218_401)
         XCTAssertEqual(VMAPParser.milliseconds(fromTimeOffset: "01:00:00.000"), 3_600_000)

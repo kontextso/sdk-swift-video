@@ -16,6 +16,10 @@ public final class VideoAds {
     /// Overlay ads prepared for this video, in timeline order.
     public private(set) var overlays: [InstreamAd] = []
 
+    /// Render-ready creatives keyed by bidId. Filled as they arrive — the
+    /// server writes ad copy asynchronously after the ads response.
+    public private(set) var creatives: [String: InstreamAdCreative] = [:]
+
     init(externalId: String, session: VideoSession) {
         self.externalId = externalId
         self.session = session
@@ -28,13 +32,16 @@ public final class VideoAds {
     /// video the banner belongs to, even if the next episode is already
     /// preloading.
     public func showSwipeBanner() {
-        // TODO: the current /ads endpoint serves only overlays; wire this up
-        // once the server adds the swipeBanner format.
+        session?.presentSwipeBanner(for: self)
     }
 
     // MARK: - Internal
 
     func apply(_ slots: [InstreamAd]) {
         overlays = slots
+    }
+
+    func setCreative(_ creative: InstreamAdCreative, forBidId bidId: String) {
+        creatives[bidId] = creative
     }
 }

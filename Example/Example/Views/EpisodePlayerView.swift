@@ -1,4 +1,5 @@
 import AVFoundation
+import KontextVideoSDK
 import SwiftUI
 
 /// A single fullscreen episode page: video + title overlay, tap to play/pause.
@@ -9,11 +10,12 @@ struct EpisodePlayerView: View {
 
     @State private var player: AVPlayer?
     @State private var isPaused = false
+    @State private var playerLayerView = PlayerLayerUIView()
 
     var body: some View {
         ZStack {
             if let player {
-                PlayerLayerView(player: player)
+                PlayerLayerView(player: player, layerView: playerLayerView)
             }
             if isPaused {
                 Image(systemName: "play.fill")
@@ -33,6 +35,7 @@ struct EpisodePlayerView: View {
             player.actionAtItemEnd = .none
             self.player = player
             if isActive {
+                attachToAdsSession()
                 player.play()
             }
         }
@@ -43,6 +46,7 @@ struct EpisodePlayerView: View {
         .onChange(of: isActive) {
             isPaused = false
             if isActive {
+                attachToAdsSession()
                 player?.seek(to: .zero)
                 player?.play()
             } else {
@@ -82,6 +86,11 @@ struct EpisodePlayerView: View {
         )
     }
 
+    private func attachToAdsSession() {
+        guard let player else { return }
+        Ads.session.attachPlayer(playerView: playerLayerView, player: player)
+    }
+
     private func togglePlayback() {
         guard let player else { return }
         if player.timeControlStatus == .playing {
@@ -94,15 +103,17 @@ struct EpisodePlayerView: View {
     }
 }
 
-/// AVPlayerLayer wrapper so the video fills the page.
+/// AVPlayerLayer wrapper so the video fills the page. Uses an externally
+/// owned `PlayerLayerUIView` so the view can also be handed to the ads
+/// session (`attachPlayer`), which mounts ad overlays into it.
 private struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
+    let layerView: PlayerLayerUIView
 
     func makeUIView(context: Context) -> PlayerLayerUIView {
-        let view = PlayerLayerUIView()
-        view.playerLayer.videoGravity = .resizeAspectFill
-        view.playerLayer.player = player
-        return view
+        layerView.playerLayer.videoGravity = .resizeAspectFill
+        layerView.playerLayer.player = player
+        return layerView
     }
 
     func updateUIView(_ uiView: PlayerLayerUIView, context: Context) {

@@ -44,8 +44,10 @@ struct StoryPlayerView: View {
             guard let episode = story.episodes.first(where: { $0.id == currentEpisodeID }) else {
                 return
             }
+            // Swipe banner belongs to the episode the user just left.
+            currentAds?.showSwipeBanner()
             currentAds = Ads.session.startVideo(
-                externalId: Ads.demoTitleId,
+                externalId: episode.id,
                 title: "\(story.title) — Episode \(episode.number): \(episode.title)"
             )
         }
