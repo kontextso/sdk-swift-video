@@ -1,0 +1,22 @@
+name: Example
+options:
+  bundleIdPrefix: so.kontext
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+
+targets:
+  Example:
+    type: application
+    platform: iOS
+    sources:
+      - Example
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        PRODUCT_BUNDLE_IDENTIFIER: so.kontext.example-video
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_CFBundleDisplayName: Kontext Drama
