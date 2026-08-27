@@ -12,6 +12,33 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 
 Overlay ads and the full-screen swipe banner are planned and will be added later.
 
+## Pause ads
+
+The pause ad follows the **Pause** format of the IAB Tech Lab
+[CTV Ad Portfolio](https://github.com/InteractiveAdvertisingBureau/Ad-Format-Guidelines-for-Digital-Video-CTV)
+(Ad Format Guidelines for Digital Video and CTV v2.0, § Pause Ad Format Guidelines):
+
+| Property | Guideline |
+|---|---|
+| Initiation | Viewer initiated: the program is paused by the viewer |
+| Creative type | Display / static, or video / animated |
+| Creative size | Fullscreen: 1920 × 1080 · Partial screen: 600 × 600 |
+| Aspect ratio | Fullscreen: 16:9 · Partial screen: 1:1 |
+| File | Static creatives under 350 kB (see the IAB video submission guidelines for video) |
+| Sound | Not required by default |
+| Placement | Fullscreen or partial screen within the pause experience |
+| Interactive components | Optional: QR codes, remote-control interactivity (SIMID) |
+| Duration & exit | Ends when the viewer dismisses the ad, resumes content, exits the app, or the device times out / starts its screensaver. Some pause ads refresh, others stay for the whole pause. Video may autoplay; refresh and autoplay behavior is signaled by the seller. |
+
+In OpenRTB terms the placement is `imp.video` with `plcmt = 5` (Pause), `pos = 7`
+(fullscreen) or `8` (partial screen), and `playbackmethod = 8` / `9` (sound on / off);
+the response is a VAST 4.2 `<NonLinearAds>` creative with `creativeView`,
+`overlayViewDuration` and `close` tracking.
+
+The spec is written for 16:9 TV screens and has no portrait size. This SDK
+currently renders the **partial-screen, static** variant as an image banner
+sized from the creative's declared dimensions, so vertical creatives work too.
+
 ## Usage
 
 ```swift
