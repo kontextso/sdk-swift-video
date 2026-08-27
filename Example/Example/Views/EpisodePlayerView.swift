@@ -3,6 +3,8 @@ import KontextVideoSDK
 import SwiftUI
 
 /// A single fullscreen episode page: video + title overlay, tap to play/pause.
+/// Owns the episode's `VideoAds` handle and drives the pause ad from the
+/// same place playback is controlled.
 struct EpisodePlayerView: View {
     let story: Story
     let episode: Episode
@@ -11,6 +13,7 @@ struct EpisodePlayerView: View {
     @State private var player: AVPlayer?
     @State private var isPaused = false
     @State private var playerLayerView = PlayerLayerUIView()
+    @State private var ads: VideoAds?
 
     var body: some View {
         ZStack {
@@ -35,18 +38,20 @@ struct EpisodePlayerView: View {
             player.actionAtItemEnd = .none
             self.player = player
             if isActive {
-                attachToAdsSession()
+                startVideo()
                 player.play()
             }
         }
         .onDisappear {
+            ads?.hidePauseAd()
             player?.pause()
             player = nil
         }
         .onChange(of: isActive) {
             isPaused = false
+            ads?.hidePauseAd()
             if isActive {
-                attachToAdsSession()
+                startVideo()
                 player?.seek(to: .zero)
                 player?.play()
             } else {
@@ -86,9 +91,11 @@ struct EpisodePlayerView: View {
         )
     }
 
-    private func attachToAdsSession() {
-        guard let player else { return }
-        Ads.session.attachPlayer(playerView: playerLayerView, player: player)
+    private func startVideo() {
+        ads = Ads.session.startVideo(
+            externalId: episode.id,
+            title: "\(story.title) — Episode \(episode.number): \(episode.title)"
+        )
     }
 
     private func togglePlayback() {
@@ -96,16 +103,22 @@ struct EpisodePlayerView: View {
         if player.timeControlStatus == .playing {
             player.pause()
             isPaused = true
+            ads?.showPauseAd(in: playerLayerView) { resume() }
         } else {
-            player.play()
-            isPaused = false
+            resume()
         }
+    }
+
+    private func resume() {
+        ads?.hidePauseAd()
+        player?.play()
+        isPaused = false
     }
 }
 
 /// AVPlayerLayer wrapper so the video fills the page. Uses an externally
-/// owned `PlayerLayerUIView` so the view can also be handed to the ads
-/// session (`attachPlayer`), which mounts ad overlays into it.
+/// owned `PlayerLayerUIView` so the same view can be handed to
+/// `VideoAds.showPauseAd(in:)`, which mounts the ad into it.
 private struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
     let layerView: PlayerLayerUIView

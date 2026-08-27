@@ -4,14 +4,14 @@ import UIKit
 /// bottom and carries the ad content — brand, headline, body, a Resume
 /// button, the CTA, and a product thumbnail. An "AD" badge sits top-right.
 final class PauseAdUIView: UIView {
-    private let creative: InstreamAdCreative
+    private let creative: VideoAdCreative
     private let gradient = CAGradientLayer()
 
     /// Called by the Resume button; the session resumes playback, which
     /// hides the ad via the playback-status observation.
     var onResume: (() -> Void)?
 
-    init(creative: InstreamAdCreative) {
+    init(creative: VideoAdCreative) {
         self.creative = creative
         super.init(frame: .zero)
         setUp()

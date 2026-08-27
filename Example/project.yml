@@ -22,12 +22,17 @@ targets:
           - Resources
       - path: Example/Resources
         buildPhase: resources
+    info:
+      path: Example/Info.plist
+      properties:
+        CFBundleDisplayName: Kontext Drama
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # The example talks to the mock ad server over plain http.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: so.kontext.example-video
         TARGETED_DEVICE_FAMILY: "1"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
-        INFOPLIST_KEY_CFBundleDisplayName: Kontext Drama

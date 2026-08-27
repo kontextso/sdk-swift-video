@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kontext Video SDK — an iOS SDK for integrating Kontext video ads into short-drama and other video-first apps. Distributed via Swift Package Manager and CocoaPods (`KontextVideoSDK`). Minimum deployment target: iOS 14.
 
-**Status: skeleton.** The public API surface exists and compiles; the ad rendering, player observation, and the server `/preload` endpoint are not implemented yet. Design doc: [SDK for short drama apps](https://app.notion.com/p/megabrainco/SDK-for-short-drama-apps-3aebafc897e280428d77deb9d82e63d2) (Notion).
+**Status: pause ad only.** The SDK currently implements just the pause ad (rendered natively into a view the app provides); overlay ads and the full-screen swipe banner were removed in the simplification and will be reimplemented later — the pre-simplification code is on the `snapshot/v0-prototype` branch. The SDK speaks a JSON `POST /preload` contract that the real ad server does not implement yet — development runs against the Vite mock in [sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server) (`pnpm dev` → `http://localhost:5175`; the example app points there). The contract is documented in that repo's README. Design doc: [SDK for short drama apps](https://app.notion.com/p/megabrainco/SDK-for-short-drama-apps-3aebafc897e280428d77deb9d82e63d2) (Notion).
 
 Design partners:
 - **HatchShorts (TCL)** — we have access to their videos: they upload them via the Kontext API with their own `external_id`, then the SDK sends only `external_id` per video.
@@ -17,14 +17,9 @@ The sibling chat-apps SDK is [sdk-swift](https://github.com/kontextso/sdk-swift)
 ## Common Commands
 
 ```bash
-# Build and test on a real iOS Simulator (UIKit isn't on host macOS, so
-# `swift build` / `swift test` won't work).
+# Build on a real iOS Simulator (UIKit isn't on host macOS, so `swift build`
+# won't work). There is no test target — iterate against the mock server.
 xcodebuild build \
-  -scheme KontextVideoSDK \
-  -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro' \
-  -skipPackagePluginValidation
-
-xcodebuild test \
   -scheme KontextVideoSDK \
   -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro' \
   -skipPackagePluginValidation
@@ -43,29 +38,24 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 
 **`VideoSession`** — one instance per app user. Lifecycle:
 1. Constructed with immutable `VideoSessionOptions` (publisher token, user id/email, enabled formats, event callback).
-2. `attachPlayer(playerView:player:)` — the publisher hands over their player so the SDK can render ads over it and observe playback (pause detection). Player integrations differ per publisher; with only 1–5 publishers expected, richer variants are designed with each partner.
-3. `startVideo(externalId:title:description:)` — called every time a new video starts loading. Fires `/preload` for all enabled formats and returns a `VideoAds` handle.
+2. `startVideo(externalId:title:description:)` — called every time a new video starts loading. Fires `POST /preload` (publisherToken, userId, userEmail, sessionId, externalId, title, description, enabledFormats, sdk) and returns a `VideoAds` handle whose `ads: [VideoAd]` fills in when the response lands.
 
-**`VideoAds`** — the ads prepared for one video (not the video itself). Overlay and pause ads show automatically; `showSwipeBanner()` is the one call the app makes itself, on the handle so the target video is unambiguous even when the next episode is already preloading.
+**`VideoAds`** — the ads prepared for one video (not the video itself). **The SDK never observes the player** (decision 2026-08-27: pause/resume detection stays with the publisher, who already controls playback and whose player may not be `AVPlayer`). The app calls `showPauseAd(in: container, onResume:)` when playback pauses (returns `false` on no fill / still loading) and `hidePauseAd()` when it resumes; the Resume button hides the ad and invokes `onResume`.
 
-**IDs** — the SDK manages both automatically; the publisher never touches them:
-- `installId` (`Utils/InstallID.swift`) — persistent, generated on first launch, stored in `UserDefaults`.
-- `sessionId` — assigned by the server on the first preload response, echoed on every later request.
+**IDs** — `sessionId` is assigned by the server on the first preload response and echoed on every later request; the publisher never touches it. The persistent install ID is *not* implemented here: it comes from KontextKit's `InstallIdProvider` once that dependency is added.
 
 ### Ad formats (`Model/VideoAdFormat.swift`)
 
 | Format | Timing contract | Frequency |
 |---|---|---|
-| `overlay` | All requested at the start of the video (same model as the video API) | N per video |
-| `pauseAd` | Requested with the other formats at video start so it can show instantly on pause; we never know if/when/how often a pause happens | 1 per video (v1 simplification) |
-| `swipeBanner` | Must be ready **before** the swipe — the swipe is too quick to generate an ad after it; can happen at any point in the video; the ad is connected to the previous video | max 1 per video |
+| `pauseAd` | Requested at video start so it can show instantly; the app shows it on pause and hides it on resume — the SDK never knows if/when a pause happens | 1 per video (v1 simplification) |
 
 ### Internal organization
 
 - `Sources/KontextVideoSDK/` — public types (`KontextVideo`, `VideoSession`, `VideoAds`, `VideoSessionOptions`) at the top.
-- `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`.
-- `Sources/KontextVideoSDK/Networking/` — `PreloadService` + request/response types. The `/preload` endpoint is tentative and not implemented server-side yet; the types here are the SDK-side sketch of the contract.
-- `Sources/KontextVideoSDK/Utils/` — `InstallID`.
+- `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`, `VideoAd` + `VideoAdCreative` (the `/preload` response shape).
+- `Sources/KontextVideoSDK/Networking/` — `AdsService` (`POST /preload`, request/response types).
+- `Sources/KontextVideoSDK/UI/` — `PauseAdUIView` (gradient bottom sheet over the paused frame) + `AdImageLoader`.
 - `Example/` — SwiftUI short-drama demo app (XcodeGen; see `Example/project.yml`). Home grid of stories → fullscreen vertical episode player. It links the SDK and is the integration playground.
 
 ### Privacy & attribution
@@ -75,7 +65,7 @@ Like `sdk-swift`, this SDK must not vendor IDFA / ATT / StoreKit / OMID code dir
 ## Conventions
 
 - **Swift 5.9**, iOS 14.0+. `StrictConcurrency` is on — anything crossing actor boundaries must be `Sendable`.
-- **`@MainActor`-isolated** anything that touches UIKit/AVPlayer. `VideoSession`, `VideoAds` are MainActor classes.
+- **`@MainActor`-isolated** anything that touches UIKit. `VideoSession`, `VideoAds` are MainActor classes. The SDK does not import AVFoundation — it renders into a `UIView` the app hands it.
 - **No comments** unless the *why* is non-obvious (hidden constraint, subtle invariant, workaround). Don't reference PRs or tickets in code.
 - Events are delivered on the main thread via the `onEvent` closure in `VideoSessionOptions`.
 

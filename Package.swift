@@ -18,16 +18,10 @@ let package = Package(
             path: "Sources/KontextVideoSDK",
             resources: [
                 .copy("PrivacyInfo.xcprivacy"),
-                .copy("Resources/MockAdsResponse.xml"),
             ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
-        .testTarget(
-            name: "KontextVideoSDKTests",
-            dependencies: ["KontextVideoSDK"],
-            path: "Tests/KontextVideoSDKTests"
-        )
     ]
 )

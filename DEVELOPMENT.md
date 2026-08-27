@@ -14,8 +14,7 @@ The SDK itself is a Swift Package — `swift build` won't work on host macOS bec
 
 ```
 sdk-swift-video/
-├── Sources/KontextVideoSDK/         # SDK source (entry points, models, networking)
-├── Tests/KontextVideoSDKTests/      # XCTest suite
+├── Sources/KontextVideoSDK/         # SDK source (entry points, models, networking, UI)
 ├── Example/                         # SwiftUI short-drama demo app (XcodeGen)
 │   ├── project.yml                  # XcodeGen input
 │   └── Example/                     # app sources
@@ -25,19 +24,30 @@ sdk-swift-video/
 └── RELEASING.md                     # how to cut a release
 ```
 
-## Building & testing the SDK
+## Building the SDK
 
 ```bash
 xcodebuild build \
   -scheme KontextVideoSDK \
   -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro' \
   -skipPackagePluginValidation
-
-xcodebuild test \
-  -scheme KontextVideoSDK \
-  -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro' \
-  -skipPackagePluginValidation
 ```
+
+There is no test suite yet — the contract is still moving; iterate against the
+mock server instead.
+
+## Mock ad server
+
+The real `/preload` endpoint does not exist yet. Development runs against
+[sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server):
+
+```bash
+git clone git@github.com:kontextso/sdk-video-mock-server.git
+cd sdk-video-mock-server && pnpm i && pnpm dev   # http://localhost:5175
+```
+
+The example app is pointed at `http://localhost:5175` (`Example/Ads.swift`);
+edit `mocks/preload.json` in the mock repo to change what the app renders.
 
 ## Running the example app
 

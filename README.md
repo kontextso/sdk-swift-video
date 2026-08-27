@@ -2,15 +2,15 @@
 
 Swift SDK for integrating Kontext video ads into short-drama and other video-first iOS apps.
 
-> **Status: early development.** The public API surface below is a working skeleton — ad rendering and the server endpoint are still being built with our design partners.
+> **Status: early development.** Pause ads render natively; the server endpoint is being designed with our design partners against a [mock server](https://github.com/kontextso/sdk-video-mock-server).
 
 ## Supported formats
 
 | Format | Behavior |
 |---|---|
-| **Overlay Ad** | Requested at the start of the video, shown at the right moments — N per video |
-| **Pause Ad** | Prepared upfront, shown instantly when the user pauses — 1 per video (v1) |
-| **Full-Screen Swipe Banner** | Prepared before the swipe can happen; the app signals the moment — max 1 per video |
+| **Pause Ad** | Prepared upfront; the app shows it when the user pauses and hides it on resume — 1 per video (v1) |
+
+Overlay ads and the full-screen swipe banner are planned and will be added later.
 
 ## Usage
 
@@ -18,13 +18,10 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 import KontextVideoSDK
 
 // 1. Initialize the SDK.
-// installId (persistent) and sessionId (server-assigned) are managed
-// automatically — you never have to touch them.
 let session = KontextVideo.createSession(VideoSessionOptions(
     publisherToken: "pub-xxxx",
     userId: "user-123",
     userEmail: "jane@example.com",
-    enabledFormats: [.overlay, .pauseAd, .swipeBanner],  // omit to enable all
     onEvent: { event in
         switch event {
         case .filled(let data): print("ad ready: \(data.format)")
@@ -33,19 +30,23 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     }
 ))
 
-// 2. Attach your player so the SDK can render ads over it.
-session.attachPlayer(playerView: playerView, player: avPlayer)
-
-// 3. Tell the SDK a new video is loading. Returns the ads prepared for
-// this video; overlay and pause ads show automatically.
+// 2. Tell the SDK a new video is loading. Returns the ads prepared for
+// this video.
 let ads = session.startVideo(
     externalId: "ep-1042",                              // your video ID
     title: "Episode 42: The Betrayal",                  // optional if uploaded via API
     description: "Mia confronts Ethan about the letter" // optional if uploaded via API
 )
 
-// 4. Swipe banner only: the app signals the right moment.
-ads.showSwipeBanner()
+// 3. You control the player, so you tell the SDK when to show and hide.
+func didPause() {
+    ads.showPauseAd(in: playerView) { avPlayer.play() }  // Resume button tapped
+}
+
+func didResume() {
+    ads.hidePauseAd()
+}
+
 ```
 
 ## Installation
