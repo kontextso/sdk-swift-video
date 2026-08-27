@@ -3,11 +3,17 @@ import UIKit
 /// The ads prepared for one video — returned by
 /// ``VideoSession/startVideo(externalId:title:description:)``.
 ///
-/// The app decides when ads appear: call ``showPauseAd(in:onResume:)`` when
-/// playback pauses and ``hidePauseAd()`` when it resumes. The SDK does not
-/// observe the player.
+/// The app decides when ads appear: call ``showPauseAd(in:)`` when playback
+/// pauses and ``hidePauseAd()`` when it resumes. The SDK does not observe
+/// the player.
 @MainActor
 public final class VideoAds {
+    /// Where the pause-ad banner sits inside the container.
+    public enum BannerPosition: Sendable {
+        case top
+        case bottom
+    }
+
     /// The publisher's video ID this handle belongs to.
     public let externalId: String
 
@@ -22,30 +28,34 @@ public final class VideoAds {
         self.emit = emit
     }
 
-    /// Shows the pause ad over `container` (typically the player view).
-    /// Returns `false` when there is nothing to show — no fill, `/preload`
-    /// still in flight, or an ad already on screen.
-    ///
-    /// - Parameter onResume: Called when the user taps the ad's Resume
-    ///   button. Resume playback there; the ad hides itself first.
+    /// Shows the pause ad as an image banner inside `container` (typically
+    /// the player view). Defaults to the top so it does not cover the
+    /// episode title most apps draw at the bottom. Returns `false` when
+    /// there is nothing to show — no fill, `/preload` still in flight, or
+    /// an ad already on screen.
     @discardableResult
-    public func showPauseAd(in container: UIView, onResume: @escaping () -> Void) -> Bool {
+    public func showPauseAd(in container: UIView, position: BannerPosition = .top) -> Bool {
         guard pauseAdView == nil,
               let ad = ads.first(where: { $0.format == .pauseAd }) else {
             return false
         }
         let view = PauseAdUIView(creative: ad.creative)
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.onResume = { [weak self] in
-            self?.hidePauseAd()
-            onResume()
-        }
         container.addSubview(view)
+        let inset: CGFloat = 16
+        let width = container.bounds.width - 2 * inset
+        let edge: NSLayoutConstraint
+        switch position {
+        case .top:
+            edge = view.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: inset)
+        case .bottom:
+            edge = view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -inset)
+        }
         NSLayoutConstraint.activate([
-            view.topAnchor.constraint(equalTo: container.topAnchor),
-            view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
+            edge,
+            view.heightAnchor.constraint(equalToConstant: view.height(forWidth: max(width, 0))),
         ])
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }

@@ -40,7 +40,7 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 1. Constructed with immutable `VideoSessionOptions` (publisher token, user id/email, enabled formats, event callback).
 2. `startVideo(externalId:title:description:)` — called every time a new video starts loading. Fires `POST /preload` (publisherToken, userId, userEmail, sessionId, externalId, title, description, enabledFormats, sdk) and returns a `VideoAds` handle whose `ads: [VideoAd]` fills in when the response lands.
 
-**`VideoAds`** — the ads prepared for one video (not the video itself). **The SDK never observes the player** (decision 2026-08-27: pause/resume detection stays with the publisher, who already controls playback and whose player may not be `AVPlayer`). The app calls `showPauseAd(in: container, onResume:)` when playback pauses (returns `false` on no fill / still loading) and `hidePauseAd()` when it resumes; the Resume button hides the ad and invokes `onResume`.
+**`VideoAds`** — the ads prepared for one video (not the video itself). **The SDK never observes the player** (decision 2026-08-27: pause/resume detection stays with the publisher, who already controls playback and whose player may not be `AVPlayer`). The app calls `showPauseAd(in: container, position: .top | .bottom)` (default `.top`, so the banner doesn't cover the episode title apps draw at the bottom) when playback pauses (returns `false` on no fill / still loading) and `hidePauseAd()` when it resumes.
 
 **IDs** — `sessionId` is assigned by the server on the first preload response and echoed on every later request; the publisher never touches it. The persistent install ID is *not* implemented here: it comes from KontextKit's `InstallIdProvider` once that dependency is added.
 
@@ -55,7 +55,7 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 - `Sources/KontextVideoSDK/` — public types (`KontextVideo`, `VideoSession`, `VideoAds`, `VideoSessionOptions`) at the top.
 - `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`, `VideoAd` + `VideoAdCreative` (the `/preload` response shape).
 - `Sources/KontextVideoSDK/Networking/` — `AdsService` (`POST /preload`, request/response types).
-- `Sources/KontextVideoSDK/UI/` — `PauseAdUIView` (gradient bottom sheet over the paused frame) + `AdImageLoader`.
+- `Sources/KontextVideoSDK/UI/` — `PauseAdUIView` (v1: just the creative image as a top/bottom banner, tap opens the CTA URL; the earlier gradient bottom-sheet design with Resume button is on `snapshot/v0-prototype`) + `AdImageLoader`.
 - `Example/` — SwiftUI short-drama demo app (XcodeGen; see `Example/project.yml`). Home grid of stories → fullscreen vertical episode player. It links the SDK and is the integration playground.
 
 ### Privacy & attribution

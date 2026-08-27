@@ -8,7 +8,7 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 
 | Format | Behavior |
 |---|---|
-| **Pause Ad** | Prepared upfront; the app shows it when the user pauses and hides it on resume — 1 per video (v1) |
+| **Pause Ad** | Prepared upfront; the app shows it when the user pauses and hides it on resume — an image banner at the top (or bottom) of the player, 1 per video (v1) |
 
 Overlay ads and the full-screen swipe banner are planned and will be added later.
 
@@ -40,7 +40,7 @@ let ads = session.startVideo(
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 func didPause() {
-    ads.showPauseAd(in: playerView) { avPlayer.play() }  // Resume button tapped
+    ads.showPauseAd(in: playerView)            // position: .top by default, or .bottom
 }
 
 func didResume() {

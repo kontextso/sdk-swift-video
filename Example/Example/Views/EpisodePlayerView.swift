@@ -103,7 +103,7 @@ struct EpisodePlayerView: View {
         if player.timeControlStatus == .playing {
             player.pause()
             isPaused = true
-            ads?.showPauseAd(in: playerLayerView) { resume() }
+            ads?.showPauseAd(in: playerLayerView)
         } else {
             resume()
         }
