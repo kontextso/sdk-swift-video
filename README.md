@@ -8,7 +8,10 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 
 | Format | Behavior |
 |---|---|
-| **Pause Ad** | Prepared upfront; the app shows it when the user pauses and hides it on resume — an image banner at the top (or bottom) of the player, 1 per video (v1) |
+| **Pause overlay** (`pauseOverlay`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
+| **Pause fullscreen** (`pauseFullscreen`) | Image over the whole paused player with a styleable Resume button |
+
+Both are prepared at video start; the app shows one when the user pauses and hides it on resume. Each ad is shown once.
 
 Overlay ads and the full-screen swipe banner are planned and will be added later.
 
@@ -35,9 +38,12 @@ In OpenRTB terms the placement is `imp.video` with `plcmt = 5` (Pause), `pos = 7
 the response is a VAST 4.2 `<NonLinearAds>` creative with `creativeView`,
 `overlayViewDuration` and `close` tracking.
 
-The spec is written for 16:9 TV screens and has no portrait size. This SDK
-currently renders the **partial-screen, static** variant as an image banner
-sized from the creative's declared dimensions, so vertical creatives work too.
+The spec is written for 16:9 TV screens and has no portrait size. The SDK
+maps the two IAB placements to its two formats: `pos = 8` (partial screen) →
+`pauseOverlay`, an image banner sized from the creative's declared dimensions
+so vertical creatives work too; `pos = 7` (fullscreen) → `pauseFullscreen`,
+the image over the whole player with a Resume button (the SDK emits `.closed`
+when it is tapped, then calls your `onResume`).
 
 ## Usage
 
@@ -66,12 +72,21 @@ let ads = session.startVideo(
 )
 
 // 3. You control the player, so you tell the SDK when to show and hide.
+//    One placement object per format; each ad is shown once, then
+//    `isReady` is false again.
 func didPause() {
-    ads.showPauseAd(in: playerView)            // position: .top by default, or .bottom
+    if ads.pauseFullscreen.isReady {
+        var style = PauseFullscreenAd.Style()
+        style.resumeTitle = "Continue watching"
+        ads.pauseFullscreen.show(in: playerView, style: style) { avPlayer.play() }
+    } else if ads.pauseOverlay.isReady {
+        ads.pauseOverlay.show(in: playerView, position: .top)
+    }
 }
 
 func didResume() {
-    ads.hidePauseAd()
+    ads.pauseOverlay.hide()
+    ads.pauseFullscreen.hide()
 }
 
 ```

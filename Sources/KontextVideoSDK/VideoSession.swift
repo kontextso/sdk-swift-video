@@ -67,11 +67,9 @@ public final class VideoSession {
             let enabled = response.ads.filter { options.enabledFormats.contains($0.format) }
             ads.apply(enabled)
             log("/preload → \(enabled.count) ad(s) for \(ads.externalId)")
-            if enabled.isEmpty {
-                emit(.noFill(VideoAdEvent.AdData(format: .pauseAd, externalId: ads.externalId)))
-            }
-            for ad in enabled {
-                emit(.filled(VideoAdEvent.AdData(format: ad.format, externalId: ads.externalId)))
+            for format in options.enabledFormats {
+                let data = VideoAdEvent.AdData(format: format, externalId: ads.externalId)
+                emit(enabled.contains { $0.format == format } ? .filled(data) : .noFill(data))
             }
         } catch {
             emit(.error(VideoAdEvent.ErrorData(externalId: ads.externalId, message: "\(error)")))

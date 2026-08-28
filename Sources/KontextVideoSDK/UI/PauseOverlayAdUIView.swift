@@ -1,14 +1,15 @@
 import UIKit
 
-/// Pause ad, v1: the creative image as a banner pinned to the top or bottom
-/// of the container. Tapping it opens the click-through URL. Nothing else is drawn —
-/// the app keeps its own player chrome.
-final class PauseAdUIView: UIView {
-    private let creative: VideoAdCreative
+/// The creative image as a rounded banner. Tapping it opens the
+/// click-through URL.
+final class PauseOverlayAdUIView: UIView {
+    private let ad: VideoAd
     private let imageView = UIImageView()
 
-    init(creative: VideoAdCreative) {
-        self.creative = creative
+    var onClick: (() -> Void)?
+
+    init(ad: VideoAd) {
+        self.ad = ad
         super.init(frame: .zero)
         setUp()
     }
@@ -32,18 +33,20 @@ final class PauseAdUIView: UIView {
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-        AdImageLoader.load(creative.image.url, into: imageView)
+        AdImageLoader.load(ad.creative.image.url, into: imageView)
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
     }
 
     /// Height for a given width, from the creative's declared image size.
     func height(forWidth width: CGFloat) -> CGFloat {
-        guard creative.image.w > 0, creative.image.h > 0 else { return width * 0.6 }
-        return width * CGFloat(creative.image.h) / CGFloat(creative.image.w)
+        let image = ad.creative.image
+        guard image.w > 0, image.h > 0 else { return width * 0.6 }
+        return width * CGFloat(image.h) / CGFloat(image.w)
     }
 
     @objc private func didTap() {
-        guard let url = URL(string: creative.cta.url) else { return }
+        guard let url = ad.creative.clickThroughUrl.flatMap(URL.init(string:)) else { return }
+        onClick?()
         UIApplication.shared.open(url)
     }
 }

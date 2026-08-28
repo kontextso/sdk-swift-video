@@ -2,9 +2,6 @@ import Foundation
 
 /// Ad lifecycle events delivered via `VideoSessionOptions.onEvent`
 /// on the main thread.
-///
-/// The event set is an early sketch and will grow (viewability, video
-/// quartiles, reward, …) as the formats are implemented.
 public enum VideoAdEvent: Sendable {
     /// An ad for the given format was preloaded and is ready to show.
     case filled(AdData)
@@ -14,6 +11,9 @@ public enum VideoAdEvent: Sendable {
     case shown(AdData)
     /// The user tapped/clicked an ad.
     case clicked(AdData)
+    /// The user dismissed the ad from inside it (the fullscreen ad's
+    /// Resume button). The ad is already hidden.
+    case closed(AdData)
     /// Something went wrong (network, rendering, …).
     case error(ErrorData)
 

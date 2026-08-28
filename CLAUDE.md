@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kontext Video SDK — an iOS SDK for integrating Kontext video ads into short-drama and other video-first apps. Distributed via Swift Package Manager and CocoaPods (`KontextVideoSDK`). Minimum deployment target: iOS 14.
 
-**Status: pause ad only.** The SDK currently implements just the pause ad (rendered natively into a view the app provides); overlay ads and the full-screen swipe banner were removed in the simplification and will be reimplemented later — the pre-simplification code is on the `snapshot/v0-prototype` branch. The SDK speaks a JSON `POST /preload` contract that the real ad server does not implement yet — development runs against the Vite mock in [sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server) (`pnpm dev` → `http://localhost:5175`; the example app points there). The contract is documented in that repo's README. Design doc: [SDK for short drama apps](https://app.notion.com/p/megabrainco/SDK-for-short-drama-apps-3aebafc897e280428d77deb9d82e63d2) (Notion).
+**Status: pause ads only.** The SDK currently implements just the pause ad (rendered natively into a view the app provides); overlay ads and the full-screen swipe banner were removed in the simplification and will be reimplemented later — the pre-simplification code is on the `snapshot/v0-prototype` branch. The SDK speaks a JSON `POST /preload` contract that the real ad server does not implement yet — development runs against the Vite mock in [sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server) (`pnpm dev` → `http://localhost:5175`; the example app points there). The contract is documented in that repo's README. Design doc: [SDK for short drama apps](https://app.notion.com/p/megabrainco/SDK-for-short-drama-apps-3aebafc897e280428d77deb9d82e63d2) (Notion).
 
 Design partners:
 - **HatchShorts (TCL)** — we have access to their videos: they upload them via the Kontext API with their own `external_id`, then the SDK sends only `external_id` per video.
@@ -40,7 +40,7 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 1. Constructed with immutable `VideoSessionOptions` (publisher token, user id/email, enabled formats, event callback).
 2. `startVideo(externalId:title:description:)` — called every time a new video starts loading. Fires `POST /preload` (publisherToken, userId, userEmail, sessionId, externalId, title, description, enabledFormats, sdk) and returns a `VideoAds` handle whose `ads: [VideoAd]` fills in when the response lands.
 
-**`VideoAds`** — the ads prepared for one video (not the video itself). **The SDK never observes the player** (decision 2026-08-27: pause/resume detection stays with the publisher, who already controls playback and whose player may not be `AVPlayer`). The app calls `showPauseAd(in: container, position: .top | .bottom)` (default `.top`, so the banner doesn't cover the episode title apps draw at the bottom) when playback pauses (returns `false` on no fill / still loading) and `hidePauseAd()` when it resumes.
+**`VideoAds`** — the ads prepared for one video (not the video itself), as **one placement object per format**: `pauseOverlay: PauseOverlayAd` and `pauseFullscreen: PauseFullscreenAd`, each with `isReady` / `show(in:…)` / `hide()` / `pending`. This mirrors the mobile ad SDK convention (MAX `MAInterstitialAd.isReady` + `show()`, LevelPlay `isAdReady()` + `showAd()`, AdMob `canPresent` + `present`) rather than a generic `isAdAvailable(format)`. **The SDK never observes the player** (decision 2026-08-27: pause/resume detection stays with the publisher, who already controls playback and whose player may not be `AVPlayer`). **Each ad is shown once** — `show` consumes it from `pending`; how many a video gets is the server's call. The two formats are what the server derives from the DSP's IAB `pos` (7 → `pauseFullscreen`, 8 → `pauseOverlay`). Overlay = banner at `position` (default `.top`, so the episode title at the bottom stays visible). Fullscreen = image over the whole container with a Resume button styled by `PauseFullscreenAd.Style` (it covers the app's controls, so the button is the way out): tapping it hides the ad, emits `.closed`, then calls the app's `onResume`.
 
 **IDs** — `sessionId` is assigned by the server on the first preload response and echoed on every later request; the publisher never touches it. The persistent install ID is *not* implemented here: it comes from KontextKit's `InstallIdProvider` once that dependency is added.
 
@@ -48,14 +48,15 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 
 | Format | Timing contract | Frequency |
 |---|---|---|
-| `pauseAd` | Requested at video start so it can show instantly; the app shows it on pause and hides it on resume — the SDK never knows if/when a pause happens | 1 per video (v1 simplification) |
+| `pauseOverlay` | Requested at video start so it can show instantly; the app shows it on pause and hides it on resume — the SDK never knows if/when a pause happens | server-decided (1 per video today) |
+| `pauseFullscreen` | Same timing; Resume button is the exit | server-decided (1 per video today) |
 
 ### Internal organization
 
-- `Sources/KontextVideoSDK/` — public types (`KontextVideo`, `VideoSession`, `VideoAds`, `VideoSessionOptions`) at the top.
-- `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`, `VideoAd` + `VideoAdCreative` (the `/preload` response shape).
+- `Sources/KontextVideoSDK/` — public types (`KontextVideo`, `VideoSession`, `VideoAds`, `PauseOverlayAd`, `PauseFullscreenAd`, `VideoSessionOptions`) at the top.
+- `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`, `VideoAd` + `VideoAdCreative` + `VideoAdTracking` (the `/preload` response shape). The server derives it from the DSP's VAST 4.2 `<NonLinearAds>` (IAB CTV Ad Portfolio pause ad): static image + click-through + `impression`/`click`/`creativeView`/`overlayViewDuration`/`close` tracking URLs. No headline/body/CTA text — VAST has none. The mock server's `vast.js` is the reference parser.
 - `Sources/KontextVideoSDK/Networking/` — `AdsService` (`POST /preload`, request/response types).
-- `Sources/KontextVideoSDK/UI/` — `PauseAdUIView` (v1: just the creative image as a top/bottom banner, tap opens the CTA URL; the earlier gradient bottom-sheet design with Resume button is on `snapshot/v0-prototype`) + `AdImageLoader`.
+- `Sources/KontextVideoSDK/UI/` — `PauseOverlayAdUIView` (image banner), `PauseFullscreenAdUIView` (image + styled Resume button), `AdImageLoader`. The earlier gradient bottom-sheet design is on `snapshot/v0-prototype`.
 - `Example/` — SwiftUI short-drama demo app (XcodeGen; see `Example/project.yml`). Home grid of stories → fullscreen vertical episode player. It links the SDK and is the integration playground.
 
 ### Privacy & attribution

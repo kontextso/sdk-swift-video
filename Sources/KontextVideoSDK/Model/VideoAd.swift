@@ -1,29 +1,35 @@
 import Foundation
 
-/// One ad returned by `/preload`, ready to render.
+/// One ad returned by `/preload`, ready to render. The ad server derives it
+/// from the DSP's VAST 4.2 `<NonLinearAds>` response (IAB CTV Ad Portfolio
+/// pause ad); the SDK never sees the XML.
 public struct VideoAd: Sendable, Decodable {
     public let format: VideoAdFormat
     public let bidId: String
     public let creative: VideoAdCreative
+    public let tracking: VideoAdTracking
 }
 
-/// Render-ready creative for a native ad view.
+/// Render-ready creative: the static image and where a tap goes.
 public struct VideoAdCreative: Sendable, Decodable {
     public struct Image: Sendable, Decodable {
         public let url: String
+        public let mimeType: String?
         public let w: Int
         public let h: Int
     }
 
-    public struct CTA: Sendable, Decodable {
-        public let text: String
-        public let url: String
-    }
-
-    /// Advertiser/brand display name.
-    public let advertiser: String?
-    public let headline: String
-    public let body: String
     public let image: Image
-    public let cta: CTA
+    public let clickThroughUrl: String?
+}
+
+/// Tracking URLs from the VAST, grouped by event. Fired by the SDK, not the
+/// app: `impression` + `creativeView` on show, `click` on tap,
+/// `overlayViewDuration` + `close` on hide.
+public struct VideoAdTracking: Sendable, Decodable {
+    public let impression: [String]
+    public let click: [String]
+    public let creativeView: [String]
+    public let overlayViewDuration: [String]
+    public let close: [String]
 }

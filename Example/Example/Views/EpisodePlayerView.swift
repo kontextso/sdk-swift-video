@@ -43,13 +43,15 @@ struct EpisodePlayerView: View {
             }
         }
         .onDisappear {
-            ads?.hidePauseAd()
+            ads?.pauseOverlay.hide()
+            ads?.pauseFullscreen.hide()
             player?.pause()
             player = nil
         }
         .onChange(of: isActive) {
             isPaused = false
-            ads?.hidePauseAd()
+            ads?.pauseOverlay.hide()
+            ads?.pauseFullscreen.hide()
             if isActive {
                 startVideo()
                 player?.seek(to: .zero)
@@ -103,14 +105,25 @@ struct EpisodePlayerView: View {
         if player.timeControlStatus == .playing {
             player.pause()
             isPaused = true
-            ads?.showPauseAd(in: playerLayerView)
+            showPauseAd()
         } else {
             resume()
         }
     }
 
+    /// Fullscreen wins when both are ready; otherwise the banner.
+    private func showPauseAd() {
+        guard let ads else { return }
+        if ads.pauseFullscreen.isReady {
+            ads.pauseFullscreen.show(in: playerLayerView) { resume() }
+        } else if ads.pauseOverlay.isReady {
+            ads.pauseOverlay.show(in: playerLayerView)
+        }
+    }
+
     private func resume() {
-        ads?.hidePauseAd()
+        ads?.pauseOverlay.hide()
+        ads?.pauseFullscreen.hide()
         player?.play()
         isPaused = false
     }
@@ -118,7 +131,7 @@ struct EpisodePlayerView: View {
 
 /// AVPlayerLayer wrapper so the video fills the page. Uses an externally
 /// owned `PlayerLayerUIView` so the same view can be handed to
-/// `VideoAds.showPauseAd(in:)`, which mounts the ad into it.
+/// `ads.pauseOverlay.show(in:)` / `ads.pauseFullscreen.show(in:)`, which mount the ad into it.
 private struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
     let layerView: PlayerLayerUIView
