@@ -41,8 +41,10 @@ public final class PauseOverlayAd {
 
     /// `true` when an ad is loaded and none is on screen.
     public var isReady: Bool {
-        view == nil && !pending.isEmpty
+        !isDestroyed && view == nil && !pending.isEmpty
     }
+
+    public private(set) var isDestroyed = false
 
     private let emit: (VideoAdEvent) -> Void
     private var view: PauseOverlayAdUIView?
@@ -92,7 +94,23 @@ public final class PauseOverlayAd {
         view = nil
     }
 
+    /// Tears the placement down: finishes measurement for an ad on screen,
+    /// keeps its view alive for `Constants.teardownDelay`, then removes it
+    /// and drops pending ads. Called by `VideoAds.destroy()`.
+    func destroy() async {
+        guard !isDestroyed else { return }
+        isDestroyed = true
+        pending.removeAll()
+        guard let view else { return }
+        view.isUserInteractionEnabled = false
+        // OM session finish + final tracking pings go here.
+        try? await Task.sleep(nanoseconds: UInt64(Constants.teardownDelay * 1_000_000_000))
+        view.removeFromSuperview()
+        if self.view === view { self.view = nil }
+    }
+
     func append(_ ads: [VideoAd]) {
+        guard !isDestroyed else { return }
         pending += ads
     }
 }

@@ -92,6 +92,13 @@ func didResume() {
     ads.pauseOverlay.load()                    // prepare the next pause (server decides whether to fill)
 }
 
+// 4. Leaving the player: release the ads. Takes ~1 s when an ad was on
+//    screen (measurement beacons); `setVideo` for the next video does
+//    this for you.
+func didLeavePlayer() async {
+    await ads.destroy()
+}
+
 ```
 
 ## Installation

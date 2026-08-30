@@ -43,8 +43,8 @@ struct EpisodePlayerView: View {
             }
         }
         .onDisappear {
-            ads?.pauseOverlay.hide()
-            ads?.pauseFullscreen.hide()
+            if let ads { Task { await ads.destroy() } }
+            ads = nil
             player?.pause()
             player = nil
         }

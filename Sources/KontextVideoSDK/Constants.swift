@@ -7,4 +7,10 @@ public enum Constants {
 
     /// `/preload` request timeout, in seconds.
     static let preloadTimeout: TimeInterval = 16
+
+    /// How long an ad view stays in the hierarchy after `destroy()` when
+    /// it was on screen. Open Measurement needs the view alive for about a
+    /// second after the session is finished so its script can send the
+    /// final beacons; the same grace applies to tracking pings.
+    static let teardownDelay: TimeInterval = 1
 }

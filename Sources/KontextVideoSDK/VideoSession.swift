@@ -30,8 +30,8 @@ public final class VideoSession {
 
     /// Makes `externalId` the current video and returns its ads handle.
     /// Does not request anything — call ``VideoAds/load(formats:)`` on the
-    /// handle. Responses for a previous video are dropped once a new one
-    /// is set.
+    /// handle. The previous video's handle is destroyed in the background
+    /// (see ``VideoAds/destroy()``).
     ///
     /// - Parameters:
     ///   - externalId: The publisher's own video ID.
@@ -50,6 +50,9 @@ public final class VideoSession {
             session: self,
             emit: { [weak self] in self?.emit($0) }
         )
+        if let previous = currentVideo {
+            Task { await previous.destroy() }
+        }
         currentVideo = ads
         return ads
     }
