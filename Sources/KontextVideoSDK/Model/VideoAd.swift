@@ -5,7 +5,10 @@ import Foundation
 /// pause ad); the SDK never sees the XML.
 public struct VideoAd: Sendable, Decodable {
     public let format: VideoAdFormat
+    /// Unique per served ad (one bid = one opportunity).
     public let bidId: String
+    /// Stable id of the creative behind the bid, when the server sends one.
+    public let creativeId: String?
     public let creative: VideoAdCreative
     public let tracking: VideoAdTracking
 }

@@ -57,4 +57,4 @@ xcodegen generate   # only after changing project.yml
 open Example.xcodeproj
 ```
 
-Run the `Example` scheme. For CI/screenshot automation, launching with `SIMCTL_CHILD_AUTO_OPEN_STORY=1` jumps straight into the player.
+Run the `Example` scheme. For CI/screenshot automation, launching with `SIMCTL_CHILD_AUTO_OPEN_STORY=1` jumps straight into the player; add `SIMCTL_CHILD_AUTO_PAUSE_LOOP=1` to pause/resume every 3 s so the pause → ad → resume → reload cycle shows up in the console (each `shown` carries a different `bidId`).

@@ -8,7 +8,7 @@ import Foundation
 ///
 /// ```swift
 /// let ads = session.setVideo(externalId: "ep-1042")
-/// ads.load(formats: [.pauseOverlay])           // or omit for all formats
+/// ads.load(formats: [.pauseOverlay, .pauseFullscreen])
 /// // on pause
 /// if ads.pauseOverlay.isReady { ads.pauseOverlay.show(in: playerView) }
 /// // on resume
@@ -68,9 +68,14 @@ public final class VideoAds {
     /// to the placements' `pending` queues. Emits `.filled` / `.noFill`
     /// per requested format. Ignored while a request is already in flight.
     ///
-    /// - Parameter formats: Which placements to fill. Defaults to all.
-    public func load(formats: [VideoAdFormat] = VideoAdFormat.allCases) {
-        guard !isDestroyed, !isLoading, let session, !formats.isEmpty else { return }
+    /// - Parameter formats: Which placements to fill. Must not be empty —
+    ///   only what you list is requested.
+    public func load(formats: [VideoAdFormat]) {
+        guard !formats.isEmpty else {
+            assertionFailure("VideoAds.load(formats:) called with an empty list — name the formats you want")
+            return
+        }
+        guard !isDestroyed, !isLoading, let session else { return }
         isLoading = true
         loadTask = Task {
             let ads = await session.preload(self, formats: formats)
@@ -79,8 +84,11 @@ public final class VideoAds {
             pauseOverlay.append(ads.filter { $0.format == .pauseOverlay })
             pauseFullscreen.append(ads.filter { $0.format == .pauseFullscreen })
             for format in formats {
-                let data = VideoAdEvent.AdData(format: format, externalId: externalId)
-                emit(ads.contains { $0.format == format } ? .filled(data) : .noFill(data))
+                if let ad = ads.first(where: { $0.format == format }) {
+                    emit(.filled(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
+                } else {
+                    emit(.noFill(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: nil)))
+                }
             }
         }
     }

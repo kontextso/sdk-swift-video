@@ -13,7 +13,14 @@ enum Ads {
         userId: "user-example",
         adServerURL: mockServerURL,
         onEvent: { event in
-            print("[Example] event: \(event)")
+            switch event {
+            case .filled(let d): print("[Example] filled \(d.format) bid=\(d.bidId ?? "-")")
+            case .noFill(let d): print("[Example] noFill \(d.format)")
+            case .shown(let d): print("[Example] shown \(d.format) bid=\(d.bidId ?? "-")")
+            case .clicked(let d): print("[Example] clicked \(d.format) bid=\(d.bidId ?? "-")")
+            case .closed(let d): print("[Example] closed \(d.format) bid=\(d.bidId ?? "-")")
+            case .error(let e): print("[Example] error \(e.message)")
+            }
         }
     ))
 }

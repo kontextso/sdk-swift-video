@@ -21,6 +21,10 @@ public enum VideoAdEvent: Sendable {
         public let format: VideoAdFormat
         /// The publisher's video ID the ad belongs to.
         public let externalId: String
+        /// The served ad's bid ID — unique per served ad, so two `shown`
+        /// events with different bid IDs are two different ads. `nil` on
+        /// `noFill`.
+        public let bidId: String?
     }
 
     public struct ErrorData: Sendable {

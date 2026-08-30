@@ -40,6 +40,7 @@ struct EpisodePlayerView: View {
             if isActive {
                 startVideo()
                 player.play()
+                startAutoPauseLoopIfRequested()
             }
         }
         .onDisappear {
@@ -98,7 +99,7 @@ struct EpisodePlayerView: View {
             externalId: episode.id,
             title: "\(story.title) — Episode \(episode.number): \(episode.title)"
         )
-        ads.load()
+        ads.load(formats: [.pauseOverlay, .pauseFullscreen])
         self.ads = ads
     }
 
@@ -119,7 +120,11 @@ struct EpisodePlayerView: View {
         if ads.pauseFullscreen.isReady {
             ads.pauseFullscreen.show(in: playerLayerView) { resume() }
         } else if ads.pauseOverlay.isReady {
-            ads.pauseOverlay.show(in: playerLayerView)
+            // The player view ignores the safe area, so its safe-area guide
+            // is zero: push the banner below the status bar and back button.
+            var style = PauseOverlayAd.Style()
+            style.margins.top = 72
+            ads.pauseOverlay.show(in: playerLayerView, style: style)
         }
     }
 
@@ -128,9 +133,23 @@ struct EpisodePlayerView: View {
         ads?.pauseFullscreen.hide()
         player?.play()
         isPaused = false
-        // Prepare the next pause while the episode keeps playing.
+        // The shown ad is consumed; ask for the next one while the episode
+        // keeps playing. The server answers with a new bidId (or noFill).
         if let ads, !ads.pauseOverlay.isReady, !ads.pauseFullscreen.isReady {
-            ads.load()
+            ads.load(formats: [.pauseOverlay, .pauseFullscreen])
+        }
+    }
+
+    /// Debug/CI hook: `SIMCTL_CHILD_AUTO_PAUSE_LOOP=1` pauses and resumes
+    /// every 3 s so the pause → ad → resume → reload cycle can be observed
+    /// from the console without touching the screen.
+    private func startAutoPauseLoopIfRequested() {
+        guard ProcessInfo.processInfo.environment["AUTO_PAUSE_LOOP"] != nil else { return }
+        Task { @MainActor in
+            while isActive, player != nil {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                togglePlayback()
+            }
         }
     }
 }

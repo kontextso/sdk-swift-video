@@ -66,7 +66,7 @@ public final class PauseOverlayAd {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onClick = { [weak self] in
             guard let self else { return }
-            self.emit(.clicked(VideoAdEvent.AdData(format: .pauseOverlay, externalId: self.externalId)))
+            self.emit(.clicked(VideoAdEvent.AdData(format: .pauseOverlay, externalId: self.externalId, bidId: ad.bidId)))
         }
         container.addSubview(view)
         let margins = style.margins
@@ -83,7 +83,7 @@ public final class PauseOverlayAd {
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
         self.view = view
-        emit(.shown(VideoAdEvent.AdData(format: .pauseOverlay, externalId: externalId)))
+        emit(.shown(VideoAdEvent.AdData(format: .pauseOverlay, externalId: externalId, bidId: ad.bidId)))
         return true
     }
 

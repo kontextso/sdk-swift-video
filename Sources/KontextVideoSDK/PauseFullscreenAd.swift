@@ -60,12 +60,12 @@ public final class PauseFullscreenAd {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onClick = { [weak self] in
             guard let self else { return }
-            self.emit(.clicked(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: self.externalId)))
+            self.emit(.clicked(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: self.externalId, bidId: ad.bidId)))
         }
         view.onResume = { [weak self] in
             guard let self else { return }
             self.hide()
-            self.emit(.closed(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: self.externalId)))
+            self.emit(.closed(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: self.externalId, bidId: ad.bidId)))
             onResume()
         }
         container.addSubview(view)
@@ -78,7 +78,7 @@ public final class PauseFullscreenAd {
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
         self.view = view
-        emit(.shown(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: externalId)))
+        emit(.shown(VideoAdEvent.AdData(format: .pauseFullscreen, externalId: externalId, bidId: ad.bidId)))
         return true
     }
 

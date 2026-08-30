@@ -69,7 +69,7 @@ let ads = session.setVideo(
     title: "Episode 42: The Betrayal",                  // optional if uploaded via API
     description: "Mia confronts Ethan about the letter" // optional if uploaded via API
 )
-ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request; omit `formats` for all
+ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request for exactly these formats
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
