@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// One instance per app user. Owns the connection to the ad server and the
 /// viewing-session ID.
@@ -59,7 +60,14 @@ public final class VideoSession {
 
     // MARK: - Internal
 
-    func preload(_ ads: VideoAds, formats: [VideoAdFormat]) async -> [VideoAd] {
+    struct PreloadOutcome {
+        let ads: [VideoAd]
+        let noFillReason: String?
+        /// `false` when the request failed — the caller emits no `noFill`.
+        let succeeded: Bool
+    }
+
+    func preload(_ ads: VideoAds, formats: [VideoAdFormat], playerSize: CGSize?) async -> PreloadOutcome {
         do {
             let response = try await adsService.preload(AdsService.PreloadRequest(
                 publisherToken: options.publisherToken,
@@ -70,18 +78,19 @@ public final class VideoSession {
                 title: ads.title,
                 description: ads.description,
                 formats: formats,
+                context: playerSize.map { AdsService.PreloadRequest.Context(playerWidth: Int($0.width), playerHeight: Int($0.height)) },
                 sdk: SDKInfo.current
             ))
             if let newSessionId = response.sessionId {
                 sessionId = newSessionId
             }
-            guard currentVideo === ads else { return [] }
+            guard currentVideo === ads else { return PreloadOutcome(ads: [], noFillReason: nil, succeeded: false) }
             let served = response.ads.filter { formats.contains($0.format) }
-            log("/preload → \(served.count) ad(s) for \(ads.externalId)")
-            return served
+            log("/instream/preload → \(served.count) ad(s) for \(ads.externalId)\(response.noFillReason.map { " (\($0))" } ?? "")")
+            return PreloadOutcome(ads: served, noFillReason: response.noFillReason, succeeded: true)
         } catch {
             emit(.error(VideoAdEvent.ErrorData(externalId: ads.externalId, message: "\(error)")))
-            return []
+            return PreloadOutcome(ads: [], noFillReason: nil, succeeded: false)
         }
     }
 

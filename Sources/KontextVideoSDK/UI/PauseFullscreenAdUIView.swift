@@ -8,6 +8,7 @@ final class PauseFullscreenAdUIView: UIView {
     private let imageView = UIImageView()
 
     var onClick: (() -> Void)?
+    var onImageLoaded: (() -> Void)?
     var onResume: (() -> Void)?
 
     init(ad: VideoAd, style: PauseFullscreenAd.Style) {
@@ -31,7 +32,7 @@ final class PauseFullscreenAdUIView: UIView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
         addSubview(imageView)
-        AdImageLoader.load(ad.creative.image.url, into: imageView)
+        AdImageLoader.load(ad.creative.image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
 
         let resume = UIButton(type: .system)
         resume.setTitle(style.resumeTitle, for: .normal)
@@ -55,9 +56,7 @@ final class PauseFullscreenAdUIView: UIView {
     }
 
     @objc private func didTap() {
-        guard let url = ad.creative.clickThroughUrl.flatMap(URL.init(string:)) else { return }
         onClick?()
-        UIApplication.shared.open(url)
     }
 
     @objc private func didTapResume() {

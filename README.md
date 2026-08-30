@@ -38,6 +38,21 @@ In OpenRTB terms the placement is `imp.video` with `plcmt = 5` (Pause), `pos = 7
 the response is a VAST 4.2 `<NonLinearAds>` creative with `creativeView`,
 `overlayViewDuration` and `close` tracking.
 
+### Tracking
+
+The ad server sends nine tracking URLs per ad (`tracking` in the JSON, the same set
+it puts into VAST). The SDK fires them, each at most once per ad:
+
+| When | Fired |
+|---|---|
+| the creative image is painted | `impression`, `creative_view` |
+| ≥ 50 % of the ad on screen for 1 continuous second (MRC display rule), app active | `viewable` — or `not_viewable` if hidden before that |
+| tap | opens `click_through` (`/impression/{bid}/redirect` records the click, then forwards) |
+| hide, for any reason | `overlay_view_duration`, plus `close` when the user dismissed (Resume) |
+
+Pings are `POST`s. `[CACHEBUSTING]` is replaced per fire, `[TIMESTAMP]` with the
+current ISO-8601 time, any other `[MACRO]` becomes empty.
+
 The spec is written for 16:9 TV screens and has no portrait size. The SDK
 maps the two IAB placements to its two formats: `pos = 8` (partial screen) →
 `pauseOverlay`, an image banner sized from the creative's declared dimensions
@@ -73,7 +88,9 @@ ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request for exact
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
-//    `isReady` is false again.
+//    `isReady` is false again. `show` reveals after the server's
+//    `delay_ms` (2 s) — a `hide()` before that cancels it, so an accidental
+//    tap never surfaces the ad.
 func didPause() {
     if ads.pauseFullscreen.isReady {
         var style = PauseFullscreenAd.Style()

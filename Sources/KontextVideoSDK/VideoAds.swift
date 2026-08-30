@@ -1,4 +1,4 @@
-import Foundation
+import UIKit
 
 /// The ads of the current video — returned by
 /// ``VideoSession/setVideo(externalId:title:description:)``.
@@ -68,9 +68,12 @@ public final class VideoAds {
     /// to the placements' `pending` queues. Emits `.filled` / `.noFill`
     /// per requested format. Ignored while a request is already in flight.
     ///
-    /// - Parameter formats: Which placements to fill. Must not be empty —
-    ///   only what you list is requested.
-    public func load(formats: [VideoAdFormat]) {
+    /// - Parameters:
+    ///   - formats: Which placements to fill. Must not be empty — only what
+    ///     you list is requested.
+    ///   - playerSize: The player's size in pixels, when known, so the
+    ///     server can pick a creative that fits.
+    public func load(formats: [VideoAdFormat], playerSize: CGSize? = nil) {
         guard !formats.isEmpty else {
             assertionFailure("VideoAds.load(formats:) called with an empty list — name the formats you want")
             return
@@ -78,16 +81,17 @@ public final class VideoAds {
         guard !isDestroyed, !isLoading, let session else { return }
         isLoading = true
         loadTask = Task {
-            let ads = await session.preload(self, formats: formats)
+            let outcome = await session.preload(self, formats: formats, playerSize: playerSize)
             isLoading = false
-            guard !Task.isCancelled, !isDestroyed else { return }
+            guard !Task.isCancelled, !isDestroyed, outcome.succeeded else { return }
+            let ads = outcome.ads
             pauseOverlay.append(ads.filter { $0.format == .pauseOverlay })
             pauseFullscreen.append(ads.filter { $0.format == .pauseFullscreen })
             for format in formats {
                 if let ad = ads.first(where: { $0.format == format }) {
                     emit(.filled(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
                 } else {
-                    emit(.noFill(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: nil)))
+                    emit(.noFill(VideoAdEvent.NoFillData(format: format, externalId: externalId, reason: outcome.noFillReason)))
                 }
             }
         }

@@ -8,6 +8,7 @@ final class PauseOverlayAdUIView: UIView {
     private let imageView = UIImageView()
 
     var onClick: (() -> Void)?
+    var onImageLoaded: (() -> Void)?
 
     init(ad: VideoAd, style: PauseOverlayAd.Style) {
         self.ad = ad
@@ -35,7 +36,7 @@ final class PauseOverlayAdUIView: UIView {
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-        AdImageLoader.load(ad.creative.image.url, into: imageView)
+        AdImageLoader.load(ad.creative.image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
     }
 
@@ -47,8 +48,6 @@ final class PauseOverlayAdUIView: UIView {
     }
 
     @objc private func didTap() {
-        guard let url = ad.creative.clickThroughUrl.flatMap(URL.init(string:)) else { return }
         onClick?()
-        UIApplication.shared.open(url)
     }
 }

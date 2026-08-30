@@ -141,13 +141,14 @@ struct EpisodePlayerView: View {
     }
 
     /// Debug/CI hook: `SIMCTL_CHILD_AUTO_PAUSE_LOOP=1` pauses and resumes
-    /// every 3 s so the pause → ad → resume → reload cycle can be observed
-    /// from the console without touching the screen.
+    /// every 5 s (the ad reveals 2 s into a pause and needs 1 s on screen
+    /// to count as viewable) so the pause → ad → pings → resume → reload
+    /// cycle can be observed from the console without touching the screen.
     private func startAutoPauseLoopIfRequested() {
         guard ProcessInfo.processInfo.environment["AUTO_PAUSE_LOOP"] != nil else { return }
         Task { @MainActor in
             while isActive, player != nil {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
                 togglePlayback()
             }
         }
