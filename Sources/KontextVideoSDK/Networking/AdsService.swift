@@ -20,7 +20,7 @@ struct AdsService: Sendable {
         let externalId: String
         let title: String?
         let description: String?
-        let enabledFormats: [VideoAdFormat]
+        let formats: [VideoAdFormat]
         let sdk: SDKInfo
     }
 

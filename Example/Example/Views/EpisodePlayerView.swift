@@ -94,10 +94,12 @@ struct EpisodePlayerView: View {
     }
 
     private func startVideo() {
-        ads = Ads.session.startVideo(
+        let ads = Ads.session.setVideo(
             externalId: episode.id,
             title: "\(story.title) — Episode \(episode.number): \(episode.title)"
         )
+        ads.load()
+        self.ads = ads
     }
 
     private func togglePlayback() {
@@ -126,6 +128,10 @@ struct EpisodePlayerView: View {
         ads?.pauseFullscreen.hide()
         player?.play()
         isPaused = false
+        // Prepare the next pause while the episode keeps playing.
+        if let ads, !ads.pauseOverlay.isReady, !ads.pauseFullscreen.isReady {
+            ads.load()
+        }
     }
 }
 

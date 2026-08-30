@@ -1,15 +1,17 @@
 import UIKit
 
-/// The creative image as a rounded banner. Tapping it opens the
-/// click-through URL.
+/// The creative image as a rounded banner styled by `PauseOverlayAd.Style`.
+/// Tapping it opens the click-through URL.
 final class PauseOverlayAdUIView: UIView {
     private let ad: VideoAd
+    private let style: PauseOverlayAd.Style
     private let imageView = UIImageView()
 
     var onClick: (() -> Void)?
 
-    init(ad: VideoAd) {
+    init(ad: VideoAd, style: PauseOverlayAd.Style) {
         self.ad = ad
+        self.style = style
         super.init(frame: .zero)
         setUp()
     }
@@ -22,9 +24,9 @@ final class PauseOverlayAdUIView: UIView {
     private func setUp() {
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
-        imageView.layer.cornerRadius = 12
+        imageView.layer.cornerRadius = style.cornerRadius
         imageView.layer.cornerCurve = .continuous
-        imageView.backgroundColor = UIColor.black.withAlphaComponent(0.3)
+        imageView.backgroundColor = style.placeholderColor
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         NSLayoutConstraint.activate([

@@ -24,6 +24,14 @@ public final class PauseFullscreenAd {
     /// Ads not yet shown, in the order the server returned them.
     public private(set) var pending: [VideoAd] = []
 
+    /// Requests another ad for this placement only (one `/preload` with
+    /// just this format). Same as `VideoAds.load(formats: [.pauseFullscreen])`.
+    public func load() {
+        loadHandler?()
+    }
+
+    var loadHandler: (() -> Void)?
+
     /// `true` when an ad is loaded and none is on screen.
     public var isReady: Bool {
         view == nil && !pending.isEmpty
@@ -79,7 +87,7 @@ public final class PauseFullscreenAd {
         view = nil
     }
 
-    func apply(_ ads: [VideoAd]) {
-        pending = ads
+    func append(_ ads: [VideoAd]) {
+        pending += ads
     }
 }

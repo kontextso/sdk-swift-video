@@ -10,10 +10,34 @@ public final class PauseOverlayAd {
         case bottom
     }
 
+    /// Appearance of the banner. Everything has a default.
+    public struct Style: Sendable {
+        /// Space between the banner and the container's safe-area edges.
+        /// `top` applies for `.top`, `bottom` for `.bottom`; `left`/`right`
+        /// always.
+        public var margins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        /// Caps the banner width (centered) so it doesn't stretch across
+        /// wide players such as iPad or landscape. `nil` = full width.
+        public var maxWidth: CGFloat? = nil
+        public var cornerRadius: CGFloat = 12
+        /// Shown until the image has loaded.
+        public var placeholderColor: UIColor = UIColor.black.withAlphaComponent(0.3)
+
+        public init() {}
+    }
+
     public let externalId: String
 
     /// Ads not yet shown, in the order the server returned them.
     public private(set) var pending: [VideoAd] = []
+
+    /// Requests another ad for this placement only (one `/preload` with
+    /// just this format). Same as `VideoAds.load(formats: [.pauseOverlay])`.
+    public func load() {
+        loadHandler?()
+    }
+
+    var loadHandler: (() -> Void)?
 
     /// `true` when an ad is loaded and none is on screen.
     public var isReady: Bool {
@@ -33,24 +57,26 @@ public final class PauseOverlayAd {
     /// title most apps draw at the bottom stays visible.
     /// Returns `false` when ``isReady`` is `false`.
     @discardableResult
-    public func show(in container: UIView, position: Position = .top) -> Bool {
+    public func show(in container: UIView, position: Position = .top, style: Style = Style()) -> Bool {
         guard isReady else { return false }
         let ad = pending.removeFirst()
-        let view = PauseOverlayAdUIView(ad: ad)
+        let view = PauseOverlayAdUIView(ad: ad, style: style)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.onClick = { [weak self] in
             guard let self else { return }
             self.emit(.clicked(VideoAdEvent.AdData(format: .pauseOverlay, externalId: self.externalId)))
         }
         container.addSubview(view)
-        let inset: CGFloat = 16
+        let margins = style.margins
+        var width = max(container.bounds.width - margins.left - margins.right, 0)
+        if let maxWidth = style.maxWidth { width = min(width, maxWidth) }
         NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
-            view.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
-            view.heightAnchor.constraint(equalToConstant: view.height(forWidth: max(container.bounds.width - 2 * inset, 0))),
+            view.widthAnchor.constraint(equalToConstant: width),
+            view.heightAnchor.constraint(equalToConstant: view.height(forWidth: width)),
+            view.centerXAnchor.constraint(equalTo: container.centerXAnchor, constant: (margins.left - margins.right) / 2),
             position == .top
-                ? view.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: inset)
-                : view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -inset),
+                ? view.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: margins.top)
+                : view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -margins.bottom),
         ])
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
@@ -66,7 +92,7 @@ public final class PauseOverlayAd {
         view = nil
     }
 
-    func apply(_ ads: [VideoAd]) {
-        pending = ads
+    func append(_ ads: [VideoAd]) {
+        pending += ads
     }
 }

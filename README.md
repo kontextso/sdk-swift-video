@@ -63,13 +63,13 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     }
 ))
 
-// 2. Tell the SDK a new video is loading. Returns the ads prepared for
-// this video.
-let ads = session.startVideo(
+// 2. Tell the SDK which video is current, then load ads for it.
+let ads = session.setVideo(
     externalId: "ep-1042",                              // your video ID
     title: "Episode 42: The Betrayal",                  // optional if uploaded via API
     description: "Mia confronts Ethan about the letter" // optional if uploaded via API
 )
+ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request; omit `formats` for all
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
@@ -80,13 +80,16 @@ func didPause() {
         style.resumeTitle = "Continue watching"
         ads.pauseFullscreen.show(in: playerView, style: style) { avPlayer.play() }
     } else if ads.pauseOverlay.isReady {
-        ads.pauseOverlay.show(in: playerView, position: .top)
+        var style = PauseOverlayAd.Style()        // margins, maxWidth, cornerRadius, placeholderColor
+        style.margins.top = 24
+        ads.pauseOverlay.show(in: playerView, position: .top, style: style)
     }
 }
 
 func didResume() {
     ads.pauseOverlay.hide()
     ads.pauseFullscreen.hide()
+    ads.pauseOverlay.load()                    // prepare the next pause (server decides whether to fill)
 }
 
 ```
