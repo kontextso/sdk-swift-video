@@ -14,7 +14,9 @@ The SDK itself is a Swift Package — `swift build` won't work on host macOS bec
 
 ```
 sdk-swift-video/
-├── Sources/KontextVideoSDK/         # SDK source (entry points, models, networking, UI)
+├── Sources/KontextVideoSDK/         # SDK source: entry points at the root, then
+│   ├── AdFormats/                   #   one folder per format (placement + view)
+│   ├── Model/  Networking/  Tracking/
 ├── Example/                         # SwiftUI short-drama demo app (XcodeGen)
 │   ├── project.yml                  # XcodeGen input
 │   └── Example/                     # app sources

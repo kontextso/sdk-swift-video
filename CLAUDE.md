@@ -54,10 +54,11 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 
 ### Internal organization
 
-- `Sources/KontextVideoSDK/` — public types (`KontextVideo`, `VideoSession`, `VideoAds`, `PauseOverlayAd`, `PauseFullscreenAd`, `VideoSessionOptions`) at the top.
+- `Sources/KontextVideoSDK/` — public entry points (`KontextVideo`, `VideoSession`, `VideoAds`, `VideoSessionOptions`) at the top.
+- `Sources/KontextVideoSDK/AdFormats/` — one folder per format, each holding the placement object and its view (mirrors sdk-swift's `InlineAd/`, `InterstitialAd/`): `PauseOverlay/{PauseOverlayAd, PauseOverlayAdUIView}`, `PauseFullscreen/{PauseFullscreenAd, PauseFullscreenAdUIView}`; shared `PausePlacement` base class and `AdImageLoader` at the folder root. A new format = a new folder here + a case in `VideoAdFormat` + a property on `VideoAds`.
 - `Sources/KontextVideoSDK/Model/` — `VideoAdFormat`, `VideoAdEvent`, `VideoAd` + `VideoAdCreative` + `VideoAdTracking` (the `/preload` response shape). The server derives it from the DSP's VAST 4.2 `<NonLinearAds>` (IAB CTV Ad Portfolio pause ad): static image + click-through + `impression`/`click`/`creativeView`/`overlayViewDuration`/`close` tracking URLs. No headline/body/CTA text — VAST has none. The mock server's `vast.js` is the reference parser.
 - `Sources/KontextVideoSDK/Networking/` — `AdsService` (`POST /preload`, request/response types).
-- `Sources/KontextVideoSDK/UI/` — `PauseOverlayAdUIView` (image banner), `PauseFullscreenAdUIView` (image + styled Resume button), `AdImageLoader`. The earlier gradient bottom-sheet design is on `snapshot/v0-prototype`.
+- `Sources/KontextVideoSDK/Tracking/` — `AdTracker` (pings), `ViewabilityMeter` (MRC). The earlier gradient bottom-sheet pause design is on `snapshot/v0-prototype`.
 - `Example/` — SwiftUI short-drama demo app (XcodeGen; see `Example/project.yml`). Home grid of stories → fullscreen vertical episode player. It links the SDK and is the integration playground.
 
 ### Privacy & attribution
