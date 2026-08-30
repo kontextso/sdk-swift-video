@@ -35,6 +35,9 @@ public final class VideoAds {
     /// Image over the whole paused player, with a Resume button.
     public let pauseFullscreen: PauseFullscreenAd
 
+    /// Full-screen video between two episodes.
+    public let swipe: SwipeAd
+
     /// `true` while a `/preload` request is in flight.
     public private(set) var isLoading = false
 
@@ -60,8 +63,10 @@ public final class VideoAds {
         self.emit = emit
         self.pauseOverlay = PauseOverlayAd(externalId: externalId, emit: emit)
         self.pauseFullscreen = PauseFullscreenAd(externalId: externalId, emit: emit)
+        self.swipe = SwipeAd(externalId: externalId, emit: emit)
         pauseOverlay.loadHandler = { [weak self] in self?.load(formats: [.pauseOverlay]) }
         pauseFullscreen.loadHandler = { [weak self] in self?.load(formats: [.pauseFullscreen]) }
+        swipe.loadHandler = { [weak self] in self?.load(formats: [.swipe]) }
     }
 
     /// Requests ads for this video in one `/preload` call and appends them
@@ -87,6 +92,7 @@ public final class VideoAds {
             let ads = outcome.ads
             pauseOverlay.append(ads.filter { $0.format == .pauseOverlay })
             pauseFullscreen.append(ads.filter { $0.format == .pauseFullscreen })
+            swipe.append(ads.filter { $0.format == .swipe })
             for format in formats {
                 if let ad = ads.first(where: { $0.format == format }) {
                     emit(.filled(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
@@ -111,6 +117,7 @@ public final class VideoAds {
         isLoading = false
         async let overlay: Void = pauseOverlay.destroy()
         async let fullscreen: Void = pauseFullscreen.destroy()
-        _ = await (overlay, fullscreen)
+        async let swipeAd: Void = swipe.destroy()
+        _ = await (overlay, fullscreen, swipeAd)
     }
 }

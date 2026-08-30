@@ -16,8 +16,14 @@ final class AdTracker {
         case impression, creativeView, viewable, notViewable, viewUndetermined, close, overlayViewDuration, clickTracking
     }
 
+    /// VAST linear events for video creatives.
+    enum VideoEvent: CaseIterable {
+        case start, firstQuartile, midpoint, thirdQuartile, complete, skip, mute, unmute
+    }
+
     private let tracking: VideoAdTracking
     private var fired: Set<Event> = []
+    private var firedVideo: Set<VideoEvent> = []
     private let session: URLSession
     /// Set once one of the three viewability verdicts fired.
     private(set) var viewabilityDecided = false
@@ -33,14 +39,38 @@ final class AdTracker {
             guard !viewabilityDecided else { return }
             viewabilityDecided = true
         }
-        guard let url = URL(string: Self.substituteMacros(in: rawURL(for: event))) else { return }
+        send(rawURL(for: event))
+    }
+
+    /// Fires a VAST linear event once. Mute/unmute may repeat per toggle.
+    func fireVideo(_ event: VideoEvent) {
+        guard let video = tracking.video else { return }
+        if event != .mute, event != .unmute {
+            guard firedVideo.insert(event).inserted else { return }
+        }
+        let raw: String?
+        switch event {
+        case .start: raw = video.start
+        case .firstQuartile: raw = video.firstQuartile
+        case .midpoint: raw = video.midpoint
+        case .thirdQuartile: raw = video.thirdQuartile
+        case .complete: raw = video.complete
+        case .skip: raw = video.skip
+        case .mute: raw = video.mute
+        case .unmute: raw = video.unmute
+        }
+        if let raw { send(raw) }
+    }
+
+    private func send(_ raw: String) {
+        guard let url = URL(string: Self.substituteMacros(in: raw)) else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: String] = [:]
         if let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == "e" })?.value {
+            .queryItems?.first(where: { $0.name == "e" || $0.name == "event" })?.value {
             body["event"] = name
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)

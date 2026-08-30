@@ -32,7 +32,9 @@ final class PauseFullscreenAdUIView: UIView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
         addSubview(imageView)
-        AdImageLoader.load(ad.creative.image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
+        if let image = ad.creative.image {
+            AdImageLoader.load(image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
+        }
 
         let resume = UIButton(type: .system)
         resume.setTitle(style.resumeTitle, for: .normal)

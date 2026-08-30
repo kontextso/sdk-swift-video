@@ -3,24 +3,27 @@ import KontextVideoSDK
 import SwiftUI
 
 /// A single fullscreen episode page: video + title overlay, tap to play/pause.
-/// Owns the episode's `VideoAds` handle and drives the pause ad from the
-/// same place playback is controlled.
+/// Drives the pause ads from the same place playback is controlled; the
+/// feed owns the `VideoAds` handle (it also needs it for the swipe ad).
 struct EpisodePlayerView: View {
     let story: Story
     let episode: Episode
     let isActive: Bool
+    let ads: VideoAds?
 
     @State private var player: AVPlayer?
     @State private var isPaused = false
     @State private var playerLayerView = PlayerLayerUIView()
-    @State private var ads: VideoAds?
+    /// A fullscreen ad covers the player, so the app hides its own chrome
+    /// (play icon, episode title) until the ad is gone.
+    @State private var isFullscreenAdShown = false
 
     var body: some View {
         ZStack {
             if let player {
                 PlayerLayerView(player: player, layerView: playerLayerView)
             }
-            if isPaused {
+            if isPaused, !isFullscreenAdShown {
                 Image(systemName: "play.fill")
                     .font(.system(size: 56))
                     .foregroundStyle(.white.opacity(0.8))
@@ -31,21 +34,20 @@ struct EpisodePlayerView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: togglePlayback)
         .overlay(alignment: .bottomLeading) {
-            episodeInfo
+            if !isFullscreenAdShown {
+                episodeInfo
+            }
         }
         .onAppear {
             let player = AVPlayer(url: episode.videoURL)
             player.actionAtItemEnd = .none
             self.player = player
             if isActive {
-                startVideo()
                 player.play()
                 startAutoPauseLoopIfRequested()
             }
         }
         .onDisappear {
-            if let ads { Task { await ads.destroy() } }
-            ads = nil
             player?.pause()
             player = nil
         }
@@ -54,7 +56,6 @@ struct EpisodePlayerView: View {
             ads?.pauseOverlay.hide()
             ads?.pauseFullscreen.hide()
             if isActive {
-                startVideo()
                 player?.seek(to: .zero)
                 player?.play()
             } else {
@@ -94,15 +95,6 @@ struct EpisodePlayerView: View {
         )
     }
 
-    private func startVideo() {
-        let ads = Ads.session.setVideo(
-            externalId: episode.id,
-            title: "\(story.title) — Episode \(episode.number): \(episode.title)"
-        )
-        ads.load(formats: [.pauseOverlay, .pauseFullscreen])
-        self.ads = ads
-    }
-
     private func togglePlayback() {
         guard let player else { return }
         if player.timeControlStatus == .playing {
@@ -118,7 +110,7 @@ struct EpisodePlayerView: View {
     private func showPauseAd() {
         guard let ads else { return }
         if ads.pauseFullscreen.isReady {
-            ads.pauseFullscreen.show(in: playerLayerView) { resume() }
+            isFullscreenAdShown = ads.pauseFullscreen.show(in: playerLayerView) { resume() }
         } else if ads.pauseOverlay.isReady {
             // The player view ignores the safe area, so its safe-area guide
             // is zero: push the banner below the status bar and back button.
@@ -131,6 +123,7 @@ struct EpisodePlayerView: View {
     private func resume() {
         ads?.pauseOverlay.hide()
         ads?.pauseFullscreen.hide()
+        isFullscreenAdShown = false
         player?.play()
         isPaused = false
         // The shown ad is consumed; ask for the next one while the episode

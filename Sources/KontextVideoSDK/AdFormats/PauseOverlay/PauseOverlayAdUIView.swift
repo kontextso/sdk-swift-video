@@ -36,14 +36,15 @@ final class PauseOverlayAdUIView: UIView {
             imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-        AdImageLoader.load(ad.creative.image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
+        if let image = ad.creative.image {
+            AdImageLoader.load(image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
+        }
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
     }
 
     /// Height for a given width, from the creative's declared image size.
     func height(forWidth width: CGFloat) -> CGFloat {
-        let image = ad.creative.image
-        guard image.w > 0, image.h > 0 else { return width * 0.6 }
+        guard let image = ad.creative.image, image.w > 0, image.h > 0 else { return width * 0.6 }
         return width * CGFloat(image.h) / CGFloat(image.w)
     }
 

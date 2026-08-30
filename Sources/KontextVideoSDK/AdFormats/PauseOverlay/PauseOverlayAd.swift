@@ -3,7 +3,7 @@ import UIKit
 /// The `pauseOverlay` placement of one video: an image banner shown over
 /// part of the paused player.
 @MainActor
-public final class PauseOverlayAd: PausePlacement {
+public final class PauseOverlayAd: AdPlacement {
     /// Where the banner sits inside the container.
     public enum Position: Sendable {
         case top
@@ -47,7 +47,7 @@ public final class PauseOverlayAd: PausePlacement {
     override func makeView(for ad: VideoAd) -> UIView {
         let view = PauseOverlayAdUIView(ad: ad, style: style)
         view.onClick = { [weak self] in self?.onClick() }
-        view.onImageLoaded = { [weak self] in self?.onImageLoaded() }
+        view.onImageLoaded = { [weak self] in self?.onCreativeRendered() }
         return view
     }
 

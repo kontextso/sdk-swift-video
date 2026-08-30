@@ -1,11 +1,11 @@
 import KontextKit
 import UIKit
 
-/// Shared machinery of the two pause placements: the pending queue, the
-/// reveal delay, tracking, viewability, and teardown. Subclasses only build
-/// the view and lay it out.
+/// Shared machinery of every placement: the pending queue, the optional
+/// reveal delay, tracking, viewability, and teardown. Subclasses build the
+/// view, lay it out, and add format-specific behaviour (video playback).
 @MainActor
-public class PausePlacement {
+public class AdPlacement {
     public let format: VideoAdFormat
     public let externalId: String
 
@@ -23,8 +23,8 @@ public class PausePlacement {
     var loadHandler: (() -> Void)?
 
     private(set) var view: UIView?
-    private var current: VideoAd?
-    private var tracker: AdTracker?
+    private(set) var current: VideoAd?
+    private(set) var tracker: AdTracker?
     private var meter: ViewabilityMeter?
     private var revealTask: Task<Void, Never>?
     private var shownAt: Date?
@@ -54,6 +54,7 @@ public class PausePlacement {
         guard let view else { return }
         meter?.end()
         meter = nil
+        willHide(userDismissed: userDismissed)
         tracker?.fire(.overlayViewDuration)
         if userDismissed { tracker?.fire(.close) }
         view.removeFromSuperview()
@@ -75,6 +76,10 @@ public class PausePlacement {
     func mount(_ view: UIView, in container: UIView) {
         fatalError("subclass")
     }
+
+    /// Called before the view is removed on `hide`; the tracker is still
+    /// alive. Video placements fire `skip` here.
+    func willHide(userDismissed: Bool) {}
 
     // MARK: - Shared flow
 
@@ -116,8 +121,9 @@ public class PausePlacement {
         emit(.shown(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
     }
 
-    /// The image is painted: this is the impression.
-    func onImageLoaded() {
+    /// The creative is on screen (image painted / first video frame): this
+    /// is the impression.
+    func onCreativeRendered() {
         guard let view, let tracker else { return }
         tracker.fire(.impression)
         tracker.fire(.creativeView)

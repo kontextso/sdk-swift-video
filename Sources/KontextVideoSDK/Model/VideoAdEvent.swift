@@ -11,9 +11,11 @@ public enum VideoAdEvent: Sendable {
     case shown(AdData)
     /// The user tapped/clicked an ad.
     case clicked(AdData)
-    /// The user dismissed the ad from inside it (the fullscreen ad's
-    /// Resume button). The ad is already hidden.
+    /// The user dismissed the ad before it ended (fullscreen Resume, or the
+    /// app hid a swipe ad after the user swiped). The ad is already hidden.
     case closed(AdData)
+    /// A video ad played to the end. The ad is already hidden.
+    case completed(AdData)
     /// Something went wrong (network, rendering, …).
     case error(ErrorData)
 

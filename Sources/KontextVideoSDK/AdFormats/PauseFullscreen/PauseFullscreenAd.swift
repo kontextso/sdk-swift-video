@@ -4,7 +4,7 @@ import UIKit
 /// paused player with a Resume button. The button is the way out, because
 /// the ad covers the app's own controls; its look is set via ``Style``.
 @MainActor
-public final class PauseFullscreenAd: PausePlacement {
+public final class PauseFullscreenAd: AdPlacement {
     /// Appearance of the fullscreen ad. Everything has a default.
     public struct Style: Sendable {
         public var backgroundColor: UIColor = .black
@@ -42,7 +42,7 @@ public final class PauseFullscreenAd: PausePlacement {
     override func makeView(for ad: VideoAd) -> UIView {
         let view = PauseFullscreenAdUIView(ad: ad, style: style)
         view.onClick = { [weak self] in self?.onClick() }
-        view.onImageLoaded = { [weak self] in self?.onImageLoaded() }
+        view.onImageLoaded = { [weak self] in self?.onCreativeRendered() }
         view.onResume = { [weak self] in
             guard let self else { return }
             let resume = self.onResume

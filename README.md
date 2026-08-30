@@ -10,8 +10,9 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 |---|---|
 | **Pause overlay** (`pauseOverlay`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
 | **Pause fullscreen** (`pauseFullscreen`) | Image over the whole paused player with a styleable Resume button |
+| **Swipe** (`swipe`) | Full-screen video between two episodes, hosted as a page in your feed; swipeable after the server's `skip_after_ms` |
 
-Both are prepared at video start; the app shows one when the user pauses and hides it on resume. Each ad is shown once.
+All are prepared at video start; the app shows a pause ad when the user pauses and hides it on resume, and shows the swipe ad when the user swipes to the next episode. Each ad is shown once.
 
 Overlay ads and the full-screen swipe banner are planned and will be added later.
 
@@ -49,6 +50,7 @@ it puts into VAST). The SDK fires them, each at most once per ad:
 | ≥ 50 % of the ad on screen for 1 continuous second (MRC display rule), app active | `viewable` — or `not_viewable` if hidden before that |
 | tap | opens `click_through` in an in-app browser (`/impression/{bid}/redirect` records the click, then forwards) |
 | hide, for any reason | `overlay_view_duration`, plus `close` when the user dismissed (Resume) |
+| swipe video: first frame, 25 / 50 / 75 %, end, swiped away | `video.start`, `video.first_quartile` / `midpoint` / `third_quartile`, `video.complete`, `video.skip` (`/impression/{bid}/vast?event=…`) |
 
 Pings are `POST`s. `[CACHEBUSTING]` is replaced per fire, `[TIMESTAMP]` with the
 current ISO-8601 time, any other `[MACRO]` becomes empty.
@@ -107,7 +109,26 @@ func didResume() {
     ads.pauseOverlay.load()                    // prepare the next pause (server decides whether to fill)
 }
 
-// 4. Leaving the player: release the ads. Takes ~1 s when an ad was on
+// 4. Swipe ad: an interstitial when the user swipes *forward* to the next
+//    episode. Show the leaving episode's ad over the feed and hold the swipe
+//    until it is skippable. Once dismissed it is gone — don't show it on a
+//    backward swipe, and `isReady` stays false until you `load()` again.
+func didSwipeToNextEpisode() {
+    if ads.swipe.isReady {
+        ads.swipe.show(in: adHostView,
+            onSkippable: { feed.allowsSwipe = true },     // server's skip_after_ms elapsed
+            onFinished: { startNextEpisode() })           // played to the end, already hidden
+    } else {
+        startNextEpisode()
+    }
+}
+
+func userSwipedAdAway() {        // only reachable once onSkippable fired
+    ads.swipe.hide()             // fires `skip`, emits .closed
+    startNextEpisode()
+}
+
+// 5. Leaving the player: release the ads. Takes ~1 s when an ad was on
 //    screen (measurement beacons); `setVideo` for the next video does
 //    this for you.
 func didLeavePlayer() async {
