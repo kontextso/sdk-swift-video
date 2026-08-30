@@ -133,23 +133,22 @@ struct EpisodePlayerView: View {
         ads?.pauseFullscreen.hide()
         player?.play()
         isPaused = false
-        // A shown ad is consumed; ask for the next one while the episode
-        // keeps playing. A pause shorter than the reveal delay leaves the ad
-        // queued, so nothing is requested then.
+        // The shown ad is consumed; ask for the next one while the episode
+        // keeps playing. The server answers with a new bidId (or noFill).
         if let ads, !ads.pauseOverlay.isReady, !ads.pauseFullscreen.isReady {
             ads.load(formats: [.pauseOverlay, .pauseFullscreen])
         }
     }
 
     /// Debug/CI hook: `SIMCTL_CHILD_AUTO_PAUSE_LOOP=1` pauses and resumes
-    /// every 5 s (the ad reveals 2 s into a pause and needs 1 s on screen
-    /// to count as viewable) so the pause → ad → pings → resume → reload
-    /// cycle can be observed from the console without touching the screen.
+    /// every 3 s (the ad shows at once and needs 1 s on screen to count as
+    /// viewable) so the pause → ad → pings → resume → reload cycle can be
+    /// observed from the console without touching the screen.
     private func startAutoPauseLoopIfRequested() {
         guard ProcessInfo.processInfo.environment["AUTO_PAUSE_LOOP"] != nil else { return }
         Task { @MainActor in
             while isActive, player != nil {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 togglePlayback()
             }
         }

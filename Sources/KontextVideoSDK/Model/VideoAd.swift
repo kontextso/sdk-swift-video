@@ -16,9 +16,9 @@ public struct VideoAd: Sendable, Decodable {
 
     public struct Trigger: Sendable, Decodable {
         public let kind: String
-        /// Wait this long after the pause before showing, so an accidental
-        /// tap that resumes immediately never surfaces the ad. Server
-        /// default 2000.
+        /// Optional wait after the pause before showing. Absent or 0 = show
+        /// immediately, which is the requirement; the server may set it per
+        /// ad if a partner wants a grace period.
         public let delayMs: Int?
     }
 

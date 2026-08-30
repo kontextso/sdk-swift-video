@@ -78,19 +78,22 @@ public class PausePlacement {
 
     // MARK: - Shared flow
 
-    /// Shows the next ad in `container` after the server's reveal delay
-    /// (`trigger.delay_ms`). A `hide()` during the delay cancels the reveal
-    /// — a quick accidental tap never surfaces the ad — and the ad stays
-    /// queued for the next pause; it is consumed only when it actually
-    /// appears. Returns `false` when ``isReady`` is `false`.
+    /// Shows the next ad in `container` — immediately, unless the server
+    /// set `trigger.delay_ms` for this ad, in which case a `hide()` during
+    /// the wait cancels the reveal and the ad stays queued for the next
+    /// pause. The ad is consumed only when it actually appears.
+    /// Returns `false` when ``isReady`` is `false`.
     @discardableResult
     func present(in container: UIView) -> Bool {
         guard isReady, let ad = pending.first else { return false }
         let delay = TimeInterval(ad.trigger.delayMs ?? 0) / 1000
+        guard delay > 0 else {
+            pending.removeFirst()
+            reveal(ad, in: container)
+            return true
+        }
         revealTask = Task { [weak self, weak container] in
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            }
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled, let self, let container,
                   let next = self.pending.first, next.bidId == ad.bidId else { return }
             self.revealTask = nil

@@ -88,9 +88,7 @@ ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request for exact
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
-//    `isReady` is false again. `show` reveals after the server's
-//    `delay_ms` (2 s) — a `hide()` before that cancels it, so an accidental
-//    tap never surfaces the ad.
+//    `isReady` is false again. The ad shows immediately on pause.
 func didPause() {
     if ads.pauseFullscreen.isReady {
         var style = PauseFullscreenAd.Style()
