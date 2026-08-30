@@ -64,6 +64,10 @@ The project uses `.enableExperimentalFeature("StrictConcurrency")` in `Package.s
 
 Like `sdk-swift`, this SDK must not vendor IDFA / ATT / StoreKit / OMID code directly — those primitives live in [KontextKit](https://github.com/kontextso/kontextkit-ios). The dependency is not added yet; add it when the first attribution/measurement feature lands, pinned exact while KontextKit is pre-1.0 (match sdk-swift's pin).
 
+## Roadmap decisions
+
+- **Custom ad views (binding API) → v2.0.** Decided 2026-08-30. v1 ships the SDK-owned views + `Style` only. v2 adds a MAX/Meta-style escape hatch: `show(in:custom:onResume:)` with a `PauseAdBinding { view, imageView, clickableViews, resumeControl, adBadgeView? }` — publisher owns layout, SDK still loads the image, routes clicks + tracking, ensures the AD badge, registers OM, applies the teardown delay. Fullscreen first; overlay only on demand. Never document "render `VideoAd` yourself" — it loses measurement.
+
 ## Conventions
 
 - **Swift 5.9**, iOS 14.0+. `StrictConcurrency` is on — anything crossing actor boundaries must be `Sendable`.
