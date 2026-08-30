@@ -119,7 +119,7 @@ struct StoryPlayerView: View {
             externalId: episode.id,
             title: "\(story.title) — Episode \(episode.number): \(episode.title)"
         )
-        handle.load(formats: [.pauseOverlay, .pauseFullscreen, .swipe])
+        handle.load(formats: [.pauseOverlay, .pauseFullscreen, .swipe, .overlay])
         ads = handle
         activeEpisodeID = id
     }

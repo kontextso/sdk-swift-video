@@ -16,7 +16,11 @@ public struct VideoAd: Sendable, Decodable {
     public let tracking: VideoAdTracking
 
     public struct Trigger: Sendable, Decodable {
+        /// `pause`, `swipe`, or `range` (a window in content time).
         public let kind: String
+        /// Window start / end in content time, `range` triggers only.
+        public let fromMs: Int?
+        public let toMs: Int?
         /// Optional wait after the trigger before showing. Absent or 0 =
         /// show immediately, which is the requirement; the server may set
         /// it per ad if a partner wants a grace period.

@@ -1,16 +1,17 @@
 import UIKit
 
-/// The creative image as a rounded banner styled by `PauseOverlayAd.Style`.
-/// Tapping it opens the click-through URL.
-final class PauseOverlayAdUIView: UIView {
+/// The creative image as a rounded banner styled by `BannerStyle`, shared by
+/// the pause overlay and the playing overlay. Tapping it opens the
+/// click-through URL.
+final class BannerAdUIView: UIView {
     private let ad: VideoAd
-    private let style: PauseOverlayAd.Style
+    private let style: BannerStyle
     private let imageView = UIImageView()
 
     var onClick: (() -> Void)?
     var onImageLoaded: (() -> Void)?
 
-    init(ad: VideoAd, style: PauseOverlayAd.Style) {
+    init(ad: VideoAd, style: BannerStyle) {
         self.ad = ad
         self.style = style
         super.init(frame: .zero)

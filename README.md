@@ -10,7 +10,8 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 |---|---|
 | **Pause overlay** (`pauseOverlay`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
 | **Pause fullscreen** (`pauseFullscreen`) | Image over the whole paused player with a styleable Resume button |
-| **Swipe** (`swipe`) | Full-screen video between two episodes, hosted as a page in your feed; swipeable after the server's `skip_after_ms` |
+| **Swipe** (`swipe`) | Full-screen video interstitial when the user swipes to the next episode; swipeable after the server's `skip_after_ms` |
+| **Overlay** (`overlay`) | Image banners while the episode plays — several per video, each in a window the server derived from the scene; the SDK tells you when a window opens, you decide to show |
 
 All are prepared at video start; the app shows a pause ad when the user pauses and hides it on resume, and shows the swipe ad when the user swipes to the next episode. Each ad is shown once.
 
@@ -117,7 +118,7 @@ func didSwipeToNextEpisode() {
     if ads.swipe.isReady {
         ads.swipe.show(in: adHostView,
             onSkippable: { feed.allowsSwipe = true },     // server's skip_after_ms elapsed
-            onFinished: { startNextEpisode() })           // played to the end, already hidden
+            onFinished: { startNextEpisode() })           // played to the end or Skip tapped, already hidden
     } else {
         startNextEpisode()
     }
@@ -128,7 +129,15 @@ func userSwipedAdAway() {        // only reachable once onSkippable fired
     startNextEpisode()
 }
 
-// 5. Leaving the player: release the ads. Takes ~1 s when an ad was on
+// 5. Overlay: feed the playhead; the SDK calls back when a window opens or
+//    closes. Showing is your call (or show any time, windows ignored).
+ads.overlay.onWindowOpen  = { ad in ads.overlay.show(in: playerView) }
+ads.overlay.onWindowClose = { ad in ads.overlay.hide() }
+player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
+    ads.overlay.playhead = t.seconds
+}
+
+// 6. Leaving the player: release the ads. Takes ~1 s when an ad was on
 //    screen (measurement beacons); `setVideo` for the next video does
 //    this for you.
 func didLeavePlayer() async {

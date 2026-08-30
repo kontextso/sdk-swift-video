@@ -110,14 +110,16 @@ public class AdPlacement {
 
     private func reveal(_ ad: VideoAd, in container: UIView) {
         let tracker = AdTracker(tracking: ad.tracking)
+        // `current` is set before `mount` so subclasses can read the ad's
+        // placement while laying out.
+        self.current = ad
+        self.tracker = tracker
         let view = makeView(for: ad)
         view.translatesAutoresizingMaskIntoConstraints = false
         mount(view, in: container)
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
         self.view = view
-        self.current = ad
-        self.tracker = tracker
         emit(.shown(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
     }
 
@@ -157,6 +159,12 @@ public class AdPlacement {
     func append(_ ads: [VideoAd]) {
         guard !isDestroyed else { return }
         pending += ads
+    }
+
+    func moveToFront(_ index: Int) {
+        guard pending.indices.contains(index), index != 0 else { return }
+        let ad = pending.remove(at: index)
+        pending.insert(ad, at: 0)
     }
 
     /// Tears the placement down: fires the end-of-display pings for an ad on

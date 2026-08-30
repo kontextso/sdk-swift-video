@@ -38,6 +38,9 @@ public final class VideoAds {
     /// Full-screen video between two episodes.
     public let swipe: SwipeAd
 
+    /// Image banners while the episode plays, in server-derived windows.
+    public let overlay: OverlayAd
+
     /// `true` while a `/preload` request is in flight.
     public private(set) var isLoading = false
 
@@ -64,9 +67,11 @@ public final class VideoAds {
         self.pauseOverlay = PauseOverlayAd(externalId: externalId, emit: emit)
         self.pauseFullscreen = PauseFullscreenAd(externalId: externalId, emit: emit)
         self.swipe = SwipeAd(externalId: externalId, emit: emit)
+        self.overlay = OverlayAd(externalId: externalId, emit: emit)
         pauseOverlay.loadHandler = { [weak self] in self?.load(formats: [.pauseOverlay]) }
         pauseFullscreen.loadHandler = { [weak self] in self?.load(formats: [.pauseFullscreen]) }
         swipe.loadHandler = { [weak self] in self?.load(formats: [.swipe]) }
+        overlay.loadHandler = { [weak self] in self?.load(formats: [.overlay]) }
     }
 
     /// Requests ads for this video in one `/preload` call and appends them
@@ -93,8 +98,10 @@ public final class VideoAds {
             pauseOverlay.append(ads.filter { $0.format == .pauseOverlay })
             pauseFullscreen.append(ads.filter { $0.format == .pauseFullscreen })
             swipe.append(ads.filter { $0.format == .swipe })
+            overlay.append(ads.filter { $0.format == .overlay })
             for format in formats {
                 if let ad = ads.first(where: { $0.format == format }) {
+                    // One `filled` per format; overlay may carry several ads.
                     emit(.filled(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
                 } else {
                     emit(.noFill(VideoAdEvent.NoFillData(format: format, externalId: externalId, reason: outcome.noFillReason)))
@@ -115,9 +122,10 @@ public final class VideoAds {
         loadTask?.cancel()
         loadTask = nil
         isLoading = false
-        async let overlay: Void = pauseOverlay.destroy()
+        async let pauseBanner: Void = pauseOverlay.destroy()
         async let fullscreen: Void = pauseFullscreen.destroy()
         async let swipeAd: Void = swipe.destroy()
-        _ = await (overlay, fullscreen, swipeAd)
+        async let playing: Void = overlay.destroy()
+        _ = await (pauseBanner, fullscreen, swipeAd, playing)
     }
 }

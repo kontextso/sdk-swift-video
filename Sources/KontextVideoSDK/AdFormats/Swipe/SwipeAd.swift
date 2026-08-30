@@ -58,8 +58,9 @@ public final class SwipeAd: AdPlacement {
     /// - Parameters:
     ///   - onSkippable: The ad may now be swiped away (`skip_after_ms`
     ///     elapsed). Unblock the swipe gesture here.
-    ///   - onFinished: The video played to the end; the ad is already
-    ///     hidden. Move on to the next episode here.
+    ///   - onFinished: The ad is over — played to the end or skipped with
+    ///     its Skip button — and already hidden. Move on to the next
+    ///     episode here. (Not called for your own `hide()`.)
     @discardableResult
     public func show(
         in container: UIView,
@@ -95,7 +96,13 @@ public final class SwipeAd: AdPlacement {
             self.isSkippable = true
             self.onSkippable?()
         }
-        view.onSkipTapped = { [weak self] in self?.onUserDismiss() }
+        view.onSkipTapped = { [weak self] in
+            // Skip is the ad's own control, so the app needs `onFinished`
+            // just like on completion — otherwise it is left holding an
+            // empty host view.
+            self?.onUserDismiss()
+            self?.onFinished?()
+        }
         view.onFailure = { [weak self] message in
             // Unplayable media: tear down without tracking and let the app
             // move on, exactly as if the ad had finished.

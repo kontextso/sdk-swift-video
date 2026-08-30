@@ -14,6 +14,10 @@ struct EpisodePlayerView: View {
     @State private var player: AVPlayer?
     @State private var isPaused = false
     @State private var playerLayerView = PlayerLayerUIView()
+    @State private var timeObserver: Any?
+    /// The time-observer closure is created once; it reads the live handle
+    /// and active flag from here instead of capturing stale struct values.
+    @State private var live = LiveState()
     /// A fullscreen ad covers the player, so the app hides its own chrome
     /// (play icon, episode title) until the ad is gone.
     @State private var isFullscreenAdShown = false
@@ -46,12 +50,19 @@ struct EpisodePlayerView: View {
                 player.play()
                 startAutoPauseLoopIfRequested()
             }
+            live.ads = ads
+            live.isActive = isActive
+            feedPlayhead(from: player)
         }
+        .onChange(of: ads.map { ObjectIdentifier($0) }) { live.ads = ads }
         .onDisappear {
+            if let timeObserver { player?.removeTimeObserver(timeObserver) }
+            timeObserver = nil
             player?.pause()
             player = nil
         }
         .onChange(of: isActive) {
+            live.isActive = isActive
             isPaused = false
             ads?.pauseOverlay.hide()
             ads?.pauseFullscreen.hide()
@@ -95,11 +106,35 @@ struct EpisodePlayerView: View {
         )
     }
 
+    /// The overlay glue: the SDK gets the playhead 4× a second and calls
+    /// back when a window opens or closes; showing stays this app's call.
+    private func feedPlayhead(from player: AVPlayer) {
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(value: 1, timescale: 4),
+            queue: .main
+        ) { time in
+            Task { @MainActor in
+                guard let ads = live.ads, live.isActive else { return }
+                ads.overlay.onWindowOpen = { _ in
+                    // Player ignores the safe area: keep the banner clear
+                    // of the status bar (top) and the episode title (bottom).
+                    var style = OverlayAd.Style()
+                    style.margins.top = 72
+                    style.margins.bottom = 120
+                    ads.overlay.show(in: playerLayerView, style: style)
+                }
+                ads.overlay.onWindowClose = { _ in ads.overlay.hide() }
+                ads.overlay.playhead = CMTimeGetSeconds(time)
+            }
+        }
+    }
+
     private func togglePlayback() {
         guard let player else { return }
         if player.timeControlStatus == .playing {
             player.pause()
             isPaused = true
+            ads?.overlay.hide()
             showPauseAd()
         } else {
             resume()
@@ -123,6 +158,7 @@ struct EpisodePlayerView: View {
     private func resume() {
         ads?.pauseOverlay.hide()
         ads?.pauseFullscreen.hide()
+        ads?.overlay.hide()
         isFullscreenAdShown = false
         player?.play()
         isPaused = false
@@ -164,6 +200,12 @@ private struct PlayerLayerView: UIViewRepresentable {
     func updateUIView(_ uiView: PlayerLayerUIView, context: Context) {
         uiView.playerLayer.player = player
     }
+}
+
+@MainActor
+final class LiveState {
+    var ads: VideoAds?
+    var isActive = false
 }
 
 final class PlayerLayerUIView: UIView {
