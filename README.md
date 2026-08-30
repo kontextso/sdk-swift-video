@@ -47,7 +47,7 @@ it puts into VAST). The SDK fires them, each at most once per ad:
 |---|---|
 | the creative image is painted | `impression`, `creative_view` |
 | ≥ 50 % of the ad on screen for 1 continuous second (MRC display rule), app active | `viewable` — or `not_viewable` if hidden before that |
-| tap | opens `click_through` (`/impression/{bid}/redirect` records the click, then forwards) |
+| tap | opens `click_through` in an in-app browser (`/impression/{bid}/redirect` records the click, then forwards) |
 | hide, for any reason | `overlay_view_duration`, plus `close` when the user dismissed (Resume) |
 
 Pings are `POST`s. `[CACHEBUSTING]` is replaced per fire, `[TIMESTAMP]` with the

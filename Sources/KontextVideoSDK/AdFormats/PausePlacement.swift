@@ -1,3 +1,4 @@
+import KontextKit
 import UIKit
 
 /// Shared machinery of the two pause placements: the pending queue, the
@@ -77,22 +78,24 @@ public class PausePlacement {
 
     // MARK: - Shared flow
 
-    /// Consumes the next ad and shows it in `container` after the server's
-    /// reveal delay (`trigger.delay_ms`). A `hide()` during the delay cancels
-    /// the reveal — a quick accidental tap never surfaces the ad.
-    /// Returns `false` when ``isReady`` is `false`.
+    /// Shows the next ad in `container` after the server's reveal delay
+    /// (`trigger.delay_ms`). A `hide()` during the delay cancels the reveal
+    /// — a quick accidental tap never surfaces the ad — and the ad stays
+    /// queued for the next pause; it is consumed only when it actually
+    /// appears. Returns `false` when ``isReady`` is `false`.
     @discardableResult
     func present(in container: UIView) -> Bool {
-        guard isReady else { return false }
-        let ad = pending.removeFirst()
+        guard isReady, let ad = pending.first else { return false }
         let delay = TimeInterval(ad.trigger.delayMs ?? 0) / 1000
         revealTask = Task { [weak self, weak container] in
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
-            guard !Task.isCancelled, let self, let container else { return }
+            guard !Task.isCancelled, let self, let container,
+                  let next = self.pending.first, next.bidId == ad.bidId else { return }
             self.revealTask = nil
-            self.reveal(ad, in: container)
+            self.pending.removeFirst()
+            self.reveal(next, in: container)
         }
         return true
     }
@@ -124,11 +127,16 @@ public class PausePlacement {
     }
 
     /// Opens the click-through via the server (`/impression/{bid}/redirect`
-    /// records the click and forwards to the advertiser).
+    /// records the click and forwards to the advertiser) in the in-app
+    /// browser (KontextKit's `SFSafariViewController` host, which also
+    /// dismisses itself when a deep link hands off to another app). Falls
+    /// back to the system for non-http schemes.
     func onClick() {
         guard let ad = current, let url = URL(string: ad.tracking.clickThrough) else { return }
         emit(.clicked(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
-        UIApplication.shared.open(url)
+        if !InAppBrowserManager.shared.present(url: url) {
+            UIApplication.shared.open(url)
+        }
     }
 
     func onUserDismiss() {

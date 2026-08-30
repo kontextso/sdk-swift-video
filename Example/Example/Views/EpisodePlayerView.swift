@@ -133,8 +133,9 @@ struct EpisodePlayerView: View {
         ads?.pauseFullscreen.hide()
         player?.play()
         isPaused = false
-        // The shown ad is consumed; ask for the next one while the episode
-        // keeps playing. The server answers with a new bidId (or noFill).
+        // A shown ad is consumed; ask for the next one while the episode
+        // keeps playing. A pause shorter than the reveal delay leaves the ad
+        // queued, so nothing is requested then.
         if let ads, !ads.pauseOverlay.isReady, !ads.pauseFullscreen.isReady {
             ads.load(formats: [.pauseOverlay, .pauseFullscreen])
         }
