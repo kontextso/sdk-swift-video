@@ -73,7 +73,7 @@ final class SwipeAdUIView: UIView {
         skipChip.isEnabled = false
         skipChip.addTarget(self, action: #selector(didTapSkip), for: .touchUpInside)
         addSubview(skipChip)
-        updateSkipChip(elapsedMs: 0)
+        updateSkipChip(elapsed: 0)
 
         NSLayoutConstraint.activate([
             badge.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 20),
@@ -136,8 +136,7 @@ final class SwipeAdUIView: UIView {
 
     private func tick(seconds: Double) {
         guard seconds.isFinite else { return }
-        let elapsedMs = Int(seconds * 1000)
-        updateSkipChip(elapsedMs: elapsedMs)
+        updateSkipChip(elapsed: seconds)
         guard let duration = player.currentItem?.duration, duration.isNumeric, duration.seconds > 0 else { return }
         let fraction = seconds / duration.seconds
         let quartile = fraction >= 0.75 ? 3 : fraction >= 0.5 ? 2 : fraction >= 0.25 ? 1 : 0
@@ -147,14 +146,14 @@ final class SwipeAdUIView: UIView {
         }
     }
 
-    private func updateSkipChip(elapsedMs: Int) {
-        guard let skipAfter = ad.playback?.skipAfterMs else {
+    private func updateSkipChip(elapsed: TimeInterval) {
+        guard let skipAfter = ad.playback?.skipAfter else {
             skipChip.isHidden = true
             return
         }
-        let remaining = skipAfter - elapsedMs
+        let remaining = skipAfter - elapsed
         if remaining > 0 {
-            skipChip.setTitle(String(format: style.skipCountdownFormat, Int((Double(remaining) / 1000).rounded(.up))), for: .normal)
+            skipChip.setTitle(String(format: style.skipCountdownFormat, Int(remaining.rounded(.up))), for: .normal)
             skipChip.isEnabled = false
         } else {
             skipChip.setTitle(style.skipTitle, for: .normal)

@@ -91,7 +91,7 @@ public class AdPlacement {
     @discardableResult
     func present(in container: UIView) -> Bool {
         guard isReady, let ad = pending.first else { return false }
-        let delay = TimeInterval(ad.trigger.delayMs ?? 0) / 1000
+        let delay = ad.trigger.delay ?? 0
         guard delay > 0 else {
             pending.removeFirst()
             reveal(ad, in: container)

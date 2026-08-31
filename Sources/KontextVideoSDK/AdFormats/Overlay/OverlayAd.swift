@@ -69,7 +69,7 @@ public final class OverlayAd: AdPlacement {
     @discardableResult
     public func show(in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
         guard isReady else { return false }
-        let preferred = openWindowAd ?? pending.first { $0.trigger.fromMs == nil }
+        let preferred = openWindowAd ?? pending.first { $0.trigger.from == nil }
         if let preferred, let index = pending.firstIndex(where: { $0.bidId == preferred.bidId }), index != 0 {
             moveToFront(index)
         }
@@ -102,10 +102,10 @@ public final class OverlayAd: AdPlacement {
     }
 
     private func evaluateWindows() {
-        let ms = Int(playhead * 1000)
+        let now = playhead
         func isOpen(_ ad: VideoAd) -> Bool {
-            guard let from = ad.trigger.fromMs else { return false }
-            return ms >= from && ms < (ad.trigger.toMs ?? Int.max)
+            guard let from = ad.trigger.from else { return false }
+            return now >= from && now < (ad.trigger.to ?? .infinity)
         }
         // The ad on screen left `pending` when it was shown but keeps its
         // window; consider it first so its own window can't "close" it.
