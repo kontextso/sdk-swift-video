@@ -70,7 +70,7 @@ public final class OverlayAd: AdPlacement {
     public func show(in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
         guard isReady else { return false }
         let preferred = openWindowAd ?? pending.first { $0.trigger.from == nil }
-        if let preferred, let index = pending.firstIndex(where: { $0.bidId == preferred.bidId }), index != 0 {
+        if let preferred, let index = pending.firstIndex(where: { $0.adId == preferred.adId }), index != 0 {
             moveToFront(index)
         }
         self.position = position
@@ -81,7 +81,7 @@ public final class OverlayAd: AdPlacement {
     /// Shows a specific pending ad (from ``onWindowOpen`` or ``pending``).
     @discardableResult
     public func show(_ ad: VideoAd, in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
-        guard let index = pending.firstIndex(where: { $0.bidId == ad.bidId }) else { return false }
+        guard let index = pending.firstIndex(where: { $0.adId == ad.adId }) else { return false }
         moveToFront(index)
         self.position = position
         self.style = style
@@ -110,13 +110,13 @@ public final class OverlayAd: AdPlacement {
         // The ad on screen left `pending` when it was shown but keeps its
         // window; consider it first so its own window can't "close" it.
         let nowOpen = (current.map { [$0] } ?? []).first(where: isOpen) ?? pending.first(where: isOpen)
-        if let open = openWindowAd, nowOpen?.bidId != open.bidId {
+        if let open = openWindowAd, nowOpen?.adId != open.adId {
             openWindowAd = nil
             onWindowClose?(open)
         }
-        if let nowOpen, openWindowAd?.bidId != nowOpen.bidId {
+        if let nowOpen, openWindowAd?.adId != nowOpen.adId {
             openWindowAd = nowOpen
-            if nowOpen.bidId != current?.bidId {
+            if nowOpen.adId != current?.adId {
                 onWindowOpen?(nowOpen)
             }
         }

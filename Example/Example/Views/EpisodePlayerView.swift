@@ -152,7 +152,7 @@ struct EpisodePlayerView: View {
         player?.play()
         isPaused = false
         // The shown ad is consumed; ask for the next one while the episode
-        // keeps playing. The server answers with a new bidId (or noFill).
+        // keeps playing. The server answers with a new adId (or a noFillReason).
         if let ads = live.ads, !ads.pause.isReady {
             ads.load(formats: [.pause])
         }

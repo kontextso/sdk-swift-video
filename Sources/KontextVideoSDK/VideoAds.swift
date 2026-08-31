@@ -108,14 +108,14 @@ public final class VideoAds {
             swipe.append(ads.filter { $0.format == .swipe })
             overlay.append(ads.filter { $0.format == .overlay })
             let rows = formats.map { format -> VideoAdEvent.LoadedData.FormatResult in
-                let slots = ads.filter { $0.format == format }
-                    .map { VideoAdEvent.LoadedData.FormatResult.Slot(id: $0.bidId) }
+                let served = ads.filter { $0.format == format }
+                    .map { VideoAdEvent.LoadedData.FormatResult.Ad(id: $0.adId) }
                 let server = outcome.results?.first { $0.format == format.rawValue }
                 return VideoAdEvent.LoadedData.FormatResult(
                     format: format,
-                    slots: slots,
+                    ads: served,
                     noFillReason: server?.noFillReason
-                        ?? (slots.isEmpty ? outcome.noFillReason : nil)
+                        ?? (served.isEmpty ? outcome.noFillReason : nil)
                 )
             }
             emit(.loaded(VideoAdEvent.LoadedData(videoId: videoId, results: rows)))

@@ -5,15 +5,21 @@ import Foundation
 /// trigger, placement and playback blocks.
 public struct VideoAd: Sendable, Decodable {
     public let format: VideoAdFormat
-    /// Unique per served ad (one bid = one opportunity).
-    public let bidId: String
-    /// Stable id of the creative behind the bid, when the server sends one.
+    /// Unique per served ad — the wire's `bid_id`. Matches the `adId` on
+    /// every later event for this ad.
+    public let adId: String
+    /// Stable id of the creative behind the ad, when the server sends one.
     public let creativeId: String?
     public let trigger: Trigger
     public let placement: Placement?
     public let playback: Playback?
     public let creative: VideoAdCreative
     public let tracking: VideoAdTracking
+
+    enum CodingKeys: String, CodingKey {
+        case format, creativeId, trigger, placement, playback, creative, tracking
+        case adId = "bidId"
+    }
 
     /// All times are seconds (`TimeInterval`), like everywhere in the
     /// public API; the wire carries milliseconds (`from_ms`, `delay_ms`).

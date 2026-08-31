@@ -17,12 +17,12 @@ enum Ads {
             switch event {
             case .loaded(let d):
                 for r in d.results {
-                    print("[Example] loaded \(r.format) \(r.slots.count)\(r.noFillReason.map { " (\($0))" } ?? "") \(r.slots.map { String($0.id.prefix(8)) }.joined(separator: ","))")
+                    print("[Example] loaded \(r.format) \(r.ads.count)\(r.noFillReason.map { " (\($0))" } ?? "") \(r.ads.map { String($0.id.prefix(8)) }.joined(separator: ","))")
                 }
-            case .shown(let d): print("[Example] shown \(d.format) bid=\(d.bidId)")
-            case .clicked(let d): print("[Example] clicked \(d.format) bid=\(d.bidId)")
-            case .closed(let d): print("[Example] closed \(d.format) bid=\(d.bidId)")
-            case .completed(let d): print("[Example] completed \(d.format) bid=\(d.bidId)")
+            case .shown(let d): print("[Example] shown \(d.format) bid=\(d.adId)")
+            case .clicked(let d): print("[Example] clicked \(d.format) bid=\(d.adId)")
+            case .closed(let d): print("[Example] closed \(d.format) bid=\(d.adId)")
+            case .completed(let d): print("[Example] completed \(d.format) bid=\(d.adId)")
             case .error(let e): print("[Example] error \(e.message)")
             }
         }

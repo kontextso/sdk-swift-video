@@ -100,7 +100,7 @@ public class AdPlacement {
         revealTask = Task { [weak self, weak container] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard !Task.isCancelled, let self, let container,
-                  let next = self.pending.first, next.bidId == ad.bidId else { return }
+                  let next = self.pending.first, next.adId == ad.adId else { return }
             self.revealTask = nil
             self.pending.removeFirst()
             self.reveal(next, in: container)
@@ -120,7 +120,7 @@ public class AdPlacement {
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
         self.view = view
-        emit(.shown(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
+        emit(.shown(VideoAdEvent.AdData(format: format, videoId: videoId, adId: ad.adId)))
     }
 
     /// The creative is on screen (image painted / first video frame): this
@@ -144,7 +144,7 @@ public class AdPlacement {
     /// back to the system for non-http schemes.
     func onClick() {
         guard let ad = current, let url = URL(string: ad.tracking.clickThrough) else { return }
-        emit(.clicked(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
+        emit(.clicked(VideoAdEvent.AdData(format: format, videoId: videoId, adId: ad.adId)))
         if !InAppBrowserManager.shared.present(url: url) {
             UIApplication.shared.open(url)
         }
@@ -153,7 +153,7 @@ public class AdPlacement {
     func onUserDismiss() {
         guard let ad = current else { return }
         hide(userDismissed: true)
-        emit(.closed(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
+        emit(.closed(VideoAdEvent.AdData(format: format, videoId: videoId, adId: ad.adId)))
     }
 
     func append(_ ads: [VideoAd]) {

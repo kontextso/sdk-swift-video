@@ -73,7 +73,7 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     userEmail: "jane@example.com",
     onEvent: { event in
         if case .loaded(let d) = event {
-            for r in d.results { print("ready:", r.format, r.slots.count) }
+            for r in d.results { print("ready:", r.format, r.ads.count) }
         }
     }
 ))

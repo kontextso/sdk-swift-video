@@ -10,9 +10,9 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     onEvent: { event in
         switch event {
         case .loaded(let d):
-            for r in d.results { print("loaded:", r.format, r.slots.count, r.noFillReason ?? "") }
-        case .shown(let d):     analytics.log("ad_shown", d.bidId)
-        case .clicked(let d):   analytics.log("ad_clicked", d.bidId)
+            for r in d.results { print("loaded:", r.format, r.ads.count, r.noFillReason ?? "") }
+        case .shown(let d):     analytics.log("ad_shown", d.adId)
+        case .clicked(let d):   analytics.log("ad_clicked", d.adId)
         case .closed(let d):    break
         case .completed(let d): break
         case .error(let e):     log.error(e.message)
@@ -25,9 +25,9 @@ Events are informational — the SDK never requires you to react to one
 (show/hide/load are separate, explicit calls). Identifiers:
 
 - `videoId` — the id you passed to `setVideo(id:)`.
-- `bidId` — unique per **served ad**. Two `shown` events with different
-  `bidId`s are two different ads; the same creative can appear behind many
-  bids.
+- `adId` — unique per **served ad**. Two `shown` events with different
+  `adId`s are two different ads; the same creative can appear behind many
+  served ads.
 
 ## The events
 
@@ -48,7 +48,7 @@ didLoad/didFailToLoad pair).
 | Field | Type | Meaning |
 |---|---|---|
 | `format` | `VideoAdFormat` | `.pause`, `.swipe`, or `.overlay` |
-| `slots` | `[Slot]` | The served ads, in order — each carries its `id` (the bid id, matching later `shown`/`clicked` events). Empty = no fill |
+| `ads` | `[Ad]` | The served ads, in order — each carries its `id` (matching the `adId` on later `shown`/`clicked` events). Empty = no fill |
 | `noFillReason` | `String?` | Why the server served less than it could have (`no_ad_match`, `frequency_capped`, `content_unsafe`, …) |
 
 Examples, as JSON:
@@ -56,27 +56,27 @@ Examples, as JSON:
 ```jsonc
 // everything filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [{ "id": "bid-p1" }] },
-  { "format": "swipe",   "slots": [{ "id": "bid-s1" }] },
-  { "format": "overlay", "slots": [{ "id": "bid-o1" }, { "id": "bid-o2" }, { "id": "bid-o3" }] }
+  { "format": "pause",   "ads": [{ "id": "bid-p1" }] },
+  { "format": "swipe",   "ads": [{ "id": "bid-s1" }] },
+  { "format": "overlay", "ads": [{ "id": "bid-o1" }, { "id": "bid-o2" }, { "id": "bid-o3" }] }
 ] }
 
 // only the pause ad filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [{ "id": "bid-p1" }] },
-  { "format": "swipe",   "slots": [], "noFillReason": "frequency_capped" },
-  { "format": "overlay", "slots": [], "noFillReason": "no_ad_match" }
+  { "format": "pause",   "ads": [{ "id": "bid-p1" }] },
+  { "format": "swipe",   "ads": [], "noFillReason": "frequency_capped" },
+  { "format": "overlay", "ads": [], "noFillReason": "no_ad_match" }
 ] }
 
 // nothing filled (whole request refused)
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [], "noFillReason": "content_unsafe" },
-  { "format": "swipe",   "slots": [], "noFillReason": "content_unsafe" },
-  { "format": "overlay", "slots": [], "noFillReason": "content_unsafe" }
+  { "format": "pause",   "ads": [], "noFillReason": "content_unsafe" },
+  { "format": "swipe",   "ads": [], "noFillReason": "content_unsafe" },
+  { "format": "overlay", "ads": [], "noFillReason": "content_unsafe" }
 ] }
 ```
 
-A non-empty `slots` with a `noFillReason` means the server could have
+A non-empty `ads` with a `noFillReason` means the server could have
 served more (e.g. an overlay window stayed empty). Not emitted when the
 request itself failed — that's `.error`.
 
@@ -125,7 +125,7 @@ For a swipe ad whose media fails after `show`, the SDK also calls
 
 | | `.pause` | `.swipe` | `.overlay` |
 |---|---|---|---|
-| `loaded` result row | 0–1 slot | 0–1 slot | 0–N slots |
+| `loaded` result row | 0–1 ad | 0–1 ad | 0–N ads |
 | `shown` | on `show(in:)` | on `show(in:…)` | on `show(in:)` (windowed or manual) |
 | `clicked` | tap | tap on video | tap |
 | `closed` | – | Skip button / your `hide()` after a user swipe | – |
