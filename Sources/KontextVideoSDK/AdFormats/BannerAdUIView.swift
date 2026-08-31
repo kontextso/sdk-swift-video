@@ -53,3 +53,21 @@ final class BannerAdUIView: UIView {
         onClick?()
     }
 }
+
+extension AdPlacement {
+    /// Lays a banner out inside `container` at `position` with `style`.
+    func mountBanner(_ view: BannerAdUIView, in container: UIView, position: BannerPosition, style: BannerStyle) {
+        container.addSubview(view)
+        let margins = style.margins
+        var width = max(container.bounds.width - margins.left - margins.right, 0)
+        if let maxWidth = style.maxWidth { width = min(width, maxWidth) }
+        NSLayoutConstraint.activate([
+            view.widthAnchor.constraint(equalToConstant: width),
+            view.heightAnchor.constraint(equalToConstant: view.height(forWidth: width)),
+            view.centerXAnchor.constraint(equalTo: container.centerXAnchor, constant: (margins.left - margins.right) / 2),
+            position == .top
+                ? view.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: margins.top)
+                : view.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor, constant: -margins.bottom),
+        ])
+    }
+}
