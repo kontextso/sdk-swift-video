@@ -80,6 +80,8 @@ Event vocabulary and payloads are documented for publishers in `EVENTS.md` — k
 
 ## Roadmap decisions
 
+- **Revenue/paid event (deferred 2026-08-31).** Later, add the `didPayRevenue`/`paidEventHandler` equivalent every mature SDK has: server puts `revenue` (+currency/precision) on the served ad, SDK surfaces it — either a field on `Slot` in `.loaded` or a dedicated event at impression time (chat SDK precedent: `revenue` on `filled`/`viewed`). Considered and consciously postponed; also postponed: an app-facing `.impression` event (GMA's `adDidRecordImpression`) and a display-failure phase on `.error`.
+
 - **Per-format load results — implemented 2026-08-31.** Wire: response carries `results: [{format, no_fill_reason?}]`; top-level `no_fill_reason` stays for whole-request conditions. SDK: `.filled`/`.noFill` **merged into one `.loaded(LoadedData{videoId, results: [FormatResult{format, slots: [Slot{id: bidId}], noFillReason?}]})` per `load` call** (user decisions 2026-08-31: Google's single load-completion shape; no `count` — it is `slots.count`; per-ad details live on `Slot`, which may grow beyond `id`; `available` was added and then removed as redundant — a reason on a non-empty row still signals a partial fill, just not the count). Empty `slots` + reason = no fill. `.error` still means the request itself failed, and then no `.loaded` is emitted.
 
 - **`VideoSessionOptions` expansion (planned, decided 2026-08-31; not implemented).** From comparing sdk-swift's `SessionOptions` and the public `/v1/ads` params (samsung.kontext.ai):
