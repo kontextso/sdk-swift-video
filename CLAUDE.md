@@ -77,6 +77,12 @@ Like `sdk-swift`, this SDK must not vendor IDFA / ATT / StoreKit / OMID / in-app
 
 ## Roadmap decisions
 
+- **`VideoSessionOptions` expansion (planned, decided 2026-08-31; not implemented).** From comparing sdk-swift's `SessionOptions` and the public `/v1/ads` params (samsung.kontext.ai):
+  - *Must (before any partner integration):* `regulatory: Regulatory?` (gdpr, gdprConsent, coppa, gpp, gppSid, usPrivacy — the `/instream/live` shape; KontextKit `TCFDataProvider` as auto-fallback); advertising identity — `advertisingId`/`vendorId` overrides + `requestTrackingAuthorization: Bool = true` running KontextKit's ATT startup flow, sending `ifa`/`ifa_type` and deriving `limit_ad_tracking`; **make `userId` optional** (the public API's rule is "user_id or ifa" — some publishers won't share a user id); `session.updateOptions(...)` for the mutable subset (regulatory, userEmail, advertisingId, vendorId, variantId — consent arrives late from a CMP, email after login, IFA after ATT).
+  - *Should:* `variantId: String?` (A/B); `ctaMode: .button | .qr` (session-level device trait, default `.button` for touch; QR the moment this contract serves TV).
+  - *Not:* `conversationId`/`character`/`enabledPlacementCodes` (chat concepts — `externalId` and formats-per-`load` cover them); `max_slots`/`content_id` stay request-level; `onDebugEvent` only once an `/init`-style server flag exists to gate reporting.
+
+
 - **Custom ad views (binding API) → v2.0.** Decided 2026-08-30. v1 ships the SDK-owned views + `Style` only. v2 adds a MAX/Meta-style escape hatch: `show(in:custom:onResume:)` with a `PauseAdBinding { view, imageView, clickableViews, resumeControl, adBadgeView? }` — publisher owns layout, SDK still loads the image, routes clicks + tracking, ensures the AD badge, registers OM, applies the teardown delay. Fullscreen first; overlay only on demand. Never document "render `VideoAd` yourself" — it loses measurement.
 
 ## Conventions
