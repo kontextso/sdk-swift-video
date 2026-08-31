@@ -137,7 +137,11 @@ func userSwipedAdAway() {        // only reachable once onSkippable fired
 
 // 5. Overlay: feed the playhead; the SDK calls back when a window opens or
 //    closes. Showing is your call (or show any time, windows ignored).
-ads.overlay.onWindowOpen  = { ad in ads.overlay.show(in: playerView) }
+ads.overlay.onWindowOpen  = { ad in
+    var style = OverlayAd.Style()             // same BannerStyle as the pause ad:
+    style.margins.bottom = 96                 // margins, maxWidth, cornerRadius, placeholderColor
+    ads.overlay.show(in: playerView, style: style)   // position defaults to the server's hint
+}
 ads.overlay.onWindowClose = { ad in ads.overlay.hide() }
 player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
     ads.overlay.playhead = t.seconds
