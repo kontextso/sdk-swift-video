@@ -95,7 +95,7 @@ Event vocabulary and payloads are documented for publishers in `EVENTS.md` — k
 ## Conventions
 
 - **Swift 5.9**, iOS 14.0+. `StrictConcurrency` is on — anything crossing actor boundaries must be `Sendable`.
-- **`@MainActor`-isolated** anything that touches UIKit. `VideoSession`, `VideoAds` are MainActor classes. The SDK does not import AVFoundation — it renders into a `UIView` the app hands it.
+- **`@MainActor`-isolated** anything that touches UIKit. `VideoSession`, `VideoAds` are MainActor classes. The SDK renders into a `UIView` the app hands `show(in:)` and never assumes an `AVPlayer` — verified 2026-08-31 against StoReel's iOS bundle, which uses SJVideoPlayer (`player.view`, over AliyunPlayer) + AppLovin MAX, not `AVPlayer`. Publishers pass the view that fills/clips the video area (so ad insets land on the video), not the VC's view. Only `SwipeAdUIView` imports AVFoundation, for the ad's own video.
 - **No comments** unless the *why* is non-obvious (hidden constraint, subtle invariant, workaround). Don't reference PRs or tickets in code.
 - Events are delivered on the main thread via the `onEvent` closure in `VideoSessionOptions`.
 

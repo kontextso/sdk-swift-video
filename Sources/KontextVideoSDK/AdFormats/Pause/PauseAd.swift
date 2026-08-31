@@ -18,6 +18,12 @@ public final class PauseAd: AdPlacement {
     /// player view) and consumes it. Defaults to the top so the episode
     /// title most apps draw at the bottom stays visible. Returns `false`
     /// when ``isReady`` is `false`.
+    ///
+    /// `container` is any `UIView` — the SDK mounts the ad as a subview and
+    /// never assumes an `AVPlayer`. Pass the view that fills the video area
+    /// and clips to it (e.g. `AVPlayerLayer`'s host view, or SJVideoPlayer's
+    /// `player.view`), not the outer view controller's view, so the ad's
+    /// insets land on the video rather than the whole screen.
     @discardableResult
     public func show(in container: UIView, position: Position = .top, style: Style = Style()) -> Bool {
         self.position = position

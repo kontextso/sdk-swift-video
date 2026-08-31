@@ -66,6 +66,12 @@ public final class OverlayAd: AdPlacement {
     /// for a later scene. Position defaults to the server's
     /// `placement.position`, then `.bottom`. Returns `false` when
     /// ``isReady`` is `false`.
+    ///
+    /// `container` is any `UIView` — the SDK mounts the ad as a subview and
+    /// never assumes an `AVPlayer`. Pass the view that fills the video area
+    /// and clips to it (e.g. `AVPlayerLayer`'s host view, or SJVideoPlayer's
+    /// `player.view`), not the outer view controller's view, so the ad's
+    /// insets land on the video rather than the whole screen.
     @discardableResult
     public func show(in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
         guard isReady else { return false }

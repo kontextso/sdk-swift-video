@@ -63,6 +63,13 @@ variant existed in the prototype and was dropped 2026-08-31.)
 
 ## Usage
 
+> The `container` you pass to `show(in:)` is any `UIView`; the SDK mounts
+> the ad as a subview and never assumes an `AVPlayer`. Pass the view that
+> fills and clips the video area — an `AVPlayerLayer` host view, or a
+> third-party player's view such as SJVideoPlayer's `player.view` (the
+> player StoReel ships) — not the outer view controller's view, so the
+> ad's insets land on the video.
+
 ```swift
 import KontextVideoSDK
 
