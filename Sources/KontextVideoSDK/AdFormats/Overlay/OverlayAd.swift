@@ -1,11 +1,14 @@
 import UIKit
 
 /// The `overlay` placement of one video: image banners shown **while the
-/// episode plays**, several per video, each with a window the server
-/// derived from the scene (`trigger.from_ms` … `to_ms`).
+/// episode plays**, several per video.
 ///
-/// The SDK never touches the player. The app feeds it the playhead and is
-/// *told* when a window opens or closes; showing is always the app's call:
+/// Two modes, decided by the server per ad:
+///
+/// **Windowed** (`trigger { kind: "range", from_ms, to_ms }`) — the server
+/// knows the content and derived scene windows. The SDK never touches the
+/// player: the app feeds it the playhead and is *told* when a window opens
+/// or closes; showing is always the app's call:
 ///
 /// ```swift
 /// ads.overlay.onWindowOpen  = { ad in ads.overlay.show(in: playerView) }
@@ -13,12 +16,21 @@ import UIKit
 /// player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
 ///     ads.overlay.playhead = t.seconds
 /// }
-/// // any time, windows ignored:
-/// if ads.overlay.isReady { ads.overlay.show(in: playerView) }
 /// ```
 ///
-/// Windows are hints: an ignored window leaves the ad in `pending` for a
-/// later manual `show`. `show(in:)` prefers the ad whose window is open.
+/// **Manual** (`trigger { kind: "manual" }`) — the publisher shared no
+/// content, so there are no windows; the app decides the moment, exactly
+/// like the pause ad:
+///
+/// ```swift
+/// if ads.overlay.isReady { ads.overlay.show(in: playerView) }
+/// ads.overlay.hide()
+/// ```
+///
+/// The modes mix: `show(in:)` prefers the ad whose window is open now,
+/// then manual ads, then anything pending — so a manual `show` never
+/// steals an ad the server scheduled for a later scene. Windows are hints;
+/// an ignored window leaves the ad in `pending`.
 @MainActor
 public final class OverlayAd: AdPlacement {
     public typealias Position = BannerPosition
@@ -48,14 +60,17 @@ public final class OverlayAd: AdPlacement {
         super.init(format: .overlay, videoId: videoId, emit: emit)
     }
 
-    /// Shows an overlay inside `container` and consumes it: the ad whose
-    /// window is open if there is one, else the next pending ad. Position
-    /// defaults to the server's `placement.position`, then `.bottom`.
-    /// Returns `false` when ``isReady`` is `false`.
+    /// Shows an overlay inside `container` and consumes it, preferring the
+    /// ad whose window is open now, then manual (window-less) ads, then
+    /// the next pending — so a manual show never steals an ad scheduled
+    /// for a later scene. Position defaults to the server's
+    /// `placement.position`, then `.bottom`. Returns `false` when
+    /// ``isReady`` is `false`.
     @discardableResult
     public func show(in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
         guard isReady else { return false }
-        if let open = openWindowAd, let index = pending.firstIndex(where: { $0.bidId == open.bidId }), index != 0 {
+        let preferred = openWindowAd ?? pending.first { $0.trigger.fromMs == nil }
+        if let preferred, let index = pending.firstIndex(where: { $0.bidId == preferred.bidId }), index != 0 {
             moveToFront(index)
         }
         self.position = position

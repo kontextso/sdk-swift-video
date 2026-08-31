@@ -16,7 +16,9 @@ public struct VideoAd: Sendable, Decodable {
     public let tracking: VideoAdTracking
 
     public struct Trigger: Sendable, Decodable {
-        /// `pause`, `swipe`, or `range` (a window in content time).
+        /// `pause`, `swipe`, `range` (a window in content time), or
+        /// `manual` (the app decides the moment — served when the
+        /// publisher shared no content to derive windows from).
         public let kind: String
         /// Window start / end in content time, `range` triggers only.
         public let fromMs: Int?

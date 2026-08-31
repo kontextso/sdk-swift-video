@@ -135,8 +135,8 @@ func userSwipedAdAway() {        // only reachable once onSkippable fired
     startNextEpisode()
 }
 
-// 5. Overlay: feed the playhead; the SDK calls back when a window opens or
-//    closes. Showing is your call (or show any time, windows ignored).
+// 5. Overlay, windowed mode (we know your content): feed the playhead; the
+//    SDK calls back when a scene window opens or closes. Showing is your call.
 ads.overlay.onWindowOpen  = { ad in
     var style = OverlayAd.Style()             // same BannerStyle as the pause ad:
     style.margins.bottom = 96                 // margins, maxWidth, cornerRadius, placeholderColor
@@ -146,6 +146,12 @@ ads.overlay.onWindowClose = { ad in ads.overlay.hide() }
 player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
     ads.overlay.playhead = t.seconds
 }
+
+//    Overlay, manual mode (we never saw your content, so there are no
+//    windows — the ads come with `trigger.kind == "manual"`): decide the
+//    moment yourself, exactly like the pause ad.
+if ads.overlay.isReady { ads.overlay.show(in: playerView) }
+ads.overlay.hide()
 
 // 6. Leaving the player: release the ads. Takes ~1 s when an ad was on
 //    screen (measurement beacons); `setVideo` for the next video does
