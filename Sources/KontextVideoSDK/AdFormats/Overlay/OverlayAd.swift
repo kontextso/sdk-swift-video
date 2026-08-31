@@ -98,6 +98,7 @@ public final class OverlayAd: AdPlacement {
         let view = BannerAdUIView(ad: ad, style: style)
         view.onClick = { [weak self] in self?.onClick() }
         view.onImageLoaded = { [weak self] in self?.onCreativeRendered() }
+        view.onImageFailed = { [weak self] message in self?.onCreativeFailed("overlay: \(message)") }
         return view
     }
 

@@ -8,6 +8,15 @@ public enum Constants {
     /// `/preload` request timeout, in seconds.
     static let preloadTimeout: TimeInterval = 16
 
+    /// How long a swipe ad's video has to produce its first frame before
+    /// the SDK gives up (bad URL, dead CDN, endless buffering) and reports
+    /// failure so the app is never stuck on a blank interstitial.
+    static let swipeStartTimeout: TimeInterval = 8
+
+    /// How long a mid-playback stall may last before the SDK reports
+    /// failure. A stall that recovers within this window is ignored.
+    static let swipeStallTimeout: TimeInterval = 8
+
     /// How long an ad view stays in the hierarchy after `destroy()` when
     /// it was on screen. Open Measurement needs the view alive for about a
     /// second after the session is finished so its script can send the

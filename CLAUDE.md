@@ -78,6 +78,17 @@ Like `sdk-swift`, this SDK must not vendor IDFA / ATT / StoreKit / OMID / in-app
 
 Event vocabulary and payloads are documented for publishers in `EVENTS.md` — keep it in sync when `VideoAdEvent` changes.
 
+## Error handling (audited + hardened 2026-08-31)
+
+The dangerous paths an audit found were all "user stuck / silent bad state"; fixed:
+- **Swipe video can no longer trap the viewer.** `SwipeAdUIView` has a first-frame watchdog (`Constants.swipeStartTimeout` 8 s — bad URL, dead CDN, endless buffering) and a stall watchdog (`swipeStallTimeout`, on `playbackStalledNotification`); a bad/missing URL fails immediately (deferred a tick so `onFailure` is wired). All funnel through one `fail()` → the existing hide + `.error` + `onFinished`, so **every terminal path calls `onFinished`** (complete, skip, media-failed KVO, no-start, stall, bad URL) — verified against a dead URL.
+- **Blank banners are surfaced.** `AdImageLoader` now reports failure (bad URL, non-200, undecodable) via `onFailed`; pause/overlay wire it to `AdPlacement.onCreativeFailed`, which removes the ad and emits `.error` instead of leaving a `placeholderColor` box with no impression.
+- **`destroy()` calls `willHide`** so an on-screen swipe ad's player stops (no audio bleed / lingering observers through `teardownDelay`).
+- **Cancellation is not an error.** `destroy()` tearing down an in-flight `/preload` no longer surfaces a spurious `.error` (`CancellationError` / `URLError.cancelled` are swallowed).
+- **Lossy ad decode.** One malformed ad in the `/preload` response no longer throws away the whole fill — `PreloadResponse` decodes `ads` element-by-element, skipping bad ones.
+
+Still swallowed by design (correct): tracking pixels (fire-and-forget), and guard-rejected `load()` calls (empty formats → `assertionFailure` in debug; a `load` while one is in flight is ignored — documented). `AdsService`/`VideoSession`/`AdTracker`/`ViewabilityMeter` were already clean.
+
 ## Roadmap decisions
 
 - **Revenue/paid event (deferred 2026-08-31).** Later, add the `didPayRevenue`/`paidEventHandler` equivalent every mature SDK has: server puts `revenue` (+currency/precision) on the served ad, SDK surfaces it — either a field on `Slot` in `.loaded` or a dedicated event at impression time (chat SDK precedent: `revenue` on `filled`/`viewed`). Considered and consciously postponed; also postponed: an app-facing `.impression` event (GMA's `adDidRecordImpression`) and a display-failure phase on `.error`.

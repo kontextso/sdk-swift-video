@@ -10,6 +10,7 @@ final class BannerAdUIView: UIView {
 
     var onClick: (() -> Void)?
     var onImageLoaded: (() -> Void)?
+    var onImageFailed: ((String) -> Void)?
 
     init(ad: VideoAd, style: BannerStyle) {
         self.ad = ad
@@ -38,7 +39,11 @@ final class BannerAdUIView: UIView {
             imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
         if let image = ad.creative.image {
-            AdImageLoader.load(image.url, into: imageView) { [weak self] in self?.onImageLoaded?() }
+            AdImageLoader.load(image.url, into: imageView,
+                onLoaded: { [weak self] in self?.onImageLoaded?() },
+                onFailed: { [weak self] message in self?.onImageFailed?(message) })
+        } else {
+            onImageFailed?("ad has no image")
         }
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTap)))
     }

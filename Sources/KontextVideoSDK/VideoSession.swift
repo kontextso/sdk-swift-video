@@ -108,6 +108,10 @@ public final class VideoSession {
             let served = response.ads.filter { formats.contains($0.format) }
             log("/instream/preload → \(served.count) ad(s) for \(ads.videoId)\(response.noFillReason.map { " (\($0))" } ?? "")")
             return PreloadOutcome(ads: served, results: response.results, noFillReason: response.noFillReason, succeeded: true)
+        } catch is CancellationError {
+            return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false)
+        } catch let error as URLError where error.code == .cancelled {
+            return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false)
         } catch {
             emit(.error(VideoAdEvent.ErrorData(videoId: ads.videoId, message: "\(error)")))
             return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false)

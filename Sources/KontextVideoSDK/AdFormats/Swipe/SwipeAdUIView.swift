@@ -13,6 +13,10 @@ final class SwipeAdUIView: UIView {
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var itemStatusObservation: NSKeyValueObservation?
+    private var stalledObserver: NSObjectProtocol?
+    private var startWatchdog: Task<Void, Never>?
+    private var stallWatchdog: Task<Void, Never>?
+    private var failed = false
     private var endObserver: NSObjectProtocol?
     private var reportedQuartile = 0
     private var firstFrameReported = false
@@ -84,7 +88,12 @@ final class SwipeAdUIView: UIView {
             skipChip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
         ])
 
-        guard let video = ad.creative.video, let url = URL(string: video.url) else { return }
+        guard let video = ad.creative.video, let url = URL(string: video.url) else {
+            // Callbacks are wired by the caller right after init returns, so
+            // defer the failure a tick so `onFailure` is set.
+            Task { @MainActor [weak self] in self?.fail("swipe ad has no playable video url") }
+            return
+        }
         let item = AVPlayerItem(url: url)
         itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             guard item.status == .failed else { return }
@@ -98,6 +107,9 @@ final class SwipeAdUIView: UIView {
             Task { @MainActor in
                 guard let self, playing, !self.firstFrameReported else { return }
                 self.firstFrameReported = true
+                self.startWatchdog?.cancel()
+                self.stallWatchdog?.cancel()
+                self.stallWatchdog = nil
                 self.onFirstFrame?()
             }
         }
@@ -108,16 +120,55 @@ final class SwipeAdUIView: UIView {
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.onComplete?() }
         }
+        // A stall that never recovers would trap the viewer on the ad; fail
+        // after a grace period, cancelling if playback resumes.
+        stalledObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.playbackStalledNotification, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.armStallWatchdog() }
+        }
     }
 
     func play() {
         player.play()
+        // The video must produce its first frame within the timeout, or the
+        // SDK gives up (dead CDN, endless buffering) so the app can move on.
+        startWatchdog?.cancel()
+        startWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Constants.swipeStartTimeout * 1_000_000_000))
+            guard let self, !Task.isCancelled, !self.firstFrameReported else { return }
+            self.fail("swipe ad video did not start within \(Int(Constants.swipeStartTimeout))s")
+        }
+    }
+
+    private func armStallWatchdog() {
+        guard !failed, stallWatchdog == nil else { return }
+        stallWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Constants.swipeStallTimeout * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.stallWatchdog = nil
+            if self.player.timeControlStatus != .playing {
+                self.fail("swipe ad video stalled for \(Int(Constants.swipeStallTimeout))s")
+            }
+        }
+    }
+
+    /// Single failure funnel: reports once, then behaves like the media-
+    /// failed KVO path (hide + `.error` + onFinished in `SwipeAd`).
+    private func fail(_ message: String) {
+        guard !failed else { return }
+        failed = true
+        onFailure?(message)
     }
 
     /// Stops playback and drops the observers. Always called before the
     /// view leaves the hierarchy (hide / destroy), so nothing is left for
     /// deinit to clean up.
     func stop() {
+        startWatchdog?.cancel(); startWatchdog = nil
+        stallWatchdog?.cancel(); stallWatchdog = nil
+        if let stalledObserver {
+            NotificationCenter.default.removeObserver(stalledObserver)
+            self.stalledObserver = nil
+        }
         player.pause()
         if let timeObserver {
             player.removeTimeObserver(timeObserver)

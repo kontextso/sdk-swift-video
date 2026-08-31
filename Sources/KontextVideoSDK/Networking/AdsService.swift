@@ -45,7 +45,34 @@ struct AdsService: Sendable {
         let results: [FormatResult]?
         let noFillReason: String?
         let nextRequestAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case sessionId, ads, results, noFillReason, nextRequestAt
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+            results = try c.decodeIfPresent([FormatResult].self, forKey: .results)
+            noFillReason = try c.decodeIfPresent(String.self, forKey: .noFillReason)
+            nextRequestAt = try c.decodeIfPresent(String.self, forKey: .nextRequestAt)
+            // Lossy: one malformed ad must not throw away the rest of the fill.
+            var list: [VideoAd] = []
+            if var arr = try? c.nestedUnkeyedContainer(forKey: .ads) {
+                while !arr.isAtEnd {
+                    if let ad = try? arr.decode(VideoAd.self) {
+                        list.append(ad)
+                    } else {
+                        _ = try? arr.decode(AnyDecodable.self)   // skip the bad element
+                    }
+                }
+            }
+            ads = list
+        }
     }
+
+    /// Consumes one element of an unkeyed container to advance past it.
+    private struct AnyDecodable: Decodable {}
 
     func preload(_ body: PreloadRequest) async throws -> PreloadResponse {
         var request = URLRequest(url: adServerURL.appendingPathComponent("instream/preload"))

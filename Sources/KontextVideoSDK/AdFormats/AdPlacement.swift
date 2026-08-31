@@ -123,6 +123,23 @@ public class AdPlacement {
         emit(.shown(VideoAdEvent.AdData(format: format, videoId: videoId, adId: ad.adId)))
     }
 
+    /// The creative could not render (image failed to load, video URL
+    /// bad). Removes the ad without firing view/impression tracking (there
+    /// was no view) and surfaces `.error`, so the app is never left with a
+    /// blank ad on screen. Subclasses that own an exit callback override.
+    func onCreativeFailed(_ message: String) {
+        revealTask?.cancel()
+        revealTask = nil
+        meter?.end()
+        meter = nil
+        willHide(userDismissed: false)
+        view?.removeFromSuperview()
+        view = nil
+        current = nil
+        tracker = nil
+        emit(.error(VideoAdEvent.ErrorData(videoId: videoId, message: message)))
+    }
+
     /// The creative is on screen (image painted / first video frame): this
     /// is the impression.
     func onCreativeRendered() {
@@ -176,8 +193,14 @@ public class AdPlacement {
         pending.removeAll()
         revealTask?.cancel()
         revealTask = nil
-        guard let view else { return }
+        guard let view else {
+            // No view on screen, but a subclass may still hold resources
+            // (a swipe ad's player) — let it tear down.
+            willHide(userDismissed: false)
+            return
+        }
         view.isUserInteractionEnabled = false
+        willHide(userDismissed: false)
         meter?.end()
         meter = nil
         tracker?.fire(.overlayViewDuration)
