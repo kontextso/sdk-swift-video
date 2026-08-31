@@ -8,8 +8,7 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 
 | Format | Behavior |
 |---|---|
-| **Pause overlay** (`pauseOverlay`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
-| **Pause fullscreen** (`pauseFullscreen`) | Image over the whole paused player with a styleable Resume button |
+| **Pause** (`pause`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
 | **Swipe** (`swipe`) | Full-screen video interstitial when the user swipes to the next episode; swipeable after the server's `skip_after_ms` |
 | **Overlay** (`overlay`) | Image banners while the episode plays — several per video, each in a window the server derived from the scene; the SDK tells you when a window opens, you decide to show |
 
@@ -58,10 +57,9 @@ current ISO-8601 time, any other `[MACRO]` becomes empty.
 
 The spec is written for 16:9 TV screens and has no portrait size. The SDK
 maps the two IAB placements to its two formats: `pos = 8` (partial screen) →
-`pauseOverlay`, an image banner sized from the creative's declared dimensions
-so vertical creatives work too; `pos = 7` (fullscreen) → `pauseFullscreen`,
-the image over the whole player with a Resume button (the SDK emits `.closed`
-when it is tapped, then calls your `onResume`).
+`pause` (`INSTREAM_IMAGE_PAUSE`), an image banner sized from the creative's
+declared dimensions so vertical creatives work too. (A fullscreen pause
+variant existed in the prototype and was dropped 2026-08-31.)
 
 ## Usage
 
@@ -87,27 +85,22 @@ let ads = session.setVideo(
     title: "Episode 42: The Betrayal",                  // optional if uploaded via API
     description: "Mia confronts Ethan about the letter" // optional if uploaded via API
 )
-ads.load(formats: [.pauseOverlay, .pauseFullscreen])    // one request for exactly these formats
+ads.load(formats: [.pause, .swipe, .overlay])           // one request for exactly these formats
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
 //    `isReady` is false again. The ad shows immediately on pause.
 func didPause() {
-    if ads.pauseFullscreen.isReady {
-        var style = PauseFullscreenAd.Style()
-        style.resumeTitle = "Continue watching"
-        ads.pauseFullscreen.show(in: playerView, style: style) { avPlayer.play() }
-    } else if ads.pauseOverlay.isReady {
-        var style = PauseOverlayAd.Style()        // margins, maxWidth, cornerRadius, placeholderColor
+    if ads.pause.isReady {
+        var style = PauseAd.Style()               // margins, maxWidth, cornerRadius, placeholderColor
         style.margins.top = 24
-        ads.pauseOverlay.show(in: playerView, position: .top, style: style)
+        ads.pause.show(in: playerView, position: .top, style: style)
     }
 }
 
 func didResume() {
-    ads.pauseOverlay.hide()
-    ads.pauseFullscreen.hide()
-    ads.pauseOverlay.load()                    // prepare the next pause (server decides whether to fill)
+    ads.pause.hide()
+    ads.pause.load()                           // prepare the next pause (server decides whether to fill)
 }
 
 // 4. Swipe ad: an interstitial when the user swipes *forward* to the next

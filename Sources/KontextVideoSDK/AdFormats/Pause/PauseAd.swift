@@ -1,9 +1,9 @@
 import UIKit
 
-/// The `pauseOverlay` placement of one video: an image banner shown over
-/// part of the paused player.
+/// The `pause` placement of one video: an image banner shown over part of
+/// the paused player.
 @MainActor
-public final class PauseOverlayAd: AdPlacement {
+public final class PauseAd: AdPlacement {
     public typealias Position = BannerPosition
     public typealias Style = BannerStyle
 
@@ -11,7 +11,7 @@ public final class PauseOverlayAd: AdPlacement {
     private var style = Style()
 
     init(externalId: String, emit: @escaping (VideoAdEvent) -> Void) {
-        super.init(format: .pauseOverlay, externalId: externalId, emit: emit)
+        super.init(format: .pause, externalId: externalId, emit: emit)
     }
 
     /// Shows the next ad as a banner inside `container` (typically the

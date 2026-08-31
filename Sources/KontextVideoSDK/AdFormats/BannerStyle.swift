@@ -1,6 +1,6 @@
 import UIKit
 
-/// Appearance of an image banner (pause overlay, playing overlay).
+/// Appearance of an image banner (pause ad, playing overlay).
 /// Everything has a default.
 public struct BannerStyle: Sendable {
     /// Space between the banner and the container's safe-area edges.

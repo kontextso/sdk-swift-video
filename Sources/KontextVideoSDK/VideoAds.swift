@@ -8,12 +8,12 @@ import UIKit
 ///
 /// ```swift
 /// let ads = session.setVideo(externalId: "ep-1042")
-/// ads.load(formats: [.pauseOverlay, .pauseFullscreen])
+/// ads.load(formats: [.pause, .swipe, .overlay])
 /// // on pause
-/// if ads.pauseOverlay.isReady { ads.pauseOverlay.show(in: playerView) }
+/// if ads.pause.isReady { ads.pause.show(in: playerView) }
 /// // on resume
-/// ads.pauseOverlay.hide()
-/// ads.pauseOverlay.load()                      // prepare the next one
+/// ads.pause.hide()
+/// ads.pause.load()                             // prepare the next one
 /// ```
 ///
 /// Each ad is shown once; `show` consumes it. Load again to prepare
@@ -30,10 +30,7 @@ public final class VideoAds {
     public let description: String?
 
     /// Banner over part of the paused player.
-    public let pauseOverlay: PauseOverlayAd
-
-    /// Image over the whole paused player, with a Resume button.
-    public let pauseFullscreen: PauseFullscreenAd
+    public let pause: PauseAd
 
     /// Full-screen video between two episodes.
     public let swipe: SwipeAd
@@ -64,12 +61,10 @@ public final class VideoAds {
         self.description = description
         self.session = session
         self.emit = emit
-        self.pauseOverlay = PauseOverlayAd(externalId: externalId, emit: emit)
-        self.pauseFullscreen = PauseFullscreenAd(externalId: externalId, emit: emit)
+        self.pause = PauseAd(externalId: externalId, emit: emit)
         self.swipe = SwipeAd(externalId: externalId, emit: emit)
         self.overlay = OverlayAd(externalId: externalId, emit: emit)
-        pauseOverlay.loadHandler = { [weak self] in self?.load(formats: [.pauseOverlay]) }
-        pauseFullscreen.loadHandler = { [weak self] in self?.load(formats: [.pauseFullscreen]) }
+        pause.loadHandler = { [weak self] in self?.load(formats: [.pause]) }
         swipe.loadHandler = { [weak self] in self?.load(formats: [.swipe]) }
         overlay.loadHandler = { [weak self] in self?.load(formats: [.overlay]) }
     }
@@ -95,8 +90,7 @@ public final class VideoAds {
             isLoading = false
             guard !Task.isCancelled, !isDestroyed, outcome.succeeded else { return }
             let ads = outcome.ads
-            pauseOverlay.append(ads.filter { $0.format == .pauseOverlay })
-            pauseFullscreen.append(ads.filter { $0.format == .pauseFullscreen })
+            pause.append(ads.filter { $0.format == .pause })
             swipe.append(ads.filter { $0.format == .swipe })
             overlay.append(ads.filter { $0.format == .overlay })
             for format in formats {
@@ -122,10 +116,9 @@ public final class VideoAds {
         loadTask?.cancel()
         loadTask = nil
         isLoading = false
-        async let pauseBanner: Void = pauseOverlay.destroy()
-        async let fullscreen: Void = pauseFullscreen.destroy()
+        async let pauseAd: Void = pause.destroy()
         async let swipeAd: Void = swipe.destroy()
         async let playing: Void = overlay.destroy()
-        _ = await (pauseBanner, fullscreen, swipeAd, playing)
+        _ = await (pauseAd, swipeAd, playing)
     }
 }

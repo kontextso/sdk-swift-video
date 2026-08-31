@@ -18,16 +18,13 @@ struct EpisodePlayerView: View {
     /// The time-observer closure is created once; it reads the live handle
     /// and active flag from here instead of capturing stale struct values.
     @State private var live = LiveState()
-    /// A fullscreen ad covers the player, so the app hides its own chrome
-    /// (play icon, episode title) until the ad is gone.
-    @State private var isFullscreenAdShown = false
 
     var body: some View {
         ZStack {
             if let player {
                 PlayerLayerView(player: player, layerView: playerLayerView)
             }
-            if isPaused, !isFullscreenAdShown {
+            if isPaused {
                 Image(systemName: "play.fill")
                     .font(.system(size: 56))
                     .foregroundStyle(.white.opacity(0.8))
@@ -38,9 +35,7 @@ struct EpisodePlayerView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: togglePlayback)
         .overlay(alignment: .bottomLeading) {
-            if !isFullscreenAdShown {
-                episodeInfo
-            }
+            episodeInfo
         }
         .onAppear {
             let player = AVPlayer(url: episode.videoURL)
@@ -64,8 +59,7 @@ struct EpisodePlayerView: View {
         .onChange(of: isActive) {
             live.isActive = isActive
             isPaused = false
-            ads?.pauseOverlay.hide()
-            ads?.pauseFullscreen.hide()
+            ads?.pause.hide()
             if isActive {
                 player?.seek(to: .zero)
                 player?.play()
@@ -134,38 +128,33 @@ struct EpisodePlayerView: View {
         if player.timeControlStatus == .playing {
             player.pause()
             isPaused = true
-            ads?.overlay.hide()
+            live.ads?.overlay.hide()
             showPauseAd()
         } else {
             resume()
         }
     }
 
-    /// Fullscreen wins when both are ready; otherwise the banner.
     private func showPauseAd() {
-        guard let ads else { return }
-        if ads.pauseFullscreen.isReady {
-            isFullscreenAdShown = ads.pauseFullscreen.show(in: playerLayerView) { resume() }
-        } else if ads.pauseOverlay.isReady {
-            // The player view ignores the safe area, so its safe-area guide
-            // is zero: push the banner below the status bar and back button.
-            var style = PauseOverlayAd.Style()
-            style.margins.top = 72
-            ads.pauseOverlay.show(in: playerLayerView, style: style)
-        }
+        // Read through `live` — long-lived closures (the auto-pause loop)
+        // capture this struct before the handle exists.
+        guard let ads = live.ads, ads.pause.isReady else { return }
+        // The player view ignores the safe area, so its safe-area guide
+        // is zero: push the banner below the status bar and back button.
+        var style = PauseAd.Style()
+        style.margins.top = 72
+        ads.pause.show(in: playerLayerView, style: style)
     }
 
     private func resume() {
-        ads?.pauseOverlay.hide()
-        ads?.pauseFullscreen.hide()
-        ads?.overlay.hide()
-        isFullscreenAdShown = false
+        live.ads?.pause.hide()
+        live.ads?.overlay.hide()
         player?.play()
         isPaused = false
         // The shown ad is consumed; ask for the next one while the episode
         // keeps playing. The server answers with a new bidId (or noFill).
-        if let ads, !ads.pauseOverlay.isReady, !ads.pauseFullscreen.isReady {
-            ads.load(formats: [.pauseOverlay, .pauseFullscreen])
+        if let ads = live.ads, !ads.pause.isReady {
+            ads.load(formats: [.pause])
         }
     }
 
@@ -186,7 +175,7 @@ struct EpisodePlayerView: View {
 
 /// AVPlayerLayer wrapper so the video fills the page. Uses an externally
 /// owned `PlayerLayerUIView` so the same view can be handed to
-/// `ads.pauseOverlay.show(in:)` / `ads.pauseFullscreen.show(in:)`, which mount the ad into it.
+/// `ads.pause.show(in:)`, which mounts the ad into it.
 private struct PlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
     let layerView: PlayerLayerUIView
