@@ -49,37 +49,36 @@ didLoad/didFailToLoad pair).
 |---|---|---|
 | `format` | `VideoAdFormat` | `.pause`, `.swipe`, or `.overlay` |
 | `slots` | `[Slot]` | The served ads, in order — each carries its `id` (the bid id, matching later `shown`/`clicked` events). Empty = no fill |
-| `available` | `Int?` | Opportunities the server considered (overlay windows; 1 for pause/swipe), when it says |
-| `noFillReason` | `String?` | Why opportunities went unserved (`no_ad_match`, `frequency_capped`, `content_unsafe`, …) — present when `slots.count` is below `available` or zero |
+| `noFillReason` | `String?` | Why the server served less than it could have (`no_ad_match`, `frequency_capped`, `content_unsafe`, …) |
 
 Examples, as JSON:
 
 ```jsonc
 // everything filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [{ "id": "bid-p1" }], "available": 1 },
-  { "format": "swipe",   "slots": [{ "id": "bid-s1" }], "available": 1 },
-  { "format": "overlay", "slots": [{ "id": "bid-o1" }, { "id": "bid-o2" }, { "id": "bid-o3" }], "available": 3 }
+  { "format": "pause",   "slots": [{ "id": "bid-p1" }] },
+  { "format": "swipe",   "slots": [{ "id": "bid-s1" }] },
+  { "format": "overlay", "slots": [{ "id": "bid-o1" }, { "id": "bid-o2" }, { "id": "bid-o3" }] }
 ] }
 
 // only the pause ad filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [{ "id": "bid-p1" }], "available": 1 },
-  { "format": "swipe",   "slots": [], "available": 1, "noFillReason": "frequency_capped" },
-  { "format": "overlay", "slots": [], "available": 3, "noFillReason": "no_ad_match" }
+  { "format": "pause",   "slots": [{ "id": "bid-p1" }] },
+  { "format": "swipe",   "slots": [], "noFillReason": "frequency_capped" },
+  { "format": "overlay", "slots": [], "noFillReason": "no_ad_match" }
 ] }
 
-// nothing filled (whole request refused; note overlay available: 0 — no windows at all)
+// nothing filled (whole request refused)
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "slots": [], "available": 1, "noFillReason": "content_unsafe" },
-  { "format": "swipe",   "slots": [], "available": 1, "noFillReason": "content_unsafe" },
-  { "format": "overlay", "slots": [], "available": 0, "noFillReason": "content_unsafe" }
+  { "format": "pause",   "slots": [], "noFillReason": "content_unsafe" },
+  { "format": "swipe",   "slots": [], "noFillReason": "content_unsafe" },
+  { "format": "overlay", "slots": [], "noFillReason": "content_unsafe" }
 ] }
 ```
 
-`slots.count < available` with a reason is a partial fill ("2 of 3 overlay
-windows, the third had no matching ad"). Not emitted when the request
-itself failed — that's `.error`.
+A non-empty `slots` with a `noFillReason` means the server could have
+served more (e.g. an overlay window stayed empty). Not emitted when the
+request itself failed — that's `.error`.
 
 ### `.shown(AdData)`
 
@@ -126,7 +125,7 @@ For a swipe ad whose media fails after `show`, the SDK also calls
 
 | | `.pause` | `.swipe` | `.overlay` |
 |---|---|---|---|
-| `loaded` result row | 0–1 slot, `available` 1 | 0–1 slot, `available` 1 | 0–N slots, `available` = windows |
+| `loaded` result row | 0–1 slot | 0–1 slot | 0–N slots |
 | `shown` | on `show(in:)` | on `show(in:…)` | on `show(in:)` (windowed or manual) |
 | `clicked` | tap | tap on video | tap |
 | `closed` | – | Skip button / your `hide()` after a user swipe | – |

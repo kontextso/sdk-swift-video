@@ -37,7 +37,6 @@ struct AdsService: Sendable {
     struct PreloadResponse: Decodable {
         struct FormatResult: Decodable {
             let format: String
-            let available: Int?
             let noFillReason: String?
         }
 

@@ -5,8 +5,7 @@ import Foundation
 public enum VideoAdEvent: Sendable {
     /// A `load(formats:)` finished: the server answered, and this is what
     /// is ready — one result row per requested format. An empty `slots`
-    /// with a `noFillReason` is the no-fill case; fewer `slots` than
-    /// `available` is a partial fill (some overlay windows went unserved).
+    /// with a `noFillReason` is the no-fill case.
     case loaded(LoadedData)
     /// An ad became visible to the user.
     case shown(AdData)
@@ -39,13 +38,8 @@ public enum VideoAdEvent: Sendable {
             /// The ads this load appended to the placement's queue, in
             /// order. Empty = no fill.
             public let slots: [Slot]
-            /// Opportunities the server considered (overlay windows; 1 for
-            /// pause/swipe), when it says. `slots.count < available` is a
-            /// partial fill.
-            public let available: Int?
-            /// Why opportunities went unserved (`no_ad_match`,
-            /// `frequency_capped`, `content_unsafe`, …) — present when
-            /// `slots.count` is below `available` or zero.
+            /// Why the server served less than it could have
+            /// (`no_ad_match`, `frequency_capped`, `content_unsafe`, …).
             public let noFillReason: String?
 
             /// One served ad. Carries the bid id today; may grow.

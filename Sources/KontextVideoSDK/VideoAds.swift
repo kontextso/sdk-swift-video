@@ -114,7 +114,6 @@ public final class VideoAds {
                 return VideoAdEvent.LoadedData.FormatResult(
                     format: format,
                     slots: slots,
-                    available: server?.available,
                     noFillReason: server?.noFillReason
                         ?? (slots.isEmpty ? outcome.noFillReason : nil)
                 )
