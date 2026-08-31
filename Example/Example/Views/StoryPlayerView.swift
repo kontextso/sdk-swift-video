@@ -116,8 +116,18 @@ struct StoryPlayerView: View {
     private func startEpisode(_ id: Episode.ID) {
         guard let episode = story.episodes.first(where: { $0.id == id }) else { return }
         let handle = Ads.session.setVideo(
-            externalId: episode.id,
-            title: "\(story.title) — Episode \(episode.number): \(episode.title)"
+            id: episode.id,
+            title: episode.title,
+            duration: 20.5,
+            language: "en",
+            episodeNumber: episode.number,
+            series: VideoSeries(
+                id: story.id,
+                title: story.title,
+                description: "A short-drama series from the demo catalog.",
+                keywords: [story.genre.lowercased()],
+                episodeCount: story.episodes.count
+            )
         )
         handle.load(formats: [.pause, .swipe, .overlay])
         ads = handle

@@ -44,8 +44,8 @@ public final class OverlayAd: AdPlacement {
     private var style = Style()
     private var position: Position?
 
-    init(externalId: String, emit: @escaping (VideoAdEvent) -> Void) {
-        super.init(format: .overlay, externalId: externalId, emit: emit)
+    init(videoId: String, emit: @escaping (VideoAdEvent) -> Void) {
+        super.init(format: .overlay, videoId: videoId, emit: emit)
     }
 
     /// Shows an overlay inside `container` and consumes it: the ad whose

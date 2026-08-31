@@ -1,13 +1,13 @@
 import UIKit
 
 /// The ads of the current video — returned by
-/// ``VideoSession/setVideo(externalId:title:description:)``.
+/// ``VideoSession/setVideo(id:title:description:duration:language:episodeNumber:series:)``.
 ///
 /// One placement object per format. The app decides when ads are loaded
 /// and shown; the SDK does not observe the player:
 ///
 /// ```swift
-/// let ads = session.setVideo(externalId: "ep-1042")
+/// let ads = session.setVideo(id: "ep-1042")
 /// ads.load(formats: [.pause, .swipe, .overlay])
 /// // on pause
 /// if ads.pause.isReady { ads.pause.show(in: playerView) }
@@ -24,10 +24,15 @@ import UIKit
 /// you).
 @MainActor
 public final class VideoAds {
-    /// The publisher's video ID this handle belongs to.
-    public let externalId: String
+    /// The publisher's unique video ID this handle belongs to.
+    public let videoId: String
     public let title: String?
     public let description: String?
+    /// Video length in seconds, when the app provided it.
+    public let duration: TimeInterval?
+    public let language: String?
+    public let episodeNumber: Int?
+    public let series: VideoSeries?
 
     /// Banner over part of the paused player.
     public let pause: PauseAd
@@ -50,20 +55,28 @@ public final class VideoAds {
     private let emit: (VideoAdEvent) -> Void
 
     init(
-        externalId: String,
+        videoId: String,
         title: String?,
         description: String?,
+        duration: TimeInterval?,
+        language: String?,
+        episodeNumber: Int?,
+        series: VideoSeries?,
         session: VideoSession,
         emit: @escaping (VideoAdEvent) -> Void
     ) {
-        self.externalId = externalId
+        self.videoId = videoId
         self.title = title
         self.description = description
+        self.duration = duration
+        self.language = language
+        self.episodeNumber = episodeNumber
+        self.series = series
         self.session = session
         self.emit = emit
-        self.pause = PauseAd(externalId: externalId, emit: emit)
-        self.swipe = SwipeAd(externalId: externalId, emit: emit)
-        self.overlay = OverlayAd(externalId: externalId, emit: emit)
+        self.pause = PauseAd(videoId: videoId, emit: emit)
+        self.swipe = SwipeAd(videoId: videoId, emit: emit)
+        self.overlay = OverlayAd(videoId: videoId, emit: emit)
         pause.loadHandler = { [weak self] in self?.load(formats: [.pause]) }
         swipe.loadHandler = { [weak self] in self?.load(formats: [.swipe]) }
         overlay.loadHandler = { [weak self] in self?.load(formats: [.overlay]) }
@@ -96,9 +109,9 @@ public final class VideoAds {
             for format in formats {
                 if let ad = ads.first(where: { $0.format == format }) {
                     // One `filled` per format; overlay may carry several ads.
-                    emit(.filled(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
+                    emit(.filled(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
                 } else {
-                    emit(.noFill(VideoAdEvent.NoFillData(format: format, externalId: externalId, reason: outcome.noFillReason)))
+                    emit(.noFill(VideoAdEvent.NoFillData(format: format, videoId: videoId, reason: outcome.noFillReason)))
                 }
             }
         }

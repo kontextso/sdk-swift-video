@@ -7,7 +7,7 @@ import UIKit
 @MainActor
 public class AdPlacement {
     public let format: VideoAdFormat
-    public let externalId: String
+    public let videoId: String
 
     /// Ads not yet shown, in the order the server returned them.
     public private(set) var pending: [VideoAd] = []
@@ -29,9 +29,9 @@ public class AdPlacement {
     private var revealTask: Task<Void, Never>?
     private var shownAt: Date?
 
-    init(format: VideoAdFormat, externalId: String, emit: @escaping (VideoAdEvent) -> Void) {
+    init(format: VideoAdFormat, videoId: String, emit: @escaping (VideoAdEvent) -> Void) {
         self.format = format
-        self.externalId = externalId
+        self.videoId = videoId
         self.emit = emit
     }
 
@@ -120,7 +120,7 @@ public class AdPlacement {
         view.alpha = 0
         UIView.animate(withDuration: 0.3) { view.alpha = 1 }
         self.view = view
-        emit(.shown(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
+        emit(.shown(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
     }
 
     /// The creative is on screen (image painted / first video frame): this
@@ -144,7 +144,7 @@ public class AdPlacement {
     /// back to the system for non-http schemes.
     func onClick() {
         guard let ad = current, let url = URL(string: ad.tracking.clickThrough) else { return }
-        emit(.clicked(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
+        emit(.clicked(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
         if !InAppBrowserManager.shared.present(url: url) {
             UIApplication.shared.open(url)
         }
@@ -153,7 +153,7 @@ public class AdPlacement {
     func onUserDismiss() {
         guard let ad = current else { return }
         hide(userDismissed: true)
-        emit(.closed(VideoAdEvent.AdData(format: format, externalId: externalId, bidId: ad.bidId)))
+        emit(.closed(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
     }
 
     func append(_ ads: [VideoAd]) {

@@ -21,8 +21,8 @@ public enum VideoAdEvent: Sendable {
 
     public struct AdData: Sendable {
         public let format: VideoAdFormat
-        /// The publisher's video ID the ad belongs to.
-        public let externalId: String
+        /// The publisher's unique video ID the ad belongs to.
+        public let videoId: String
         /// The served ad's bid ID — unique per served ad, so two `shown`
         /// events with different bid IDs are two different ads.
         public let bidId: String
@@ -30,14 +30,14 @@ public enum VideoAdEvent: Sendable {
 
     public struct NoFillData: Sendable {
         public let format: VideoAdFormat
-        public let externalId: String
+        public let videoId: String
         /// The server's `no_fill_reason` (e.g. `no_ad_match`,
         /// `content_unsafe`), when it sent one.
         public let reason: String?
     }
 
     public struct ErrorData: Sendable {
-        public let externalId: String?
+        public let videoId: String?
         public let message: String
     }
 }

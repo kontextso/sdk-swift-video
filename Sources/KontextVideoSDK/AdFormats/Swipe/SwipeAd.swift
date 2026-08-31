@@ -47,8 +47,8 @@ public final class SwipeAd: AdPlacement {
     private var onFinished: (() -> Void)?
     private var completed = false
 
-    init(externalId: String, emit: @escaping (VideoAdEvent) -> Void) {
-        super.init(format: .swipe, externalId: externalId, emit: emit)
+    init(videoId: String, emit: @escaping (VideoAdEvent) -> Void) {
+        super.init(format: .swipe, videoId: videoId, emit: emit)
     }
 
     /// Shows the next ad in `container` (a full-screen page the app inserted
@@ -109,7 +109,7 @@ public final class SwipeAd: AdPlacement {
             guard let self, let ad = self.current else { return }
             self.completed = true
             self.hide(userDismissed: false)
-            self.emit(.error(VideoAdEvent.ErrorData(externalId: self.externalId, message: "swipe ad \(ad.bidId): \(message)")))
+            self.emit(.error(VideoAdEvent.ErrorData(videoId: self.videoId, message: "swipe ad \(ad.bidId): \(message)")))
             self.onFinished?()
         }
         view.onComplete = { [weak self] in
@@ -117,7 +117,7 @@ public final class SwipeAd: AdPlacement {
             self.completed = true
             self.tracker?.fireVideo(.complete)
             self.hide(userDismissed: false)
-            self.emit(.completed(VideoAdEvent.AdData(format: .swipe, externalId: self.externalId, bidId: ad.bidId)))
+            self.emit(.completed(VideoAdEvent.AdData(format: .swipe, videoId: self.videoId, bidId: ad.bidId)))
             self.onFinished?()
         }
         return view
@@ -142,7 +142,7 @@ public final class SwipeAd: AdPlacement {
             return
         }
         super.hide(userDismissed: true)
-        emit(.closed(VideoAdEvent.AdData(format: .swipe, externalId: externalId, bidId: ad.bidId)))
+        emit(.closed(VideoAdEvent.AdData(format: .swipe, videoId: videoId, bidId: ad.bidId)))
     }
 
     override func willHide(userDismissed: Bool) {

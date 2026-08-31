@@ -21,9 +21,14 @@ struct AdsService: Sendable {
         let userId: String
         let userEmail: String?
         let sessionId: String?
-        let externalId: String
+        /// The publisher's unique video id.
+        let id: String
         let title: String?
         let description: String?
+        let durationMs: Int?
+        let language: String?
+        let episodeNumber: Int?
+        let series: VideoSeries?
         let formats: [VideoAdFormat]
         let context: Context?
         let sdk: SDKInfo

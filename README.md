@@ -80,10 +80,23 @@ let session = KontextVideo.createSession(VideoSessionOptions(
 ))
 
 // 2. Tell the SDK which video is current, then load ads for it.
+//    `id` is YOUR unique id for the video — any scheme (series id + number,
+//    a UUID, …). Everything else is optional contextual signal: for short
+//    drama the synopsis/keywords/rating usually live on the series.
 let ads = session.setVideo(
-    externalId: "ep-1042",                              // your video ID
-    title: "Episode 42: The Betrayal",                  // optional if uploaded via API
-    description: "Mia confronts Ethan about the letter" // optional if uploaded via API
+    id: "100001-6",
+    duration: 92,                                       // seconds
+    language: "en",                                     // the track being played
+    episodeNumber: 6,
+    series: VideoSeries(
+        id: "100001",
+        title: "My Marionette Lover",
+        description: "To win a bet with his friends, Ryan…",
+        keywords: ["forced love", "fantasy"],
+        contentRating: "18+",
+        languages: ["en", "es"],
+        episodeCount: 40
+    )
 )
 ads.load(formats: [.pause, .swipe, .overlay])           // one request for exactly these formats
 

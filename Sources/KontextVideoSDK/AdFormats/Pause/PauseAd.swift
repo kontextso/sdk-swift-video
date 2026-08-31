@@ -10,8 +10,8 @@ public final class PauseAd: AdPlacement {
     private var position: Position = .top
     private var style = Style()
 
-    init(externalId: String, emit: @escaping (VideoAdEvent) -> Void) {
-        super.init(format: .pause, externalId: externalId, emit: emit)
+    init(videoId: String, emit: @escaping (VideoAdEvent) -> Void) {
+        super.init(format: .pause, videoId: videoId, emit: emit)
     }
 
     /// Shows the next ad as a banner inside `container` (typically the
