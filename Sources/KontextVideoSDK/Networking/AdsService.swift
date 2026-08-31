@@ -21,6 +21,7 @@ struct AdsService: Sendable {
         let userId: String
         let userEmail: String?
         let sessionId: String?
+        let installId: String
         /// The publisher's unique video id.
         let id: String
         let title: String?
@@ -74,14 +75,14 @@ struct AdsService: Sendable {
     /// Consumes one element of an unkeyed container to advance past it.
     private struct AnyDecodable: Decodable {}
 
-    func preload(_ body: PreloadRequest) async throws -> PreloadResponse {
+    func preload(_ body: PreloadRequest, timeout: TimeInterval) async throws -> PreloadResponse {
         var request = URLRequest(url: adServerURL.appendingPathComponent("instream/preload"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(body)
-        request.timeoutInterval = Constants.preloadTimeout
+        request.timeoutInterval = timeout
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw HTTPError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)

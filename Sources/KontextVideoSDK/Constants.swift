@@ -5,8 +5,12 @@ public enum Constants {
     /// Production ad-server base URL.
     public static let defaultAdServerURL = URL(string: "https://server.megabrain.co")!
 
-    /// `/preload` request timeout, in seconds.
-    static let preloadTimeout: TimeInterval = 16
+    /// `/preload` request timeout, in seconds. May be overridden by the
+    /// `/init` response.
+    static let defaultPreloadTimeout: TimeInterval = 16
+
+    /// `/init` request timeout, in seconds.
+    static let initTimeout: TimeInterval = 16
 
     /// How long a swipe ad's video has to produce its first frame before
     /// the SDK gives up (bad URL, dead CDN, endless buffering) and reports

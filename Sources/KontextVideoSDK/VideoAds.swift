@@ -97,7 +97,7 @@ public final class VideoAds {
             assertionFailure("VideoAds.load(formats:) called with an empty list — name the formats you want")
             return
         }
-        guard !isDestroyed, !isLoading, let session else { return }
+        guard !isDestroyed, !isLoading, let session, session.isEnabled else { return }
         isLoading = true
         loadTask = Task {
             let outcome = await session.preload(self, formats: formats, playerSize: playerSize)

@@ -31,6 +31,10 @@ targets:
         # The example talks to the mock ad server over plain http.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # SKAdNetwork ids the SDK reports at /init (Kontext + a sample DSP).
+        SKAdNetworkItems:
+          - SKAdNetworkIdentifier: mp7rpxwdrx.skadnetwork
+          - SKAdNetworkIdentifier: 22mmun2rn5.skadnetwork
     settings:
       base:
         SWIFT_VERSION: "5.9"

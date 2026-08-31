@@ -1,4 +1,5 @@
 import Foundation
+import KontextKit
 import UIKit
 
 /// One instance per app user. Owns the connection to the ad server and the
@@ -19,14 +20,52 @@ public final class VideoSession {
     /// response; sent with every subsequent request.
     private(set) var sessionId: String?
 
+    /// Persistent per-install id (KontextKit, UUID v7), sent on `/init` and
+    /// every `/preload`; the publisher never manages it.
+    let installId: String
+
     /// The handle returned by the latest `setVideo`.
     public private(set) var currentVideo: VideoAds?
 
+    /// `false` once `/init` reports the session permanently disabled;
+    /// `load` becomes a no-op.
+    public private(set) var isEnabled = true
+
     private let adsService: AdsService
+    private let initService: InitService
+    private var preloadTimeout: TimeInterval = Constants.defaultPreloadTimeout
 
     init(options: VideoSessionOptions) {
         self.options = options
+        self.installId = InstallIdProvider.getOrCreate()
         self.adsService = AdsService(adServerURL: options.adServerURL)
+        self.initService = InitService(adServerURL: options.adServerURL)
+        // Fire /init in the background: reports SKAdNetwork ids and lets the
+        // server disable the session / override the preload timeout. Never
+        // blocks ad requests.
+        Task { await runInit() }
+    }
+
+    private func runInit() async {
+        let response = await initService.fetchInit(InitService.InitRequest(
+            publisherToken: options.publisherToken,
+            userId: options.userId,
+            installId: installId,
+            sdk: SDKInfo.current,
+            app: InitService.InitRequest.App(
+                bundleId: AppInfoProvider.collect().bundleId,
+                version: AppInfoProvider.collect().version
+            ),
+            skan: InitService.InitRequest.Skan(items: SKAdNetworkIdsProvider.collect())
+        ))
+        guard let response else { return }
+        isEnabled = response.enabled
+        if let ms = response.preloadTimeoutMs {
+            preloadTimeout = TimeInterval(ms) / 1000
+        }
+        if !isEnabled {
+            log("session disabled by /init")
+        }
     }
 
     /// Makes the video with `id` current and returns its ads handle.
@@ -90,6 +129,7 @@ public final class VideoSession {
                 userId: options.userId,
                 userEmail: options.userEmail,
                 sessionId: sessionId,
+                installId: installId,
                 id: ads.videoId,
                 title: ads.title,
                 description: ads.description,
@@ -100,7 +140,7 @@ public final class VideoSession {
                 formats: formats,
                 context: playerSize.map { AdsService.PreloadRequest.Context(playerWidth: Int($0.width), playerHeight: Int($0.height)) },
                 sdk: SDKInfo.current
-            ))
+            ), timeout: preloadTimeout)
             if let newSessionId = response.sessionId {
                 sessionId = newSessionId
             }

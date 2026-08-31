@@ -173,6 +173,18 @@ All lifecycle events and their payloads are documented in
 
 ## Installation
 
+Add Kontext's SKAdNetwork identifier (and any DSP ids from onboarding) to your
+app's `Info.plist` so installs from directly-served campaigns are attributed —
+the SDK reports them at session start via `/init`:
+
+```xml
+<key>SKAdNetworkItems</key>
+<array>
+  <dict><key>SKAdNetworkIdentifier</key><string>mp7rpxwdrx.skadnetwork</string></dict>
+</array>
+```
+
+
 ### Swift Package Manager
 
 ```swift
