@@ -77,8 +77,9 @@ public final class VideoSession {
 
     struct PreloadOutcome {
         let ads: [VideoAd]
+        let results: [AdsService.PreloadResponse.FormatResult]?
         let noFillReason: String?
-        /// `false` when the request failed — the caller emits no `noFill`.
+        /// `false` when the request failed — the caller emits no `.loaded`.
         let succeeded: Bool
     }
 
@@ -103,13 +104,13 @@ public final class VideoSession {
             if let newSessionId = response.sessionId {
                 sessionId = newSessionId
             }
-            guard currentVideo === ads else { return PreloadOutcome(ads: [], noFillReason: nil, succeeded: false) }
+            guard currentVideo === ads else { return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false) }
             let served = response.ads.filter { formats.contains($0.format) }
             log("/instream/preload → \(served.count) ad(s) for \(ads.videoId)\(response.noFillReason.map { " (\($0))" } ?? "")")
-            return PreloadOutcome(ads: served, noFillReason: response.noFillReason, succeeded: true)
+            return PreloadOutcome(ads: served, results: response.results, noFillReason: response.noFillReason, succeeded: true)
         } catch {
             emit(.error(VideoAdEvent.ErrorData(videoId: ads.videoId, message: "\(error)")))
-            return PreloadOutcome(ads: [], noFillReason: nil, succeeded: false)
+            return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false)
         }
     }
 

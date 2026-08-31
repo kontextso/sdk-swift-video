@@ -35,8 +35,15 @@ struct AdsService: Sendable {
     }
 
     struct PreloadResponse: Decodable {
+        struct FormatResult: Decodable {
+            let format: String
+            let available: Int?
+            let noFillReason: String?
+        }
+
         let sessionId: String?
         let ads: [VideoAd]
+        let results: [FormatResult]?
         let noFillReason: String?
         let nextRequestAt: String?
     }

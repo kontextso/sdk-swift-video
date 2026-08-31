@@ -72,9 +72,8 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     userId: "user-123",
     userEmail: "jane@example.com",
     onEvent: { event in
-        switch event {
-        case .filled(let data): print("ad ready: \(data.format)")
-        default: break
+        if case .loaded(let d) = event {
+            for r in d.results { print("ready:", r.format, r.slots.count) }
         }
     }
 ))
@@ -161,6 +160,9 @@ func didLeavePlayer() async {
 }
 
 ```
+
+All lifecycle events and their payloads are documented in
+[EVENTS.md](EVENTS.md).
 
 ## Installation
 

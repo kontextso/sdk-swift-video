@@ -3,10 +3,11 @@ import Foundation
 /// Ad lifecycle events delivered via `VideoSessionOptions.onEvent`
 /// on the main thread.
 public enum VideoAdEvent: Sendable {
-    /// An ad for the given format was preloaded and is ready to show.
-    case filled(AdData)
-    /// No ad is available for the given format on this video.
-    case noFill(NoFillData)
+    /// A `load(formats:)` finished: the server answered, and this is what
+    /// is ready — one result row per requested format. An empty `slots`
+    /// with a `noFillReason` is the no-fill case; fewer `slots` than
+    /// `available` is a partial fill (some overlay windows went unserved).
+    case loaded(LoadedData)
     /// An ad became visible to the user.
     case shown(AdData)
     /// The user tapped/clicked an ad.
@@ -28,12 +29,32 @@ public enum VideoAdEvent: Sendable {
         public let bidId: String
     }
 
-    public struct NoFillData: Sendable {
-        public let format: VideoAdFormat
+    public struct LoadedData: Sendable {
         public let videoId: String
-        /// The server's `no_fill_reason` (e.g. `no_ad_match`,
-        /// `content_unsafe`), when it sent one.
-        public let reason: String?
+        /// One row per requested format.
+        public let results: [FormatResult]
+
+        public struct FormatResult: Sendable {
+            public let format: VideoAdFormat
+            /// The ads this load appended to the placement's queue, in
+            /// order. Empty = no fill.
+            public let slots: [Slot]
+            /// Opportunities the server considered (overlay windows; 1 for
+            /// pause/swipe), when it says. `slots.count < available` is a
+            /// partial fill.
+            public let available: Int?
+            /// Why opportunities went unserved (`no_ad_match`,
+            /// `frequency_capped`, `content_unsafe`, …) — present when
+            /// `slots.count` is below `available` or zero.
+            public let noFillReason: String?
+
+            /// One served ad. Carries the bid id today; may grow.
+            public struct Slot: Sendable {
+                /// The served ad's bid id — matches later `shown` /
+                /// `clicked` events and the placement's `pending` entries.
+                public let id: String
+            }
+        }
     }
 
     public struct ErrorData: Sendable {

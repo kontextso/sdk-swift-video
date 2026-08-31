@@ -83,8 +83,9 @@ public final class VideoAds {
     }
 
     /// Requests ads for this video in one `/preload` call and appends them
-    /// to the placements' `pending` queues. Emits `.filled` / `.noFill`
-    /// per requested format. Ignored while a request is already in flight.
+    /// to the placements' `pending` queues. Emits one `.loaded` with a
+    /// result row per requested format. Ignored while a request is already
+    /// in flight.
     ///
     /// - Parameters:
     ///   - formats: Which placements to fill. Must not be empty — only what
@@ -106,14 +107,19 @@ public final class VideoAds {
             pause.append(ads.filter { $0.format == .pause })
             swipe.append(ads.filter { $0.format == .swipe })
             overlay.append(ads.filter { $0.format == .overlay })
-            for format in formats {
-                if let ad = ads.first(where: { $0.format == format }) {
-                    // One `filled` per format; overlay may carry several ads.
-                    emit(.filled(VideoAdEvent.AdData(format: format, videoId: videoId, bidId: ad.bidId)))
-                } else {
-                    emit(.noFill(VideoAdEvent.NoFillData(format: format, videoId: videoId, reason: outcome.noFillReason)))
-                }
+            let rows = formats.map { format -> VideoAdEvent.LoadedData.FormatResult in
+                let slots = ads.filter { $0.format == format }
+                    .map { VideoAdEvent.LoadedData.FormatResult.Slot(id: $0.bidId) }
+                let server = outcome.results?.first { $0.format == format.rawValue }
+                return VideoAdEvent.LoadedData.FormatResult(
+                    format: format,
+                    slots: slots,
+                    available: server?.available,
+                    noFillReason: server?.noFillReason
+                        ?? (slots.isEmpty ? outcome.noFillReason : nil)
+                )
             }
+            emit(.loaded(VideoAdEvent.LoadedData(videoId: videoId, results: rows)))
         }
     }
 
