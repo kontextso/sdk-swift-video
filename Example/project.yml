@@ -33,7 +33,7 @@ targets:
           NSAllowsLocalNetworking: true
         # SKAdNetwork ids the SDK reports at /init (Kontext + a sample DSP).
         SKAdNetworkItems:
-          - SKAdNetworkIdentifier: mp7rpxwdrx.skadnetwork
+          - SKAdNetworkIdentifier: mp7rpxwdrx.adattributionkit
           - SKAdNetworkIdentifier: 22mmun2rn5.skadnetwork
     settings:
       base:

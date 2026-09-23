@@ -50,7 +50,7 @@ didLoad/didFailToLoad pair).
 
 | Field | Type | Meaning |
 |---|---|---|
-| `format` | `VideoAdFormat` | `.pause`, `.swipe`, or `.overlay` |
+| `format` | `VideoAdFormat` | `.pause`, `.interstitial`, or `.overlay` |
 | `ads` | `[Ad]` | The served ads, in order — each carries its `id` (matching the `adId` on later `shown`/`clicked` events) and its `ecpm` (USD per 1,000 impressions). Empty = no fill |
 | `noFillReason` | `String?` | Why the server served less than it could have (`no_ad_match`, `frequency_capped`, `content_unsafe`, …) |
 
@@ -60,21 +60,21 @@ Examples, as JSON:
 // everything filled
 { "videoId": "100001-6", "results": [
   { "format": "pause",   "ads": [{ "id": "bid-p1", "ecpm": 12.4 }] },
-  { "format": "swipe",   "ads": [{ "id": "bid-s1", "ecpm": 25.0 }] },
+  { "format": "interstitial", "ads": [{ "id": "bid-i1", "ecpm": 25.0 }] },
   { "format": "overlay", "ads": [{ "id": "bid-o1", "ecpm": 12.4 }, { "id": "bid-o2", "ecpm": 12.4 }, { "id": "bid-o3", "ecpm": 12.4 }] }
 ] }
 
 // only the pause ad filled
 { "videoId": "100001-6", "results": [
   { "format": "pause",   "ads": [{ "id": "bid-p1", "ecpm": 12.4 }] },
-  { "format": "swipe",   "ads": [], "noFillReason": "frequency_capped" },
+  { "format": "interstitial", "ads": [], "noFillReason": "frequency_capped" },
   { "format": "overlay", "ads": [], "noFillReason": "no_ad_match" }
 ] }
 
 // nothing filled (whole request refused)
 { "videoId": "100001-6", "results": [
   { "format": "pause",   "ads": [], "noFillReason": "content_unsafe" },
-  { "format": "swipe",   "ads": [], "noFillReason": "content_unsafe" },
+  { "format": "interstitial", "ads": [], "noFillReason": "content_unsafe" },
   { "format": "overlay", "ads": [], "noFillReason": "content_unsafe" }
 ] }
 ```
@@ -91,8 +91,9 @@ request itself failed — that's `.error`.
 
 ### `.shown(AdData)`
 
-The ad is on screen — emitted when the view is mounted (for the swipe ad,
-when playback is about to start). The SDK separately fires the
+The ad is on screen — emitted when the view is mounted (for the
+interstitial, when its screen is presented and playback is about to
+start). The SDK separately fires the
 `impression` + `creative_view` tracking when the creative has actually
 rendered (image painted / first video frame), so `shown` may precede the
 tracked impression by the image-load time.
@@ -105,16 +106,16 @@ in-app browser — you don't need to do anything.
 
 ### `.closed(AdData)`
 
-The user dismissed the ad **from inside it**: the swipe ad's Skip button,
-or your call to `swipe.hide()` after the user swiped it away. The ad is
-already hidden and `skip`/`close` tracking has fired. For the swipe ad,
-`onFinished` also runs (Skip counts as finishing). Your own `pause.hide()` /
-`overlay.hide()` calls do **not** emit `.closed` — you initiated those.
+The user dismissed the ad **from inside it**: the interstitial's Close
+chip, enabled once the server's `skip_after_ms` has elapsed. The ad is
+already hidden, its screen dismissed, and `skip`/`close` tracking has
+fired; `onDismissed` runs too. Your own `hide()` calls do **not** emit
+`.closed` — you initiated those.
 
 ### `.completed(AdData)`
 
-A video ad (swipe) played to the end. Already hidden; `video.complete`
-tracking fired; `onFinished` runs.
+A video ad (interstitial) played to the end. Its screen is already
+dismissed; `video.complete` tracking fired; `onDismissed` runs.
 
 ### `.error(ErrorData)`
 
@@ -127,15 +128,15 @@ failed request — `.loaded` means "the server answered".
 | `videoId` | `String?` | The video the failure belongs to, when known |
 | `message` | `String` | Diagnostic description |
 
-For a swipe ad whose media fails after `show`, the SDK also calls
-`onFinished` so your flow continues.
+For an interstitial whose media fails after `show`, the SDK dismisses
+its screen and calls `onDismissed` so your flow continues.
 
 ## Per-format cheat sheet
 
-| | `.pause` | `.swipe` | `.overlay` |
+| | `.pause` | `.interstitial` | `.overlay` |
 |---|---|---|---|
 | `loaded` result row | 0–1 ad | 0–1 ad | 0–N ads |
-| `shown` | on `show(in:)` | on `show(in:…)` | on `show(in:)` (windowed or manual) |
+| `shown` | on `show(in:)` | on `show(from:…)` | on `show(in:)` (windowed or manual) |
 | `clicked` | tap | tap on video | tap |
-| `closed` | – | Skip button / your `hide()` after a user swipe | – |
+| `closed` | – | Close chip | – |
 | `completed` | – | video end | – |

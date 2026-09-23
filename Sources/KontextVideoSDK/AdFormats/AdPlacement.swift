@@ -195,7 +195,7 @@ public class AdPlacement {
         revealTask = nil
         guard let view else {
             // No view on screen, but a subclass may still hold resources
-            // (a swipe ad's player) — let it tear down.
+            // (an interstitial's player) — let it tear down.
             willHide(userDismissed: false)
             return
         }

@@ -3,8 +3,8 @@ import KontextVideoSDK
 import SwiftUI
 
 /// A single fullscreen episode page: video + title overlay, tap to play/pause.
-/// Drives the pause ads from the same place playback is controlled; the
-/// feed owns the `VideoAds` handle (it also needs it for the swipe ad).
+/// Drives the pause, overlay and interstitial ads from the same place
+/// playback is controlled; the feed owns the `VideoAds` handle.
 struct EpisodePlayerView: View {
     let story: Story
     let episode: Episode
@@ -118,8 +118,28 @@ struct EpisodePlayerView: View {
                     ads.overlay.show(in: playerLayerView, style: style)
                 }
                 ads.overlay.onWindowClose = { _ in ads.overlay.hide() }
-                ads.overlay.playhead = CMTimeGetSeconds(time)
+                let seconds = CMTimeGetSeconds(time)
+                ads.overlay.playhead = seconds
+                showInterstitialIfDue(at: seconds, player: player)
             }
+        }
+    }
+
+    /// The demo's interstitial moment: 3 s into the first playback of an
+    /// episode the content pauses, the SDK presents the ad over the app,
+    /// and playback resumes when it is dismissed. Once per episode — the
+    /// ad is consumed by `show`.
+    private func showInterstitialIfDue(at seconds: Double, player: AVPlayer) {
+        guard seconds >= 3, !live.didShowInterstitial, player.timeControlStatus == .playing,
+              let ads = live.ads, ads.interstitial.isReady,
+              let presenter = UIApplication.shared.topViewController else { return }
+        live.didShowInterstitial = true
+        live.isInterstitialShowing = true
+        ads.overlay.hide()
+        player.pause()
+        ads.interstitial.show(from: presenter) {
+            live.isInterstitialShowing = false
+            player.play()
         }
     }
 
@@ -167,7 +187,9 @@ struct EpisodePlayerView: View {
         Task { @MainActor in
             while isActive, player != nil {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                togglePlayback()
+                // The interstitial pauses the content itself; toggling
+                // underneath it would show a pause ad behind the modal.
+                if !live.isInterstitialShowing { togglePlayback() }
             }
         }
     }
@@ -195,6 +217,22 @@ private struct PlayerLayerView: UIViewRepresentable {
 final class LiveState {
     var ads: VideoAds?
     var isActive = false
+    var didShowInterstitial = false
+    var isInterstitialShowing = false
+}
+
+extension UIApplication {
+    /// The controller to present the interstitial from: the top of the key
+    /// window's presentation chain (SwiftUI's fullScreenCover included).
+    var topViewController: UIViewController? {
+        var top = connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
+    }
 }
 
 final class PlayerLayerUIView: UIView {

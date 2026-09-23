@@ -27,9 +27,9 @@ public struct VideoAd: Sendable, Decodable {
     /// All times are seconds (`TimeInterval`), like everywhere in the
     /// public API; the wire carries milliseconds (`from_ms`, `delay_ms`).
     public struct Trigger: Sendable, Decodable {
-        /// `pause`, `swipe`, `range` (a window in content time), or
-        /// `manual` (the app decides the moment — served when the
-        /// publisher shared no content to derive windows from).
+        /// `pause`, `range` (a window in content time), or `manual` (the
+        /// app decides the moment — every interstitial, and overlays when
+        /// the publisher shared no content to derive windows from).
         public let kind: String
         /// Window start / end in content time, `range` triggers only.
         public let from: TimeInterval?
@@ -59,8 +59,8 @@ public struct VideoAd: Sendable, Decodable {
 
     /// Video formats only. Times in seconds; the wire carries `skip_after_ms`.
     public struct Playback: Sendable, Decodable {
-        /// The ad may be skipped (swiped away) after this long, in seconds.
-        /// `nil` = not skippable; the app must wait for completion.
+        /// The ad may be closed after this long, in seconds. `nil` = not
+        /// closable; it ends only when the video completes.
         public let skipAfter: TimeInterval?
         public let muted: Bool?
 

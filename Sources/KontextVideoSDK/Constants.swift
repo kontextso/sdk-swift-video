@@ -12,14 +12,14 @@ public enum Constants {
     /// `/init` request timeout, in seconds.
     static let initTimeout: TimeInterval = 16
 
-    /// How long a swipe ad's video has to produce its first frame before
-    /// the SDK gives up (bad URL, dead CDN, endless buffering) and reports
-    /// failure so the app is never stuck on a blank interstitial.
-    static let swipeStartTimeout: TimeInterval = 8
+    /// How long an interstitial's video has to produce its first frame
+    /// before the SDK gives up (bad URL, dead CDN, endless buffering) and
+    /// reports failure so the app is never stuck on a blank screen.
+    static let interstitialStartTimeout: TimeInterval = 8
 
     /// How long a mid-playback stall may last before the SDK reports
     /// failure. A stall that recovers within this window is ignored.
-    static let swipeStallTimeout: TimeInterval = 8
+    static let interstitialStallTimeout: TimeInterval = 8
 
     /// How long an ad view stays in the hierarchy after `destroy()` when
     /// it was on screen. Open Measurement needs the view alive for about a

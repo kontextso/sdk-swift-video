@@ -9,12 +9,10 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 | Format | Behavior |
 |---|---|
 | **Pause** (`pause`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
-| **Swipe** (`swipe`) | Full-screen video interstitial when the user swipes to the next episode; swipeable after the server's `skip_after_ms` |
+| **Interstitial** (`interstitial`) | Full-screen video the SDK presents at a moment the app chooses; closable after the server's `skip_after_ms`, closes itself at the end |
 | **Overlay** (`overlay`) | Image banners while the episode plays — several per video, each in a window the server derived from the scene; the SDK tells you when a window opens, you decide to show |
 
-All are prepared at video start; the app shows a pause ad when the user pauses and hides it on resume, and shows the swipe ad when the user swipes to the next episode. Each ad is shown once.
-
-Overlay ads and the full-screen swipe banner are planned and will be added later.
+All are prepared at video start; the app shows a pause ad when the user pauses and hides it on resume, shows overlays in their windows, and presents the interstitial at a moment it picks (a scene break, the end of an episode). Each ad is shown once.
 
 ## Pause ads
 
@@ -50,7 +48,7 @@ it puts into VAST). The SDK fires them, each at most once per ad:
 | ≥ 50 % of the ad on screen for 1 continuous second (MRC display rule), app active | `viewable` — or `not_viewable` if hidden before that |
 | tap | opens `click_through` in an in-app browser (`/impression/{bid}/redirect` records the click, then forwards) |
 | hide, for any reason | `overlay_view_duration`, plus `close` when the user dismissed (Resume) |
-| swipe video: first frame, 25 / 50 / 75 %, end, swiped away | `video.start`, `video.first_quartile` / `midpoint` / `third_quartile`, `video.complete`, `video.skip` (`/impression/{bid}/vast?event=…`) |
+| interstitial video: first frame, 25 / 50 / 75 %, end, closed early | `video.start`, `video.first_quartile` / `midpoint` / `third_quartile`, `video.complete`, `video.skip` (`/impression/{bid}/vast?event=…`) |
 
 Pings are `POST`s. `[CACHEBUSTING]` is replaced per fire, `[TIMESTAMP]` with the
 current ISO-8601 time, any other `[MACRO]` becomes empty.
@@ -106,7 +104,7 @@ let ads = session.setVideo(
         episodeCount: 40
     )
 )
-ads.load(formats: [.pause, .swipe, .overlay])           // one request for exactly these formats
+ads.load(formats: [.pause, .interstitial, .overlay])    // one request for exactly these formats
 
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
@@ -126,23 +124,16 @@ func didResume() {
     ads.pause.load()                           // prepare the next pause (server decides whether to fill)
 }
 
-// 4. Swipe ad: an interstitial when the user swipes *forward* to the next
-//    episode. Show the leaving episode's ad over the feed and hold the swipe
-//    until it is skippable. Once dismissed it is gone — don't show it on a
-//    backward swipe, and `isReady` stays false until you `load()` again.
-func didSwipeToNextEpisode() {
-    if ads.swipe.isReady {
-        ads.swipe.show(in: adHostView,
-            onSkippable: { feed.allowsSwipe = true },     // server's skip_after_ms elapsed
-            onFinished: { startNextEpisode() })           // played to the end or Skip tapped, already hidden
-    } else {
-        startNextEpisode()
+// 4. Interstitial: a full-screen video the SDK presents itself, at a
+//    moment you choose (3 s into the episode, a scene break, the end of
+//    an episode). Pause your content first and resume it in `onDismissed`,
+//    which runs once however the ad ended: video finished, Close tapped
+//    after the server's `skip_after_ms`, media failed, or your `hide()`.
+func didReachAdMoment() {
+    if ads.interstitial.isReady {
+        player.pause()
+        ads.interstitial.show(from: viewController) { player.play() }
     }
-}
-
-func userSwipedAdAway() {        // only reachable once onSkippable fired
-    ads.swipe.hide()             // fires `skip`, emits .closed
-    startNextEpisode()
 }
 
 // 5. Overlay, windowed mode (we know your content): feed the playhead; the
@@ -184,7 +175,7 @@ the SDK reports them at session start via `/init`:
 ```xml
 <key>SKAdNetworkItems</key>
 <array>
-  <dict><key>SKAdNetworkIdentifier</key><string>mp7rpxwdrx.skadnetwork</string></dict>
+  <dict><key>SKAdNetworkIdentifier</key><string>mp7rpxwdrx.adattributionkit</string></dict>
 </array>
 ```
 

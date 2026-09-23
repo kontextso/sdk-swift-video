@@ -1,15 +1,15 @@
 import AVFoundation
 import UIKit
 
-/// Full-screen video creative with an AD badge and a Skip chip that counts
-/// down `skip_after_ms`. Plays with sound; tapping the video opens the
-/// click-through.
-final class SwipeAdUIView: UIView {
+/// Full-screen video creative with an AD badge and a Close chip that counts
+/// down `skip_after_ms`. Plays with sound unless the server says `muted`;
+/// tapping the video opens the click-through.
+final class InterstitialAdUIView: UIView {
     private let ad: VideoAd
-    private let style: SwipeAd.Style
+    private let style: InterstitialAd.Style
     private let player = AVPlayer()
     private let playerLayer = AVPlayerLayer()
-    private let skipChip = UIButton(type: .system)
+    private let closeChip = UIButton(type: .system)
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var itemStatusObservation: NSKeyValueObservation?
@@ -20,19 +20,19 @@ final class SwipeAdUIView: UIView {
     private var endObserver: NSObjectProtocol?
     private var reportedQuartile = 0
     private var firstFrameReported = false
-    private var skippableReported = false
+    private var closableReported = false
 
     var onClick: (() -> Void)?
     var onFirstFrame: (() -> Void)?
     /// 1 = first quartile, 2 = midpoint, 3 = third quartile.
     var onProgress: ((Int) -> Void)?
-    var onSkippable: (() -> Void)?
-    var onSkipTapped: (() -> Void)?
+    var onClosable: (() -> Void)?
+    var onCloseTapped: (() -> Void)?
     var onComplete: (() -> Void)?
     /// The media failed to load or play. The ad cannot be shown.
     var onFailure: ((String) -> Void)?
 
-    init(ad: VideoAd, style: SwipeAd.Style) {
+    init(ad: VideoAd, style: InterstitialAd.Style) {
         self.ad = ad
         self.style = style
         super.init(frame: .zero)
@@ -67,31 +67,30 @@ final class SwipeAdUIView: UIView {
         badge.translatesAutoresizingMaskIntoConstraints = false
         addSubview(badge)
 
-        skipChip.titleLabel?.font = style.font
-        skipChip.setTitleColor(style.textColor, for: .normal)
-        skipChip.backgroundColor = style.chipBackgroundColor
-        skipChip.layer.cornerRadius = 16
-        skipChip.contentEdgeInsets = UIEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
-        skipChip.translatesAutoresizingMaskIntoConstraints = false
-        skipChip.isHidden = !style.showsSkipButton
-        skipChip.isEnabled = false
-        skipChip.addTarget(self, action: #selector(didTapSkip), for: .touchUpInside)
-        addSubview(skipChip)
-        updateSkipChip(elapsed: 0)
+        closeChip.titleLabel?.font = style.font
+        closeChip.setTitleColor(style.textColor, for: .normal)
+        closeChip.backgroundColor = style.chipBackgroundColor
+        closeChip.layer.cornerRadius = 16
+        closeChip.contentEdgeInsets = UIEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
+        closeChip.translatesAutoresizingMaskIntoConstraints = false
+        closeChip.isEnabled = false
+        closeChip.addTarget(self, action: #selector(didTapClose), for: .touchUpInside)
+        addSubview(closeChip)
+        updateCloseChip(elapsed: 0)
 
         NSLayoutConstraint.activate([
             badge.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 20),
             badge.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             badge.widthAnchor.constraint(equalToConstant: 34),
             badge.heightAnchor.constraint(equalToConstant: 20),
-            skipChip.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 16),
-            skipChip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            closeChip.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 16),
+            closeChip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
         ])
 
         guard let video = ad.creative.video, let url = URL(string: video.url) else {
             // Callbacks are wired by the caller right after init returns, so
             // defer the failure a tick so `onFailure` is set.
-            Task { @MainActor [weak self] in self?.fail("swipe ad has no playable video url") }
+            Task { @MainActor [weak self] in self?.fail("interstitial ad has no playable video url") }
             return
         }
         let item = AVPlayerItem(url: url)
@@ -133,26 +132,26 @@ final class SwipeAdUIView: UIView {
         // SDK gives up (dead CDN, endless buffering) so the app can move on.
         startWatchdog?.cancel()
         startWatchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Constants.swipeStartTimeout * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(Constants.interstitialStartTimeout * 1_000_000_000))
             guard let self, !Task.isCancelled, !self.firstFrameReported else { return }
-            self.fail("swipe ad video did not start within \(Int(Constants.swipeStartTimeout))s")
+            self.fail("interstitial ad video did not start within \(Int(Constants.interstitialStartTimeout))s")
         }
     }
 
     private func armStallWatchdog() {
         guard !failed, stallWatchdog == nil else { return }
         stallWatchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Constants.swipeStallTimeout * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(Constants.interstitialStallTimeout * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             self.stallWatchdog = nil
             if self.player.timeControlStatus != .playing {
-                self.fail("swipe ad video stalled for \(Int(Constants.swipeStallTimeout))s")
+                self.fail("interstitial ad video stalled for \(Int(Constants.interstitialStallTimeout))s")
             }
         }
     }
 
     /// Single failure funnel: reports once, then behaves like the media-
-    /// failed KVO path (hide + `.error` + onFinished in `SwipeAd`).
+    /// failed KVO path (hide + `.error` + onDismissed in `InterstitialAd`).
     private func fail(_ message: String) {
         guard !failed else { return }
         failed = true
@@ -187,7 +186,7 @@ final class SwipeAdUIView: UIView {
 
     private func tick(seconds: Double) {
         guard seconds.isFinite else { return }
-        updateSkipChip(elapsed: seconds)
+        updateCloseChip(elapsed: seconds)
         guard let duration = player.currentItem?.duration, duration.isNumeric, duration.seconds > 0 else { return }
         let fraction = seconds / duration.seconds
         let quartile = fraction >= 0.75 ? 3 : fraction >= 0.5 ? 2 : fraction >= 0.25 ? 1 : 0
@@ -197,21 +196,23 @@ final class SwipeAdUIView: UIView {
         }
     }
 
-    private func updateSkipChip(elapsed: TimeInterval) {
+    /// No `skip_after_ms` = the ad closes only when the video ends, so the
+    /// chip stays hidden.
+    private func updateCloseChip(elapsed: TimeInterval) {
         guard let skipAfter = ad.playback?.skipAfter else {
-            skipChip.isHidden = true
+            closeChip.isHidden = true
             return
         }
         let remaining = skipAfter - elapsed
         if remaining > 0 {
-            skipChip.setTitle(String(format: style.skipCountdownFormat, Int(remaining.rounded(.up))), for: .normal)
-            skipChip.isEnabled = false
+            closeChip.setTitle(String(format: style.closeCountdownFormat, Int(remaining.rounded(.up))), for: .normal)
+            closeChip.isEnabled = false
         } else {
-            skipChip.setTitle(style.skipTitle, for: .normal)
-            skipChip.isEnabled = true
-            if !skippableReported {
-                skippableReported = true
-                onSkippable?()
+            closeChip.setTitle(style.closeTitle, for: .normal)
+            closeChip.isEnabled = true
+            if !closableReported {
+                closableReported = true
+                onClosable?()
             }
         }
     }
@@ -220,7 +221,7 @@ final class SwipeAdUIView: UIView {
         onClick?()
     }
 
-    @objc private func didTapSkip() {
-        onSkipTapped?()
+    @objc private func didTapClose() {
+        onCloseTapped?()
     }
 }
