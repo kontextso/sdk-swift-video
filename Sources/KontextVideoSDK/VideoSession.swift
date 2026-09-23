@@ -7,11 +7,14 @@ import UIKit
 ///
 /// Lifecycle:
 /// 1. Create via ``KontextVideo/createSession(_:)``.
-/// 2. Call ``setVideo(id:title:description:duration:language:episodeNumber:series:)`` every time a new
-///    video becomes current. It returns the ``VideoAds`` handle for that
-///    video; call ``VideoAds/load(formats:)`` on it to request ads.
+/// 2. Call ``createAds(videoId:title:description:duration:language:episodeNumber:series:)``
+///    for a video, as early as you like — the next episode while the
+///    current one plays. It returns the ``VideoAds`` handle for that video;
+///    call ``VideoAds/load(formats:)`` on it to request ads. Any number of
+///    handles can be alive at once.
 /// 3. Drive the ads from the handle — the SDK never observes the player;
-///    the app tells it when to show, hide, and load again.
+///    the app tells it when to show, hide, and load again — and
+///    ``VideoAds/destroy()`` it when the viewer is done with that video.
 @MainActor
 public final class VideoSession {
     public let options: VideoSessionOptions
@@ -23,9 +26,6 @@ public final class VideoSession {
     /// Persistent per-install id (KontextKit, UUID v7), sent on `/init` and
     /// every `/preload`; the publisher never manages it.
     let installId: String
-
-    /// The handle returned by the latest `setVideo`.
-    public private(set) var currentVideo: VideoAds?
 
     /// `false` once `/init` reports the session permanently disabled;
     /// `load` becomes a no-op.
@@ -68,13 +68,15 @@ public final class VideoSession {
         }
     }
 
-    /// Makes the video with `id` current and returns its ads handle.
-    /// Does not request anything — call ``VideoAds/load(formats:)`` on the
-    /// handle. The previous video's handle is destroyed in the background
-    /// (see ``VideoAds/destroy()``).
+    /// Creates the ads handle for one video. Does not request anything —
+    /// call ``VideoAds/load(formats:)`` on the handle. Handles are
+    /// independent: create the next episode's while the current one plays
+    /// so its ads are ready on arrival, and ``VideoAds/destroy()`` each one
+    /// when the viewer is done with that video; a handle you keep keeps
+    /// its ads.
     ///
     /// - Parameters:
-    ///   - id: The publisher's unique ID for this video — any scheme
+    ///   - videoId: The publisher's unique ID for this video — any scheme
     ///     (`"100001-6"`, a UUID…), as long as it identifies the video.
     ///   - title: Optional if the video was uploaded via the API. Otherwise
     ///     it is contextual signal, like `description`.
@@ -85,8 +87,8 @@ public final class VideoSession {
     ///   - episodeNumber: Position within `series`, when applicable.
     ///   - series: Series-level metadata; for short drama this is where
     ///     the synopsis, keywords, and content rating live.
-    public func setVideo(
-        id: String,
+    public func createAds(
+        videoId: String,
         title: String? = nil,
         description: String? = nil,
         duration: TimeInterval? = nil,
@@ -94,8 +96,8 @@ public final class VideoSession {
         episodeNumber: Int? = nil,
         series: VideoSeries? = nil
     ) -> VideoAds {
-        let ads = VideoAds(
-            videoId: id,
+        VideoAds(
+            videoId: videoId,
             title: title,
             description: description,
             duration: duration,
@@ -105,11 +107,6 @@ public final class VideoSession {
             session: self,
             emit: { [weak self] in self?.emit($0) }
         )
-        if let previous = currentVideo {
-            Task { await previous.destroy() }
-        }
-        currentVideo = ads
-        return ads
     }
 
     // MARK: - Internal
@@ -144,7 +141,7 @@ public final class VideoSession {
             if let newSessionId = response.sessionId {
                 sessionId = newSessionId
             }
-            guard currentVideo === ads else { return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false) }
+            guard !ads.isDestroyed else { return PreloadOutcome(ads: [], results: nil, noFillReason: nil, succeeded: false) }
             let served = response.ads.filter { formats.contains($0.format) }
             log("/instream/preload → \(served.count) ad(s) for \(ads.videoId)\(response.noFillReason.map { " (\($0))" } ?? "")")
             return PreloadOutcome(ads: served, results: response.results, noFillReason: response.noFillReason, succeeded: true)

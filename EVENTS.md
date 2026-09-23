@@ -27,7 +27,7 @@ let session = KontextVideo.createSession(VideoSessionOptions(
 Events are informational — the SDK never requires you to react to one
 (show/hide/load are separate, explicit calls). Identifiers:
 
-- `videoId` — the id you passed to `setVideo(id:)`.
+- `videoId` — the id you passed to `createAds(videoId:)`.
 - `adId` — unique per **served ad**. Two `shown` events with different
   `adId`s are two different ads; the same creative can appear behind many
   served ads.

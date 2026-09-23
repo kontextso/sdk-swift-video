@@ -1,13 +1,13 @@
 import UIKit
 
-/// The ads of the current video — returned by
-/// ``VideoSession/setVideo(id:title:description:duration:language:episodeNumber:series:)``.
+/// The ads of one video — returned by
+/// ``VideoSession/createAds(videoId:title:description:duration:language:episodeNumber:series:)``.
 ///
 /// One placement object per format. The app decides when ads are loaded
 /// and shown; the SDK does not observe the player:
 ///
 /// ```swift
-/// let ads = session.setVideo(id: "ep-1042")
+/// let ads = session.createAds(videoId: "ep-1042")
 /// ads.load(formats: [.pause, .interstitial, .overlay])
 /// // on pause
 /// if ads.pause.isReady { ads.pause.show(in: playerView) }
@@ -19,9 +19,9 @@ import UIKit
 /// Each ad is shown once; `show` consumes it. Load again to prepare
 /// another — whether one is served is the server's decision.
 ///
-/// When the viewer leaves the video, `await ads.destroy()` (or just call
-/// `setVideo` for the next one, which destroys the previous handle for
-/// you).
+/// Handles are independent, so the next episode's can be created and
+/// loaded while this one plays. When the viewer is done with a video,
+/// `await ads.destroy()` — nothing releases a handle for you.
 @MainActor
 public final class VideoAds {
     /// The publisher's unique video ID this handle belongs to.

@@ -85,12 +85,14 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     }
 ))
 
-// 2. Tell the SDK which video is current, then load ads for it.
-//    `id` is YOUR unique id for the video — any scheme (series id + number,
-//    a UUID, …). Everything else is optional contextual signal: for short
-//    drama the synopsis/keywords/rating usually live on the series.
-let ads = session.setVideo(
-    id: "100001-6",
+// 2. Create the ads handle for a video, then load ads for it. Do this as
+//    early as you like — for the next episode while the current one plays —
+//    so the ads are ready on arrival; handles are independent.
+//    `videoId` is YOUR unique id for the video — any scheme (series id +
+//    number, a UUID, …). Everything else is optional contextual signal: for
+//    short drama the synopsis/keywords/rating usually live on the series.
+let ads = session.createAds(
+    videoId: "100001-6",
     duration: 92,                                       // seconds
     language: "en",                                     // the track being played
     episodeNumber: 6,
@@ -155,10 +157,10 @@ player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queu
 if ads.overlay.isReady { ads.overlay.show(in: playerView) }
 ads.overlay.hide()
 
-// 6. Leaving the player: release the ads. Takes ~1 s when an ad was on
-//    screen (measurement beacons); `setVideo` for the next video does
-//    this for you.
-func didLeavePlayer() async {
+// 6. Done with the video: release its ads. Takes ~1 s when an ad was on
+//    screen (measurement beacons). Nothing releases a handle for you, so
+//    destroy the previous episode's when you move on.
+func didLeaveVideo() async {
     await ads.destroy()
 }
 

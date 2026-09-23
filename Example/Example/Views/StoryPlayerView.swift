@@ -2,18 +2,22 @@ import KontextVideoSDK
 import SwiftUI
 
 /// Fullscreen vertical feed of a story's episodes — swipe up/down to change episode.
-/// Each episode gets its own `VideoAds` handle, loaded with every format
-/// the moment it becomes current.
+/// Each episode gets its own `VideoAds` handle. The handle for the *next*
+/// episode is created and loaded while the current one plays, so its ads
+/// are ready the moment the viewer swipes; the previous episode's handle
+/// is destroyed when the viewer moves on.
 struct StoryPlayerView: View {
     let story: Story
 
     @Environment(\.dismiss) private var dismiss
     @State private var currentEpisodeID: Episode.ID?
-    /// The episode whose ads handle is current. `scrollPosition` can
+    /// The episode whose handle drives the player. `scrollPosition` can
     /// re-report the same id (e.g. when the interstitial is presented over
-    /// the feed), and re-creating the handle would destroy the ad on screen.
+    /// the feed); this guard keeps that from re-creating the handle and
+    /// destroying the ad on screen.
     @State private var activeEpisodeID: Episode.ID?
-    @State private var ads: VideoAds?
+    /// Live handles: the active episode's and the next one's.
+    @State private var handles: [Episode.ID: VideoAds] = [:]
 
     init(story: Story) {
         self.story = story
@@ -29,7 +33,7 @@ struct StoryPlayerView: View {
                             story: story,
                             episode: episode,
                             isActive: activeEpisodeID == episode.id,
-                            ads: activeEpisodeID == episode.id ? ads : nil
+                            ads: activeEpisodeID == episode.id ? handles[episode.id] : nil
                         )
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .id(episode.id)
@@ -51,7 +55,7 @@ struct StoryPlayerView: View {
             if let id = currentEpisodeID { startEpisode(id) }
         }
         .onDisappear {
-            ads?.interstitial.hide()
+            activeEpisodeID.flatMap { handles[$0] }?.interstitial.hide()
         }
         .onChange(of: currentEpisodeID) { _, newID in
             guard let newID, newID != activeEpisodeID else { return }
@@ -59,11 +63,25 @@ struct StoryPlayerView: View {
         }
     }
 
-    /// Makes `id` the current video, loaded with every format.
+    /// Makes `id` the active episode: its handle (usually prepared while
+    /// the previous episode played) drives the player, the next episode's
+    /// is prepared now, and every other handle is released.
     private func startEpisode(_ id: Episode.ID) {
-        guard let episode = story.episodes.first(where: { $0.id == id }) else { return }
-        let handle = Ads.session.setVideo(
-            id: episode.id,
+        guard let index = story.episodes.firstIndex(where: { $0.id == id }) else { return }
+        let keep = [story.episodes[index], story.episodes[safe: index + 1]].compactMap { $0 }
+        for episode in keep where handles[episode.id] == nil {
+            handles[episode.id] = prepareAds(for: episode)
+        }
+        for (episodeID, handle) in handles where !keep.contains(where: { $0.id == episodeID }) {
+            handles[episodeID] = nil
+            Task { await handle.destroy() }
+        }
+        activeEpisodeID = id
+    }
+
+    private func prepareAds(for episode: Episode) -> VideoAds {
+        let handle = Ads.session.createAds(
+            videoId: episode.id,
             title: episode.title,
             duration: 20.5,
             language: "en",
@@ -77,8 +95,7 @@ struct StoryPlayerView: View {
             )
         )
         handle.load(formats: [.pause, .interstitial, .overlay])
-        ads = handle
-        activeEpisodeID = id
+        return handle
     }
 
     // A back chevron, not an X — the X is reserved for closing ads, and two
@@ -94,6 +111,12 @@ struct StoryPlayerView: View {
                 .background(.black.opacity(0.4), in: Circle())
         }
         .padding(.leading, 16)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
