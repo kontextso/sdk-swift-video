@@ -210,11 +210,11 @@ final class InterstitialAdUIView: UIView {
     /// stays hidden until then.
     private func updateCloseChip(elapsed: TimeInterval) {
         guard !ended else { return }
-        guard let skipAfter = ad.playback?.skipAfter else {
+        guard let skipAfterMs = ad.playback?.skipAfterMs else {
             closeChip.isHidden = true
             return
         }
-        let remaining = skipAfter - elapsed
+        let remaining = TimeInterval(skipAfterMs) / 1000 - elapsed
         if remaining > 0 {
             closeChip.setTitle(String(format: style.closeCountdownFormat, Int(remaining.rounded(.up))), for: .normal)
             closeChip.isEnabled = false

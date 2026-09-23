@@ -93,7 +93,7 @@ let session = KontextVideo.createSession(VideoSessionOptions(
 //    short drama the synopsis/keywords/rating usually live on the series.
 let ads = session.createAds(
     videoId: "100001-6",
-    duration: 92,                                       // seconds
+    durationMs: 92_000,                                 // milliseconds
     language: "en",                                     // the track being played
     episodeNumber: 6,
     series: VideoSeries(
@@ -148,7 +148,7 @@ ads.overlay.onWindowOpen  = { ad in
 }
 ads.overlay.onWindowClose = { ad in ads.overlay.hide() }
 player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
-    ads.overlay.playhead = t.seconds
+    ads.overlay.playheadMs = Int(t.seconds * 1000)
 }
 
 //    Overlay, manual mode (we never saw your content, so there are no

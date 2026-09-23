@@ -7,7 +7,7 @@ import UIKit
 ///
 /// Lifecycle:
 /// 1. Create via ``KontextVideo/createSession(_:)``.
-/// 2. Call ``createAds(videoId:title:description:duration:language:episodeNumber:series:)``
+/// 2. Call ``createAds(videoId:title:description:durationMs:language:episodeNumber:series:)``
 ///    for a video, as early as you like — the next episode while the
 ///    current one plays. It returns the ``VideoAds`` handle for that video;
 ///    call ``VideoAds/load(formats:)`` on it to request ads. Any number of
@@ -80,8 +80,8 @@ public final class VideoSession {
     ///     (`"100001-6"`, a UUID…), as long as it identifies the video.
     ///   - title: Optional if the video was uploaded via the API. Otherwise
     ///     it is contextual signal, like `description`.
-    ///   - duration: Video length in seconds, when known. Lets the server
-    ///     place overlay windows for videos it has never analyzed.
+    ///   - durationMs: Video length in milliseconds, when known. Lets the
+    ///     server place overlay windows for videos it has never analyzed.
     ///   - language: The audio/subtitle track being played (ISO 639) — ad
     ///     copy follows it, not the app locale.
     ///   - episodeNumber: Position within `series`, when applicable.
@@ -91,7 +91,7 @@ public final class VideoSession {
         videoId: String,
         title: String? = nil,
         description: String? = nil,
-        duration: TimeInterval? = nil,
+        durationMs: Int? = nil,
         language: String? = nil,
         episodeNumber: Int? = nil,
         series: VideoSeries? = nil
@@ -100,7 +100,7 @@ public final class VideoSession {
             videoId: videoId,
             title: title,
             description: description,
-            duration: duration,
+            durationMs: durationMs,
             language: language,
             episodeNumber: episodeNumber,
             series: series,
@@ -130,7 +130,7 @@ public final class VideoSession {
                 id: ads.videoId,
                 title: ads.title,
                 description: ads.description,
-                durationMs: ads.duration.map { Int($0 * 1000) },
+                durationMs: ads.durationMs,
                 language: ads.language,
                 episodeNumber: ads.episodeNumber,
                 series: ads.series,

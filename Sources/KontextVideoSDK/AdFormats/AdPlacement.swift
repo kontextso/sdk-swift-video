@@ -91,14 +91,14 @@ public class AdPlacement {
     @discardableResult
     func present(in container: UIView) -> Bool {
         guard isReady, let ad = pending.first else { return false }
-        let delay = ad.trigger.delay ?? 0
-        guard delay > 0 else {
+        let delayMs = ad.trigger.delayMs ?? 0
+        guard delayMs > 0 else {
             pending.removeFirst()
             reveal(ad, in: container)
             return true
         }
         revealTask = Task { [weak self, weak container] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
             guard !Task.isCancelled, let self, let container,
                   let next = self.pending.first, next.adId == ad.adId else { return }
             self.revealTask = nil

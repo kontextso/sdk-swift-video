@@ -2,7 +2,8 @@ import Foundation
 
 /// One ad returned by `/instream/preload`, ready to render. Same shape as the
 /// ad server's `InstreamOverlayAdJson` (decoded from snake_case) plus the
-/// trigger, placement and playback blocks.
+/// trigger, placement and playback blocks. All times are milliseconds, like
+/// the wire and like the Kotlin SDK.
 public struct VideoAd: Sendable, Decodable {
     public let format: VideoAdFormat
     /// Unique per served ad — the wire's `bid_id`. Matches the `adId` on
@@ -24,32 +25,19 @@ public struct VideoAd: Sendable, Decodable {
         case adId = "bidId"
     }
 
-    /// All times are seconds (`TimeInterval`), like everywhere in the
-    /// public API; the wire carries milliseconds (`from_ms`, `delay_ms`).
     public struct Trigger: Sendable, Decodable {
         /// `pause`, `range` (a window in content time), or `manual` (the
         /// app decides the moment — every interstitial, and overlays when
         /// the publisher shared no content to derive windows from).
         public let kind: String
-        /// Window start / end in content time, `range` triggers only.
-        public let from: TimeInterval?
-        public let to: TimeInterval?
-        /// Optional wait after the trigger before showing. Absent or 0 =
-        /// show immediately, which is the requirement; the server may set
-        /// it per ad if a partner wants a grace period.
-        public let delay: TimeInterval?
-
-        enum CodingKeys: String, CodingKey {
-            case kind, fromMs, toMs, delayMs
-        }
-
-        public init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            kind = try c.decode(String.self, forKey: .kind)
-            from = try c.decodeIfPresent(Int.self, forKey: .fromMs).map { TimeInterval($0) / 1000 }
-            to = try c.decodeIfPresent(Int.self, forKey: .toMs).map { TimeInterval($0) / 1000 }
-            delay = try c.decodeIfPresent(Int.self, forKey: .delayMs).map { TimeInterval($0) / 1000 }
-        }
+        /// Window start / end in content time, milliseconds, `range`
+        /// triggers only.
+        public let fromMs: Int?
+        public let toMs: Int?
+        /// Optional wait after the trigger before showing, milliseconds.
+        /// Absent or 0 = show immediately, which is the requirement; the
+        /// server may set it per ad if a partner wants a grace period.
+        public let delayMs: Int?
     }
 
     public struct Placement: Sendable, Decodable {
@@ -57,22 +45,12 @@ public struct VideoAd: Sendable, Decodable {
         public let position: String?
     }
 
-    /// Video formats only. Times in seconds; the wire carries `skip_after_ms`.
+    /// Video formats only.
     public struct Playback: Sendable, Decodable {
-        /// The ad may be closed after this long, in seconds. `nil` = not
+        /// The ad may be closed after this long, in milliseconds. `nil` = not
         /// closable; it ends only when the video completes.
-        public let skipAfter: TimeInterval?
+        public let skipAfterMs: Int?
         public let muted: Bool?
-
-        enum CodingKeys: String, CodingKey {
-            case skipAfterMs, muted
-        }
-
-        public init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            skipAfter = try c.decodeIfPresent(Int.self, forKey: .skipAfterMs).map { TimeInterval($0) / 1000 }
-            muted = try c.decodeIfPresent(Bool.self, forKey: .muted)
-        }
     }
 }
 
@@ -91,21 +69,8 @@ public struct VideoAdCreative: Sendable, Decodable {
         public let mimeType: String?
         public let w: Int
         public let h: Int
-        /// Seconds; the wire carries `duration_ms`.
-        public let duration: TimeInterval?
-
-        enum CodingKeys: String, CodingKey {
-            case url, mimeType, w, h, durationMs
-        }
-
-        public init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            url = try c.decode(String.self, forKey: .url)
-            mimeType = try c.decodeIfPresent(String.self, forKey: .mimeType)
-            w = try c.decode(Int.self, forKey: .w)
-            h = try c.decode(Int.self, forKey: .h)
-            duration = try c.decodeIfPresent(Int.self, forKey: .durationMs).map { TimeInterval($0) / 1000 }
-        }
+        /// Milliseconds.
+        public let durationMs: Int?
     }
 
     public struct CTA: Sendable, Decodable {

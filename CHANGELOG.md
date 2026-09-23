@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Breaking
+Times in the public API are milliseconds (`Int`) with the `Ms` suffix, the same as the Kotlin SDK: `createAds(durationMs:)`, `overlay.playheadMs`, `trigger.fromMs` / `toMs` / `delayMs`, `playback.skipAfterMs`, `creative.video.durationMs`. From an AVPlayer time observer, `ads.overlay.playheadMs = Int(t.seconds * 1000)`.
+
 `setVideo(id:…)` is now `createAds(videoId:…)`, and it no longer destroys the previous video's handle: handles are independent, so the next episode's ads can be created and loaded while the current one plays. Destroy each handle yourself with `await ads.destroy()` when the viewer is done with that video. `session.currentVideo` is gone.
 
 The swipe format is gone; the interstitial replaces it. `VideoAdFormat.swipe` → `.interstitial` (`INSTREAM_VIDEO_INTERSTITIAL`), `ads.swipe` → `ads.interstitial`, and the SDK now presents the ad itself: `show(from: viewController, onDismissed:)` instead of `show(in: hostView, onSkippable:onFinished:)`. Pause your content before `show` and resume it in `onDismissed`; there is no gesture to unblock and no host view to provide.

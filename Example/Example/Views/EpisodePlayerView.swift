@@ -119,7 +119,7 @@ struct EpisodePlayerView: View {
                 }
                 ads.overlay.onWindowClose = { _ in ads.overlay.hide() }
                 let seconds = CMTimeGetSeconds(time)
-                ads.overlay.playhead = seconds
+                ads.overlay.playheadMs = Int(seconds * 1000)
                 showInterstitialIfDue(at: seconds, player: player)
             }
         }

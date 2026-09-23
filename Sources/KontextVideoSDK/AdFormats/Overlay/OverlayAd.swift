@@ -14,7 +14,7 @@ import UIKit
 /// ads.overlay.onWindowOpen  = { ad in ads.overlay.show(in: playerView) }
 /// ads.overlay.onWindowClose = { ad in ads.overlay.hide() }
 /// player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 4), queue: .main) { t in
-///     ads.overlay.playhead = t.seconds
+///     ads.overlay.playheadMs = Int(t.seconds * 1000)
 /// }
 /// ```
 ///
@@ -36,10 +36,10 @@ public final class OverlayAd: AdPlacement {
     public typealias Position = BannerPosition
     public typealias Style = BannerStyle
 
-    /// Current playback position of the episode, in seconds. Set it from
-    /// your player's periodic time observer; the SDK compares it with the
-    /// pending ads' windows and calls ``onWindowOpen`` / ``onWindowClose``.
-    public var playhead: TimeInterval = 0 {
+    /// Current playback position of the episode, in milliseconds. Set it
+    /// from your player's periodic time observer; the SDK compares it with
+    /// the pending ads' windows and calls ``onWindowOpen`` / ``onWindowClose``.
+    public var playheadMs: Int = 0 {
         didSet { evaluateWindows() }
     }
 
@@ -75,7 +75,7 @@ public final class OverlayAd: AdPlacement {
     @discardableResult
     public func show(in container: UIView, position: Position? = nil, style: Style = Style()) -> Bool {
         guard isReady else { return false }
-        let preferred = openWindowAd ?? pending.first { $0.trigger.from == nil }
+        let preferred = openWindowAd ?? pending.first { $0.trigger.fromMs == nil }
         if let preferred, let index = pending.firstIndex(where: { $0.adId == preferred.adId }), index != 0 {
             moveToFront(index)
         }
@@ -109,10 +109,10 @@ public final class OverlayAd: AdPlacement {
     }
 
     private func evaluateWindows() {
-        let now = playhead
+        let now = playheadMs
         func isOpen(_ ad: VideoAd) -> Bool {
-            guard let from = ad.trigger.from else { return false }
-            return now >= from && now < (ad.trigger.to ?? .infinity)
+            guard let from = ad.trigger.fromMs else { return false }
+            return now >= from && now < (ad.trigger.toMs ?? Int.max)
         }
         // The ad on screen left `pending` when it was shown but keeps its
         // window; consider it first so its own window can't "close" it.

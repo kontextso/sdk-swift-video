@@ -1,7 +1,7 @@
 import UIKit
 
 /// The ads of one video — returned by
-/// ``VideoSession/createAds(videoId:title:description:duration:language:episodeNumber:series:)``.
+/// ``VideoSession/createAds(videoId:title:description:durationMs:language:episodeNumber:series:)``.
 ///
 /// One placement object per format. The app decides when ads are loaded
 /// and shown; the SDK does not observe the player:
@@ -28,8 +28,8 @@ public final class VideoAds {
     public let videoId: String
     public let title: String?
     public let description: String?
-    /// Video length in seconds, when the app provided it.
-    public let duration: TimeInterval?
+    /// Video length in milliseconds, when the app provided it.
+    public let durationMs: Int?
     public let language: String?
     public let episodeNumber: Int?
     public let series: VideoSeries?
@@ -58,7 +58,7 @@ public final class VideoAds {
         videoId: String,
         title: String?,
         description: String?,
-        duration: TimeInterval?,
+        durationMs: Int?,
         language: String?,
         episodeNumber: Int?,
         series: VideoSeries?,
@@ -68,7 +68,7 @@ public final class VideoAds {
         self.videoId = videoId
         self.title = title
         self.description = description
-        self.duration = duration
+        self.durationMs = durationMs
         self.language = language
         self.episodeNumber = episodeNumber
         self.series = series

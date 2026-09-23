@@ -83,7 +83,7 @@ struct StoryPlayerView: View {
         let handle = Ads.session.createAds(
             videoId: episode.id,
             title: episode.title,
-            duration: 20.5,
+            durationMs: 20_500,
             language: "en",
             episodeNumber: episode.number,
             series: VideoSeries(
