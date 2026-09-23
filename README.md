@@ -9,7 +9,7 @@ Swift SDK for integrating Kontext video ads into short-drama and other video-fir
 | Format | Behavior |
 |---|---|
 | **Pause** (`pause`) | Image banner at the top (or bottom) of the paused player; the content stays visible |
-| **Interstitial** (`interstitial`) | Full-screen video the SDK presents at a moment the app chooses; closable after the server's `skip_after_ms`, closes itself at the end |
+| **Interstitial** (`interstitial`) | Full-screen video the SDK presents at a moment the app chooses; closable after the server's `skip_after_ms`, and after the video ends the last frame stays up until the viewer taps Close |
 | **Overlay** (`overlay`) | Image banners while the episode plays — several per video, each in a window the server derived from the scene; the SDK tells you when a window opens, you decide to show |
 
 All are prepared at video start; the app shows a pause ad when the user pauses and hides it on resume, shows overlays in their windows, and presents the interstitial at a moment it picks (a scene break, the end of an episode). Each ad is shown once.
@@ -127,8 +127,9 @@ func didResume() {
 // 4. Interstitial: a full-screen video the SDK presents itself, at a
 //    moment you choose (3 s into the episode, a scene break, the end of
 //    an episode). Pause your content first and resume it in `onDismissed`,
-//    which runs once however the ad ended: video finished, Close tapped
-//    after the server's `skip_after_ms`, media failed, or your `hide()`.
+//    which runs once when the screen goes away: the viewer tapped Close
+//    (after the server's `skip_after_ms`, or after the video ended — the
+//    last frame stays up like a MAX end card), media failed, or your `hide()`.
 func didReachAdMoment() {
     if ads.interstitial.isReady {
         player.pause()

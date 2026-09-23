@@ -15,8 +15,10 @@ import UIKit
 /// ```
 ///
 /// Close is server-driven: the chip counts down `playback.skip_after_ms`
-/// and enables after it; with no `skip_after_ms` the ad closes only when
-/// the video ends. Completion dismisses the screen on its own.
+/// and enables after it; with no `skip_after_ms` it enables when the video
+/// ends. The screen never goes away on its own: after the video the last
+/// frame stays up with Close enabled until the viewer taps it (the MAX /
+/// AdMob end-card behaviour), so `onDismissed` always follows a user action.
 @MainActor
 public final class InterstitialAd: AdPlacement {
     /// Appearance of the interstitial. Everything has a default.
@@ -35,8 +37,8 @@ public final class InterstitialAd: AdPlacement {
         public init() {}
     }
 
-    /// `true` once the server's `skip_after_ms` has elapsed and the Close
-    /// chip is enabled.
+    /// `true` once the Close chip is enabled: the server's `skip_after_ms`
+    /// elapsed, or the video ended.
     public private(set) var isClosable = false
 
     private var style = Style()
@@ -54,9 +56,10 @@ public final class InterstitialAd: AdPlacement {
     /// consumes the ad. Returns `false` when ``isReady`` is `false`.
     ///
     /// Pause your content before calling this and resume it in
-    /// `onDismissed`, which runs exactly once however the ad ended: video
-    /// finished, user tapped Close, media failed, or your own ``hide()``.
-    /// It does not run for ``VideoAds/destroy()``, which you initiated.
+    /// `onDismissed`, which runs exactly once when the screen goes away:
+    /// the viewer tapped Close (before or after the video ended), the
+    /// media failed, or you called ``hide()``. It does not run for
+    /// ``VideoAds/destroy()``, which you initiated.
     @discardableResult
     public func show(
         from viewController: UIViewController,
@@ -76,8 +79,9 @@ public final class InterstitialAd: AdPlacement {
     }
 
     /// Dismisses the ad because the app is leaving (viewer left the screen,
-    /// app going to background). Fires `skip` when the video had not
-    /// finished. Runs `onDismissed`. A hide after completion is a no-op.
+    /// app going to background), including an end card the viewer has not
+    /// closed yet. Fires `skip` when the video had not finished. Runs
+    /// `onDismissed`. A no-op when nothing is on screen.
     public override func hide() {
         guard current != nil else {
             super.hide()
@@ -104,8 +108,19 @@ public final class InterstitialAd: AdPlacement {
         view.onClosable = { [weak self] in self?.isClosable = true }
         view.onCloseTapped = { [weak self] in self?.end(.closed) }
         view.onFailure = { [weak self] message in self?.end(.failed(message)) }
-        view.onComplete = { [weak self] in self?.end(.completed) }
+        view.onComplete = { [weak self] in self?.didComplete() }
         return view
+    }
+
+    /// The video reached its end. The screen stays up on the last frame
+    /// with Close enabled; only the viewer's tap ends the ad.
+    private func didComplete() {
+        guard let ad = current, !completed else { return }
+        completed = true
+        isClosable = true
+        tracker?.fireVideo(.complete)
+        (view as? InterstitialAdUIView)?.showEndState()
+        emit(.completed(VideoAdEvent.AdData(format: .interstitial, videoId: videoId, adId: ad.adId)))
     }
 
     override func mount(_ view: UIView, in container: UIView) {
@@ -136,23 +151,21 @@ public final class InterstitialAd: AdPlacement {
     }
 
     private enum End {
-        case completed
         case closed
         case failed(String)
         case hidden
     }
 
-    /// Single exit: every way the ad can end goes through here, so the
-    /// screen is dismissed and `onDismissed` runs exactly once.
+    /// Single exit: every way the screen can go away goes through here, so
+    /// it is dismissed and `onDismissed` runs exactly once.
     private func end(_ end: End) {
         guard let ad = current, !ended else { return }
         ended = true
         switch end {
-        case .completed:
-            completed = true
-            tracker?.fireVideo(.complete)
-            hide(userDismissed: false)
-            emit(.completed(VideoAdEvent.AdData(format: .interstitial, videoId: videoId, adId: ad.adId)))
+        case .closed where completed:
+            // Closing the end card: `close` tracking, no `.closed` — the
+            // ad was not cut short, `.completed` already said so.
+            hide(userDismissed: true)
         case .closed:
             onUserDismiss()
         case .failed(let message):

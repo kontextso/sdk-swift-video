@@ -21,6 +21,7 @@ final class InterstitialAdUIView: UIView {
     private var reportedQuartile = 0
     private var firstFrameReported = false
     private var closableReported = false
+    private var ended = false
 
     var onClick: (() -> Void)?
     var onFirstFrame: (() -> Void)?
@@ -196,9 +197,19 @@ final class InterstitialAdUIView: UIView {
         }
     }
 
-    /// No `skip_after_ms` = the ad closes only when the video ends, so the
-    /// chip stays hidden.
+    /// The video ended: keep the last frame (the player pauses on it) and
+    /// let the viewer close whenever they like.
+    func showEndState() {
+        ended = true
+        closeChip.setTitle(style.closeTitle, for: .normal)
+        closeChip.isEnabled = true
+        closeChip.isHidden = false
+    }
+
+    /// No `skip_after_ms` = closable only once the video ends, so the chip
+    /// stays hidden until then.
     private func updateCloseChip(elapsed: TimeInterval) {
+        guard !ended else { return }
         guard let skipAfter = ad.playback?.skipAfter else {
             closeChip.isHidden = true
             return

@@ -106,16 +106,18 @@ in-app browser — you don't need to do anything.
 
 ### `.closed(AdData)`
 
-The user dismissed the ad **from inside it**: the interstitial's Close
-chip, enabled once the server's `skip_after_ms` has elapsed. The ad is
-already hidden, its screen dismissed, and `skip`/`close` tracking has
-fired; `onDismissed` runs too. Your own `hide()` calls do **not** emit
+The user cut the ad short **from inside it**: the interstitial's Close
+chip, enabled once the server's `skip_after_ms` has elapsed, tapped before
+the video ended. The ad is already hidden, its screen dismissed, and
+`skip`/`close` tracking has fired; `onDismissed` runs too. Your own `hide()` calls do **not** emit
 `.closed` — you initiated those.
 
 ### `.completed(AdData)`
 
-A video ad (interstitial) played to the end. Its screen is already
-dismissed; `video.complete` tracking fired; `onDismissed` runs.
+A video ad (interstitial) played to the end. `video.complete` tracking
+fired. The screen is **still up** on the last frame with Close enabled,
+like a MAX end card; `onDismissed` runs when the viewer taps it (no
+`.closed` then — the ad was not cut short).
 
 ### `.error(ErrorData)`
 
@@ -138,5 +140,5 @@ its screen and calls `onDismissed` so your flow continues.
 | `loaded` result row | 0–1 ad | 0–1 ad | 0–N ads |
 | `shown` | on `show(in:)` | on `show(from:…)` | on `show(in:)` (windowed or manual) |
 | `clicked` | tap | tap on video | tap |
-| `closed` | – | Close chip | – |
+| `closed` | – | Close chip before the video ended | – |
 | `completed` | – | video end | – |
