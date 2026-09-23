@@ -10,7 +10,10 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     onEvent: { event in
         switch event {
         case .loaded(let d):
-            for r in d.results { print("loaded:", r.format, r.ads.count, r.noFillReason ?? "") }
+            for r in d.results {
+                for ad in r.ads { print("loaded:", r.format, ad.id, "eCPM", ad.ecpm) }
+                if let reason = r.noFillReason { print("no fill:", r.format, reason) }
+            }
         case .shown(let d):     analytics.log("ad_shown", d.adId)
         case .clicked(let d):   analytics.log("ad_clicked", d.adId)
         case .closed(let d):    break
@@ -48,7 +51,7 @@ didLoad/didFailToLoad pair).
 | Field | Type | Meaning |
 |---|---|---|
 | `format` | `VideoAdFormat` | `.pause`, `.swipe`, or `.overlay` |
-| `ads` | `[Ad]` | The served ads, in order — each carries its `id` (matching the `adId` on later `shown`/`clicked` events). Empty = no fill |
+| `ads` | `[Ad]` | The served ads, in order — each carries its `id` (matching the `adId` on later `shown`/`clicked` events) and its `ecpm` (USD per 1,000 impressions). Empty = no fill |
 | `noFillReason` | `String?` | Why the server served less than it could have (`no_ad_match`, `frequency_capped`, `content_unsafe`, …) |
 
 Examples, as JSON:
@@ -56,14 +59,14 @@ Examples, as JSON:
 ```jsonc
 // everything filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "ads": [{ "id": "bid-p1" }] },
-  { "format": "swipe",   "ads": [{ "id": "bid-s1" }] },
-  { "format": "overlay", "ads": [{ "id": "bid-o1" }, { "id": "bid-o2" }, { "id": "bid-o3" }] }
+  { "format": "pause",   "ads": [{ "id": "bid-p1", "ecpm": 12.4 }] },
+  { "format": "swipe",   "ads": [{ "id": "bid-s1", "ecpm": 25.0 }] },
+  { "format": "overlay", "ads": [{ "id": "bid-o1", "ecpm": 12.4 }, { "id": "bid-o2", "ecpm": 12.4 }, { "id": "bid-o3", "ecpm": 12.4 }] }
 ] }
 
 // only the pause ad filled
 { "videoId": "100001-6", "results": [
-  { "format": "pause",   "ads": [{ "id": "bid-p1" }] },
+  { "format": "pause",   "ads": [{ "id": "bid-p1", "ecpm": 12.4 }] },
   { "format": "swipe",   "ads": [], "noFillReason": "frequency_capped" },
   { "format": "overlay", "ads": [], "noFillReason": "no_ad_match" }
 ] }
@@ -77,7 +80,13 @@ Examples, as JSON:
 ```
 
 A non-empty `ads` with a `noFillReason` means the server could have
-served more (e.g. an overlay window stayed empty). Not emitted when the
+served more (e.g. an overlay window stayed empty).
+
+`ecpm` is what the ad pays, in USD per 1,000 impressions. It is known
+before the ad is shown — here, on `VideoAd.ecpm` in the placement's
+`pending` list, and on the ad handed to `overlay.onWindowOpen` — so an app
+that runs its own auction can rank a Kontext ad against its other demand
+and skip `show` when it loses. An ad that is never shown is never billed. Not emitted when the
 request itself failed — that's `.error`.
 
 ### `.shown(AdData)`

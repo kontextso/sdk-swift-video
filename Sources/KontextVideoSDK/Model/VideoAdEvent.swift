@@ -43,12 +43,15 @@ public enum VideoAdEvent: Sendable {
             /// (`no_ad_match`, `frequency_capped`, `content_unsafe`, …).
             public let noFillReason: String?
 
-            /// One served ad; may grow beyond `id`.
+            /// One served ad.
             public struct Ad: Sendable {
                 /// Unique per served ad — matches the `adId` on later
                 /// `shown` / `clicked` events and the placement's
                 /// `pending` entries.
                 public let id: String
+                /// USD per 1,000 impressions — the same value as
+                /// `VideoAd.ecpm` on the placement's `pending` entry.
+                public let ecpm: Double
             }
         }
     }

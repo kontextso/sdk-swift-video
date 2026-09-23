@@ -2,7 +2,7 @@
 
 Swift SDK for integrating Kontext video ads into short-drama and other video-first iOS apps.
 
-> **Status: early development.** Pause ads render natively; the server endpoint is being designed with our design partners against a [mock server](https://github.com/kontextso/sdk-video-mock-server).
+> **Status: early development.** All three formats render natively; the server endpoint is being designed with our design partners against a [mock server](https://github.com/kontextso/sdk-video-mock-server).
 
 ## Supported formats
 
@@ -80,7 +80,9 @@ let session = KontextVideo.createSession(VideoSessionOptions(
     userEmail: "jane@example.com",
     onEvent: { event in
         if case .loaded(let d) = event {
-            for r in d.results { print("ready:", r.format, r.ads.count) }
+            for r in d.results {
+                for ad in r.ads { print("ready:", r.format, ad.id, "eCPM", ad.ecpm) }
+            }
         }
     }
 ))
@@ -109,8 +111,10 @@ ads.load(formats: [.pause, .swipe, .overlay])           // one request for exact
 // 3. You control the player, so you tell the SDK when to show and hide.
 //    One placement object per format; each ad is shown once, then
 //    `isReady` is false again. The ad shows immediately on pause.
+//    Every ad carries `ecpm` (USD per 1,000 impressions) before it is
+//    shown — rank it against your other demand and skip `show` if it loses.
 func didPause() {
-    if ads.pause.isReady {
+    if ads.pause.isReady, let ad = ads.pause.pending.first, ad.ecpm >= myFloor {
         var style = PauseAd.Style()               // margins, maxWidth, cornerRadius, placeholderColor
         style.margins.top = 24
         ads.pause.show(in: playerView, position: .top, style: style)

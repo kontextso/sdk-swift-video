@@ -109,7 +109,7 @@ public final class VideoAds {
             overlay.append(ads.filter { $0.format == .overlay })
             let rows = formats.map { format -> VideoAdEvent.LoadedData.FormatResult in
                 let served = ads.filter { $0.format == format }
-                    .map { VideoAdEvent.LoadedData.FormatResult.Ad(id: $0.adId) }
+                    .map { VideoAdEvent.LoadedData.FormatResult.Ad(id: $0.adId, ecpm: $0.ecpm) }
                 let server = outcome.results?.first { $0.format == format.rawValue }
                 return VideoAdEvent.LoadedData.FormatResult(
                     format: format,

@@ -17,7 +17,7 @@ enum Ads {
             switch event {
             case .loaded(let d):
                 for r in d.results {
-                    print("[Example] loaded \(r.format) \(r.ads.count)\(r.noFillReason.map { " (\($0))" } ?? "") \(r.ads.map { String($0.id.prefix(8)) }.joined(separator: ","))")
+                    print("[Example] loaded \(r.format) \(r.ads.count)\(r.noFillReason.map { " (\($0))" } ?? "") \(r.ads.map { "\(String($0.id.prefix(8))) eCPM \($0.ecpm)" }.joined(separator: ", "))")
                 }
             case .shown(let d): print("[Example] shown \(d.format) bid=\(d.adId)")
             case .clicked(let d): print("[Example] clicked \(d.format) bid=\(d.adId)")

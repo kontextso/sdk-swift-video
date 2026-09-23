@@ -10,6 +10,9 @@ public struct VideoAd: Sendable, Decodable {
     public let adId: String
     /// Stable id of the creative behind the ad, when the server sends one.
     public let creativeId: String?
+    /// What this ad pays, in USD per 1,000 impressions. Known before the ad
+    /// is shown, so the app can rank it against its other demand.
+    public let ecpm: Double
     public let trigger: Trigger
     public let placement: Placement?
     public let playback: Playback?
@@ -17,7 +20,7 @@ public struct VideoAd: Sendable, Decodable {
     public let tracking: VideoAdTracking
 
     enum CodingKeys: String, CodingKey {
-        case format, creativeId, trigger, placement, playback, creative, tracking
+        case format, creativeId, ecpm, trigger, placement, playback, creative, tracking
         case adId = "bidId"
     }
 
