@@ -1,18 +1,6 @@
 import Foundation
 
-/// Static entry point of the Kontext Video SDK.
-///
-/// ```swift
-/// let session = KontextVideo.createSession(VideoSessionOptions(
-///     publisherToken: "pub-xxxx",
-///     userId: "user-123"
-/// ))
-/// ```
-@MainActor
+/// Entry point of the Kontext Video SDK.
 public enum KontextVideo {
-    /// Creates a new video session. One session per app user; it survives
-    /// across episodes and videos.
-    public static func createSession(_ options: VideoSessionOptions) -> VideoSession {
-        VideoSession(options: options)
-    }
+    public static let version = "0.1.0"
 }

@@ -2,7 +2,7 @@ name: Example
 options:
   bundleIdPrefix: so.kontext
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "16.0"
   xcodeVersion: "16.0"
 
 packages:
@@ -18,23 +18,12 @@ targets:
         product: KontextVideoSDK
     sources:
       - path: Example
-        excludes:
-          - Resources
-      - path: Example/Resources
-        buildPhase: resources
     info:
       path: Example/Info.plist
       properties:
-        CFBundleDisplayName: Kontext Drama
+        CFBundleDisplayName: Kontext Video
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        # The example talks to the mock ad server over plain http.
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        # SKAdNetwork ids the SDK reports at /init (Kontext + a sample DSP).
-        SKAdNetworkItems:
-          - SKAdNetworkIdentifier: mp7rpxwdrx.adattributionkit
-          - SKAdNetworkIdentifier: 22mmun2rn5.skadnetwork
     settings:
       base:
         SWIFT_VERSION: "5.9"
