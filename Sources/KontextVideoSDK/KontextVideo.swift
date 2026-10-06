@@ -24,7 +24,12 @@ public final class KontextVideo {
 
     /// Starts the SDK. Call it once, at app launch; later calls are ignored.
     public func initialize(with configuration: Configuration) {
-        guard !isInitialized else { return }
+        guard !isInitialized else {
+            Logger.warning("initialize(with:) was already called; this call is ignored")
+            return
+        }
         self.configuration = configuration
+        Logger.level = configuration.logLevel
+        Logger.debug("Initialised, SDK version \(Self.version)")
     }
 }

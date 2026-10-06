@@ -1,5 +1,5 @@
-/// How much the SDK prints to the device console.
-public enum LogLevel: Sendable {
+/// How much the SDK prints to the device console. Each level includes the ones above it.
+public enum LogLevel: Sendable, Comparable {
     /// Silent.
     case none
     /// Only errors.
