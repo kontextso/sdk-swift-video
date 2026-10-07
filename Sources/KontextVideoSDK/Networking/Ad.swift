@@ -9,6 +9,13 @@ struct Ad: Decodable, Sendable {
         case window(from: Int, to: Int)
     }
 
+    /// What the page renders. The viewability clock (1 s for an image, 2 s for a video), the video events
+    /// and the `complete` beacon depend on it.
+    enum Creative: String, Decodable, Sendable {
+        case image
+        case video
+    }
+
     enum Rendering: Sendable, Equatable {
         /// The page to show in a WebView.
         case frame(URL)
@@ -66,6 +73,7 @@ struct Ad: Decodable, Sendable {
 
     let id: String
     let format: AdFormat
+    let creative: Creative
     let trigger: Trigger
     let price: Price
     /// Milliseconds from receipt.
@@ -76,7 +84,7 @@ struct Ad: Decodable, Sendable {
     let details: Details
 
     private enum CodingKeys: String, CodingKey {
-        case id, format, trigger, price, expires, rendering, tracking, vastUrl
+        case id, format, creative, trigger, price, expires, rendering, tracking, vastUrl
         case position, size, duration, skipOffset, reward
     }
 
@@ -92,6 +100,7 @@ struct Ad: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         format = try container.decode(AdFormat.self, forKey: .format)
+        creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)
         expires = try container.decode(Int.self, forKey: .expires)
         tracking = try container.decode(Tracking.self, forKey: .tracking)
