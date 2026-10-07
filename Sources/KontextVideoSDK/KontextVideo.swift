@@ -10,8 +10,11 @@ public final class KontextVideo {
         /// `/init` is in flight. Ads requests wait for it.
         case initializing
         case enabled
-        /// The server switched the SDK off, or `/init` failed. No ads until the next app launch.
+        /// The server switched the SDK off. Final for this app launch.
         case disabled(reason: String)
+        /// `/init` failed twice, usually a bad network at launch. No ads until a later `/init` succeeds:
+        /// the SDK tries again at the next video start, 5 minutes after the failure at the earliest.
+        case failed
     }
 
     public static let shared = KontextVideo()
@@ -31,8 +34,12 @@ public final class KontextVideo {
         configuration != nil
     }
 
-    private static let sessionIdKey = "so.kontext.video.sessionId"
+    static let initRetryInterval: TimeInterval = 300
+
+    /// When the server asked for the debug log (`reportDebug` in the `/init` response).
+    private(set) var reportDebug = false
     private var initTask: Task<Void, Never>?
+    private var initFailedAt: Date?
 
     private init() {}
 
@@ -54,28 +61,34 @@ public final class KontextVideo {
         }
     }
 
+    /// Called at the next natural moment after a failed `/init` (a video start): tries again
+    /// when the failure is at least `initRetryInterval` old.
+    func retryInitIfDue() {
+        guard state == .failed, let configuration, let initFailedAt,
+              Date().timeIntervalSince(initFailedAt) >= Self.initRetryInterval else { return }
+        Logger.info("Retrying /init")
+        state = .initializing
+        initTask = Task { await runInit(configuration: configuration) }
+    }
+
     private func runInit(configuration: Configuration) async {
         let client = APIClient(baseURL: configuration.adServerUrl)
-        let request = InitRequest.make(configuration: configuration, installId: Self.installId, sessionId: storedSessionId)
+        let request = InitRequest.make(configuration: configuration, installId: Self.installId)
         do {
             switch try await Init.send(request, client: client) {
-            case .enabled(let sessionId, _, _):
-                storedSessionId = sessionId
+            case .enabled(let reportDebug):
+                self.reportDebug = reportDebug
+                initFailedAt = nil
                 state = .enabled
-                Logger.info("Enabled, session \(sessionId)")
+                Logger.info("Enabled")
             case .disabled(let reason):
                 state = .disabled(reason: reason)
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {
-            state = .disabled(reason: "/init failed: \(error)")
-            Logger.error("/init failed, no ads this launch: \(error)")
+            initFailedAt = Date()
+            state = .failed
+            Logger.error("/init failed, no ads until it succeeds: \(error)")
         }
-    }
-
-    /// The session id from the last `/init` or ads response. The server decides whether it is still valid.
-    private var storedSessionId: String? {
-        get { UserDefaults.standard.string(forKey: Self.sessionIdKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.sessionIdKey) }
     }
 }
