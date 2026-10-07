@@ -79,7 +79,37 @@ public final class KontextVideo {
     /// the current one plays, and call `destroy()` on it when the viewer leaves the video.
     public func createVideoAds(for video: Video, player: Player) -> VideoAds {
         requireInitialized("createVideoAds(for:player:)")
-        return VideoAds(video: video, player: player)
+        let ads = VideoAds(video: video, player: player)
+        liveVideoAds.append(WeakVideoAds(ads))
+        liveVideoAds.removeAll { $0.value == nil }
+        return ads
+    }
+
+    /// Every `VideoAds` still alive, for the rules that touch all of them.
+    private var liveVideoAds: [WeakVideoAds] = []
+
+    private struct WeakVideoAds {
+        weak var value: VideoAds?
+        init(_ value: VideoAds) { self.value = value }
+    }
+
+    /// Whether ads may be requested now: waits while `/init` is in flight, retries it when due after a
+    /// failure, and answers `false` when the SDK is off.
+    func waitUntilEnabled() async -> Bool {
+        if state == .failed {
+            retryInitIfDue()
+        }
+        if state == .initializing {
+            await initTask?.value
+        }
+        return state == .enabled
+    }
+
+    /// An ads response said `enabled: false`: the same kill switch as `/init`.
+    func disable(reason: String) {
+        guard state != .disabled(reason: reason) else { return }
+        state = .disabled(reason: reason)
+        Logger.warning("Disabled by the server: \(reason)")
     }
 
     /// Guards a call that needs `initialize(with:)` to have been called first.
@@ -113,7 +143,9 @@ public final class KontextVideo {
     /// shown yet is discarded, and the next request for each format carries the new values.
     private func targetingChanged(_ what: String) {
         Logger.debug("\(what) changed")
-        // TODO: discard loaded, unshown ads once VideoAds holds them.
+        for entry in liveVideoAds {
+            entry.value?.discardLoadedAds(reason: "\(what) changed")
+        }
     }
 
     private func runInit(configuration: Configuration) async {

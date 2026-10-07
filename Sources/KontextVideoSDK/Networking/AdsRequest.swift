@@ -4,6 +4,8 @@ import UIKit
 
 /// The body of `POST /video/ads`: one ad of one format for one video.
 struct AdsRequest: Encodable, Sendable {
+    /// Where to send it; not part of the body.
+    let adServerUrl: URL
     let requestId: String
     let publisherToken: String
     let installId: String
@@ -19,9 +21,14 @@ struct AdsRequest: Encodable, Sendable {
     let format: AdFormat
     let options: FormatOptions?
 
+    private enum CodingKeys: String, CodingKey {
+        case requestId, publisherToken, installId, user, variantId, idfv, regulatory, sdk, app, device, player, video, format, options
+    }
+
     @MainActor
     static func make(sdk: KontextVideo, configuration: Configuration, video: Video, player: Player, format: FormatRequest) -> AdsRequest {
         AdsRequest(
+            adServerUrl: configuration.adServerUrl,
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,

@@ -4,6 +4,9 @@ import SwiftUI
 /// What the SDK reported back, for the screen to show.
 final class SDKStatus: ObservableObject {
     @Published var state = "initializing"
+    /// The ads of the episode the example "plays": created right after initialize, so the loads
+    /// wait for /init.
+    var ads: VideoAds?
 }
 
 @main
@@ -22,6 +25,19 @@ struct ExampleApp: App {
         KontextVideo.shared.initialize(with: configuration) { state in
             status.state = "\(state)"
         }
+
+        let video = Video(
+            id: "demo-episode-1",
+            language: "en",
+            title: "Episode 1",
+            duration: 93_000,
+            episodeNumber: 1,
+            genre: "romance",
+            series: Series(id: "demo", title: "My Marionette Lover", episodeCount: 6)
+        )
+        let player = Player(width: 393, height: 852, fullscreen: true)
+        status.ads = KontextVideo.shared.createVideoAds(for: video, player: player)
+        status.ads?.load()
     }
 
     var body: some Scene {

@@ -98,7 +98,16 @@ let ads = KontextVideo.shared.createVideoAds(
 )
 ```
 
-### 4. Release them
+### 4. Load the ads
+
+One request per format (overlay, pause, interstitial). Loads started while the SDK is still initialising wait
+for it; nothing is requested before `/init` has succeeded.
+
+```swift
+ads.load()
+```
+
+### 5. Release them
 
 When the viewer leaves the video. Nothing destroys a `VideoAds` for you, so destroy the previous episode's when
 you move on.
