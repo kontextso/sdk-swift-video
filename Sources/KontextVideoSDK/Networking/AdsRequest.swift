@@ -20,15 +20,15 @@ struct AdsRequest: Encodable, Sendable {
     let options: FormatOptions?
 
     @MainActor
-    static func make(configuration: Configuration, installId: String, video: Video, player: Player, format: FormatRequest) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: Configuration, video: Video, player: Player, format: FormatRequest) -> AdsRequest {
         AdsRequest(
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
-            installId: installId,
-            user: configuration.user,
-            variantId: configuration.variantId,
+            installId: KontextVideo.installId,
+            user: sdk.user,
+            variantId: sdk.variantId,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
-            regulatory: configuration.regulatory,
+            regulatory: sdk.regulatory,
             sdk: .current,
             app: .current(),
             device: .current(),

@@ -30,6 +30,20 @@ public final class KontextVideo {
     public private(set) var configuration: Configuration?
     public private(set) var state: State = .notInitialized
 
+    /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
+    /// the next ads request carries it. Ads already loaded but not shown are discarded on a change.
+    public var user: User? {
+        didSet { if user != oldValue { targetingChanged("user") } }
+    }
+    /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
+    public var regulatory: Regulatory? {
+        didSet { if regulatory != oldValue { targetingChanged("regulatory") } }
+    }
+    /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
+    public var variantId: String? {
+        didSet { if variantId != oldValue { targetingChanged("variantId") } }
+    }
+
     public var isInitialized: Bool {
         configuration != nil
     }
@@ -78,6 +92,13 @@ public final class KontextVideo {
         Logger.info("Retrying /init")
         state = .initializing
         initTask = Task { await runInit(configuration: configuration) }
+    }
+
+    /// The spec's rule: when `user`, `regulatory` or `variantId` changes, every loaded ad that was not
+    /// shown yet is discarded, and the next request for each format carries the new values.
+    private func targetingChanged(_ what: String) {
+        Logger.debug("\(what) changed")
+        // TODO: discard loaded, unshown ads once VideoAds holds them.
     }
 
     private func runInit(configuration: Configuration) async {

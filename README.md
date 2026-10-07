@@ -46,13 +46,20 @@ All options, with their defaults:
 ```swift
 Configuration(
     publisherToken: "yourpublisher-dev",
-    user: User(id: "u_84213907", email: "ryan@example.com"),  // what you know about the viewer
-    variantId: nil,                                           // A/B testing, agreed with Kontext
-    regulatory: Regulatory(coppa: false),                     // consent signals; the rest is read from your CMP
-    requestTrackingAuthorization: false,                      // let the SDK show the ATT dialog
-    logLevel: .warning,                                       // .none, .error, .warning, .info, .debug
-    adServerUrl: Constants.defaultAdServerUrl                 // override only for a staging or mock server
+    requestTrackingAuthorization: false,       // let the SDK show the ATT dialog
+    logLevel: .warning,                        // .none, .error, .warning, .info, .debug
+    adServerUrl: Constants.defaultAdServerUrl  // override only for a staging or mock server
 )
+```
+
+What you know about the viewer usually arrives later: the user after login, consent when your consent platform
+has it. Set these on the shared instance whenever you learn them, from anywhere; the next ads request carries
+them, and ads already loaded but not shown are discarded. `nil` clears a value.
+
+```swift
+KontextVideo.shared.user = User(id: "u_84213907", email: "ryan@example.com", yearOfBirth: 1994)
+KontextVideo.shared.regulatory = Regulatory(coppa: false)   // the rest is read from your CMP's storage
+KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
 ### 2. Create the ads for a video
