@@ -21,6 +21,11 @@ public final class VideoAds {
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
+    /// One placement per format: load each one you will show.
+    public private(set) lazy var overlay = OverlayAd(ads: self)
+    public private(set) lazy var pause = PauseAd(ads: self)
+    public private(set) lazy var interstitial = InterstitialAd(ads: self)
+
     /// One ad per format at a time.
     private(set) var loaded: [AdFormat: LoadedAd] = [:]
     /// Timed mode: content time before which a format must not be requested again.
@@ -33,13 +38,7 @@ public final class VideoAds {
         Logger.debug("VideoAds created for video \(video.id)")
     }
 
-    /// Requests an ad for every format. Each request waits for `/init` when that is still in flight.
-    public func load() {
-        load(.overlay(nil))
-        load(.pause(nil))
-        load(.interstitial(nil))
-    }
-
+    /// One request for one format. Waits for `/init` when that is still in flight.
     func load(_ format: FormatRequest) {
         guard !isDestroyed, KontextVideo.shared.requireInitialized("load()") else { return }
         let kind = format.format

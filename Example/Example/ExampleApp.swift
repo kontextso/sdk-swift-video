@@ -37,7 +37,9 @@ struct ExampleApp: App {
         )
         let player = Player(width: 393, height: 852, fullscreen: true)
         status.ads = KontextVideo.shared.createVideoAds(for: video, player: player)
-        status.ads?.load()
+        status.ads?.overlay.load(OverlayOptions(positions: [.bottom]))
+        status.ads?.pause.load(PauseOptions(positions: [.top]))
+        status.ads?.interstitial.load(InterstitialOptions(timing: .preroll))
     }
 
     var body: some Scene {

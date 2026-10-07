@@ -100,12 +100,31 @@ let ads = KontextVideo.shared.createVideoAds(
 
 ### 4. Load the ads
 
-One request per format (overlay, pause, interstitial). Loads started while the SDK is still initialising wait
-for it; nothing is requested before `/init` has succeeded.
+One placement per format on `ads`: `overlay`, `pause` and `interstitial`. Load each one you will show; every
+load is one request, with the options of its format. Loads started while the SDK is still initialising wait for
+it; nothing is requested before `/init` has succeeded.
 
 ```swift
-ads.load()
+// A strip across the player while the content plays.
+ads.overlay.load(OverlayOptions(
+    positions: [.bottom]             // where you can render it; default: top and bottom
+))
+
+// A card, or the full player, while the content is paused.
+ads.pause.load(PauseOptions(
+    positions: [.top, .fullscreen]   // what you can render; default: top and bottom
+))
+
+// A full-screen video at a moment you pick.
+ads.interstitial.load(InterstitialOptions(
+    timing: .preroll,                // where you will show it; default: .midroll
+    maxDuration: 30_000,             // milliseconds
+    muted: false,                    // start with the sound off; default: false
+    rewarded: false                  // non-skippable, with a reward granted when the video completes
+))
 ```
+
+Every option is optional: `ads.overlay.load()` asks with the defaults.
 
 ### 5. Release them
 
