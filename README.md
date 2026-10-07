@@ -66,10 +66,16 @@ KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agre
 
 One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
 plays. `id` is your own id of the video, in any scheme; everything else is optional context that helps targeting.
-`player` is the area the ads will be shown in, in points; for a prefetch before the player exists, pass the size
-it will most likely have.
+
+`Player` represents your video player: the area the ads will be shown in, in points, whether it is full screen,
+and where the content is. For a prefetch before the player exists, pass the size it will most likely have.
+
+> **Temporary.** `Player` will become a handle to your actual player, from which the SDK reads the size and the
+> playhead itself. For now you pass the values and keep `playhead` updated as the content plays.
 
 ```swift
+let player = Player(width: 393, height: 852, fullscreen: true)
+
 let ads = KontextVideo.shared.createVideoAds(
     for: Video(
         id: "100001-6",
@@ -80,7 +86,7 @@ let ads = KontextVideo.shared.createVideoAds(
         genre: "romance",
         series: Series(id: "100001", title: "My Marionette Lover", episodeCount: 40)
     ),
-    player: Player(width: 393, height: 852, fullscreen: true)
+    player: player
 )
 
 ads.player.playhead = 12_000     // milliseconds in content time, as the content plays
