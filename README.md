@@ -62,33 +62,43 @@ KontextVideo.shared.regulatory = Regulatory(coppa: false)   // the rest is read 
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
-### 2. Create the ads for a video
+### 2. Initialize the player
+
+`Player` is the interface that represents your video player: the area the ads will be shown in, in points,
+whether it is full screen, and where the content is. Keep it current: set `playhead` as the content plays, and
+`width`, `height` and `fullscreen` when the layout changes, for example on rotation. For a prefetch before the
+player exists, start with the size it will most likely have.
+
+> **Temporary.** `Player` will become a handle to your actual player, from which the SDK reads these values itself.
+
+```swift
+let player = Player(width: 393, height: 852, fullscreen: true)
+
+player.playhead = 12_000       // milliseconds in content time; update it as the content plays
+player.fullscreen = false      // and the box when the layout changes
+```
+
+### 3. Create the ads for a video
 
 One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
 plays. `id` is your own id of the video, in any scheme; everything else is optional context that helps targeting.
 
-`Player` represents your video player: the area the ads will be shown in, in points, whether it is full screen,
-and where the content is. For a prefetch before the player exists, pass the size it will most likely have.
-
 ```swift
-let video = Video(
-    id: "100001-6",
-    language: "en",
-    title: "Episode 6",
-    duration: 92_000,            // milliseconds
-    episodeNumber: 6,
-    genre: "romance",
-    series: Series(id: "100001", title: "My Marionette Lover", episodeCount: 40)
+let ads = KontextVideo.shared.createVideoAds(
+    for: Video(
+        id: "100001-6",
+        language: "en",
+        title: "Episode 6",
+        duration: 92_000,            // milliseconds
+        episodeNumber: 6,
+        genre: "romance",
+        series: Series(id: "100001", title: "My Marionette Lover", episodeCount: 40)
+    ),
+    player: player
 )
-
-// Temporary: Player will become a handle to your actual player, from which the SDK reads the size
-// and the playhead itself. For now you pass the values and keep `playhead` updated as the content plays.
-let player = Player(width: 393, height: 852, fullscreen: true)
-let ads = KontextVideo.shared.createVideoAds(for: video, player: player)
-ads.player.playhead = 12_000     // milliseconds in content time; call this as the content plays
 ```
 
-### 3. Release them
+### 4. Release them
 
 When the viewer leaves the video. Nothing destroys a `VideoAds` for you, so destroy the previous episode's when
 you move on.

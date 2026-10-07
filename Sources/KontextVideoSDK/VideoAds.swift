@@ -3,9 +3,8 @@
 @MainActor
 public final class VideoAds {
     public let video: Video
-    /// The player box and playhead the requests describe. Update `playhead` as the content plays.
-    // TODO: temporary, see Player.
-    public var player: Player
+    /// The player the ads are shown in; the requests describe its box and playhead.
+    public let player: Player
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 

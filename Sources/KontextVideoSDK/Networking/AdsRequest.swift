@@ -14,7 +14,7 @@ struct AdsRequest: Encodable, Sendable {
     let sdk: SDKInfo
     let app: AppInfo
     let device: AdsDevice
-    let player: Player
+    let player: PlayerSnapshot
     let video: Video
     let format: AdFormat
     let options: FormatOptions?
@@ -32,7 +32,7 @@ struct AdsRequest: Encodable, Sendable {
             sdk: .current,
             app: .current(),
             device: .current(),
-            player: player,
+            player: player.snapshot,
             video: video,
             format: format.format,
             options: format.options
