@@ -78,10 +78,25 @@ public final class KontextVideo {
     /// The ads for one video. Create it as early as you like, for example for the next episode while
     /// the current one plays, and call `destroy()` on it when the viewer leaves the video.
     public func createVideoAds(for video: Video, player: Player) -> VideoAds {
-        if !isInitialized {
-            Logger.warning("createVideoAds(for:player:) called before initialize(with:); no ads will load until the SDK is initialised")
-        }
+        requireInitialized("createVideoAds(for:player:)")
         return VideoAds(video: video, player: player)
+    }
+
+    /// Guards a call that needs `initialize(with:)` to have been called first.
+    ///
+    /// Calling the SDK before initialising it is a mistake in the app's code, not a runtime condition,
+    /// so it is handled the way Swift handles programmer errors: `assertionFailure` stops a debug build
+    /// on the first run with the message, where a log line could be overlooked (Firebase and RevenueCat
+    /// do the same for their configure calls). A release build only logs and carries on, because the
+    /// order of calls in a real app is not always deterministic and an ad SDK must never take the app
+    /// down in front of users. Not `throws`: that would put `try` on every publisher's call for a mistake
+    /// most never make. AdMob and AppLovin MAX also stay non-throwing and let the ad load fail instead.
+    @discardableResult
+    func requireInitialized(_ call: String) -> Bool {
+        guard !isInitialized else { return true }
+        assertionFailure("KontextVideo: call initialize(with:) before \(call)")
+        Logger.error("\(call) called before initialize(with:); no ads will load")
+        return false
     }
 
     /// Called at the next natural moment after a failed `/init` (a video start): tries again
