@@ -1,0 +1,140 @@
+import Foundation
+
+/// One served ad: everything the SDK needs to place, show, time and track it.
+struct Ad: Decodable, Sendable {
+    enum Trigger: Sendable, Equatable {
+        /// The app decides the moment.
+        case manual
+        /// Timed mode: show it between `from` and `to`, milliseconds in content time.
+        case window(from: Int, to: Int)
+    }
+
+    enum Rendering: Sendable, Equatable {
+        /// The page to show in a WebView.
+        case frame(URL)
+    }
+
+    struct Price: Decodable, Sendable, Equatable {
+        enum Precision: String, Decodable, Sendable {
+            /// A DSP's clearing price.
+            case exact
+            /// Our own or house demand, a forecast.
+            case estimated
+        }
+
+        /// Per 1,000 impressions.
+        let value: Double
+        /// ISO 4217.
+        let currency: String
+        let precision: Precision
+    }
+
+    /// The beacons the SDK fires. `impression`, `click` and `complete` are retried.
+    struct Tracking: Decodable, Sendable {
+        let impression: [String]
+        let click: [String]
+        let complete: [String]
+        let viewable: [String]
+        let notViewable: [String]
+        let viewUndetermined: [String]
+        let overlayViewDuration: [String]
+        let error: [String]
+    }
+
+    /// The nominal box the creative was built for, in points; the VAST NonLinear attributes.
+    struct Size: Decodable, Sendable, Equatable {
+        let width: Int
+        let height: Int
+        let scalable: Bool
+        let maintainAspectRatio: Bool
+    }
+
+    struct Reward: Decodable, Sendable, Equatable {
+        let label: String
+        let amount: Double
+    }
+
+    /// What each format adds to the common fields.
+    enum Details: Sendable, Equatable {
+        /// `duration`: milliseconds to keep it on screen.
+        case overlay(position: AdPosition, size: Size, duration: Int)
+        /// `size` is `nil` for the fullscreen variant.
+        case pause(position: PauseOptions.Position, size: Size?)
+        /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
+        case interstitial(duration: Int, skipOffset: Int?, reward: Reward?)
+    }
+
+    let id: String
+    let format: AdFormat
+    let trigger: Trigger
+    let price: Price
+    /// Milliseconds from receipt.
+    let expires: Int
+    let rendering: Rendering
+    let tracking: Tracking
+    let vastUrl: URL
+    let details: Details
+
+    private enum CodingKeys: String, CodingKey {
+        case id, format, trigger, price, expires, rendering, tracking, vastUrl
+        case position, size, duration, skipOffset, reward
+    }
+
+    private enum TriggerKeys: String, CodingKey {
+        case kind, from, to
+    }
+
+    private enum RenderingKeys: String, CodingKey {
+        case kind, url
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        format = try container.decode(AdFormat.self, forKey: .format)
+        price = try container.decode(Price.self, forKey: .price)
+        expires = try container.decode(Int.self, forKey: .expires)
+        tracking = try container.decode(Tracking.self, forKey: .tracking)
+        vastUrl = try container.decode(URL.self, forKey: .vastUrl)
+
+        let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
+        switch try trigger.decode(String.self, forKey: .kind) {
+        case "manual":
+            self.trigger = .manual
+        case "window":
+            self.trigger = .window(from: try trigger.decode(Int.self, forKey: .from), to: try trigger.decode(Int.self, forKey: .to))
+        case let kind:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: trigger, debugDescription: "unknown trigger kind \(kind)")
+        }
+
+        let rendering = try container.nestedContainer(keyedBy: RenderingKeys.self, forKey: .rendering)
+        switch try rendering.decode(String.self, forKey: .kind) {
+        case "frame":
+            self.rendering = .frame(try rendering.decode(URL.self, forKey: .url))
+        case let kind:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: rendering, debugDescription: "unknown rendering kind \(kind)")
+        }
+
+        switch format {
+        case .overlay:
+            details = .overlay(
+                position: try container.decode(AdPosition.self, forKey: .position),
+                size: try container.decode(Size.self, forKey: .size),
+                duration: try container.decode(Int.self, forKey: .duration)
+            )
+        case .pause:
+            let position = try container.decode(PauseOptions.Position.self, forKey: .position)
+            if position == .fullscreen {
+                details = .pause(position: position, size: nil)
+            } else {
+                details = .pause(position: position, size: try container.decode(Size.self, forKey: .size))
+            }
+        case .interstitial:
+            details = .interstitial(
+                duration: try container.decode(Int.self, forKey: .duration),
+                skipOffset: try container.decodeIfPresent(Int.self, forKey: .skipOffset),
+                reward: try container.decodeIfPresent(Reward.self, forKey: .reward)
+            )
+        }
+    }
+}

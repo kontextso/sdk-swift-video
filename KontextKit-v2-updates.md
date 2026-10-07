@@ -31,3 +31,12 @@ set `phone`, `tablet`, `tv`, `settopbox`, `desktop`, `other`.
 Rename `handset` to `phone` (or add a typed enum with the v2 set) and report `tv` on tvOS.
 
 Meanwhile: `HardwareInfo.current()` in `DeviceInfo.swift` maps the strings.
+
+## 4. Screen size in points
+
+`ScreenInfoProvider.collect()` reports `width` and `height` in physical pixels. The v2 API wants logical pixels
+(points on iOS) plus `dpr`; the server multiplies where OpenRTB needs physical pixels.
+
+Report points (`UIScreen.main.bounds`) and keep `dpr`, or add `pointWidth` and `pointHeight` next to the pixel values.
+
+Meanwhile: `AdsDevice.current()` in `Sources/KontextVideoSDK/Networking/AdsRequest.swift` divides by `dpr`.
