@@ -70,10 +70,9 @@ plays. `id` is your own id of the video, in any scheme; everything else is optio
 `Player` represents your video player: the area the ads will be shown in, in points, whether it is full screen,
 and where the content is. For a prefetch before the player exists, pass the size it will most likely have.
 
-> **Temporary.** `Player` will become a handle to your actual player, from which the SDK reads the size and the
-> playhead itself. For now you pass the values and keep `playhead` updated as the content plays.
-
 ```swift
+// Temporary: Player will become a handle to your actual player, from which the SDK reads the size
+// and the playhead itself. For now you pass the values and keep `playhead` updated as the content plays.
 let player = Player(width: 393, height: 852, fullscreen: true)
 
 let ads = KontextVideo.shared.createVideoAds(
