@@ -3,11 +3,15 @@
 @MainActor
 public final class VideoAds {
     public let video: Video
+    /// The player box and playhead the requests describe. Update `playhead` as the content plays.
+    // TODO: temporary, see Player.
+    public var player: Player
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
-    init(video: Video) {
+    init(video: Video, player: Player) {
         self.video = video
+        self.player = player
         Logger.debug("VideoAds created for video \(video.id)")
     }
 

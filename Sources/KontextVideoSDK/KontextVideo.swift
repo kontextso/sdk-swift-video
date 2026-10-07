@@ -77,11 +77,11 @@ public final class KontextVideo {
 
     /// The ads for one video. Create it as early as you like, for example for the next episode while
     /// the current one plays, and call `destroy()` on it when the viewer leaves the video.
-    public func createVideoAds(for video: Video) -> VideoAds {
+    public func createVideoAds(for video: Video, player: Player) -> VideoAds {
         if !isInitialized {
-            Logger.warning("createVideoAds(for:) called before initialize(with:); no ads will load until the SDK is initialised")
+            Logger.warning("createVideoAds(for:player:) called before initialize(with:); no ads will load until the SDK is initialised")
         }
-        return VideoAds(video: video)
+        return VideoAds(video: video, player: player)
     }
 
     /// Called at the next natural moment after a failed `/init` (a video start): tries again
