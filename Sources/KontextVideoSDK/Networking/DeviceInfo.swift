@@ -19,6 +19,7 @@ struct OSInfo: Encodable, Sendable {
     @MainActor
     static func current() -> OSInfo {
         let info = OSInfoProvider.collect()
+        // TODO: KontextKit reports "ios" on iPad too; see KontextKit-v2-updates.md, 2.
         return OSInfo(
             name: UIDevice.current.userInterfaceIdiom == .pad ? .ipados : .ios,
             version: info.version,
@@ -44,6 +45,7 @@ struct HardwareInfo: Encodable, Sendable {
     @MainActor
     static func current() -> HardwareInfo {
         let info = HardwareInfoProvider.collect()
+        // TODO: KontextKit says "handset", the API says "phone"; see KontextKit-v2-updates.md, 3.
         let type: DeviceType
         switch info.type {
         case "handset": type = .phone
@@ -74,6 +76,7 @@ struct AttributionIds: Encodable, Sendable {
     static func current() -> AttributionIds {
         AttributionIds(
             skan: SKAdNetworkIdsProvider.collect(),
+            // TODO: KontextKit has no AdAttributionKit provider yet; see KontextKit-v2-updates.md, 1.
             aak: Bundle.main.infoDictionary?["AdNetworkIdentifiers"] as? [String] ?? []
         )
     }
