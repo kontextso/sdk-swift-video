@@ -133,7 +133,7 @@ final class FrameBridge: NSObject {
     }
 
     private func send(_ type: String, _ payload: [String: Any] = [:]) {
-        var message: [String: Any] = ["kontext": 2, "adId": adId, "type": type]
+        var message: [String: Any] = ["adId": adId, "type": type]
         payload.forEach { message[$0.key] = $0.value }
         guard let data = try? JSONSerialization.data(withJSONObject: message), let json = String(data: data, encoding: .utf8) else { return }
         webView.evaluateJavaScript("window.postMessage(\(json), window.location.origin)") { _, error in
@@ -151,7 +151,6 @@ final class FrameBridge: NSObject {
             return
         }
         guard let body = message.body as? [String: Any],
-              (body["kontext"] as? NSNumber)?.intValue == 2,
               body["adId"] as? String == adId,
               let type = body["type"] as? String else {
             Logger.debug("frame \(adId.prefix(8)): malformed message dropped")
