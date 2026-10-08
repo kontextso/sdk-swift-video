@@ -89,14 +89,14 @@ final class FrameBridge: NSObject {
         #endif
     }
 
-    /// Loads the page. `ad.ready` must arrive within `loadTimeout`.
+    /// Loads the page. `ad.loaded` must arrive within `loadTimeout`.
     func load() {
         Logger.debug("frame \(adId.prefix(8)): loading \(url)")
         webView.load(URLRequest(url: url))
         loadTimeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.loadTimeout * 1_000_000_000))
             guard let self, !Task.isCancelled, state == .loading else { return }
-            Logger.warning("frame \(adId.prefix(8)): no ad.ready within \(Int(Self.loadTimeout)) s")
+            Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
             fail(.loadFailed(code: loadErrorCode))
         }
     }
@@ -161,7 +161,7 @@ final class FrameBridge: NSObject {
         let playhead = (body["playhead"] as? NSNumber)?.intValue ?? 0
 
         switch type {
-        case "ad.ready":
+        case "ad.loaded":
             guard state == .loading else { return }
             loadTimeoutTask?.cancel()
             state = .ready
