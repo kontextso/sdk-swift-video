@@ -36,16 +36,15 @@ struct Ad: Decodable, Sendable {
         let precision: Precision
     }
 
-    /// The beacons the SDK fires. `impression`, `click` and `complete` are retried.
-    struct Tracking: Decodable, Sendable {
-        let impression: [String]
-        let click: [String]
-        let complete: [String]
-        let viewable: [String]
-        let notViewable: [String]
-        let viewUndetermined: [String]
-        let overlayViewDuration: [String]
-        let error: [String]
+    /// One beacon of the ad. The SDK fires every entry once, when its moment happens; the page never does.
+    struct TrackingEvent: Decodable, Sendable, Equatable {
+        /// A VAST event name: `impression`, `creativeView`, `start`, `complete`, `close`, ... The SDK ignores names it does not know.
+        let event: String
+        let url: String
+        /// `progress` only: milliseconds into the ad video at which to fire.
+        let offset: Int?
+        /// `endCard` for the interstitial's end card; `nil` for the main creative.
+        let part: String?
     }
 
     /// The nominal box the creative was built for, in points; the VAST NonLinear attributes.
@@ -79,7 +78,7 @@ struct Ad: Decodable, Sendable {
     /// Milliseconds from receipt.
     let expires: Int
     let rendering: Rendering
-    let tracking: Tracking
+    let tracking: [TrackingEvent]
     let vastUrl: URL
     let details: Details
 
@@ -103,7 +102,7 @@ struct Ad: Decodable, Sendable {
         creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)
         expires = try container.decode(Int.self, forKey: .expires)
-        tracking = try container.decode(Tracking.self, forKey: .tracking)
+        tracking = try container.decode([TrackingEvent].self, forKey: .tracking)
         vastUrl = try container.decode(URL.self, forKey: .vastUrl)
 
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
@@ -145,5 +144,15 @@ struct Ad: Decodable, Sendable {
                 reward: try container.decodeIfPresent(Reward.self, forKey: .reward)
             )
         }
+    }
+
+    /// The URLs to fire for one event of one part (`nil` = the main creative).
+    func trackingURLs(_ event: String, part: String? = nil) -> [String] {
+        tracking.filter { $0.event == event && $0.part == part }.map(\.url)
+    }
+
+    /// `true` when the ad has an end card: it has tracking entries of its own.
+    var hasEndCard: Bool {
+        tracking.contains { $0.part == "endCard" }
     }
 }

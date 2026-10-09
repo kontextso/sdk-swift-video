@@ -2,23 +2,28 @@ import Foundation
 import UIKit
 import WebKit
 
-/// What the frame page told the bridge, already checked and in order.
+/// What the frame page told the bridge, already checked and in order. The page only reports
+/// moments; the SDK fires every beacon.
 enum FrameEvent: Sendable {
-    /// The creative is rendered and can be shown.
-    case ready
-    /// The viewer tapped the ad. `area` is `creative`, `cta`, `endCard`, `skoverlay` or `adChoices`.
-    case click(url: URL, fallbackUrl: URL?, appStoreId: String?, area: String)
-    /// The viewer dismissed the ad with the page's control. `reason` is `close`, `resume` or `unload`.
+    /// The creative is loaded and can be shown (the VAST `loaded` moment).
+    case loaded
+    /// The viewer clicked the ad. `area` is `creative`, `endCard`, or whatever else the page says.
+    case click(url: URL, fallbackUrl: URL?, area: String)
+    /// The page needs a URL opened that is not an ad click (`purpose`: `adChoices`, ...). Fires no `click`.
+    case open(url: URL, purpose: String)
+    /// The viewer dismissed the ad with the page's control. `reason` is `close` or `resume`.
     case close(reason: String)
     /// The viewer dismissed a video before it completed.
     case skip(playhead: Int)
     /// `start`, `firstQuartile`, `midpoint`, `thirdQuartile`, `pause`, `resume`, `mute`, `unmute`.
     case video(name: String, playhead: Int)
-    /// The video played to the end. The SDK fires the `complete` beacon and grants the reward.
+    /// The ad video passed a `progress` entry's offset.
+    case progress(offset: Int, playhead: Int)
+    /// The video played to the end. The SDK fires `complete` and grants the reward.
     case complete(playhead: Int)
-    /// The creative failed to load or play, with the VAST error code. The page fired the error beacon.
+    /// The creative failed to load or play, with the VAST error code.
     case error(code: Int)
-    /// The page did not answer in time, or could not be loaded. The SDK fires the error beacon.
+    /// The page did not answer in time, or could not be loaded.
     case loadFailed(code: Int)
 }
 
@@ -31,15 +36,16 @@ enum FrameEvent: Sendable {
 final class FrameBridge: NSObject {
     enum State: Sendable {
         case loading
-        case ready
+        case loaded
         case shown
         case ended
     }
 
     static let loadTimeout: TimeInterval = 10
-    /// A click is opened only if the viewer touched the WebView this recently.
+    /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1
-    static let allowedClickSchemes: Set<String> = ["http", "https", "itms-apps", "itms-appss", "itms", "market"]
+    /// Web, store and app deep links all open; `intent:` can start any Android component and is refused.
+    static let refusedSchemes: Set<String> = ["intent"]
 
     let adId: String
     let webView: WKWebView
@@ -104,22 +110,21 @@ final class FrameBridge: NSObject {
     // MARK: SDK → page
 
     /// The page is on screen: it starts whatever the creative does when visible.
-    func show(contentPlayhead: Int) {
-        guard state == .ready else {
+    func show() {
+        guard state == .loaded else {
             Logger.warning("frame \(adId.prefix(8)): show() in state \(state), ignored")
             return
         }
         state = .shown
-        send("ad.show", ["contentPlayhead": contentPlayhead])
+        send("ad.show")
     }
 
     /// How much of the box is on screen, from the viewability meter.
-    func exposure(percentage: Double, visibleRectangle: CGRect, contentPlayhead: Int) {
+    func exposure(percentage: Double, visibleRectangle: CGRect) {
         guard state == .shown else { return }
         send("ad.exposure", [
             "exposedPercentage": percentage,
             "visibleRectangle": ["x": visibleRectangle.minX, "y": visibleRectangle.minY, "width": visibleRectangle.width, "height": visibleRectangle.height],
-            "contentPlayhead": contentPlayhead,
         ])
     }
 
@@ -163,20 +168,23 @@ final class FrameBridge: NSObject {
         case "ad.loaded":
             guard state == .loading else { return }
             loadTimeoutTask?.cancel()
-            state = .ready
-            onEvent?(.ready)
-        case "ad.click":
+            state = .loaded
+            onEvent?(.loaded)
+        case "ad.click", "ad.open":
             guard state == .shown, let raw = body["url"] as? String, let url = URL(string: raw) else { return }
-            let area = body["area"] as? String ?? "creative"
-            guard let scheme = url.scheme?.lowercased(), Self.allowedClickSchemes.contains(scheme) else {
-                Logger.warning("frame \(adId.prefix(8)): click to \(raw) dropped, scheme not allowed")
+            guard let scheme = url.scheme?.lowercased(), !Self.refusedSchemes.contains(scheme) else {
+                Logger.warning("frame \(adId.prefix(8)): \(type) to \(raw) dropped, scheme refused")
                 return
             }
             guard wasTouchedRecently else {
-                Logger.warning("frame \(adId.prefix(8)): click to \(url.host ?? raw) dropped, no touch before it")
+                Logger.warning("frame \(adId.prefix(8)): \(type) to \(url.host ?? raw) dropped, no touch before it")
                 return
             }
-            onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(URL.init(string:)), appStoreId: body["appStoreId"] as? String, area: area))
+            if type == "ad.click" {
+                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(URL.init(string:)), area: body["area"] as? String ?? "creative"))
+            } else {
+                onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
+            }
         case "ad.close":
             guard state == .shown else { return }
             end()
@@ -191,8 +199,11 @@ final class FrameBridge: NSObject {
         case "video.start", "video.firstQuartile", "video.midpoint", "video.thirdQuartile", "video.pause", "video.resume", "video.mute", "video.unmute":
             guard state == .shown else { return }
             onEvent?(.video(name: String(type.dropFirst("video.".count)), playhead: playhead))
+        case "video.progress":
+            guard state == .shown, let offset = (body["offset"] as? NSNumber)?.intValue else { return }
+            onEvent?(.progress(offset: offset, playhead: playhead))
         case "ad.error":
-            guard state == .loading || state == .ready || state == .shown else { return }
+            guard state == .loading || state == .loaded || state == .shown else { return }
             fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)))
         default:
             Logger.debug("frame \(adId.prefix(8)): unknown message \(type) dropped")
@@ -225,13 +236,14 @@ final class FrameBridge: NSObject {
         webView.loadHTMLString("", baseURL: nil)
     }
 
-    /// A navigation out of our origin is a click the page could not report: honoured only after a touch.
+    /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
+    /// without one it is a forced redirect and goes nowhere.
     private func externalNavigation(to target: URL) {
-        guard state == .shown, wasTouchedRecently, let scheme = target.scheme?.lowercased(), Self.allowedClickSchemes.contains(scheme) else {
+        guard state == .shown, wasTouchedRecently, let scheme = target.scheme?.lowercased(), !Self.refusedSchemes.contains(scheme) else {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.host ?? target.absoluteString) cancelled")
             return
         }
-        onEvent?(.click(url: target, fallbackUrl: nil, appStoreId: nil, area: "creative"))
+        onEvent?(.click(url: target, fallbackUrl: nil, area: "creative"))
     }
 }
 
