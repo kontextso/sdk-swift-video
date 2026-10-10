@@ -32,13 +32,13 @@ import KontextVideoSDK
 KontextVideo.shared.initialize(with: Configuration(publisherToken: "yourpublisher-dev"))
 ```
 
-Use your developer token (`{publisher}-dev`) while testing and your production token in release builds. The optional
-completion tells you when the SDK is ready:
+Use your developer token (`{publisher}-dev`) while testing and your production token in release builds. If you want to
+know when the SDK is ready, await the call from `async` code, or pass a completion:
 
 ```swift
-KontextVideo.shared.initialize(with: configuration) { state in
-    // .enabled, .disabled(reason:) or .failed
-}
+let state = await KontextVideo.shared.initialize(with: configuration)   // .enabled, .disabled(reason:) or .failed
+
+KontextVideo.shared.initialize(with: configuration) { state in … }
 ```
 
 All options, with their defaults:

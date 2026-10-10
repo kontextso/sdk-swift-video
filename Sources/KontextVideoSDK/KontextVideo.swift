@@ -75,6 +75,15 @@ public final class KontextVideo {
         }
     }
 
+    /// The same, for `async` code: returns the state once `/init` has answered or failed, as AdMob's
+    /// `await MobileAds.shared.start()`. Swift picks this overload in an `async` context and the
+    /// fire-and-forget one elsewhere.
+    public func initialize(with configuration: Configuration) async -> State {
+        initialize(with: configuration, completion: nil)
+        await initTask?.value
+        return state
+    }
+
     /// The ads for one video. Create it as early as you like, for example for the next episode while
     /// the current one plays, and call `destroy()` on it when the viewer leaves the video.
     public func createVideoAds(for video: Video, player: Player) -> VideoAds {
