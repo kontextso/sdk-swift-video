@@ -130,6 +130,10 @@ public final class VideoAd {
     private var completed = false
     /// Delivers `didInvalidate(.expired)` when the time comes.
     private var expiryTask: Task<Void, Never>?
+    /// Fires the `tracking` entries, each once.
+    private let tracker: Tracker
+    /// Decides `viewable` / `notViewable` while the ad is on screen.
+    private var meter: ViewabilityMeter?
 
     init(ad: AdPayload) {
         let now = ProcessInfo.processInfo.systemUptime
@@ -172,6 +176,11 @@ public final class VideoAd {
         switch ad.rendering {
         case .frame(let url):
             bridge = FrameBridge(adId: ad.id, url: url, isVideo: ad.creative == .video)
+        }
+        tracker = Tracker(adId: ad.id, entries: ad.tracking)
+        tracker.contentPlayhead = { [weak self] in
+            guard let self, let owner, owner.isStarted else { return 0 }
+            return owner.player?.playhead ?? 0
         }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
@@ -236,8 +245,12 @@ public final class VideoAd {
             end(.interrupted)
         }
         interstitialController = controller
-        viewController.present(controller, animated: true)
-        begin()
+        // The meter starts once the presentation is on screen; a tick during the transition would read
+        // exposure 0 and make the page pause the video it has just started.
+        viewController.present(controller, animated: true) { [weak self] in
+            self?.startMeter()
+        }
+        begin(startMeter: false)
     }
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
@@ -273,28 +286,53 @@ public final class VideoAd {
     }
 
     /// Presentation began: the page is told, the owner retains the ad, the delegate hears `didShow`.
-    private func begin() {
+    private func begin(startMeter: Bool = true) {
         wasShown = true
         expiryTask?.cancel()
         owner?.adDidBeginShowing(self)
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
+        // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image
+        // creative, while a video's waits for its first frame.
+        tracker.fire("creativeView")
+        tracker.fire("iconView")
         delegate?.videoAdDidShow(self)
         if ad.creative == .image {
             recordImpression()
         }
+        if startMeter {
+            self.startMeter()
+        }
     }
 
     private func recordImpression() {
-        // TODO(step 4): fire the `impression` (and `creativeView`) entries.
+        tracker.fire("impression")
         Logger.info("ad \(id.prefix(8)): impression")
         delegate?.videoAdDidRecordImpression(self)
+    }
+
+    /// Viewability: 50 % of the box on screen for 1 s (image) or 2 s (video) is `viewable`; the page
+    /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
+    private func startMeter() {
+        guard !hasEnded, meter == nil else { return }
+        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: ad.creative == .video ? 2 : 1)
+        meter.onExposure = { [weak self] percentage, visible in
+            self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
+        }
+        meter.onVerdict = { [weak self] verdict in
+            self?.tracker.fire(verdict.rawValue)
+            Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
+        }
+        self.meter = meter
+        meter.start()
     }
 
     /// The one terminal moment after a successful show. Idempotent.
     func end(_ reason: EndReason) {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
+        meter?.stop()
+        meter = nil
         bridge.hide()
         hostView?.removeFromSuperview()
         hostView = nil
@@ -306,8 +344,8 @@ public final class VideoAd {
             }
         }
         if format != .interstitial {
-            // TODO(step 4): fire `overlayViewDuration`: the ad was on screen, whatever ended it.
-            Logger.debug("ad \(id.prefix(8)): overlayViewDuration")
+            // The ad was on screen, whatever ended it.
+            tracker.fire("overlayViewDuration")
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
         owner?.adDidEnd(self)
@@ -362,9 +400,11 @@ public final class VideoAd {
         switch event {
         case .loaded:
             isLoaded = true
+            tracker.fire("loaded")
             loadContinuation?.resume()
             loadContinuation = nil
         case .loadFailed(let code), .error(let code):
+            tracker.fire("error", errorCode: code)
             if let continuation = loadContinuation {
                 loadContinuation = nil
                 Logger.warning("ad \(id.prefix(8)): creative failed to load, VAST error \(code)")
@@ -378,24 +418,40 @@ public final class VideoAd {
             }
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.host ?? url.absoluteString)")
+            // The end card selects its own `click` entries; anything else is the creative's.
+            tracker.fire("click", part: area == "endCard" ? "endCard" : nil)
             open(url, fallback: fallbackUrl)
             delegate?.videoAd(self, didClick: Click(url: url, area: area))
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.host ?? url.absoluteString)")
+            if purpose == "adChoices" {
+                tracker.fire("iconClick")
+            }
             open(url, fallback: nil)
         case .close(let reason):
+            // The page's own close control; not fired for the app's dismiss() or destroy().
+            tracker.fire("close")
             end(completed ? .completed : (reason == "resume" ? .resumed : .closed))
-        case .skip:
+        case .skip(let playhead):
+            tracker.adPlayhead = playhead
+            tracker.fire("skip")
             end(.skipped)
-        case .video(let name, _):
+        case .video(let name, let playhead):
+            tracker.adPlayhead = playhead
             Logger.debug("ad \(id.prefix(8)): video.\(name)")
             if name == "start" {
                 recordImpression()
             }
-        case .progress(let offset, _):
-            Logger.debug("ad \(id.prefix(8)): progress \(offset) ms")
-        case .complete:
+            tracker.fire(name)
+        case .progress(let offset, let playhead):
+            tracker.adPlayhead = playhead
+            tracker.fire("progress", offset: offset)
+        case .complete(let playhead):
+            tracker.adPlayhead = playhead
             completed = true
+            tracker.fire("complete")
+            // The end card, when there is one, becomes visible now.
+            tracker.fire("creativeView", part: "endCard")
             Logger.info("ad \(id.prefix(8)): complete")
             if let reward {
                 delegate?.videoAd(self, didEarn: reward)
