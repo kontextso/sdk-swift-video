@@ -46,7 +46,13 @@ struct APIClient: Sendable {
     static let defaultTimeout: TimeInterval = 10
 
     let baseURL: URL
-    var session: URLSession = .shared
+    let session: URLSession
+
+    @MainActor
+    init(baseURL: URL) {
+        self.baseURL = baseURL
+        session = Environment.session
+    }
 
     func post<Body: Encodable, Response: Decodable>(
         _ path: String,

@@ -12,7 +12,7 @@ final class ViewabilityMeter {
         case viewUndetermined
     }
 
-    static let interval: TimeInterval = 0.25
+    static var interval: TimeInterval = 0.25
     static let threshold: Double = 0.5
 
     /// Exposure changed: percentage on screen and the visible rectangle in the view's coordinates.

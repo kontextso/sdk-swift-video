@@ -42,7 +42,7 @@ final class DebugReporter {
     }
 
     static let shared = DebugReporter()
-    static let interval: TimeInterval = 1
+    static var interval: TimeInterval = 1
 
     /// Set from the `/init` response; nothing is sent while `false`.
     var isEnabled = false {

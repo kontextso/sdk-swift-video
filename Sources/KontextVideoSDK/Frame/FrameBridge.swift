@@ -41,7 +41,7 @@ final class FrameBridge: NSObject {
         case ended
     }
 
-    static let loadTimeout: TimeInterval = 10
+    static var loadTimeout: TimeInterval = 10
     /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1
     /// Web, store and app deep links all open; `intent:` can start any Android component and is refused.
@@ -73,6 +73,9 @@ final class FrameBridge: NSObject {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(messageHandler, name: "kontext")
+        for (scheme, handler) in Environment.schemeHandlers {
+            configuration.setURLSchemeHandler(handler, forURLScheme: scheme)
+        }
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
 
@@ -159,10 +162,7 @@ final class FrameBridge: NSObject {
     }
 
     private static var keyWindow: UIWindow? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
+        Environment.keyWindow()
     }
 
     // MARK: SDK → page
@@ -195,10 +195,20 @@ final class FrameBridge: NSObject {
         end()
     }
 
-    private func send(_ type: String, _ payload: [String: Any] = [:]) {
+    /// Every message sent to the page, for tests.
+    var onSend: ((String, [String: Any]) -> Void)?
+
+    /// The envelope as the page receives it: `{ adId, type, ...payload }`.
+    static func envelope(adId: String, type: String, payload: [String: Any]) -> String? {
         var message: [String: Any] = ["adId": adId, "type": type]
         payload.forEach { message[$0.key] = $0.value }
-        guard let data = try? JSONSerialization.data(withJSONObject: message), let json = String(data: data, encoding: .utf8) else { return }
+        guard let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func send(_ type: String, _ payload: [String: Any] = [:]) {
+        onSend?(type, payload)
+        guard let json = Self.envelope(adId: adId, type: type, payload: payload) else { return }
         webView.evaluateJavaScript("window.postMessage(\(json), window.location.origin)") { _, error in
             if let error { Logger.debug("frame \(self.adId.prefix(8)): \(type) not delivered, \(error.localizedDescription)") }
         }
@@ -206,14 +216,38 @@ final class FrameBridge: NSObject {
 
     // MARK: Page → SDK
 
-    /// Checks the envelope, the sender and the order; drops anything else without an error.
+    /// Where a message came from, as WebKit reports it.
+    struct Sender: Equatable {
+        let isMainFrame: Bool
+        let scheme: String
+        let host: String
+        /// 0 for the scheme's default port.
+        let port: Int
+
+        init(isMainFrame: Bool, scheme: String, host: String, port: Int) {
+            self.isMainFrame = isMainFrame
+            self.scheme = scheme
+            self.host = host
+            self.port = port
+        }
+
+        init(_ frame: WKFrameInfo) {
+            self.init(isMainFrame: frame.isMainFrame, scheme: frame.securityOrigin.protocol, host: frame.securityOrigin.host, port: frame.securityOrigin.port)
+        }
+    }
+
     fileprivate func receive(_ message: WKScriptMessage) {
+        receive(message.body, from: Sender(message.frameInfo))
+    }
+
+    /// Checks the envelope, the sender and the order; drops anything else without an error.
+    func receive(_ rawBody: Any, from sender: Sender) {
         guard state != .ended else { return }
-        guard message.frameInfo.isMainFrame, isFrameOrigin(message.frameInfo.securityOrigin) else {
+        guard sender.isMainFrame, isFrameOrigin(sender) else {
             Logger.debug("frame \(adId.prefix(8)): message from another frame dropped")
             return
         }
-        guard let body = message.body as? [String: Any],
+        guard let body = rawBody as? [String: Any],
               body["adId"] as? String == adId,
               let type = body["type"] as? String else {
             Logger.debug("frame \(adId.prefix(8)): malformed message dropped")
@@ -272,9 +306,13 @@ final class FrameBridge: NSObject {
         ProcessInfo.processInfo.systemUptime - lastTouchAt <= Self.touchWindow
     }
 
-    private func isFrameOrigin(_ origin: WKSecurityOrigin) -> Bool {
-        let defaultPort = url.scheme == "https" ? 443 : 80
-        return origin.protocol == url.scheme && origin.host == url.host && origin.port == (url.port ?? defaultPort)
+    /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
+    /// explicit 443 in the URL and the origin's 0 are the same origin.
+    func isFrameOrigin(_ sender: Sender) -> Bool {
+        guard sender.scheme == url.scheme, sender.host == url.host else { return false }
+        let defaultPort = url.scheme == "https" ? 443 : (url.scheme == "http" ? 80 : 0)
+        let expected = url.port ?? defaultPort
+        return sender.port == expected || (sender.port == 0 && expected == defaultPort) || (sender.port == defaultPort && url.port == nil)
     }
 
     private func fail(_ event: FrameEvent) {

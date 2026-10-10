@@ -22,5 +22,10 @@ let package = Package(
                 .copy("PrivacyInfo.xcprivacy"),
             ]
         ),
+        .testTarget(
+            name: "KontextVideoSDKTests",
+            dependencies: ["KontextVideoSDK"],
+            path: "Tests/KontextVideoSDKTests"
+        ),
     ]
 )

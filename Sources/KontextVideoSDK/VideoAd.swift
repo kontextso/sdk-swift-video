@@ -135,7 +135,7 @@ public final class VideoAd {
     /// The page owns the 3 s video-start timeout and reports it as `ad.error`; this is the backstop for a
     /// page that is itself dead after `ad.show`.
     private var startBackstop: Task<Void, Never>?
-    static let videoStartBackstop: TimeInterval = 5
+    static var videoStartBackstop: TimeInterval = 5
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
 
@@ -203,7 +203,7 @@ public final class VideoAd {
     /// From here until `didEnd` the SDK retains the ad.
     public func show() throws {
         guard format != .interstitial else {
-            assertionFailure("KontextVideo: an interstitial is shown with show(from:)")
+            Environment.assertionFailure("KontextVideo: an interstitial is shown with show(from:)")
             throw VideoAdError.cannotPresent
         }
         try checkShowable()
@@ -230,7 +230,7 @@ public final class VideoAd {
     /// From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController) throws {
         guard format == .interstitial else {
-            assertionFailure("KontextVideo: an overlay or pause ad is shown with show()")
+            Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show()")
             throw VideoAdError.cannotPresent
         }
         try checkShowable()
@@ -374,9 +374,9 @@ public final class VideoAd {
     /// Opens a URL the page asked for: the app store, a deep link, a web page. The fallback is tried when
     /// the first cannot be opened (an app that is not installed).
     private func open(_ url: URL, fallback: URL?) {
-        UIApplication.shared.open(url, options: [:]) { opened in
+        Environment.openURL(url) { opened in
             if !opened, let fallback {
-                UIApplication.shared.open(fallback, options: [:])
+                Environment.openURL(fallback) { _ in }
             }
         }
     }

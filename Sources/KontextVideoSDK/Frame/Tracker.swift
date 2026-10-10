@@ -15,10 +15,10 @@ final class Tracker {
     private var fired: Set<Int> = []
     private let session: URLSession
 
-    init(adId: String, entries: [AdPayload.TrackingEvent], session: URLSession = .shared) {
+    init(adId: String, entries: [AdPayload.TrackingEvent]) {
         self.adId = adId
         self.entries = entries
-        self.session = session
+        session = Environment.session
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.

@@ -48,7 +48,7 @@ public final class KontextVideo {
         configuration != nil
     }
 
-    static let initRetryInterval: TimeInterval = 300
+    static var initRetryInterval: TimeInterval = 300
 
     /// When the server asked for the debug log (`reportDebug` in the `/init` response).
     private(set) var reportDebug = false
@@ -131,7 +131,7 @@ public final class KontextVideo {
     @discardableResult
     func requireInitialized(_ call: String) -> Bool {
         guard !isInitialized else { return true }
-        assertionFailure("KontextVideo: call initialize(with:) before \(call)")
+        Environment.assertionFailure("KontextVideo: call initialize(with:) before \(call)")
         Logger.error("\(call) called before initialize(with:); no ads will load")
         return false
     }
@@ -161,6 +161,22 @@ public final class KontextVideo {
         for entry in liveVideoAds {
             entry.value?.discardLoadedAds(reason: "\(what) changed")
         }
+    }
+
+    /// Back to the state before `initialize(with:)`. Tests only: the shared instance is process-wide.
+    func resetForTesting() {
+        initTask?.cancel()
+        initTask = nil
+        configuration = nil
+        state = .notInitialized
+        user = nil
+        regulatory = nil
+        variantId = nil
+        reportDebug = false
+        initFailedAt = nil
+        liveVideoAds.removeAll()
+        DebugReporter.shared.isEnabled = false
+        Logger.level = .warning
     }
 
     private func runInit(configuration: Configuration) async {

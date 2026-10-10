@@ -51,7 +51,9 @@ struct TrackingInfo: Sendable {
 /// keys (TCF v2, GPP, US Privacy). What the publisher set on `KontextVideo.shared.regulatory` wins per
 /// field; `coppa` can only come from the publisher.
 enum ConsentStorage {
-    static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults = .standard) -> KontextVideo.Regulatory? {
+    @MainActor
+    static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
+        let defaults = defaults ?? Environment.consentDefaults
         let gdprApplies: Bool? = defaults.object(forKey: "IABTCF_gdprApplies").flatMap { ($0 as? NSNumber)?.intValue }.map { $0 == 1 }
         let gppSid: [Int]? = (defaults.string(forKey: "IABGPP_GppSID") ?? "")
             .split(whereSeparator: { $0 == "_" || $0 == "," })
