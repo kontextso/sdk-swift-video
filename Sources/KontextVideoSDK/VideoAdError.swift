@@ -15,8 +15,14 @@ public enum VideoAdError: Error, Sendable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion when the
     /// `VideoAds` was created; a release build gets this error instead, and works once `initialize` runs.
     case notInitialized
-    /// The SDK cannot serve now: `/init` failed and is not due for a retry yet, or the `VideoAds` was destroyed.
-    case notReady
+    /// `/init` failed and is not due for a retry yet (the SDK tries again at the next video start, 5 minutes
+    /// after the failure at the earliest). No ads until it succeeds.
+    case initializationFailed
+    /// The `VideoAds` was destroyed. It is terminal: create a new one for the next content.
+    case destroyed
+    /// The `KontextVideoPlayer` object was deallocated; the request needs its view and playhead. Not
+    /// terminal: the ad, when there is one, stays ready.
+    case playerUnavailable
     /// The server switched the SDK off for this app launch (`/init` or an ads response said so).
     case disabled(reason: String)
     /// The placement already has an ad loading, loaded but not shown, or showing. One ad per placement at
@@ -42,8 +48,12 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         switch self {
         case .notInitialized:
             return "KontextVideo.shared.initialize(with:) was not called"
-        case .notReady:
-            return "the SDK is not ready: /init failed or the VideoAds was destroyed"
+        case .initializationFailed:
+            return "/init failed; no ads until it succeeds"
+        case .destroyed:
+            return "the VideoAds was destroyed"
+        case .playerUnavailable:
+            return "the KontextVideoPlayer was deallocated"
         case .disabled(let reason):
             return "the SDK is disabled by the server (\(reason))"
         case .placementBusy:

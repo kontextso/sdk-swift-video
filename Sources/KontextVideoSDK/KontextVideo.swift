@@ -146,6 +146,14 @@ public final class KontextVideo {
         initTask = Task { await runInit(configuration: configuration) }
     }
 
+    /// At most one started `VideoAds` per player: starting one stops the others on the same player object.
+    func stopOthers(playing player: any KontextVideoPlayer, except ads: VideoAds) {
+        for entry in liveVideoAds {
+            guard let other = entry.value, other !== ads, other.player === player else { continue }
+            other.stop(because: ads)
+        }
+    }
+
     /// The spec's rule: when `user`, `regulatory` or `variantId` changes, every loaded ad that was not
     /// shown yet is discarded, and the next request for each format carries the new values.
     private func targetingChanged(_ what: String) {

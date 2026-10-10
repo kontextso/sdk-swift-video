@@ -85,7 +85,8 @@ any scheme; everything else is optional context that helps targeting. Times are 
 when you do not know it; the SDK never guesses.
 
 Call `ads.start()` when the episode starts playing. Before that, requests are prefetches at content time 0, so you can
-load the next episode's ads while this one plays; after it, requests carry the live playhead.
+load the next episode's ads while this one plays; after it, requests carry the live playhead. One started `VideoAds` per
+player: starting the next episode's stops the previous one (and logs a warning); destroy the previous one when you move on.
 
 ```swift
 let ads = VideoAds(
@@ -152,7 +153,8 @@ do {
 } catch VideoAdError.invalidPlacement(let problem) {
     // an integration bug: unknown id or wrong format; fix the id or the dashboard
 } catch {
-    // .placementBusy, .notInitialized, .notReady, .disabled(reason:), .request(error), CancellationError
+    // .placementBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,
+    // .playerUnavailable, .creativeFailed(code:), .request(error), CancellationError
 }
 ```
 

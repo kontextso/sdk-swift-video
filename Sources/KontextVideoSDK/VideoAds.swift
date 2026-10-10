@@ -46,8 +46,19 @@ public final class VideoAds {
     /// requests and `[CONTENTPLAYHEAD]` use the live playhead.
     public func start() {
         guard !isDestroyed, !isStarted else { return }
+        if let player {
+            KontextVideo.shared.stopOthers(playing: player, except: self)
+        }
         isStarted = true
         Logger.debug("\(content.id): started")
+    }
+
+    /// Another `VideoAds` started on the same player: this one is no longer the content playing there,
+    /// so its requests fall back to prefetch mode (content time 0).
+    func stop(because other: VideoAds) {
+        guard isStarted else { return }
+        isStarted = false
+        Logger.warning("\(content.id): stopped, \(other.content.id) started on the same player; destroy the previous content's VideoAds when you move on")
     }
 
     /// Content time in milliseconds as a request sends it: 0 until `start()`.
@@ -89,7 +100,7 @@ public final class VideoAds {
     /// Returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready.
     /// Waits for `/init` when that is still in flight.
     func load(_ format: FormatRequest) async throws -> VideoAd {
-        guard !isDestroyed else { throw VideoAdError.notReady }
+        guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let id = format.placementId
         if loading.contains(id) || current[id]?.value?.occupiesPlacement == true {
@@ -106,12 +117,13 @@ public final class VideoAds {
         guard await KontextVideo.shared.waitUntilEnabled() else {
             Logger.warning("\(id) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
             if case .disabled(let reason) = KontextVideo.shared.state { throw VideoAdError.disabled(reason: reason) }
-            throw VideoAdError.notReady
+            throw VideoAdError.initializationFailed
         }
-        guard !isDestroyed, let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notReady }
+        guard !isDestroyed else { throw VideoAdError.destroyed }
+        guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
         guard let player else {
-            Logger.warning("\(id) for \(content.id): not requested, the player is gone")
-            throw VideoAdError.notReady
+            Logger.warning("\(id) for \(content.id): not requested, the player was deallocated")
+            throw VideoAdError.playerUnavailable
         }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,
                                       player: .read(from: player, started: isStarted), format: format)
@@ -122,12 +134,12 @@ public final class VideoAds {
             // The one retry the SDK does by itself: the server asked for it (`temporaryError`).
             Logger.info("\(id) for \(content.id): no fill (\(reason)), retrying in \(retryAfter) ms as the server asked")
             try await Task.sleep(nanoseconds: UInt64(retryAfter) * 1_000_000)
-            guard !isDestroyed else { throw VideoAdError.notReady }
+            guard !isDestroyed else { throw VideoAdError.destroyed }
             var retry = request
             retry.requestId = UUID().uuidString.lowercased()
             response = try await send(retry, format: format)
         }
-        guard !isDestroyed else { throw VideoAdError.notReady }
+        guard !isDestroyed else { throw VideoAdError.destroyed }
 
         switch response {
         case .ad(let ad, let next):
@@ -143,7 +155,7 @@ public final class VideoAds {
                 current[id] = nil
                 throw error
             }
-            guard !isDestroyed else { throw VideoAdError.notReady }
+            guard !isDestroyed else { throw VideoAdError.destroyed }
             Logger.info("\(id) for \(content.id): ad \(ad.id.prefix(8)) ready in \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) ms")
             return videoAd
         case .noFill(let reason, _, let next):
@@ -206,7 +218,8 @@ public final class VideoAds {
     }
 
     /// Releases the video's ads. Call it when the viewer leaves the video; deallocation does the same.
-    /// Loads in flight fail with `notReady`, ads the app still holds are invalidated.
+    /// Loads in flight fail with `destroyed`, ads the app still holds are invalidated. Terminal: placements
+    /// the app kept, and any looked up afterwards, throw `destroyed` from `load`.
     public func destroy() {
         guard !isDestroyed else { return }
         isDestroyed = true
