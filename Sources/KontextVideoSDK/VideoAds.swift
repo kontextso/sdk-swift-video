@@ -244,6 +244,23 @@ public final class VideoAds {
         ads.forEach { $0.invalidate(.targetingChanged) }
     }
 
+    /// Deallocation does what `destroy()` does. Loads in flight hold `self` for their duration, so none
+    /// is running here; ads on screen are retained by `showing` and end with `.destroyed`.
+    deinit {
+        let showing = Array(self.showing.values)
+        let loaded = current.values.compactMap(\.value)
+        guard !showing.isEmpty || !loaded.isEmpty else { return }
+        let teardown: @MainActor () -> Void = {
+            loaded.forEach { $0.invalidate(.destroyed) }
+            showing.forEach { $0.invalidate(.destroyed) }
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { teardown() }
+        } else {
+            Task { @MainActor in teardown() }
+        }
+    }
+
     /// Releases the video's ads. Call it when the viewer leaves the video; deallocation does the same.
     /// Loads in flight fail with `destroyed`, ads the app still holds are invalidated. Terminal: placements
     /// the app kept, and any looked up afterwards, throw `destroyed` from `load`.

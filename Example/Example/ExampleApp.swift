@@ -66,8 +66,20 @@ final class Demo: ObservableObject {
             dismissOverlay()
             await loadInterstitialAndWait()
             showInterstitial()
-            try? await Task.sleep(nanoseconds: 14_000_000_000)   // the 10 s video plays to complete
-            destroy()                                             // ends it with didEnd(.destroyed)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            // Something outside the SDK dismisses the presentation: didEnd(.interrupted)
+            Self.topViewController?.presentingViewController?.dismiss(animated: true)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // An ad loaded and dropped without being shown: released, placement free again
+            await loadPauseAdAndWait()
+            pauseAd = nil
+            note("pause ad dropped without showing")
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            // An ad on screen when the VideoAds is destroyed: didEnd(.destroyed)
+            await loadPauseAdAndWait()
+            viewerPaused()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            destroy()
         }
     }
 

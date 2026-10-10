@@ -483,8 +483,20 @@ public final class VideoAd {
         expiryTask?.cancel()
         bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
-        if isLoaded || loadContinuation == nil {
+        if let continuation = loadContinuation {
+            // `load` was still waiting for the page: it throws instead of hanging.
+            loadContinuation = nil
+            continuation.resume(throwing: VideoAdError.invalidated(reason))
+        } else {
             delegate?.videoAd(self, didInvalidate: reason)
         }
+    }
+
+    /// Dropping the last reference releases everything: the bridge tears the page down in its own
+    /// `deinit`; the timer and the expiry task are stopped here. Never reached while the ad is on screen,
+    /// because its `VideoAds` retains it until `didEnd`.
+    deinit {
+        expiryTask?.cancel()
+        meter?.stopTimer()
     }
 }

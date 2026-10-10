@@ -40,6 +40,14 @@ final class ViewabilityMeter {
         }
     }
 
+    /// Stops measuring without a verdict; for the owner's `deinit`, from any thread.
+    nonisolated func stopTimer() {
+        MainActor.assumeIsolated {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
     /// The ad ended: a verdict is still owed when none was reached.
     func stop() {
         timer?.invalidate()

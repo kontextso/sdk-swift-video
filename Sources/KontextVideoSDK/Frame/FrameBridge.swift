@@ -95,6 +95,28 @@ final class FrameBridge: NSObject {
         #endif
     }
 
+    /// The owner dropped the bridge: the page is stopped and the WebView leaves the window it was parked
+    /// in, or the window would keep it alive, invisible. The handler registered with WebKit is a weak
+    /// proxy, so nothing retains the bridge itself and this is actually reached.
+    deinit {
+        Logger.debug("frame \(adId.prefix(8)): released")
+        let webView = self.webView
+        let timeout = loadTimeoutTask
+        let teardown: @MainActor () -> Void = {
+            timeout?.cancel()
+            webView.stopLoading()
+            webView.configuration.userContentController.removeScriptMessageHandler(forName: "kontext")
+            webView.navigationDelegate = nil
+            webView.uiDelegate = nil
+            webView.removeFromSuperview()
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { teardown() }
+        } else {
+            Task { @MainActor in teardown() }
+        }
+    }
+
     /// Loads the page. `ad.loaded` must arrive within `loadTimeout`.
     func load() {
         Logger.debug("frame \(adId.prefix(8)): loading \(url)")
