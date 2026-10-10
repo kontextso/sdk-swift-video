@@ -21,6 +21,7 @@ final class Demo: ObservableObject {
     private(set) var ads: VideoAds?
     private(set) var pauseAd: VideoAd?
     private(set) var overlayAd: VideoAd?
+    private(set) var interstitial: VideoAd?
 
     init() {
         // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there).
@@ -63,7 +64,47 @@ final class Demo: ObservableObject {
             showOverlay()
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             dismissOverlay()
+            await loadInterstitialAndWait()
+            showInterstitial()
+            try? await Task.sleep(nanoseconds: 14_000_000_000)   // the 10 s video plays to complete
+            destroy()                                             // ends it with didEnd(.destroyed)
         }
+    }
+
+    private func loadInterstitialAndWait() async {
+        do {
+            let ad = try await ads!.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .midroll))
+            ad.delegate = self
+            interstitial = ad
+            note("interstitial \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
+        } catch {
+            note("interstitial load: \(error)")
+        }
+    }
+
+    func loadInterstitial() {
+        Task { await loadInterstitialAndWait() }
+    }
+
+    /// The interstitial is presented by the SDK over everything; the content would pause here and resume in didEnd.
+    func showInterstitial() {
+        guard let ad = interstitial, let presenter = Self.topViewController else { return }
+        do {
+            try ad.show(from: presenter)
+        } catch {
+            note("interstitial show: \(error)")
+        }
+    }
+
+    private static var topViewController: UIViewController? {
+        let root = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .rootViewController
+        var top = root
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 
     private func loadPauseAdAndWait() async {
@@ -166,6 +207,7 @@ extension Demo: VideoAdDelegate {
         note("\(ad.format) \(ad.id.prefix(8)) ended: \(reason)")   // the content would resume here
         if ad === pauseAd { pauseAd = nil }
         if ad === overlayAd { overlayAd = nil }
+        if ad === interstitial { interstitial = nil }
     }
 }
 

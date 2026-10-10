@@ -185,7 +185,21 @@ extension PlayerController: VideoAdDelegate {
 }
 ```
 
-Interstitials (`show(from:)`) are the next step and not in the SDK yet.
+An interstitial is presented by the SDK itself, full screen, with `show(from:)`; only the SDK dismisses it (the video
+completed, a skip, a close, an error, an interruption, or your `destroy()`), and every way ends in one `didEnd`. Pause
+your content before `show(from:)` and resume it in `didEnd`. `show(from:)` also throws `.cannotPresent` when the view
+controller is not on screen or already presenting; the ad stays ready, try again later.
+
+```swift
+let interstitial = try await midroll.load()
+interstitial.delegate = self
+contentPlayer.pause()
+do {
+    try interstitial.show(from: self)
+} catch {
+    contentPlayer.play()                 // never started: undo here, no delegate call follows
+}
+```
 
 
 ### 6. Release them

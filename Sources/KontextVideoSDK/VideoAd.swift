@@ -124,6 +124,8 @@ public final class VideoAd {
     weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: UIView?
+    /// The controller the SDK presented for an interstitial.
+    private var interstitialController: InterstitialViewController?
     /// `video.complete` arrived; the next `ad.close` is the end card closing, not the viewer giving up.
     private var completed = false
     /// Delivers `didInvalidate(.expired)` when the time comes.
@@ -208,6 +210,36 @@ public final class VideoAd {
         begin()
     }
 
+    /// Presents an interstitial full screen from `viewController`, which must be on screen and not already
+    /// presenting. Throws when presentation cannot begin, with nothing fired: `alreadyShown`,
+    /// `invalidated`, `cannotPresent` (the ad stays ready; try again later). Only the SDK dismisses it:
+    /// the video completing, a skip, a close, an error, or an interruption, each ending in one `didEnd`.
+    /// From here until `didEnd` the SDK retains the ad.
+    public func show(from viewController: UIViewController) throws {
+        guard format == .interstitial else {
+            assertionFailure("KontextVideo: an overlay or pause ad is shown with show()")
+            throw VideoAdError.cannotPresent
+        }
+        try checkShowable()
+        guard owner?.player != nil else {
+            owner?.playerIsGone()
+            throw VideoAdError.invalidated(.playerUnavailable)
+        }
+        guard viewController.view.window != nil, viewController.presentedViewController == nil else {
+            Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
+            throw VideoAdError.cannotPresent
+        }
+        let controller = InterstitialViewController(webView: bridge.takeWebView())
+        controller.onInterrupted = { [weak self] in
+            guard let self else { return }
+            Logger.warning("ad \(id.prefix(8)): presentation interrupted")
+            end(.interrupted)
+        }
+        interstitialController = controller
+        viewController.present(controller, animated: true)
+        begin()
+    }
+
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
     /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again.
     public func dismiss() {
@@ -266,6 +298,13 @@ public final class VideoAd {
         bridge.hide()
         hostView?.removeFromSuperview()
         hostView = nil
+        if let controller = interstitialController {
+            interstitialController = nil
+            controller.isEndingByAd = true
+            if controller.presentingViewController != nil, reason != .interrupted {
+                controller.dismiss(animated: true)
+            }
+        }
         if format != .interstitial {
             // TODO(step 4): fire `overlayViewDuration`, except for `.destroyed`.
             Logger.debug("ad \(id.prefix(8)): overlayViewDuration")

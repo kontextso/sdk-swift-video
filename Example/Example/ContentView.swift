@@ -27,10 +27,13 @@ struct ContentView: View {
                 Button("Load overlay") { demo.loadOverlay() }
                 Button("Show") { demo.showOverlay() }
                 Button("Dismiss") { demo.dismissOverlay() }
+            }
+            HStack {
+                Button("Load interstitial") { demo.loadInterstitial() }
+                Button("Show") { demo.showInterstitial() }
                 Spacer()
                 Button("Destroy") { demo.destroy() }
             }
-            .buttonStyle(.bordered)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
