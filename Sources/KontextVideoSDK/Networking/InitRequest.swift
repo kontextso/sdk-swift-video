@@ -17,7 +17,7 @@ struct InitRequest: Encodable, Sendable {
     let attribution: AttributionIds
 
     @MainActor
-    static func make(configuration: Configuration, installId: String) -> InitRequest {
+    static func make(configuration: KontextVideo.Configuration, installId: String) -> InitRequest {
         InitRequest(
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,

@@ -29,7 +29,7 @@ succeeded.
 ```swift
 import KontextVideoSDK
 
-KontextVideo.shared.initialize(with: Configuration(publisherToken: "yourpublisher-dev"))
+KontextVideo.shared.initialize(with: .init(publisherToken: "yourpublisher-dev"))
 ```
 
 Use your developer token (`{publisher}-dev`) while testing and your production token in release builds. If you want to
@@ -41,14 +41,16 @@ let state = await KontextVideo.shared.initialize(with: configuration)   // .enab
 KontextVideo.shared.initialize(with: configuration) { state in … }
 ```
 
-All options, with their defaults:
+All options, with their defaults. The SDK's model types are nested in `KontextVideo` (`KontextVideo.Configuration`,
+`.User`, `.Content`, `.Player`), as `UIButton.Configuration`, so they never collide with your app's own `User` or
+`Player`; where Swift can infer the type, `.init(…)` is enough.
 
 ```swift
-Configuration(
+KontextVideo.Configuration(
     publisherToken: "yourpublisher-dev",
     requestTrackingAuthorization: false,       // let the SDK show the ATT dialog
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
-    adServerUrl: Constants.defaultAdServerUrl  // override only for a staging or mock server
+    adServerURL: KontextVideo.Configuration.defaultAdServerURL   // override only for a staging or mock server
 )
 ```
 
@@ -57,14 +59,14 @@ has it. Set these on the shared instance whenever you learn them, from anywhere;
 them, and ads already loaded but not shown are discarded. `nil` clears a value.
 
 ```swift
-KontextVideo.shared.user = User(id: "u_84213907", email: "ryan@example.com", yearOfBirth: 1994)
-KontextVideo.shared.regulatory = Regulatory(coppa: false)   // the rest is read from your CMP's storage
+KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com", yearOfBirth: 1994)
+KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
 ### 2. Initialize the player
 
-`Player` is the interface that represents your video player: the area the ads will be shown in, in points,
+`KontextVideo.Player` represents your video player: the area the ads will be shown in, in points,
 whether it is full screen, and where the content is. Keep it current: set `playhead` as the content plays, and
 `width`, `height` and `fullscreen` when the layout changes, for example on rotation. For a prefetch before the
 player exists, start with the size it will most likely have.
@@ -72,7 +74,7 @@ player exists, start with the size it will most likely have.
 > **Temporary.** `Player` will become a handle to your actual player, from which the SDK reads these values itself.
 
 ```swift
-let player = Player(width: 393, height: 852, fullscreen: true)
+let player = KontextVideo.Player(width: 393, height: 852, fullscreen: true)
 
 player.playhead = 12_000       // milliseconds in content time; update it as the content plays
 player.fullscreen = false      // and the box when the layout changes
@@ -81,18 +83,19 @@ player.fullscreen = false      // and the box when the layout changes
 ### 3. Create the ads for a video
 
 One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
-plays. `id` is your own id of the video, in any scheme; everything else is optional context that helps targeting.
+plays. `KontextVideo.Content` describes the video ("content" is the ad-industry word for it): `id` is your own id, in
+any scheme; everything else is optional context that helps targeting.
 
 ```swift
 let ads = VideoAds(
-    video: Video(
+    content: .init(
         id: "100001-6",
         language: "en",
         title: "Episode 6",
         duration: 92_000,            // milliseconds
         episodeNumber: 6,
         genre: "romance",
-        series: Series(id: "100001", title: "My Marionette Lover", episodeCount: 40)
+        series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
     ),
     player: player
 )

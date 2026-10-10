@@ -156,7 +156,7 @@ public final class KontextVideo {
     }
 
     private func runInit(configuration: Configuration) async {
-        let client = APIClient(baseURL: configuration.adServerUrl)
+        let client = APIClient(baseURL: configuration.adServerURL)
         let request = InitRequest.make(configuration: configuration, installId: Self.installId)
         do {
             switch try await Init.send(request, client: client) {

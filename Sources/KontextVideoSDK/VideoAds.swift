@@ -15,9 +15,9 @@ public final class VideoAds {
         }
     }
 
-    public let video: Video
+    public let content: KontextVideo.Content
     /// The player the ads are shown in; the requests describe its box and playhead.
-    public let player: Player
+    public let player: KontextVideo.Player
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
@@ -31,13 +31,13 @@ public final class VideoAds {
     private(set) var nextRequestAt: [String: Int] = [:]
     private var loading: [String: Task<Void, Never>] = [:]
 
-    /// `video` describes the content, `player` the area the ads are shown in. Needs `initialize(with:)`
+    /// `content` describes the video, `player` the area the ads are shown in. Needs `initialize(with:)`
     /// to have been called; `/init` itself may still be in flight, loads wait for it.
-    public init(video: Video, player: Player) {
-        self.video = video
+    public init(content: KontextVideo.Content, player: KontextVideo.Player) {
+        self.content = content
         self.player = player
         KontextVideo.shared.register(self)
-        Logger.debug("VideoAds created for video \(video.id)")
+        Logger.debug("VideoAds created for video \(content.id)")
     }
 
     /// The overlay placement with this id, as created in the Kontext dashboard. Get it once and keep it.
@@ -73,23 +73,23 @@ public final class VideoAds {
         guard !isDestroyed, KontextVideo.shared.requireInitialized("load()") else { return }
         let id = format.placementId
         if let current = loaded[id], !current.isExpired {
-            Logger.debug("\(id) for \(video.id): an ad is already loaded")
+            Logger.debug("\(id) for \(content.id): an ad is already loaded")
             return
         }
         if let at = nextRequestAt[id], (player.playhead ?? 0) < at {
-            Logger.debug("\(id) for \(video.id): next request at \(at) ms, playhead is \(player.playhead ?? 0)")
+            Logger.debug("\(id) for \(content.id): next request at \(at) ms, playhead is \(player.playhead ?? 0)")
             return
         }
         guard loading[id] == nil else { return }
         loading[id] = Task {
             defer { loading[id] = nil }
             guard await KontextVideo.shared.waitUntilEnabled() else {
-                Logger.warning("\(id) for \(video.id): not requested, the SDK is \(KontextVideo.shared.state)")
+                Logger.warning("\(id) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
                 return
             }
             guard !isDestroyed, let configuration = KontextVideo.shared.configuration else { return }
-            let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, video: video, player: player, format: format)
-            Logger.debug("\(id) for \(video.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
+            let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content, player: player, format: format)
+            Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
             handle(await send(request), placementId: id)
         }
     }
@@ -97,12 +97,12 @@ public final class VideoAds {
     /// Ads requests are not retried: a timeout counts as `temporaryError`, and the next request happens
     /// at the format's next natural moment.
     private func send(_ request: AdsRequest) async -> AdsResponse? {
-        let client = APIClient(baseURL: request.adServerUrl)
+        let client = APIClient(baseURL: request.adServerURL)
         do {
             return try await client.post("video/ads", body: request)
         } catch let error as APIError {
             if case .transport(let urlError) = error, urlError.code == .cancelled { return nil }
-            Logger.error("\(request.placementId) for \(video.id): request failed, \(error)")
+            Logger.error("\(request.placementId) for \(content.id): request failed, \(error)")
             return nil
         } catch {
             return nil
@@ -115,10 +115,10 @@ public final class VideoAds {
         case .ad(let ad, let next):
             loaded[placementId] = LoadedAd(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
             nextRequestAt[placementId] = next
-            Logger.info("\(placementId) for \(video.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
+            Logger.info("\(placementId) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
         case .noFill(let reason, let retryAfter, let next):
             nextRequestAt[placementId] = next
-            Logger.info("\(placementId) for \(video.id): no fill (\(reason))\(retryAfter.map { ", retry after \($0) ms" } ?? "")\(next.map { ", next request at \($0) ms" } ?? "")")
+            Logger.info("\(placementId) for \(content.id): no fill (\(reason))\(retryAfter.map { ", retry after \($0) ms" } ?? "")\(next.map { ", next request at \($0) ms" } ?? "")")
         case .disabled(let reason):
             KontextVideo.shared.disable(reason: reason)
         }
@@ -128,7 +128,7 @@ public final class VideoAds {
     /// dropped so the next request carries the new values.
     func discardLoadedAds(reason: String) {
         guard !loaded.isEmpty else { return }
-        Logger.debug("\(video.id): discarding \(loaded.count) loaded ad(s), \(reason)")
+        Logger.debug("\(content.id): discarding \(loaded.count) loaded ad(s), \(reason)")
         loaded.removeAll()
     }
 
@@ -140,7 +140,7 @@ public final class VideoAds {
         loading.values.forEach { $0.cancel() }
         loading.removeAll()
         loaded.removeAll()
-        Logger.debug("VideoAds destroyed for video \(video.id)")
+        Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 
     private func describe(_ trigger: Ad.Trigger) -> String {

@@ -5,19 +5,19 @@ import UIKit
 /// The body of `POST /video/ads`: one ad of one format for one video.
 struct AdsRequest: Encodable, Sendable {
     /// Where to send it; not part of the body.
-    let adServerUrl: URL
+    let adServerURL: URL
     let requestId: String
     let publisherToken: String
     let installId: String
-    let user: User?
+    let user: KontextVideo.User?
     let variantId: String?
     let idfv: String?
-    let regulatory: Regulatory?
+    let regulatory: KontextVideo.Regulatory?
     let sdk: SDKInfo
     let app: AppInfo
     let device: AdsDevice
-    let player: PlayerSnapshot
-    let video: Video
+    let player: KontextVideo.Player.Snapshot
+    let video: KontextVideo.Content
     let format: AdFormat
     let placementId: String
     let options: FormatOptions?
@@ -27,9 +27,9 @@ struct AdsRequest: Encodable, Sendable {
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: Configuration, video: Video, player: Player, format: FormatRequest) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, content: KontextVideo.Content, player: KontextVideo.Player, format: FormatRequest) -> AdsRequest {
         AdsRequest(
-            adServerUrl: configuration.adServerUrl,
+            adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
@@ -41,7 +41,7 @@ struct AdsRequest: Encodable, Sendable {
             app: .current(),
             device: .current(),
             player: player.snapshot,
-            video: video,
+            video: content,
             format: format.format,
             placementId: format.placementId,
             options: format.options

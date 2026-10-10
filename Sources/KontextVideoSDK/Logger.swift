@@ -5,9 +5,9 @@ import os
 enum Logger {
     private static let output = os.Logger(subsystem: "so.kontext.video", category: "KontextVideoSDK")
     private static let lock = NSLock()
-    private static var storedLevel: LogLevel = .warning
+    private static var storedLevel: KontextVideo.Configuration.LogLevel = .warning
 
-    static var level: LogLevel {
+    static var level: KontextVideo.Configuration.LogLevel {
         get { lock.withLock { storedLevel } }
         set { lock.withLock { storedLevel = newValue } }
     }
@@ -28,7 +28,7 @@ enum Logger {
         log(.debug, message)
     }
 
-    private static func log(_ messageLevel: LogLevel, _ message: String) {
+    private static func log(_ messageLevel: KontextVideo.Configuration.LogLevel, _ message: String) {
         guard messageLevel <= level else { return }
         switch messageLevel {
         case .none: break
