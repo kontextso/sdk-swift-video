@@ -13,7 +13,7 @@ AdAttributionKit has its own key, `AdNetworkIdentifiers`, a plain array of strin
 Add an `AdAttributionKitIdsProvider` (or a second method on the SKAN provider) that returns `AdNetworkIdentifiers`,
 an empty array when the key is missing or malformed, like the SKAN one.
 
-Meanwhile: `AttributionIds.current()` in `Sources/KontextVideoSDK/Networking/DeviceInfo.swift` reads the key itself.
+Meanwhile: `AttributionIds.current()` in `Sources/KontextVideoSDK/API/DeviceInfo.swift` reads the key itself.
 
 ## 2. OS name on iPad
 
@@ -39,4 +39,4 @@ Meanwhile: `HardwareInfo.current()` in `DeviceInfo.swift` maps the strings.
 
 Report points (`UIScreen.main.bounds`) and keep `dpr`, or add `pointWidth` and `pointHeight` next to the pixel values.
 
-Meanwhile: `AdsDevice.current()` in `Sources/KontextVideoSDK/Networking/AdsRequest.swift` divides by `dpr`.
+Meanwhile: `AdsDevice.current()` in `Sources/KontextVideoSDK/API/AdsRequest.swift` divides by `dpr`.
