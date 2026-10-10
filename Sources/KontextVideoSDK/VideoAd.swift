@@ -90,11 +90,11 @@ public final class VideoAd {
     public private(set) var invalidationReason: InvalidationReason?
 
     /// The wire object, for the steps that render and track it.
-    let ad: Ad
+    let ad: AdPayload
     /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here.
     let receivedAt: TimeInterval
 
-    init(ad: Ad) {
+    init(ad: AdPayload) {
         let now = ProcessInfo.processInfo.systemUptime
         let lifetime = TimeInterval(ad.expires) / 1000
         self.ad = ad

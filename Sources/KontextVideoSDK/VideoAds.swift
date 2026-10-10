@@ -208,7 +208,7 @@ public final class VideoAds {
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 
-    private func describe(_ trigger: Ad.Trigger) -> String {
+    private func describe(_ trigger: AdPayload.Trigger) -> String {
         switch trigger {
         case .manual: return "manual"
         case .window(let from, let to): return "window \(from)–\(to) ms"

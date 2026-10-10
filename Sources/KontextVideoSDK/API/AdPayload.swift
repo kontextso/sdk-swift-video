@@ -1,7 +1,8 @@
 import Foundation
 
-/// One served ad: everything the SDK needs to place, show, time and track it.
-struct Ad: Decodable, Sendable {
+/// One served ad as the wire sends it: everything the SDK needs to place, show, time and track it.
+/// `VideoAd` is the public object built from it.
+struct AdPayload: Decodable, Sendable {
     enum Trigger: Sendable, Equatable {
         /// The app decides the moment.
         case manual

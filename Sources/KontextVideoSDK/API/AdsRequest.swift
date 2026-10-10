@@ -133,3 +133,26 @@ struct AdsDevice: Encodable, Sendable {
         )
     }
 }
+
+/// What an ads request says about the player, read from the protocol at request time.
+struct PlayerSnapshot: Encodable, Sendable, Equatable {
+    let width: Int
+    let height: Int
+    let fullscreen: Bool
+    /// Milliseconds in content time; `nil` means the start of the video.
+    let playhead: Int?
+
+    /// `started` is `VideoAds.start()`: before it, the player's playhead belongs to other content and
+    /// the request is a prefetch at content time 0.
+    @MainActor
+    static func read(from player: any KontextVideoPlayer, started: Bool) -> PlayerSnapshot {
+        let bounds = player.view.bounds
+        let screen = player.view.window?.bounds ?? UIScreen.main.bounds
+        return PlayerSnapshot(
+            width: Int(bounds.width.rounded()),
+            height: Int(bounds.height.rounded()),
+            fullscreen: bounds.width >= screen.width - 1 && bounds.height >= screen.height - 1,
+            playhead: started ? Int((player.playhead * 1000).rounded()) : nil
+        )
+    }
+}

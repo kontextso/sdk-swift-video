@@ -1,7 +1,7 @@
 /// The answer to `POST /video/ads`.
 enum AdsResponse: Decodable, Sendable {
     /// `nextRequestAt`: milliseconds in content time; do not ask for this format again before the playhead reaches it.
-    case ad(Ad, nextRequestAt: Int?)
+    case ad(AdPayload, nextRequestAt: Int?)
     /// `retryAfter`: milliseconds, only with `temporaryError`.
     case noFill(reason: String, retryAfter: Int?, nextRequestAt: Int?)
     /// The server switched the SDK off.
@@ -23,7 +23,7 @@ enum AdsResponse: Decodable, Sendable {
             return
         }
         let nextRequestAt = try container.decodeIfPresent(Int.self, forKey: .nextRequestAt)
-        if let ad = try container.decodeIfPresent(Ad.self, forKey: .ad) {
+        if let ad = try container.decodeIfPresent(AdPayload.self, forKey: .ad) {
             self = .ad(ad, nextRequestAt: nextRequestAt)
         } else {
             self = .noFill(
