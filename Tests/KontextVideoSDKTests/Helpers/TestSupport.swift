@@ -116,7 +116,7 @@ struct SDKHarness {
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
         Init.retryDelay = 10_000_000
-        FrameBridge.loadTimeout = 1
+        FrameBridge.loadTimeout = 3   // the first WebView of a process takes over a second to come up
         VideoAd.videoStartBackstop = 1
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }
