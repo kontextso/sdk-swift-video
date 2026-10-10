@@ -19,8 +19,9 @@ public final class VideoAds {
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
-    /// The placement objects handed out, by id: asking twice for the same id gives the same object,
-    /// so its one-ad-at-a-time state is shared.
+    /// The placement objects handed out, by format and id: the same typed lookup gives the same object.
+    /// The one-ad-at-a-time state lives in this class keyed by id alone, so two typed handles for one id
+    /// share it; whichever format is wrong hears it from the server (`invalidPlacement`).
     private var placements: [String: AnyObject] = [:]
 
     /// One ad per placement at a time: the ad each placement handed out last, while the app keeps it.
@@ -70,16 +71,12 @@ public final class VideoAds {
         placement(id) { InterstitialPlacement(id: id, ads: self) }
     }
 
-    /// One object per id. The same id asked for with another format is a bug in the app: the dashboard
-    /// gives every placement exactly one format.
+    /// One object per (format, id).
     private func placement<P: AnyObject>(_ id: String, make: () -> P) -> P {
-        if let existing = placements[id] {
-            if let placement = existing as? P { return placement }
-            assertionFailure("KontextVideo: placement \"\(id)\" was already used with another format")
-            Logger.error("placement \"\(id)\" was already used with another format; the dashboard gives a placement one format")
-        }
+        let key = "\(P.self):\(id)"
+        if let placement = placements[key] as? P { return placement }
         let placement = make()
-        placements[id] = placement
+        placements[key] = placement
         return placement
     }
 
