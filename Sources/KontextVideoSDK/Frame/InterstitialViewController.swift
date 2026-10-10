@@ -40,7 +40,13 @@ final class InterstitialViewController: UIViewController {
         super.viewDidDisappear(animated)
         // Fires for every removal, programmatic or not, unlike presentationControllerDidDismiss: the one
         // place that sees a presenting controller dismissed underneath the ad.
-        guard !isEndingByAd, isBeingDismissed || isMovingFromParent || presentingViewController == nil else { return }
+        viewDisappeared(isBeingDismissed: isBeingDismissed, isMovingFromParent: isMovingFromParent, hasPresenter: presentingViewController != nil)
+    }
+
+    /// The decision `viewDidDisappear` makes, with its inputs explicit: a removal the ad did not ask for
+    /// is an interruption.
+    func viewDisappeared(isBeingDismissed: Bool, isMovingFromParent: Bool, hasPresenter: Bool) {
+        guard !isEndingByAd, isBeingDismissed || isMovingFromParent || !hasPresenter else { return }
         onInterrupted?()
     }
 }

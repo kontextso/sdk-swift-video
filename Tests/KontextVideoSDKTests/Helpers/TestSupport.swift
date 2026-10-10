@@ -60,9 +60,18 @@ final class TestWindow {
     let root = UIViewController()
 
     init(size: CGSize = CGSize(width: 390, height: 844)) {
-        window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        // Transitions in a headless window never finish with animations on.
+        UIView.setAnimationsEnabled(false)
+        if let scene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+            window = UIWindow(windowScene: scene)
+            window.frame = CGRect(origin: .zero, size: size)
+        } else {
+            window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        }
         window.rootViewController = root
         window.makeKeyAndVisible()
+        root.view.frame = window.bounds
+        root.view.layoutIfNeeded()
     }
 
     func add(_ view: UIView) {
