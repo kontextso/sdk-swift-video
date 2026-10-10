@@ -17,7 +17,10 @@ let package = Package(
             dependencies: [
                 .product(name: "KontextKit", package: "kontextkit-ios"),
             ],
-            path: "Sources/KontextVideoSDK"
+            path: "Sources/KontextVideoSDK",
+            resources: [
+                .copy("PrivacyInfo.xcprivacy"),
+            ]
         ),
     ]
 )

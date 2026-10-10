@@ -5,19 +5,35 @@ implements is the *Video Ads API & SDK v2* document. iOS 14 and later.
 
 ```
 Sources/KontextVideoSDK   the SDK (Swift package)
-Example                   a minimal app that links it (xcodegen generate && open Example.xcodeproj)
+Example                   an app with a real AVPlayer that links it (xcodegen generate && open Example.xcodeproj)
 ```
+
+Contributing: [DEVELOPMENT.md](DEVELOPMENT.md). Releases: [RELEASING.md](RELEASING.md), [CHANGELOG.md](CHANGELOG.md).
 
 The SDK builds on [KontextKit](https://github.com/kontextso/kontextkit-ios). What KontextKit should add in its next
 release, and where this SDK works around it for now, is in [KontextKit-v2-updates.md](KontextKit-v2-updates.md).
 
+## Requirements
+
+iOS 14 or later, Swift 5.9 (Xcode 15.0+). The SDK is UIKit-based; SwiftUI apps host their player in a
+`UIViewRepresentable`, as the example does.
+
 ## Installation
 
-Swift Package Manager:
+Swift Package Manager, in Xcode (File → Add Package Dependencies) or in `Package.swift`:
 
 ```swift
 .package(url: "https://github.com/kontextso/sdk-swift-video.git", from: "0.1.0")
 ```
+
+CocoaPods:
+
+```ruby
+pod 'KontextVideoSDK', '~> 0.1'
+```
+
+The SDK ships a privacy manifest. If you let it show the App Tracking Transparency dialog
+(`requestTrackingAuthorization: true`), add `NSUserTrackingUsageDescription` to your Info.plist.
 
 ## Usage
 
