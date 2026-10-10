@@ -1,0 +1,215 @@
+import Foundation
+@testable import KontextVideoSDK
+import Testing
+import UIKit
+
+/// What the SDK sends: the `/init` and `/video/ads` bodies, the player snapshot, device facts, privacy.
+extension SerialSuites {
+@Suite
+@MainActor
+struct RequestTests {
+    init() { SDKHarness.reset() }
+
+    private var configuration: KontextVideo.Configuration {
+        KontextVideo.Configuration(publisherToken: "pub-dev", adServerURL: URL(string: "https://ads.test")!)
+    }
+
+    // MARK: InitRequest
+
+    @Test func initRequestCarriesIdentityAndAttribution() throws {
+        let request = InitRequest.make(configuration: configuration, installId: "install-1")
+        let json = try Fixtures.encode(request)
+        #expect(UUID(uuidString: request.requestId) != nil)
+        #expect(request.requestId == request.requestId.lowercased())
+        #expect(json["publisherToken"] as? String == "pub-dev")
+        #expect(json["installId"] as? String == "install-1")
+        #expect((json["sdk"] as? [String: Any])?["name"] as? String == "sdk-swift-video")
+        #expect((json["app"] as? [String: Any])?["bundleId"] is String)
+        let device = json["device"] as? [String: Any]
+        #expect((device?["os"] as? [String: Any])?["name"] as? String == "ios")
+        #expect((device?["hardware"] as? [String: Any])?["brand"] as? String == "Apple")
+        let attribution = json["attribution"] as? [String: Any]
+        #expect(attribution?["skan"] is [String])
+        #expect(attribution?["aak"] is [String])
+    }
+
+    @Test func eachInitRequestHasItsOwnId() {
+        let a = InitRequest.make(configuration: configuration, installId: "i")
+        let b = InitRequest.make(configuration: configuration, installId: "i")
+        #expect(a.requestId != b.requestId)
+    }
+
+    // MARK: AdsRequest
+
+    private func makeAdsRequest(started: Bool = true, playhead: TimeInterval = 12.345) -> AdsRequest {
+        let player = TestPlayer()
+        player.playhead = playhead
+        KontextVideo.shared.user = KontextVideo.User(id: "u1")
+        KontextVideo.shared.variantId = "exp-b"
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
+        return AdsRequest.make(
+            sdk: KontextVideo.shared,
+            configuration: configuration,
+            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), attStatus: "authorized"),
+            content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
+            player: .read(from: player, started: started),
+            format: FormatRequest(placementId: "fullscreen-pause", options: .pause(PauseOptions(positions: [.fullscreen])))
+        )
+    }
+
+    @Test func adsRequestBodyHasEveryField() throws {
+        let json = try Fixtures.encode(makeAdsRequest())
+        #expect(json["adServerURL"] == nil, "where to send it is not part of the body")
+        #expect(json["publisherToken"] as? String == "pub-dev")
+        #expect(json["installId"] as? String == KontextVideo.installId)
+        #expect((json["user"] as? [String: Any])?["id"] as? String == "u1")
+        #expect(json["variantId"] as? String == "exp-b")
+        #expect((json["ifa"] as? [String: Any])?["type"] as? String == "idfa")
+        #expect((json["ifa"] as? [String: Any])?["limitAdTracking"] as? Bool == false)
+        #expect(json["attStatus"] as? String == "authorized")
+        #expect(json["idfv"] is String)
+        #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == false)
+        #expect(json["format"] as? String == "pause")
+        #expect(json["placementId"] as? String == "fullscreen-pause")
+        #expect((json["options"] as? [String: Any])?["positions"] as? [String] == ["fullscreen"])
+        #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
+        let player = json["player"] as? [String: Any]
+        #expect(player?["width"] as? Int == 390)
+        #expect(player?["height"] as? Int == 220)
+        #expect(player?["playhead"] as? Int == 12_345)
+        let device = json["device"] as? [String: Any]
+        #expect((device?["screen"] as? [String: Any])?["dpr"] is Double)
+        #expect((device?["network"] as? [String: Any])?["userAgent"] is String)
+        #expect(device?["power"] != nil)
+        #expect(device?["audio"] != nil)
+    }
+
+    @Test func adsRequestOmitsIfaWhenNotAuthorized() throws {
+        var request = makeAdsRequest()
+        request = AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration,
+            tracking: TrackingInfo(ifa: nil, attStatus: "denied"),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .read(from: TestPlayer(), started: false),
+            format: FormatRequest(placementId: "overlay", options: .overlay(OverlayOptions()))
+        )
+        let json = try Fixtures.encode(request)
+        #expect(json["ifa"] == nil)
+        #expect(json["attStatus"] as? String == "denied")
+        #expect((json["options"] as? [String: Any])?.isEmpty == true, "no option set: an empty object")
+    }
+
+    @Test func formatRequestKnowsItsFormat() {
+        #expect(FormatRequest(placementId: "x", options: .overlay(OverlayOptions())).format == .overlay)
+        #expect(FormatRequest(placementId: "x", options: .pause(PauseOptions())).format == .pause)
+        #expect(FormatRequest(placementId: "x", options: .interstitial(InterstitialOptions())).format == .interstitial)
+    }
+
+    // MARK: PlayerSnapshot
+
+    @Test func snapshotBeforeStartIsAPrefetchAtZero() {
+        let player = TestPlayer()
+        player.playhead = 47
+        let snapshot = PlayerSnapshot.read(from: player, started: false)
+        #expect(snapshot.playhead == nil, "content time 0 until start()")
+        #expect(snapshot.width == 390)
+        #expect(snapshot.height == 220)
+    }
+
+    @Test func snapshotAfterStartReadsTheLivePlayheadInMilliseconds() {
+        let player = TestPlayer()
+        player.playhead = 47.0006
+        #expect(PlayerSnapshot.read(from: player, started: true).playhead == 47_001)
+    }
+
+    @Test func snapshotRoundsFractionalBounds() {
+        let player = TestPlayer(size: CGSize(width: 393.4, height: 220.6))
+        let snapshot = PlayerSnapshot.read(from: player, started: false)
+        #expect(snapshot.width == 393)
+        #expect(snapshot.height == 221)
+    }
+
+    @Test func snapshotDetectsFullScreenFromTheWindow() {
+        let window = TestWindow(size: CGSize(width: 390, height: 844))
+        defer { window.tearDown() }
+        let small = TestPlayer()
+        window.add(small.view)
+        #expect(PlayerSnapshot.read(from: small, started: false).fullscreen == false)
+        let full = TestPlayer(size: CGSize(width: 390, height: 844))
+        window.add(full.view)
+        #expect(PlayerSnapshot.read(from: full, started: false).fullscreen == true)
+    }
+
+    // MARK: Device facts
+
+    @Test func deviceFactsHaveTheWireShape() throws {
+        let device = try Fixtures.encode(AdsDevice.current())
+        let screen = device["screen"] as? [String: Any]
+        #expect((screen?["width"] as? Int ?? 0) > 0)
+        #expect((screen?["dpr"] as? Double ?? 0) >= 1)
+        #expect(screen?["darkMode"] is Bool)
+        let os = device["os"] as? [String: Any]
+        #expect(os?["name"] as? String == "ios")
+        #expect(os?["locale"] is String)
+        #expect(os?["timezone"] is String)
+        let hardware = device["hardware"] as? [String: Any]
+        #expect(["phone", "tablet", "tv", "other"].contains(hardware?["type"] as? String ?? ""))
+        let userAgent = (device["network"] as? [String: Any])?["userAgent"] as? String
+        #expect(userAgent?.contains("KontextVideo/") == true)
+    }
+
+    // MARK: Privacy
+
+    @Test func trackingInfoWithoutTheDialogReportsTheStatus() async {
+        let info = await TrackingInfo.current(requestAuthorization: false)
+        #expect(["authorized", "denied", "notDetermined", "restricted"].contains(info.attStatus))
+        if info.attStatus != "authorized" {
+            #expect(info.ifa == nil, "no id unless authorized")
+        }
+    }
+
+    @Test func consentStorageReadsTheIABKeys() {
+        let defaults = UserDefaults(suiteName: "consent-test")!
+        defaults.removePersistentDomain(forName: "consent-test")
+        defaults.set(1, forKey: "IABTCF_gdprApplies")
+        defaults.set("TC-STRING", forKey: "IABTCF_TCString")
+        defaults.set("GPP-STRING", forKey: "IABGPP_HDR_GppString")
+        defaults.set("2_7", forKey: "IABGPP_GppSID")
+        defaults.set("1YNN", forKey: "IABUSPrivacy_String")
+        let regulatory = ConsentStorage.read(merging: nil, defaults: defaults)
+        #expect(regulatory?.gdpr == true)
+        #expect(regulatory?.gdprConsent == "TC-STRING")
+        #expect(regulatory?.gpp == "GPP-STRING")
+        #expect(regulatory?.gppSid == [2, 7])
+        #expect(regulatory?.usPrivacy == "1YNN")
+        #expect(regulatory?.coppa == nil, "coppa can only come from the publisher")
+    }
+
+    @Test func consentStorageExplicitValuesWinPerField() {
+        let defaults = UserDefaults(suiteName: "consent-test-2")!
+        defaults.removePersistentDomain(forName: "consent-test-2")
+        defaults.set(0, forKey: "IABTCF_gdprApplies")
+        defaults.set("STORED", forKey: "IABTCF_TCString")
+        let regulatory = ConsentStorage.read(merging: KontextVideo.Regulatory(gdpr: true, coppa: true), defaults: defaults)
+        #expect(regulatory?.gdpr == true, "explicit wins")
+        #expect(regulatory?.gdprConsent == "STORED", "stored fills the rest")
+        #expect(regulatory?.coppa == true)
+    }
+
+    @Test func consentStorageIsNilWhenNothingIsKnown() {
+        let defaults = UserDefaults(suiteName: "consent-test-3")!
+        defaults.removePersistentDomain(forName: "consent-test-3")
+        defaults.set("", forKey: "IABTCF_TCString")
+        defaults.set("", forKey: "IABGPP_GppSID")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults) == nil, "empty strings count as absent")
+    }
+
+    @Test func consentStorageParsesSingleAndCommaSeparatedSids() {
+        let defaults = UserDefaults(suiteName: "consent-test-4")!
+        defaults.removePersistentDomain(forName: "consent-test-4")
+        defaults.set("7", forKey: "IABGPP_GppSID")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [7])
+        defaults.set("8,10", forKey: "IABGPP_GppSID")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [8, 10])
+    }
+}
+}
