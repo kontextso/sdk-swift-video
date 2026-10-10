@@ -4,15 +4,11 @@ import Foundation
 /// current one plays; any number can be alive at once. Call `destroy()` when the viewer leaves the video.
 @MainActor
 public final class VideoAds {
-    /// An ad the server returned, kept until it is shown, expires or is discarded.
-    struct LoadedAd {
-        let ad: Ad
-        /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here, on a monotonic clock.
-        let receivedAt: TimeInterval
-
-        var isExpired: Bool {
-            (ProcessInfo.processInfo.systemUptime - receivedAt) * 1000 >= Double(ad.expires)
-        }
+    /// A weak hold on an ad handed to the app: the app owns it, the placement only needs to know whether
+    /// one is still around for its one-at-a-time rule.
+    private struct WeakAd {
+        weak var value: VideoAd?
+        init(_ value: VideoAd) { self.value = value }
     }
 
     public let content: KontextVideo.Content
@@ -27,11 +23,12 @@ public final class VideoAds {
     /// so its one-ad-at-a-time state is shared.
     private var placements: [String: AnyObject] = [:]
 
-    /// One ad per placement at a time.
-    private(set) var loaded: [String: LoadedAd] = [:]
-    /// Timed mode: content time before which a placement must not be requested again.
+    /// One ad per placement at a time: the ad each placement handed out last, while the app keeps it.
+    private var current: [String: WeakAd] = [:]
+    /// Timed mode: content time (ms) before which a placement must not be requested again.
     private(set) var nextRequestAt: [String: Int] = [:]
-    private var loading: [String: Task<Void, Never>] = [:]
+    /// Placements with a request in flight.
+    private var loading: Set<String> = []
 
     /// `content` describes the video, `player` the area the ads are shown in. Needs `initialize(with:)`
     /// to have been called; `/init` itself may still be in flight, loads wait for it.
@@ -86,83 +83,128 @@ public final class VideoAds {
         return placement
     }
 
-    /// One request for one placement. Waits for `/init` when that is still in flight.
-    func load(_ format: FormatRequest) {
-        guard !isDestroyed, KontextVideo.shared.requireInitialized("load()") else { return }
+    /// Every ad this object handed out that the app still holds and that is not yet gone.
+    private var liveAds: [VideoAd] {
+        current.values.compactMap(\.value)
+    }
+
+    /// One request for one placement, run on the caller's task so cancelling that task cancels the request.
+    /// Returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready.
+    /// Waits for `/init` when that is still in flight.
+    func load(_ format: FormatRequest) async throws -> VideoAd {
+        guard !isDestroyed else { throw VideoAdError.notReady }
+        guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let id = format.placementId
-        if let current = loaded[id], !current.isExpired {
-            Logger.debug("\(id) for \(content.id): an ad is already loaded")
-            return
+        if loading.contains(id) || current[id]?.value?.occupiesPlacement == true {
+            Logger.warning("\(id) for \(content.id): load refused, the placement is busy")
+            throw VideoAdError.placementBusy
         }
         if let at = nextRequestAt[id], playheadMs < at {
             Logger.debug("\(id) for \(content.id): next request at \(at) ms, playhead is \(playheadMs)")
-            return
+            throw VideoAdError.tooEarly(nextRequestAt: TimeInterval(at) / 1000)
         }
-        guard loading[id] == nil else { return }
-        loading[id] = Task {
-            defer { loading[id] = nil }
-            guard await KontextVideo.shared.waitUntilEnabled() else {
-                Logger.warning("\(id) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
-                return
-            }
-            guard !isDestroyed, let configuration = KontextVideo.shared.configuration else { return }
-            guard let player else {
-                Logger.warning("\(id) for \(content.id): not requested, the player is gone")
-                return
-            }
-            let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,
-                                          player: .read(from: player, started: isStarted), format: format)
-            Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
-            handle(await send(request), placementId: id)
+        loading.insert(id)
+        defer { loading.remove(id) }
+
+        guard await KontextVideo.shared.waitUntilEnabled() else {
+            Logger.warning("\(id) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
+            if case .disabled(let reason) = KontextVideo.shared.state { throw VideoAdError.disabled(reason: reason) }
+            throw VideoAdError.notReady
+        }
+        guard !isDestroyed, let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notReady }
+        guard let player else {
+            Logger.warning("\(id) for \(content.id): not requested, the player is gone")
+            throw VideoAdError.notReady
+        }
+        let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,
+                                      player: .read(from: player, started: isStarted), format: format)
+        Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
+
+        var response = try await send(request, format: format)
+        if case .noFill(let reason, let retryAfter?, _) = response {
+            // The one retry the SDK does by itself: the server asked for it (`temporaryError`).
+            Logger.info("\(id) for \(content.id): no fill (\(reason)), retrying in \(retryAfter) ms as the server asked")
+            try await Task.sleep(nanoseconds: UInt64(retryAfter) * 1_000_000)
+            guard !isDestroyed else { throw VideoAdError.notReady }
+            var retry = request
+            retry.requestId = UUID().uuidString.lowercased()
+            response = try await send(retry, format: format)
+        }
+        guard !isDestroyed else { throw VideoAdError.notReady }
+
+        switch response {
+        case .ad(let ad, let next):
+            let videoAd = VideoAd(ad: ad)
+            current[id] = WeakAd(videoAd)
+            nextRequestAt[id] = next
+            Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
+            return videoAd
+        case .noFill(let reason, _, let next):
+            nextRequestAt[id] = next
+            Logger.info("\(id) for \(content.id): no fill (\(reason))\(next.map { ", next request at \($0) ms" } ?? "")")
+            throw VideoAdError.noFill(reason: reason)
+        case .disabled(let reason):
+            KontextVideo.shared.disable(reason: reason)
+            throw VideoAdError.disabled(reason: reason)
         }
     }
 
-    /// Ads requests are not retried: a timeout counts as `temporaryError`, and the next request happens
-    /// at the format's next natural moment.
-    private func send(_ request: AdsRequest) async -> AdsResponse? {
+    /// Ads requests are not retried by the SDK (beyond the server's own `retryAfter`): a timeout counts as
+    /// `temporaryError`, and the app asks again at the placement's next natural moment.
+    private func send(_ request: AdsRequest, format: FormatRequest) async throws -> AdsResponse {
         let client = APIClient(baseURL: request.adServerURL)
         do {
             return try await client.post("video/ads", body: request)
         } catch let error as APIError {
-            if case .transport(let urlError) = error, urlError.code == .cancelled { return nil }
+            // Swift's convention for a cancelled task is `CancellationError`; URLSession says `.cancelled`.
+            if case .transport(let urlError) = error, urlError.code == .cancelled { throw CancellationError() }
+            if Task.isCancelled { throw CancellationError() }
+            if case .http(400, let errors) = error, let problem = invalidPlacement(in: errors, format: format) {
+                Logger.error("\(request.placementId) for \(content.id): \(VideoAdError.invalidPlacement(problem))")
+                throw VideoAdError.invalidPlacement(problem)
+            }
             Logger.error("\(request.placementId) for \(content.id): request failed, \(error)")
-            return nil
-        } catch {
-            return nil
+            throw VideoAdError.request(error)
         }
     }
 
-    private func handle(_ response: AdsResponse?, placementId: String) {
-        guard !isDestroyed, let response else { return }
-        switch response {
-        case .ad(let ad, let next):
-            loaded[placementId] = LoadedAd(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
-            nextRequestAt[placementId] = next
-            Logger.info("\(placementId) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
-        case .noFill(let reason, let retryAfter, let next):
-            nextRequestAt[placementId] = next
-            Logger.info("\(placementId) for \(content.id): no fill (\(reason))\(retryAfter.map { ", retry after \($0) ms" } ?? "")\(next.map { ", next request at \($0) ms" } ?? "")")
-        case .disabled(let reason):
-            KontextVideo.shared.disable(reason: reason)
+    /// The server's dedicated codes for a wrong placement id, so the app reads a sentence, not a 400.
+    private func invalidPlacement(in errors: [APIErrorResponse.Item], format: FormatRequest) -> VideoAdError.InvalidPlacement? {
+        for item in errors {
+            switch item.code {
+            case "unknownPlacement":
+                return .unknown(id: format.placementId)
+            case "placementFormatMismatch":
+                // `detail` reads "expected overlay, got interstitial" when the server names the dashboard's format.
+                let expected = item.detail.flatMap { detail -> AdFormat? in
+                    guard let range = detail.range(of: "expected ") else { return nil }
+                    let word = detail[range.upperBound...].prefix { $0.isLetter }
+                    return AdFormat(rawValue: String(word))
+                }
+                return .formatMismatch(id: format.placementId, expected: expected, actual: format.format)
+            default:
+                continue
+            }
         }
+        return nil
     }
 
     /// The spec's rule: when the viewer's data or consent changes, loaded ads that were not shown are
     /// dropped so the next request carries the new values.
     func discardLoadedAds(reason: String) {
-        guard !loaded.isEmpty else { return }
-        Logger.debug("\(content.id): discarding \(loaded.count) loaded ad(s), \(reason)")
-        loaded.removeAll()
+        let ads = liveAds.filter(\.occupiesPlacement)
+        guard !ads.isEmpty else { return }
+        Logger.debug("\(content.id): discarding \(ads.count) loaded ad(s), \(reason)")
+        ads.forEach { $0.invalidate(.targetingChanged) }
     }
 
-    /// Releases the video's ads. Call it when the viewer leaves the video. Nothing destroys a
-    /// `VideoAds` for you, so destroy the previous episode's when you move on.
+    /// Releases the video's ads. Call it when the viewer leaves the video; deallocation does the same.
+    /// Loads in flight fail with `notReady`, ads the app still holds are invalidated.
     public func destroy() {
         guard !isDestroyed else { return }
         isDestroyed = true
-        loading.values.forEach { $0.cancel() }
-        loading.removeAll()
-        loaded.removeAll()
+        liveAds.forEach { $0.invalidate(.destroyed) }
+        current.removeAll()
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 

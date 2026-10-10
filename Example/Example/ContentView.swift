@@ -10,6 +10,10 @@ struct ContentView: View {
             row("Install id", KontextVideo.installId)
             row("Publisher token", KontextVideo.shared.configuration?.publisherToken ?? "not initialised")
             row("State", status.state)
+            ForEach(Array(status.loads.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.system(.footnote, design: .monospaced))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()

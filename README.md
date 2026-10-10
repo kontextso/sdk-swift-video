@@ -111,9 +111,10 @@ A placement is a piece of your inventory, created in the Kontext dashboard with 
 (`episode-midroll`, `fullscreen-pause`); demand, floors, frequency caps and reporting are configured there. Every
 publisher starts with one per format: `overlay`, `pause`, `interstitial`.
 
-Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. Every load
-is one request for that placement, with the options of its format; one ad per placement at a time. Loads started
-while the SDK is still initialising wait for it; nothing is requested before `/init` has succeeded.
+Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. `load` is
+`async` and returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready. You own
+the ad you get; keep a reference until it is shown, drop it and it is gone. One ad per placement at a time. Loads
+started while the SDK is still initialising wait for it.
 
 ```swift
 let overlay = ads.overlayPlacement("overlay")
@@ -121,25 +122,41 @@ let pause = ads.pausePlacement("pause")
 let midroll = ads.interstitialPlacement("interstitial")
 
 // A strip across the player while the content plays.
-overlay.load(OverlayOptions(
+let strip = try await overlay.load(OverlayOptions(
     positions: [.bottom]             // where you can render it; default: top and bottom
 ))
 
 // A card, or the full player, while the content is paused.
-pause.load(PauseOptions(
+let card = try await pause.load(PauseOptions(
     positions: [.top, .fullscreen]   // what you can render; default: top and bottom
 ))
+card.price.value                     // your own auction, if you run one
+card.expirationDate                  // a Date
 
 // A full-screen video at a moment you pick.
-midroll.load(InterstitialOptions(
+let interstitial = try await midroll.load(InterstitialOptions(
     timing: .preroll,                // where you will show it; default: .midroll
     maxDuration: 30,                 // seconds
     muted: false,                    // start with the sound off; default: false
     rewarded: false                  // non-skippable, with a reward granted when the video completes
 ))
+
+// Every option is optional
+let ad = try await overlay.load()
+
+// No fill and failures are errors
+do {
+    let ad = try await pause.load()
+} catch VideoAdError.noFill(let reason) {
+    // nothing to show; reason: noAdMatch, frequencyCap, …
+} catch VideoAdError.invalidPlacement(let problem) {
+    // an integration bug: unknown id or wrong format; fix the id or the dashboard
+} catch {
+    // .placementBusy, .notInitialized, .notReady, .disabled(reason:), .request(error), CancellationError
+}
 ```
 
-Every option is optional: `overlay.load()` asks with the defaults.
+Showing the ad (`show`, `dismiss`, the delegate) is the next step and not in the SDK yet.
 
 ### 5. Release them
 

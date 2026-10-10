@@ -4,7 +4,8 @@
 /// format: `overlay`, `pause`, `interstitial`.
 ///
 /// One object per placement, obtained once from `VideoAds` and kept, as MAX's `MAInterstitialAd` or
-/// LevelPlay's `LPMInterstitialAd`. One ad per placement at a time.
+/// LevelPlay's `LPMInterstitialAd`. One ad per placement at a time; `load` returns the ad or throws
+/// a `VideoAdError` (no fill, busy placement, failed request, SDK not ready), or `CancellationError`.
 
 /// A strip across the player while the content plays. Shown in a window the server derived from the
 /// content (timed mode) or at a moment the app picks (manual mode).
@@ -19,8 +20,8 @@ public final class OverlayPlacement {
     }
 
     /// Requests an overlay. `positions`: where the app can render it; the default is top and bottom.
-    public func load(_ options: OverlayOptions = OverlayOptions()) {
-        ads.load(FormatRequest(placementId: id, options: .overlay(options)))
+    public func load(_ options: OverlayOptions = OverlayOptions()) async throws -> VideoAd {
+        try await ads.load(FormatRequest(placementId: id, options: .overlay(options)))
     }
 }
 
@@ -36,8 +37,8 @@ public final class PausePlacement {
     }
 
     /// Requests a pause ad. `positions`: what the app can render; the default is top and bottom.
-    public func load(_ options: PauseOptions = PauseOptions()) {
-        ads.load(FormatRequest(placementId: id, options: .pause(options)))
+    public func load(_ options: PauseOptions = PauseOptions()) async throws -> VideoAd {
+        try await ads.load(FormatRequest(placementId: id, options: .pause(options)))
     }
 }
 
@@ -55,7 +56,7 @@ public final class InterstitialPlacement {
     /// Requests an interstitial. `timing` says where the app will show it, `maxDuration` caps the
     /// video, `muted` starts it with the sound off, `rewarded` asks for a non-skippable video with a
     /// reward granted when it completes.
-    public func load(_ options: InterstitialOptions = InterstitialOptions()) {
-        ads.load(FormatRequest(placementId: id, options: .interstitial(options)))
+    public func load(_ options: InterstitialOptions = InterstitialOptions()) async throws -> VideoAd {
+        try await ads.load(FormatRequest(placementId: id, options: .interstitial(options)))
     }
 }

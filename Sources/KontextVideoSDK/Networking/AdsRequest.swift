@@ -6,7 +6,7 @@ import UIKit
 struct AdsRequest: Encodable, Sendable {
     /// Where to send it; not part of the body.
     let adServerURL: URL
-    let requestId: String
+    var requestId: String
     let publisherToken: String
     let installId: String
     let user: KontextVideo.User?

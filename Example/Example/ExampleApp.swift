@@ -7,6 +7,10 @@ final class SDKStatus: ObservableObject {
     /// The ads of the episode the example "plays": created right after initialize, so the loads
     /// wait for /init.
     var ads: VideoAds?
+    /// One line per load, as it finished.
+    @Published var loads: [String] = []
+    /// The ads the app holds; dropping one frees its placement.
+    var loadedAds: [VideoAd] = []
 }
 
 /// Stands in for the app's player: the SDK reads the view the content plays in and the playhead.
@@ -44,11 +48,31 @@ struct ExampleApp: App {
             genre: "romance",
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
-        status.ads = VideoAds(content: content, player: player)
-        status.ads?.start()          // the episode is "playing": requests carry the playhead
-        status.ads?.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom]))
-        status.ads?.pausePlacement("pause").load(PauseOptions(positions: [.top]))
-        status.ads?.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .preroll))
+        let ads = VideoAds(content: content, player: player)
+        ads.start()                  // the episode is "playing": requests carry the playhead
+        status.ads = ads
+
+        // Each load returns the ad or throws; the app owns the ad it gets.
+        Task {
+            let load = { label, work in await Self.load(label, into: status, work) }
+            await load("overlay") { try await ads.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom])) }
+            await load("pause") { try await ads.pausePlacement("pause").load(PauseOptions(positions: [.top])) }
+            await load("interstitial") { try await ads.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .preroll)) }
+            // Two ways a load fails that are the app's fault, shown on purpose:
+            await load("pause again") { try await ads.pausePlacement("pause").load() }          // .placementBusy
+            await load("nope") { try await ads.overlayPlacement("nope").load() }                 // .invalidPlacement
+        }
+    }
+
+    /// Runs one load and records what came back.
+    private static func load(_ label: String, into status: SDKStatus, _ work: () async throws -> VideoAd) async {
+        do {
+            let ad = try await work()
+            status.loadedAds.append(ad)
+            status.loads.append("\(label): \(ad.format) \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm, expires \(ad.expirationDate.formatted(date: .omitted, time: .standard))")
+        } catch {
+            status.loads.append("\(label): \(error)")
+        }
     }
 
     var body: some Scene {
