@@ -1,13 +1,13 @@
+import AVFoundation
 import KontextVideoSDK
 import SwiftUI
 import UIKit
 
-/// Stands in for the app's player: the SDK reads the view the content plays in and the playhead.
-/// A real app conforms its player controller (or a wrapper around AVPlayer).
-@MainActor
-final class DemoPlayer: KontextVideoPlayer {
-    let view = UIView()
-    var playhead: TimeInterval = 0
+/// The example's player: an AVPlayer in a view with an AVPlayerLayer. The SDK sees it through
+/// `KontextVideo.AVPlayerAdapter`, which reads the playhead from the player and places ads in the view.
+final class PlayerLayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
 /// The app side of the example: owns the player, the `VideoAds`, the loaded ads, and is the ads' delegate.
@@ -17,13 +17,18 @@ final class Demo: ObservableObject {
     @Published var state = "initializing"
     @Published var log: [String] = []
 
-    let player = DemoPlayer()
+    let contentPlayer = AVPlayer(url: URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!)
+    let playerView = PlayerLayerView()
+    let player: KontextVideo.AVPlayerAdapter
     private(set) var ads: VideoAds?
     private(set) var pauseAd: VideoAd?
     private(set) var overlayAd: VideoAd?
     private(set) var interstitial: VideoAd?
 
     init() {
+        playerView.playerLayer.player = contentPlayer
+        player = KontextVideo.AVPlayerAdapter(player: contentPlayer, view: playerView)
+
         // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there).
         // On a physical device replace localhost with the Mac's LAN address.
         let configuration = KontextVideo.Configuration(
@@ -45,8 +50,9 @@ final class Demo: ObservableObject {
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
         let ads = VideoAds(content: content, player: player)
-        ads.start()                  // the episode is "playing": requests carry the playhead
         self.ads = ads
+        contentPlayer.play()
+        ads.start()                  // the episode is playing: requests carry the live playhead
 
         if CommandLine.arguments.contains("--demo") {
             runScriptedDemo()
@@ -101,9 +107,11 @@ final class Demo: ObservableObject {
     /// The interstitial is presented by the SDK over everything; the content would pause here and resume in didEnd.
     func showInterstitial() {
         guard let ad = interstitial, let presenter = Self.topViewController else { return }
+        contentPlayer.pause()
         do {
             try ad.show(from: presenter)
         } catch {
+            contentPlayer.play()                 // never started: undo here, no delegate call follows
             note("interstitial show: \(error)")
         }
     }
@@ -151,6 +159,7 @@ final class Demo: ObservableObject {
 
     /// The pause idiom: show if ready, else load for next time.
     func viewerPaused() {
+        contentPlayer.pause()
         guard let ad = pauseAd, ad.isReady else {
             note("no pause ad ready, loading one")
             loadPauseAd()
@@ -165,6 +174,7 @@ final class Demo: ObservableObject {
 
     func viewerResumed() {
         pauseAd?.dismiss()
+        contentPlayer.play()
     }
 
     func showOverlay() {
@@ -216,7 +226,8 @@ extension Demo: VideoAdDelegate {
     }
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
-        note("\(ad.format) \(ad.id.prefix(8)) ended: \(reason)")   // the content would resume here
+        note("\(ad.format) \(ad.id.prefix(8)) ended: \(reason)")
+        if ad.format == .interstitial { contentPlayer.play() }      // every way it ends lands here
         if ad === pauseAd { pauseAd = nil }
         if ad === overlayAd { overlayAd = nil }
         if ad === interstitial { interstitial = nil }

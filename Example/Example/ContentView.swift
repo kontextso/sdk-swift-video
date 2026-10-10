@@ -13,8 +13,8 @@ struct ContentView: View {
                 row("State", demo.state)
             }
 
-            // The "player": a 16:9 area the content would play in; ads are placed inside it.
-            PlayerView(view: demo.player.view)
+            // The player: the content plays here; the SDK places overlay and pause ads inside it.
+            PlayerView(view: demo.playerView)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .background(Color.black)
 

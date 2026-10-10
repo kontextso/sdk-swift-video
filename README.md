@@ -72,10 +72,20 @@ KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agre
 content plays in, where overlay and pause ads go and whose size and full-screen state the SDK reads itself, and the
 content playhead in seconds. The same model as Google IMA (`IMAAdDisplayContainer` + `IMAContentPlayhead`).
 
+For an `AVPlayer` the SDK ships the conformance: `KontextVideo.AVPlayerAdapter`. Keep it alive as long as the player
+screen; the SDK holds it weakly.
+
 ```swift
+// AVPlayer in your own view (the one holding the AVPlayerLayer)
+let player = KontextVideo.AVPlayerAdapter(player: avPlayer, view: playerView)
+
+// AVPlayerViewController: ads go into its contentOverlayView, under the transport controls
+let player = KontextVideo.AVPlayerAdapter(playerViewController: playerViewController)
+
+// Any other player: conform your own object
 extension MyPlayerController: KontextVideoPlayer {
     var view: UIView { playerView }                               // the content's view; ads are placed in it
-    var playhead: TimeInterval { avPlayer.currentTime().seconds } // content time, seconds
+    var playhead: TimeInterval { currentTime }                    // content time, seconds
 }
 ```
 
