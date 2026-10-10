@@ -98,25 +98,33 @@ let ads = KontextVideo.shared.createVideoAds(
 )
 ```
 
-### 4. Load the ads
+### 4. Placements and loading the ads
 
-One placement per format on `ads`: `overlay`, `pause` and `interstitial`. Load each one you will show; every
-load is one request, with the options of its format. Loads started while the SDK is still initialising wait for
-it; nothing is requested before `/init` has succeeded.
+A placement is a piece of your inventory, created in the Kontext dashboard with a format and an id you chose
+(`episode-midroll`, `fullscreen-pause`); demand, floors, frequency caps and reporting are configured there. Every
+publisher starts with one per format: `overlay`, `pause`, `interstitial`.
+
+Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. Every load
+is one request for that placement, with the options of its format; one ad per placement at a time. Loads started
+while the SDK is still initialising wait for it; nothing is requested before `/init` has succeeded.
 
 ```swift
+let overlay = ads.overlay("overlay")
+let pause = ads.pause("pause")
+let midroll = ads.interstitial("interstitial")
+
 // A strip across the player while the content plays.
-ads.overlay.load(OverlayOptions(
+overlay.load(OverlayOptions(
     positions: [.bottom]             // where you can render it; default: top and bottom
 ))
 
 // A card, or the full player, while the content is paused.
-ads.pause.load(PauseOptions(
+pause.load(PauseOptions(
     positions: [.top, .fullscreen]   // what you can render; default: top and bottom
 ))
 
 // A full-screen video at a moment you pick.
-ads.interstitial.load(InterstitialOptions(
+midroll.load(InterstitialOptions(
     timing: .preroll,                // where you will show it; default: .midroll
     maxDuration: 30_000,             // milliseconds
     muted: false,                    // start with the sound off; default: false
@@ -124,7 +132,7 @@ ads.interstitial.load(InterstitialOptions(
 ))
 ```
 
-Every option is optional: `ads.overlay.load()` asks with the defaults.
+Every option is optional: `overlay.load()` asks with the defaults.
 
 ### 5. Release them
 

@@ -71,6 +71,8 @@ struct Ad: Decodable, Sendable {
     }
 
     let id: String
+    /// The placement it was requested for.
+    let placementId: String
     let format: AdFormat
     let creative: Creative
     let trigger: Trigger
@@ -83,7 +85,7 @@ struct Ad: Decodable, Sendable {
     let details: Details
 
     private enum CodingKeys: String, CodingKey {
-        case id, format, creative, trigger, price, expires, rendering, tracking, vastUrl
+        case id, placementId, format, creative, trigger, price, expires, rendering, tracking, vastUrl
         case position, size, duration, skipOffset, reward
     }
 
@@ -98,6 +100,7 @@ struct Ad: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        placementId = try container.decode(String.self, forKey: .placementId)
         format = try container.decode(AdFormat.self, forKey: .format)
         creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)

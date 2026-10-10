@@ -19,10 +19,11 @@ struct AdsRequest: Encodable, Sendable {
     let player: PlayerSnapshot
     let video: Video
     let format: AdFormat
+    let placementId: String
     let options: FormatOptions?
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, idfv, regulatory, sdk, app, device, player, video, format, options
+        case requestId, publisherToken, installId, user, variantId, idfv, regulatory, sdk, app, device, player, video, format, placementId, options
     }
 
     @MainActor
@@ -42,36 +43,28 @@ struct AdsRequest: Encodable, Sendable {
             player: player.snapshot,
             video: video,
             format: format.format,
+            placementId: format.placementId,
             options: format.options
         )
     }
 }
 
-/// Which format to ask for, with its options.
-enum FormatRequest: Sendable, Equatable {
-    case overlay(OverlayOptions?)
-    case pause(PauseOptions?)
-    case interstitial(InterstitialOptions?)
+/// Which placement to ask for, with the options of its format.
+struct FormatRequest: Sendable, Equatable {
+    let placementId: String
+    let options: FormatOptions
 
     var format: AdFormat {
-        switch self {
+        switch options {
         case .overlay: return .overlay
         case .pause: return .pause
         case .interstitial: return .interstitial
         }
     }
-
-    var options: FormatOptions? {
-        switch self {
-        case .overlay(let options): return options.map(FormatOptions.overlay)
-        case .pause(let options): return options.map(FormatOptions.pause)
-        case .interstitial(let options): return options.map(FormatOptions.interstitial)
-        }
-    }
 }
 
 /// The `options` object, encoded as whichever format's options it holds.
-enum FormatOptions: Encodable, Sendable {
+enum FormatOptions: Encodable, Sendable, Equatable {
     case overlay(OverlayOptions)
     case pause(PauseOptions)
     case interstitial(InterstitialOptions)
