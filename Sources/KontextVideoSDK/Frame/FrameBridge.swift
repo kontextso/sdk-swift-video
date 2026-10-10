@@ -89,7 +89,7 @@ final class FrameBridge: NSObject {
         webView.allowsBackForwardNavigationGestures = false
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        touchRecognizer.onTouch = { [weak self] in self?.lastTouchAt = ProcessInfo.processInfo.systemUptime }
+        touchRecognizer.onTouch = { [weak self] in self?.noteTouch() }
         webView.addGestureRecognizer(touchRecognizer)
         #if DEBUG
         if #available(iOS 16.4, *) {
@@ -300,6 +300,11 @@ final class FrameBridge: NSObject {
         default:
             Logger.debug("frame \(adId.prefix(8)): unknown message \(type) dropped")
         }
+    }
+
+    /// The viewer touched the WebView; a URL may be opened for `touchWindow` seconds.
+    func noteTouch() {
+        lastTouchAt = ProcessInfo.processInfo.systemUptime
     }
 
     private var wasTouchedRecently: Bool {
