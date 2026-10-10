@@ -63,6 +63,9 @@ public final class VideoAd {
         case creativeFailed(code: Int)
         /// `show` found the player's view below 50 % of the ad's size.
         case containerTooSmall
+        /// The `KontextVideoPlayer` object was deallocated. Terminal for the `VideoAds`: create a new one
+        /// with the new player.
+        case playerUnavailable
     }
 
     public let id: String
@@ -189,7 +192,10 @@ public final class VideoAd {
             throw VideoAdError.cannotPresent
         }
         try checkShowable()
-        guard let player = owner?.player else { throw VideoAdError.playerUnavailable }
+        guard let player = owner?.player else {
+            owner?.playerIsGone()
+            throw VideoAdError.invalidated(.playerUnavailable)
+        }
         let container = player.view
         let host = UIView(frame: try frame(in: container.bounds))
         host.autoresizingMask = position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, position == .top ? .flexibleBottomMargin : .flexibleTopMargin]

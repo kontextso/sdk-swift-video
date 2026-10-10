@@ -46,6 +46,8 @@ public final class VideoAds {
     /// content time 0 with the player's current size, which is what makes loading the next episode's ads
     /// while this one plays correct: the player's playhead belongs to the current episode. After it,
     /// requests and `[CONTENTPLAYHEAD]` use the live playhead.
+    /// A no-op while this object is active; after another `VideoAds` on the same player displaced it,
+    /// calling it again makes this one active and the other one a prefetcher again.
     public func start() {
         guard !isDestroyed, !isStarted else { return }
         if let player {
@@ -98,6 +100,18 @@ public final class VideoAds {
         current.values.compactMap(\.value)
     }
 
+    /// The player was deallocated: terminal for this object. Every loaded ad is invalidated; the warning
+    /// is logged once.
+    func playerIsGone() {
+        if !playerGoneLogged {
+            playerGoneLogged = true
+            Logger.error("\(content.id): the KontextVideoPlayer was deallocated; create a new VideoAds with the new player")
+        }
+        liveAds.forEach { $0.invalidate(.playerUnavailable) }
+    }
+
+    private var playerGoneLogged = false
+
     func adDidBeginShowing(_ ad: VideoAd) {
         showing[ad.placementId] = ad
     }
@@ -132,7 +146,7 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
         guard let player else {
-            Logger.warning("\(id) for \(content.id): not requested, the player was deallocated")
+            playerIsGone()
             throw VideoAdError.playerUnavailable
         }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,

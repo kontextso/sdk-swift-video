@@ -21,8 +21,9 @@ public enum VideoAdError: Error, Sendable {
     case initializationFailed
     /// The `VideoAds` was destroyed. It is terminal: create a new one for the next content.
     case destroyed
-    /// The `KontextVideoPlayer` object was deallocated; the request needs its view and playhead. Not
-    /// terminal: the ad, when there is one, stays ready.
+    /// The `KontextVideoPlayer` object was deallocated. Terminal for the `VideoAds` (the SDK holds the
+    /// player weakly and cannot re-attach one): its loaded ads are invalidated with the same reason, and
+    /// `show` on one throws `invalidated(.playerUnavailable)`. Create a new `VideoAds` with the new player.
     case playerUnavailable
     /// The server switched the SDK off for this app launch (`/init` or an ads response said so).
     case disabled(reason: String)
