@@ -36,10 +36,10 @@ struct ExampleApp: App {
             series: Series(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
         let player = Player(width: 393, height: 852, fullscreen: true)
-        status.ads = KontextVideo.shared.createVideoAds(for: video, player: player)
-        status.ads?.overlay("overlay").load(OverlayOptions(positions: [.bottom]))
-        status.ads?.pause("pause").load(PauseOptions(positions: [.top]))
-        status.ads?.interstitial("interstitial").load(InterstitialOptions(timing: .preroll))
+        status.ads = VideoAds(video: video, player: player)
+        status.ads?.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom]))
+        status.ads?.pausePlacement("pause").load(PauseOptions(positions: [.top]))
+        status.ads?.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .preroll))
     }
 
     var body: some Scene {

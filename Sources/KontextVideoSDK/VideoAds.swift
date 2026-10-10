@@ -1,7 +1,7 @@
 import Foundation
 
-/// The ads of one video. Created with `KontextVideo.shared.createVideoAds(for:player:)`; any number
-/// can be alive at once, for example the next episode's while the current one plays.
+/// The ads of one video. Create it as early as you like, for example the next episode's while the
+/// current one plays; any number can be alive at once. Call `destroy()` when the viewer leaves the video.
 @MainActor
 public final class VideoAds {
     /// An ad the server returned, kept until it is shown, expires or is discarded.
@@ -31,24 +31,27 @@ public final class VideoAds {
     private(set) var nextRequestAt: [String: Int] = [:]
     private var loading: [String: Task<Void, Never>] = [:]
 
-    init(video: Video, player: Player) {
+    /// `video` describes the content, `player` the area the ads are shown in. Needs `initialize(with:)`
+    /// to have been called; `/init` itself may still be in flight, loads wait for it.
+    public init(video: Video, player: Player) {
         self.video = video
         self.player = player
+        KontextVideo.shared.register(self)
         Logger.debug("VideoAds created for video \(video.id)")
     }
 
     /// The overlay placement with this id, as created in the Kontext dashboard. Get it once and keep it.
-    public func overlay(_ id: String) -> OverlayPlacement {
+    public func overlayPlacement(_ id: String) -> OverlayPlacement {
         placement(id) { OverlayPlacement(id: id, ads: self) }
     }
 
     /// The pause placement with this id, as created in the Kontext dashboard. Get it once and keep it.
-    public func pause(_ id: String) -> PausePlacement {
+    public func pausePlacement(_ id: String) -> PausePlacement {
         placement(id) { PausePlacement(id: id, ads: self) }
     }
 
     /// The interstitial placement with this id, as created in the Kontext dashboard. Get it once and keep it.
-    public func interstitial(_ id: String) -> InterstitialPlacement {
+    public func interstitialPlacement(_ id: String) -> InterstitialPlacement {
         placement(id) { InterstitialPlacement(id: id, ads: self) }
     }
 

@@ -84,14 +84,12 @@ public final class KontextVideo {
         return state
     }
 
-    /// The ads for one video. Create it as early as you like, for example for the next episode while
-    /// the current one plays, and call `destroy()` on it when the viewer leaves the video.
-    public func createVideoAds(for video: Video, player: Player) -> VideoAds {
-        requireInitialized("createVideoAds(for:player:)")
-        let ads = VideoAds(video: video, player: player)
+    /// Every `VideoAds` registers itself here from its initializer, so the rules that touch all of them
+    /// (a targeting change discards every unshown ad) can reach it.
+    func register(_ ads: VideoAds) {
+        requireInitialized("VideoAds(video:player:)")
         liveVideoAds.append(WeakVideoAds(ads))
         liveVideoAds.removeAll { $0.value == nil }
-        return ads
     }
 
     /// Every `VideoAds` still alive, for the rules that touch all of them.

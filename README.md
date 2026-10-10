@@ -84,8 +84,8 @@ One `VideoAds` per video. Create it as early as you like, for example for the ne
 plays. `id` is your own id of the video, in any scheme; everything else is optional context that helps targeting.
 
 ```swift
-let ads = KontextVideo.shared.createVideoAds(
-    for: Video(
+let ads = VideoAds(
+    video: Video(
         id: "100001-6",
         language: "en",
         title: "Episode 6",
@@ -109,9 +109,9 @@ is one request for that placement, with the options of its format; one ad per pl
 while the SDK is still initialising wait for it; nothing is requested before `/init` has succeeded.
 
 ```swift
-let overlay = ads.overlay("overlay")
-let pause = ads.pause("pause")
-let midroll = ads.interstitial("interstitial")
+let overlay = ads.overlayPlacement("overlay")
+let pause = ads.pausePlacement("pause")
+let midroll = ads.interstitialPlacement("interstitial")
 
 // A strip across the player while the content plays.
 overlay.load(OverlayOptions(
