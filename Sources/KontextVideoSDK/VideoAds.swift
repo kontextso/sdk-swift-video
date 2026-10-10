@@ -63,6 +63,8 @@ public final class VideoAds {
         guard isStarted else { return }
         isStarted = false
         Logger.warning("\(content.id): stopped, \(other.content.id) started on the same player; destroy the previous content's VideoAds when you move on")
+        // Nothing of this content may sit over the next one; loaded, unshown ads stay for a return.
+        showing.values.forEach { $0.end(.interrupted) }
     }
 
     /// Content time in milliseconds as a request sends it: 0 until `start()`.

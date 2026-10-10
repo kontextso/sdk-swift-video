@@ -306,7 +306,7 @@ public final class VideoAd {
             }
         }
         if format != .interstitial {
-            // TODO(step 4): fire `overlayViewDuration`, except for `.destroyed`.
+            // TODO(step 4): fire `overlayViewDuration`: the ad was on screen, whatever ended it.
             Logger.debug("ad \(id.prefix(8)): overlayViewDuration")
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
