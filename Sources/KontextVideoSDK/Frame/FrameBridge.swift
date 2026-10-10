@@ -98,6 +98,7 @@ final class FrameBridge: NSObject {
     /// Loads the page. `ad.loaded` must arrive within `loadTimeout`.
     func load() {
         Logger.debug("frame \(adId.prefix(8)): loading \(url)")
+        parkOffscreen()
         webView.load(URLRequest(url: url))
         loadTimeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.loadTimeout * 1_000_000_000))
@@ -105,6 +106,35 @@ final class FrameBridge: NSObject {
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
             fail(.loadFailed(code: loadErrorCode))
         }
+    }
+
+    /// WebKit loads a video's data only for a WebView that is in a window, so while the page loads the
+    /// WebView sits in the key window, invisible and inert, at the size the ad will have. Removed on show
+    /// (the ad's own view takes it) and on end.
+    private func parkOffscreen() {
+        guard webView.window == nil, let window = Self.keyWindow else { return }
+        webView.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: window.bounds.height)
+        webView.alpha = 0
+        webView.isUserInteractionEnabled = false
+        window.insertSubview(webView, at: 0)
+        isParked = true
+    }
+
+    private var isParked = false
+
+    private func unpark() {
+        guard isParked else { return }
+        isParked = false
+        webView.removeFromSuperview()
+        webView.alpha = 1
+        webView.isUserInteractionEnabled = true
+    }
+
+    private static var keyWindow: UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
     }
 
     // MARK: SDK → page
@@ -229,6 +259,7 @@ final class FrameBridge: NSObject {
         guard state != .ended else { return }
         state = .ended
         loadTimeoutTask?.cancel()
+        unpark()
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "kontext")
         webView.navigationDelegate = nil

@@ -69,7 +69,7 @@ struct ExampleApp: App {
         do {
             let ad = try await work()
             status.loadedAds.append(ad)
-            status.loads.append("\(label): \(ad.format) \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm, expires \(ad.expirationDate.formatted(date: .omitted, time: .standard))")
+            status.loads.append("\(label): \(ad.format) \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm, ready: \(ad.isReady)")
         } catch {
             status.loads.append("\(label): \(error)")
         }

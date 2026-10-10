@@ -131,10 +131,20 @@ public final class VideoAds {
 
         switch response {
         case .ad(let ad, let next):
-            let videoAd = VideoAd(ad: ad)
-            current[id] = WeakAd(videoAd)
             nextRequestAt[id] = next
             Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
+            // The page starts loading now; `load` returns only when it reported `ad.loaded`.
+            let videoAd = VideoAd(ad: ad)
+            current[id] = WeakAd(videoAd)
+            let started = ProcessInfo.processInfo.systemUptime
+            do {
+                try await videoAd.awaitLoaded()
+            } catch {
+                current[id] = nil
+                throw error
+            }
+            guard !isDestroyed else { throw VideoAdError.notReady }
+            Logger.info("\(id) for \(content.id): ad \(ad.id.prefix(8)) ready in \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) ms")
             return videoAd
         case .noFill(let reason, _, let next):
             nextRequestAt[id] = next

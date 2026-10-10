@@ -57,6 +57,9 @@ public final class VideoAd {
         case targetingChanged
         /// The `VideoAds` was destroyed.
         case destroyed
+        /// The creative died while the ad waited to be shown (for example the web content process was
+        /// terminated). `code` is the VAST error code the SDK fired.
+        case creativeFailed(code: Int)
     }
 
     public let id: String
@@ -79,11 +82,11 @@ public final class VideoAd {
     public let reward: Reward?
     public let trigger: Trigger
 
-    /// Whether `show` can be called: loaded, not yet shown, not invalidated. A hint for "show or load"
-    /// decisions, not the authority: the box is measured only at `show`, and `show` throws when it cannot
-    /// begin. TODO(step 2): `true` once the creative reported `ad.loaded`.
+    /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
+    /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
+    /// `show` throws when it cannot begin. TODO(step 3): `false` once shown.
     public var isReady: Bool {
-        false
+        isLoaded && invalidationReason == nil && !isExpired
     }
 
     /// Why the ad was invalidated, once it was.
@@ -93,6 +96,13 @@ public final class VideoAd {
     let ad: AdPayload
     /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here.
     let receivedAt: TimeInterval
+    /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
+    /// once, so `load` can return a ready ad.
+    let bridge: FrameBridge
+    /// The page reported `ad.loaded`.
+    private(set) var isLoaded = false
+    /// `load` waiting for the page.
+    private var loadContinuation: CheckedContinuation<Void, Error>?
 
     init(ad: AdPayload) {
         let now = ProcessInfo.processInfo.systemUptime
@@ -132,6 +142,65 @@ public final class VideoAd {
             self.skipOffset = skipOffset.map { TimeInterval($0) / 1000 }
             self.reward = reward.map { Reward(label: $0.label, amount: $0.amount) }
         }
+        switch ad.rendering {
+        case .frame(let url):
+            bridge = FrameBridge(adId: ad.id, url: url, isVideo: ad.creative == .video)
+        }
+        bridge.onEvent = { [weak self] event in self?.handle(event) }
+        bridge.load()
+    }
+
+    /// Resolves when the page reported `ad.loaded`; throws `creativeFailed` when it failed or timed out
+    /// first, `CancellationError` when the awaiting task was cancelled (the page is stopped then).
+    func awaitLoaded() async throws {
+        if isLoaded { return }
+        if let reason = invalidationReason, case .creativeFailed(let code) = reason { throw VideoAdError.creativeFailed(code: code) }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                // The handler may have run before the continuation existed (a task cancelled early).
+                if loadCancelled || Task.isCancelled {
+                    cancelLoad()
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    loadContinuation = continuation
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancelLoad() }
+        }
+    }
+
+    private var loadCancelled = false
+
+    private func cancelLoad() {
+        guard !loadCancelled, !isLoaded else { return }
+        loadCancelled = true
+        bridge.hide()
+        Logger.debug("ad \(id.prefix(8)): load cancelled")
+        if let continuation = loadContinuation {
+            loadContinuation = nil
+            continuation.resume(throwing: CancellationError())
+        }
+    }
+
+    /// What the page reports. TODO(step 3): everything after `loaded`.
+    private func handle(_ event: FrameEvent) {
+        switch event {
+        case .loaded:
+            isLoaded = true
+            loadContinuation?.resume()
+            loadContinuation = nil
+        case .loadFailed(let code), .error(let code):
+            if let continuation = loadContinuation {
+                loadContinuation = nil
+                Logger.warning("ad \(id.prefix(8)): creative failed to load, VAST error \(code)")
+                continuation.resume(throwing: VideoAdError.creativeFailed(code: code))
+            } else {
+                invalidate(.creativeFailed(code: code))
+            }
+        default:
+            break
+        }
     }
 
     /// On the monotonic clock, as the SDK decides it.
@@ -148,6 +217,7 @@ public final class VideoAd {
     func invalidate(_ reason: InvalidationReason) {
         guard invalidationReason == nil else { return }
         invalidationReason = reason
+        bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
     }
 }

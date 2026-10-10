@@ -31,6 +31,10 @@ public enum VideoAdError: Error, Sendable {
     case noFill(reason: String)
     /// The request failed: no network, a timeout, a server error, an unexpected answer.
     case request(Error)
+    /// The server had an ad, but its creative did not load: the frame page failed or did not report
+    /// `ad.loaded` within 10 s. `code` is the VAST error code the SDK fired (400 for a video, 500 otherwise,
+    /// or the page's own).
+    case creativeFailed(code: Int)
 }
 
 extension VideoAdError: CustomStringConvertible, LocalizedError {
@@ -57,6 +61,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "no fill (\(reason))"
         case .request(let error):
             return "request failed: \(error)"
+        case .creativeFailed(let code):
+            return "the creative failed to load (VAST error \(code))"
         }
     }
 
