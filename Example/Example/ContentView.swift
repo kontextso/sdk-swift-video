@@ -1,31 +1,67 @@
 import KontextVideoSDK
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
-    @ObservedObject var status: SDKStatus
+    @ObservedObject var demo: Demo
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            row("SDK version", KontextVideo.version)
-            row("Install id", KontextVideo.installId)
-            row("Publisher token", KontextVideo.shared.configuration?.publisherToken ?? "not initialised")
-            row("State", status.state)
-            ForEach(Array(status.loads.enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(.system(.footnote, design: .monospaced))
+            HStack {
+                row("SDK", KontextVideo.version)
+                Spacer()
+                row("State", demo.state)
+            }
+
+            // The "player": a 16:9 area the content would play in; ads are placed inside it.
+            PlayerView(view: demo.player.view)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .background(Color.black)
+
+            HStack {
+                Button("Load pause") { demo.loadPauseAd() }
+                Button("Pause") { demo.viewerPaused() }
+                Button("Resume") { demo.viewerResumed() }
+            }
+            HStack {
+                Button("Load overlay") { demo.loadOverlay() }
+                Button("Show") { demo.showOverlay() }
+                Button("Dismiss") { demo.dismissOverlay() }
+                Spacer()
+                Button("Destroy") { demo.destroy() }
+            }
+            .buttonStyle(.bordered)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(demo.log.enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.system(.caption, design: .monospaced))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .buttonStyle(.bordered)
         .padding()
     }
 
     private func row(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Text(value)
-                .font(.system(.footnote, design: .monospaced))
+            Text(label).font(.caption).foregroundColor(.secondary)
+            Text(value).font(.system(.footnote, design: .monospaced))
         }
     }
+}
+
+/// Hosts the demo player's UIView in SwiftUI; the SDK adds ad views into it.
+struct PlayerView: UIViewRepresentable {
+    let view: UIView
+
+    func makeUIView(context: Context) -> UIView {
+        view.backgroundColor = .black
+        view.clipsToBounds = true
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
 }

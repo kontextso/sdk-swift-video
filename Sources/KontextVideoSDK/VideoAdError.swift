@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Why `load` or `show` could not do its job. Thrown, never delivered through the delegate: a thrown error
 /// means nothing happened on screen and nothing was fired.
@@ -41,6 +42,17 @@ public enum VideoAdError: Error, Sendable {
     /// `ad.loaded` within 10 s. `code` is the VAST error code the SDK fired (400 for a video, 500 otherwise,
     /// or the page's own).
     case creativeFailed(code: Int)
+
+    // `show`
+
+    /// An ad is shown at most once.
+    case alreadyShown
+    /// The ad was lost before `show`; the delegate's `didInvalidate` had the same reason.
+    case invalidated(VideoAd.InvalidationReason)
+    /// The player's view is below 50 % of the ad's size. The ad is discarded; load again with the real size.
+    case containerTooSmall(minimum: CGSize)
+    /// The interstitial's view controller is already presenting, or not on screen. The ad stays ready.
+    case cannotPresent
 }
 
 extension VideoAdError: CustomStringConvertible, LocalizedError {
@@ -73,6 +85,14 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "request failed: \(error)"
         case .creativeFailed(let code):
             return "the creative failed to load (VAST error \(code))"
+        case .alreadyShown:
+            return "the ad was already shown"
+        case .invalidated(let reason):
+            return "the ad was invalidated (\(reason))"
+        case .containerTooSmall(let minimum):
+            return "the player's view is too small for the ad; at least \(Int(minimum.width))×\(Int(minimum.height)) points are needed"
+        case .cannotPresent:
+            return "the view controller cannot present now"
         }
     }
 

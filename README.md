@@ -158,9 +158,37 @@ do {
 }
 ```
 
-Showing the ad (`show`, `dismiss`, the delegate) is the next step and not in the SDK yet.
+### 5. Show it, listen, dismiss
 
-### 5. Release them
+Overlay and pause ads are shown with `show()`, inside your player's `view`; `dismiss()` ends them when your content
+resumes. `show` throws when presentation cannot begin (nothing fired): `.alreadyShown`, `.invalidated(reason)`,
+`.containerTooSmall` (the ad is discarded) or `.playerUnavailable`. Set a `VideoAdDelegate` on the ad for everything
+after: `didShow`, `didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every
+way an ad ends, including your own `dismiss()` and `destroy()`. Resume your content in `didEnd`.
+
+```swift
+let ad = try await pause.load()
+ad.delegate = self
+
+func viewerPaused() {
+    if let ad = pauseAd, ad.isReady { try? ad.show() } else { loadPauseAd() }   // show if ready, else load
+}
+
+func viewerResumed() {
+    pauseAd?.dismiss()                                                        // didEnd(.dismissed) follows
+}
+
+extension PlayerController: VideoAdDelegate {
+    func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
+        contentPlayer.play()
+    }
+}
+```
+
+Interstitials (`show(from:)`) are the next step and not in the SDK yet.
+
+
+### 6. Release them
 
 When the viewer leaves the video. Nothing destroys a `VideoAds` for you, so destroy the previous episode's when
 you move on.

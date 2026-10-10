@@ -1,33 +1,28 @@
 import KontextVideoSDK
 import SwiftUI
-
-/// What the SDK reported back, for the screen to show.
-final class SDKStatus: ObservableObject {
-    @Published var state = "initializing"
-    /// The ads of the episode the example "plays": created right after initialize, so the loads
-    /// wait for /init.
-    var ads: VideoAds?
-    /// One line per load, as it finished.
-    @Published var loads: [String] = []
-    /// The ads the app holds; dropping one frees its placement.
-    var loadedAds: [VideoAd] = []
-}
+import UIKit
 
 /// Stands in for the app's player: the SDK reads the view the content plays in and the playhead.
 /// A real app conforms its player controller (or a wrapper around AVPlayer).
 @MainActor
 final class DemoPlayer: KontextVideoPlayer {
-    let view = UIView(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+    let view = UIView()
     var playhead: TimeInterval = 0
 }
 
-@main
-struct ExampleApp: App {
-    private let status = SDKStatus()
-    private let player = DemoPlayer()
+/// The app side of the example: owns the player, the `VideoAds`, the loaded ads, and is the ads' delegate.
+/// What it sees goes into `log`, which the screen shows.
+@MainActor
+final class Demo: ObservableObject {
+    @Published var state = "initializing"
+    @Published var log: [String] = []
+
+    let player = DemoPlayer()
+    private(set) var ads: VideoAds?
+    private(set) var pauseAd: VideoAd?
+    private(set) var overlayAd: VideoAd?
 
     init() {
-        let status = self.status
         // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there).
         // On a physical device replace localhost with the Mac's LAN address.
         let configuration = KontextVideo.Configuration(
@@ -35,8 +30,8 @@ struct ExampleApp: App {
             logLevel: .debug,
             adServerURL: URL(string: "http://localhost:5175")!
         )
-        KontextVideo.shared.initialize(with: configuration) { state in
-            status.state = "\(state)"
+        KontextVideo.shared.initialize(with: configuration) { [weak self] state in
+            self?.state = "\(state)"
         }
 
         let content = KontextVideo.Content(
@@ -50,34 +45,137 @@ struct ExampleApp: App {
         )
         let ads = VideoAds(content: content, player: player)
         ads.start()                  // the episode is "playing": requests carry the playhead
-        status.ads = ads
+        self.ads = ads
 
-        // Each load returns the ad or throws; the app owns the ad it gets.
+        if CommandLine.arguments.contains("--demo") {
+            runScriptedDemo()
+        }
+    }
+
+    /// `--demo`: the pause and overlay flows without touching the screen, for automated runs.
+    private func runScriptedDemo() {
         Task {
-            let load = { label, work in await Self.load(label, into: status, work) }
-            await load("overlay") { try await ads.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom])) }
-            await load("pause") { try await ads.pausePlacement("pause").load(PauseOptions(positions: [.top])) }
-            await load("interstitial") { try await ads.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .preroll)) }
-            // Two ways a load fails that are the app's fault, shown on purpose:
-            await load("pause again") { try await ads.pausePlacement("pause").load() }          // .placementBusy
-            await load("nope") { try await ads.overlayPlacement("nope").load() }                 // .invalidPlacement
+            await loadPauseAdAndWait()
+            viewerPaused()
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            viewerResumed()
+            await loadOverlayAndWait()
+            showOverlay()
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            dismissOverlay()
         }
     }
 
-    /// Runs one load and records what came back.
-    private static func load(_ label: String, into status: SDKStatus, _ work: () async throws -> VideoAd) async {
+    private func loadPauseAdAndWait() async {
         do {
-            let ad = try await work()
-            status.loadedAds.append(ad)
-            status.loads.append("\(label): \(ad.format) \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm, ready: \(ad.isReady)")
+            let ad = try await ads!.pausePlacement("pause").load(PauseOptions(positions: [.top, .bottom]))
+            ad.delegate = self
+            pauseAd = ad
+            note("pause ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
         } catch {
-            status.loads.append("\(label): \(error)")
+            note("pause load: \(error)")
         }
     }
+
+    private func loadOverlayAndWait() async {
+        do {
+            let ad = try await ads!.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom]))
+            ad.delegate = self
+            overlayAd = ad
+            note("overlay \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
+        } catch {
+            note("overlay load: \(error)")
+        }
+    }
+
+    func loadPauseAd() {
+        Task { await loadPauseAdAndWait() }
+    }
+
+    func loadOverlay() {
+        Task { await loadOverlayAndWait() }
+    }
+
+    /// The pause idiom: show if ready, else load for next time.
+    func viewerPaused() {
+        guard let ad = pauseAd, ad.isReady else {
+            note("no pause ad ready, loading one")
+            loadPauseAd()
+            return
+        }
+        do {
+            try ad.show()
+        } catch {
+            note("pause show: \(error)")
+        }
+    }
+
+    func viewerResumed() {
+        pauseAd?.dismiss()
+    }
+
+    func showOverlay() {
+        guard let ad = overlayAd else { return }
+        do {
+            try ad.show()
+        } catch {
+            note("overlay show: \(error)")
+        }
+    }
+
+    func dismissOverlay() {
+        overlayAd?.dismiss()
+    }
+
+    func destroy() {
+        ads?.destroy()
+        note("destroyed")
+    }
+
+    private func note(_ line: String) {
+        log.append(line)
+    }
+}
+
+extension Demo: VideoAdDelegate {
+    func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
+        note("\(ad.format) \(ad.id.prefix(8)) invalidated: \(reason)")
+    }
+
+    func videoAdDidShow(_ ad: VideoAd) {
+        note("\(ad.format) \(ad.id.prefix(8)) shown")
+    }
+
+    func videoAdDidRecordImpression(_ ad: VideoAd) {
+        note("\(ad.format) \(ad.id.prefix(8)) impression")
+    }
+
+    func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {
+        note("\(ad.format) \(ad.id.prefix(8)) click (\(click.area)) \(click.url.host ?? "")")
+    }
+
+    func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {
+        note("\(ad.format) \(ad.id.prefix(8)) reward \(reward.amount) \(reward.label)")
+    }
+
+    func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {
+        note("\(ad.format) \(ad.id.prefix(8)) failed: \(error)")
+    }
+
+    func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
+        note("\(ad.format) \(ad.id.prefix(8)) ended: \(reason)")   // the content would resume here
+        if ad === pauseAd { pauseAd = nil }
+        if ad === overlayAd { overlayAd = nil }
+    }
+}
+
+@main
+struct ExampleApp: App {
+    @StateObject private var demo = Demo()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(status: status)
+            ContentView(demo: demo)
         }
     }
 }

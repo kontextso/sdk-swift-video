@@ -130,6 +130,12 @@ final class FrameBridge: NSObject {
         webView.isUserInteractionEnabled = true
     }
 
+    /// The WebView, visible and interactive, for the caller to place where the ad goes.
+    func takeWebView() -> WKWebView {
+        unpark()
+        return webView
+    }
+
     private static var keyWindow: UIWindow? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

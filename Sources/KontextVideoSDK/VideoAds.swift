@@ -26,6 +26,8 @@ public final class VideoAds {
 
     /// One ad per placement at a time: the ad each placement handed out last, while the app keeps it.
     private var current: [String: WeakAd] = [:]
+    /// Ads on screen, retained from `show` until `didEnd` so dropping the app's reference cannot abort them.
+    private var showing: [String: VideoAd] = [:]
     /// Timed mode: content time (ms) before which a placement must not be requested again.
     private(set) var nextRequestAt: [String: Int] = [:]
     /// Placements with a request in flight.
@@ -96,6 +98,14 @@ public final class VideoAds {
         current.values.compactMap(\.value)
     }
 
+    func adDidBeginShowing(_ ad: VideoAd) {
+        showing[ad.placementId] = ad
+    }
+
+    func adDidEnd(_ ad: VideoAd) {
+        if showing[ad.placementId] === ad { showing[ad.placementId] = nil }
+    }
+
     /// One request for one placement, run on the caller's task so cancelling that task cancels the request.
     /// Returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready.
     /// Waits for `/init` when that is still in flight.
@@ -147,6 +157,7 @@ public final class VideoAds {
             Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
             // The page starts loading now; `load` returns only when it reported `ad.loaded`.
             let videoAd = VideoAd(ad: ad)
+            videoAd.owner = self
             current[id] = WeakAd(videoAd)
             let started = ProcessInfo.processInfo.systemUptime
             do {
@@ -224,6 +235,8 @@ public final class VideoAds {
         guard !isDestroyed else { return }
         isDestroyed = true
         liveAds.forEach { $0.invalidate(.destroyed) }
+        showing.values.forEach { $0.invalidate(.destroyed) }
+        showing.removeAll()
         current.removeAll()
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
