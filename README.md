@@ -64,27 +64,28 @@ KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read 
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
-### 2. Initialize the player
+### 2. The player
 
-`KontextVideo.Player` represents your video player: the area the ads will be shown in, in points,
-whether it is full screen, and where the content is. Keep it current: set `playhead` as the content plays, and
-`width`, `height` and `fullscreen` when the layout changes, for example on rotation. For a prefetch before the
-player exists, start with the size it will most likely have.
-
-> **Temporary.** `Player` will become a handle to your actual player, from which the SDK reads these values itself.
+`KontextVideoPlayer` is a protocol your own player object conforms to. It gives the SDK two things: the view the
+content plays in, where overlay and pause ads go and whose size and full-screen state the SDK reads itself, and the
+content playhead in seconds. The same model as Google IMA (`IMAAdDisplayContainer` + `IMAContentPlayhead`).
 
 ```swift
-let player = KontextVideo.Player(width: 393, height: 852, fullscreen: true)
-
-player.playhead = 12_000       // milliseconds in content time; update it as the content plays
-player.fullscreen = false      // and the box when the layout changes
+extension MyPlayerController: KontextVideoPlayer {
+    var view: UIView { playerView }                               // the content's view; ads are placed in it
+    var playhead: TimeInterval { avPlayer.currentTime().seconds } // content time, seconds
+}
 ```
 
 ### 3. Create the ads for a video
 
 One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
 plays. `KontextVideo.Content` describes the video ("content" is the ad-industry word for it): `id` is your own id, in
-any scheme; everything else is optional context that helps targeting.
+any scheme; everything else is optional context that helps targeting. Times are seconds. Leave `mediaRating` unset
+when you do not know it; the SDK never guesses.
+
+Call `ads.start()` when the episode starts playing. Before that, requests are prefetches at content time 0, so you can
+load the next episode's ads while this one plays; after it, requests carry the live playhead.
 
 ```swift
 let ads = VideoAds(
@@ -92,13 +93,16 @@ let ads = VideoAds(
         id: "100001-6",
         language: "en",
         title: "Episode 6",
-        duration: 92_000,            // milliseconds
+        duration: 92,                // seconds
         episodeNumber: 6,
         genre: "romance",
+        mediaRating: .safe,          // optional; unset = unknown
         series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
     ),
-    player: player
+    player: self                     // your KontextVideoPlayer
 )
+
+ads.start()                          // when the episode starts playing
 ```
 
 ### 4. Placements and loading the ads
@@ -129,7 +133,7 @@ pause.load(PauseOptions(
 // A full-screen video at a moment you pick.
 midroll.load(InterstitialOptions(
     timing: .preroll,                // where you will show it; default: .midroll
-    maxDuration: 30_000,             // milliseconds
+    maxDuration: 30,                 // seconds
     muted: false,                    // start with the sound off; default: false
     rewarded: false                  // non-skippable, with a reward granted when the video completes
 ))

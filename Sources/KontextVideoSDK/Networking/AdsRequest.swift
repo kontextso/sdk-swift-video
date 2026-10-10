@@ -16,7 +16,7 @@ struct AdsRequest: Encodable, Sendable {
     let sdk: SDKInfo
     let app: AppInfo
     let device: AdsDevice
-    let player: KontextVideo.Player.Snapshot
+    let player: PlayerSnapshot
     let video: KontextVideo.Content
     let format: AdFormat
     let placementId: String
@@ -27,7 +27,7 @@ struct AdsRequest: Encodable, Sendable {
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, content: KontextVideo.Content, player: KontextVideo.Player, format: FormatRequest) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, content: KontextVideo.Content, player: PlayerSnapshot, format: FormatRequest) -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -40,7 +40,7 @@ struct AdsRequest: Encodable, Sendable {
             sdk: .current,
             app: .current(),
             device: .current(),
-            player: player.snapshot,
+            player: player,
             video: content,
             format: format.format,
             placementId: format.placementId,

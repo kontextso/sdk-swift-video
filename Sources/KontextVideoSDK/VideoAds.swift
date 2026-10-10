@@ -16,8 +16,10 @@ public final class VideoAds {
     }
 
     public let content: KontextVideo.Content
-    /// The player the ads are shown in; the requests describe its box and playhead.
-    public let player: KontextVideo.Player
+    /// The player the ads are shown in; held weakly, it is usually the view controller that owns this object.
+    public private(set) weak var player: (any KontextVideoPlayer)?
+    /// `true` after `start()`: this content is playing in the player and requests carry its playhead.
+    public private(set) var isStarted = false
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
@@ -33,11 +35,27 @@ public final class VideoAds {
 
     /// `content` describes the video, `player` the area the ads are shown in. Needs `initialize(with:)`
     /// to have been called; `/init` itself may still be in flight, loads wait for it.
-    public init(content: KontextVideo.Content, player: KontextVideo.Player) {
+    public init(content: KontextVideo.Content, player: any KontextVideoPlayer) {
         self.content = content
         self.player = player
         KontextVideo.shared.register(self)
         Logger.debug("VideoAds created for video \(content.id)")
+    }
+
+    /// Call it when this content starts playing in the player. Before it, every request is a prefetch at
+    /// content time 0 with the player's current size, which is what makes loading the next episode's ads
+    /// while this one plays correct: the player's playhead belongs to the current episode. After it,
+    /// requests and `[CONTENTPLAYHEAD]` use the live playhead.
+    public func start() {
+        guard !isDestroyed, !isStarted else { return }
+        isStarted = true
+        Logger.debug("\(content.id): started")
+    }
+
+    /// Content time in milliseconds as a request sends it: 0 until `start()`.
+    var playheadMs: Int {
+        guard isStarted, let player else { return 0 }
+        return Int((player.playhead * 1000).rounded())
     }
 
     /// The overlay placement with this id, as created in the Kontext dashboard. Get it once and keep it.
@@ -76,8 +94,8 @@ public final class VideoAds {
             Logger.debug("\(id) for \(content.id): an ad is already loaded")
             return
         }
-        if let at = nextRequestAt[id], (player.playhead ?? 0) < at {
-            Logger.debug("\(id) for \(content.id): next request at \(at) ms, playhead is \(player.playhead ?? 0)")
+        if let at = nextRequestAt[id], playheadMs < at {
+            Logger.debug("\(id) for \(content.id): next request at \(at) ms, playhead is \(playheadMs)")
             return
         }
         guard loading[id] == nil else { return }
@@ -88,7 +106,12 @@ public final class VideoAds {
                 return
             }
             guard !isDestroyed, let configuration = KontextVideo.shared.configuration else { return }
-            let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content, player: player, format: format)
+            guard let player else {
+                Logger.warning("\(id) for \(content.id): not requested, the player is gone")
+                return
+            }
+            let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,
+                                          player: .read(from: player, started: isStarted), format: format)
             Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
             handle(await send(request), placementId: id)
         }

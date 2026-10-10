@@ -9,9 +9,18 @@ final class SDKStatus: ObservableObject {
     var ads: VideoAds?
 }
 
+/// Stands in for the app's player: the SDK reads the view the content plays in and the playhead.
+/// A real app conforms its player controller (or a wrapper around AVPlayer).
+@MainActor
+final class DemoPlayer: KontextVideoPlayer {
+    let view = UIView(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+    var playhead: TimeInterval = 0
+}
+
 @main
 struct ExampleApp: App {
     private let status = SDKStatus()
+    private let player = DemoPlayer()
 
     init() {
         let status = self.status
@@ -30,13 +39,13 @@ struct ExampleApp: App {
             id: "demo-episode-1",
             language: "en",
             title: "Episode 1",
-            duration: 93_000,
+            duration: 93,                // seconds
             episodeNumber: 1,
             genre: "romance",
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
-        let player = KontextVideo.Player(width: 393, height: 852, fullscreen: true)
         status.ads = VideoAds(content: content, player: player)
+        status.ads?.start()          // the episode is "playing": requests carry the playhead
         status.ads?.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom]))
         status.ads?.pausePlacement("pause").load(PauseOptions(positions: [.top]))
         status.ads?.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .preroll))
