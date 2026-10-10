@@ -132,6 +132,10 @@ public final class VideoAd {
     private var expiryTask: Task<Void, Never>?
     /// Fires the `tracking` entries, each once.
     private let tracker: Tracker
+    /// The page owns the 3 s video-start timeout and reports it as `ad.error`; this is the backstop for a
+    /// page that is itself dead after `ad.show`.
+    private var startBackstop: Task<Void, Never>?
+    static let videoStartBackstop: TimeInterval = 5
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
 
@@ -299,13 +303,26 @@ public final class VideoAd {
         delegate?.videoAdDidShow(self)
         if ad.creative == .image {
             recordImpression()
+        } else {
+            startBackstop = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(Self.videoStartBackstop * 1_000_000_000))
+                guard let self, !Task.isCancelled, !hasEnded, !impressionRecorded else { return }
+                Logger.warning("ad \(id.prefix(8)): no video.start within \(Int(Self.videoStartBackstop)) s of ad.show")
+                handle(.error(code: 405))
+            }
         }
+        DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
         if startMeter {
             self.startMeter()
         }
     }
 
+    private var impressionRecorded = false
+
     private func recordImpression() {
+        guard !impressionRecorded else { return }
+        impressionRecorded = true
+        startBackstop?.cancel()
         tracker.fire("impression")
         Logger.info("ad \(id.prefix(8)): impression")
         delegate?.videoAdDidRecordImpression(self)
@@ -331,6 +348,7 @@ public final class VideoAd {
     func end(_ reason: EndReason) {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
+        startBackstop?.cancel()
         meter?.stop()
         meter = nil
         bridge.hide()
@@ -348,6 +366,7 @@ public final class VideoAd {
             tracker.fire("overlayViewDuration")
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
+        DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
         owner?.adDidEnd(self)
         delegate?.videoAd(self, didEnd: reason)
     }
@@ -483,6 +502,7 @@ public final class VideoAd {
         expiryTask?.cancel()
         bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
+        DebugReporter.shared.event("ad.invalidated", adId: id, state: ["reason": .string("\(reason)")])
         if let continuation = loadContinuation {
             // `load` was still waiting for the page: it throws instead of hanging.
             loadContinuation = nil
@@ -497,6 +517,7 @@ public final class VideoAd {
     /// because its `VideoAds` retains it until `didEnd`.
     deinit {
         expiryTask?.cancel()
+        startBackstop?.cancel()
         meter?.stopTimer()
     }
 }

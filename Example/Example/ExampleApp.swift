@@ -27,7 +27,7 @@ final class Demo: ObservableObject {
         // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there).
         // On a physical device replace localhost with the Mac's LAN address.
         let configuration = KontextVideo.Configuration(
-            publisherToken: "example-dev",
+            publisherToken: "example-debug",
             logLevel: .debug,
             adServerURL: URL(string: "http://localhost:5175")!
         )

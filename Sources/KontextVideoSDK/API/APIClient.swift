@@ -72,6 +72,9 @@ struct APIClient: Sendable {
             let errors = (try? JSONDecoder().decode(APIErrorResponse.self, from: data))?.errors ?? []
             throw APIError.http(status: status, errors: errors)
         }
+        if data.isEmpty, let empty = EmptyResponse() as? Response {
+            return empty
+        }
         do {
             return try JSONDecoder().decode(Response.self, from: data)
         } catch {

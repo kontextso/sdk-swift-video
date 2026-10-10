@@ -50,6 +50,8 @@ public final class VideoAds {
     /// calling it again makes this one active and the other one a prefetcher again.
     public func start() {
         guard !isDestroyed, !isStarted else { return }
+        // A video start is when a failed /init is tried again (2.2 of the spec).
+        KontextVideo.shared.retryInitIfDue()
         if let player {
             KontextVideo.shared.stopOthers(playing: player, except: self)
         }
@@ -151,9 +153,13 @@ public final class VideoAds {
             playerIsGone()
             throw VideoAdError.playerUnavailable
         }
-        let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, content: content,
+        // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
+        let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
+        guard !isDestroyed else { throw VideoAdError.destroyed }
+        let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
                                       player: .read(from: player, started: isStarted), format: format)
         Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
+        DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead ?? 0))])
 
         var response = try await send(request, format: format)
         if case .noFill(let reason, let retryAfter?, _) = response {
@@ -171,6 +177,7 @@ public final class VideoAds {
         case .ad(let ad, let next):
             nextRequestAt[id] = next
             Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
+            DebugReporter.shared.event("ads.response", adId: ad.id, state: ["placementId": .string(id), "filled": true])
             // The page starts loading now; `load` returns only when it reported `ad.loaded`.
             let videoAd = VideoAd(ad: ad)
             videoAd.owner = self
@@ -180,14 +187,18 @@ public final class VideoAds {
                 try await videoAd.awaitLoaded()
             } catch {
                 current[id] = nil
+                DebugReporter.shared.event("ad.loadFailed", adId: ad.id, level: "warning", state: ["reason": .string("\(error)")])
                 throw error
             }
             guard !isDestroyed else { throw VideoAdError.destroyed }
-            Logger.info("\(id) for \(content.id): ad \(ad.id.prefix(8)) ready in \(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)) ms")
+            let durationMs = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            Logger.info("\(id) for \(content.id): ad \(ad.id.prefix(8)) ready in \(durationMs) ms")
+            DebugReporter.shared.event("ad.loaded", adId: ad.id, state: ["durationMs": .number(Double(durationMs))])
             return videoAd
         case .noFill(let reason, _, let next):
             nextRequestAt[id] = next
             Logger.info("\(id) for \(content.id): no fill (\(reason))\(next.map { ", next request at \($0) ms" } ?? "")")
+            DebugReporter.shared.event("ads.response", state: ["placementId": .string(id), "filled": false, "reason": .string(reason)])
             throw VideoAdError.noFill(reason: reason)
         case .disabled(let reason):
             KontextVideo.shared.disable(reason: reason)

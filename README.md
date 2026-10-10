@@ -48,7 +48,8 @@ All options, with their defaults. The SDK's model types are nested in `KontextVi
 ```swift
 KontextVideo.Configuration(
     publisherToken: "yourpublisher-dev",
-    requestTrackingAuthorization: false,       // let the SDK show the ATT dialog
+    requestTrackingAuthorization: false,       // let the SDK show the ATT dialog before the first ads request
+                                               // (needs NSUserTrackingUsageDescription in your Info.plist)
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
     adServerURL: KontextVideo.Configuration.defaultAdServerURL   // override only for a staging or mock server
 )
@@ -61,6 +62,7 @@ them, and ads already loaded but not shown are discarded. `nil` clears a value.
 ```swift
 KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com", yearOfBirth: 1994)
 KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
+                                                            // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); what you set wins
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 

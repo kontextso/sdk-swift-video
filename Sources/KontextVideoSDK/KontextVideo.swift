@@ -170,6 +170,8 @@ public final class KontextVideo {
             switch try await Init.send(request, client: client) {
             case .enabled(let reportDebug):
                 self.reportDebug = reportDebug
+                DebugReporter.shared.isEnabled = reportDebug
+                DebugReporter.shared.event("init.response", state: ["enabled": true])
                 initFailedAt = nil
                 state = .enabled
                 Logger.info("Enabled")

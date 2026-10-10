@@ -11,7 +11,9 @@ struct AdsRequest: Encodable, Sendable {
     let installId: String
     let user: KontextVideo.User?
     let variantId: String?
+    let ifa: IFA?
     let idfv: String?
+    let attStatus: String
     let regulatory: KontextVideo.Regulatory?
     let sdk: SDKInfo
     let app: AppInfo
@@ -23,11 +25,11 @@ struct AdsRequest: Encodable, Sendable {
     let options: FormatOptions?
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, idfv, regulatory, sdk, app, device, player, video, format, placementId, options
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, format, placementId, options
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, content: KontextVideo.Content, player: PlayerSnapshot, format: FormatRequest) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, format: FormatRequest) -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -35,8 +37,11 @@ struct AdsRequest: Encodable, Sendable {
             installId: KontextVideo.installId,
             user: sdk.user,
             variantId: sdk.variantId,
+            ifa: tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
-            regulatory: sdk.regulatory,
+            attStatus: tracking.attStatus,
+            // What the publisher set wins per field; the rest comes from the CMP's shared storage.
+            regulatory: ConsentStorage.read(merging: sdk.regulatory),
             sdk: .current,
             app: .current(),
             device: .current(),
