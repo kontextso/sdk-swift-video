@@ -12,3 +12,4 @@ First release of the Kontext Video SDK for iOS: manual-mode v1 of the *Video Ads
 * Tracking: every VAST entry fired once by the SDK with the macros substituted; viewability (`viewable` / `notViewable` / `viewUndetermined`); the Kontext Frame Protocol v2 with the page.
 * App Tracking Transparency on request, IDFA only when authorized, consent read from the CMP's IAB keys; `/init` kill switch and retry; `/debug` reporting when the server asks.
 * Privacy manifest (`PrivacyInfo.xcprivacy`).
+* Tests: 230+ Swift Testing cases, 93 % line coverage, including whole flows through a real `WKWebView`; CI on every push.

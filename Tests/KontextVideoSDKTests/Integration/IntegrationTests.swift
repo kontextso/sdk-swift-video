@@ -98,6 +98,30 @@ struct IntegrationTests {
         ad.dismiss()
     }
 
+    @Test func aPageNavigatingAwayIsAClickOnlyAfterATouchAndNeverLeavesTheWebView() async throws {
+        let ads = await start()
+        harness.serve(Fixtures.ad(id: "img-nav"))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        let delegate = RecordingDelegate()
+        let ad = try await ads.pausePlacement("pause").load()
+        ad.delegate = delegate
+        try ad.show()
+        // A forced redirect: no touch, so the navigation is cancelled and nothing opens.
+        await inPage(ad, "window.location.href = 'https://brand.test/forced'")
+        await sleepMs(200)
+        #expect(opened.isEmpty)
+        #expect(ad.bridge.webView.url?.scheme == FramePageServer.scheme, "the page stayed")
+        // The same navigation right after a touch is a click the page could not report.
+        ad.bridge.noteTouch()
+        await inPage(ad, "window.location.href = 'https://brand.test/tap'")
+        #expect(await waitUntil { opened.count == 1 })
+        #expect(opened.first?.absoluteString == "https://brand.test/tap")
+        #expect(delegate.clicks.first?.area == "creative")
+        #expect(ad.bridge.webView.url?.scheme == FramePageServer.scheme, "still our page, the URL opened outside")
+        ad.dismiss()
+    }
+
     // MARK: Interstitial, video creative
 
     @Test func interstitialPlaysToCompletionWithTheReward() async throws {

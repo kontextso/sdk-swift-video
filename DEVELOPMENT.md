@@ -88,6 +88,40 @@ starting with `nofill`, a placement id ending in `-disabled`, and so on.
 
 ## Tests
 
+Swift Testing, run on a simulator (the SDK imports UIKit and WebKit):
+
 ```bash
 xcodebuild test -scheme KontextVideoSDK -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
+
+# One suite, or with coverage
+xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
+xcodebuild test -scheme KontextVideoSDK -destination '…' -enableCodeCoverage YES -resultBundlePath cov.xcresult
+xcrun xccov view --report --files-for-target KontextVideoSDK cov.xcresult
 ```
+
+Layout, one suite per source file plus the whole flows:
+
+```
+Tests/KontextVideoSDKTests/
+├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (wire payloads),
+│                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
+│                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
+├── Model/        encoding of what the app passes in
+├── API/          decoding, requests, the client, /init, privacy
+├── Frame/        the bridge's state machine, the tracker, the meter, the interstitial controller
+├── Core/         KontextVideo, VideoAds, VideoAd, support, the debug reporter
+└── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
+```
+
+Rules the suites follow:
+
+- Anything that touches process-wide state (the shared instance, `Environment`, the stub server) nests under
+  `SerialSuites`, which is `.serialized`; Swift Testing runs other suites in parallel.
+- `SDKHarness` resets everything before a test and installs the stub server; the seams it uses are in
+  `Support/Environment.swift`, and production never sets them.
+- Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
+
+What the package runner cannot do, and where it is covered instead: there is no `UIWindowScene`, so UIKit never
+completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The interstitial
+tests therefore assert what the SDK asked UIKit to do and drive the controller's disappearance decision directly;
+the example app's `--demo` run against the mock covers the real presentation, interruption and dismissal.
