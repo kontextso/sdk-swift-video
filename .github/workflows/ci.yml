@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the SDK
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme KontextVideoSDK \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            | tail -50
+      - name: Build the example
+        run: |
+          set -o pipefail
+          brew install xcodegen
+          cd Example && xcodegen generate
+          xcodebuild build \
+            -project Example.xcodeproj \
+            -scheme Example \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | tail -50
+
+  test:
+    name: Test
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simulators
+        run: xcrun simctl list devices available | head -40
+      - name: Run the tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme KontextVideoSDK \
+            -destination 'platform=iOS Simulator,OS=18.5,name=iPhone 16' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)"
