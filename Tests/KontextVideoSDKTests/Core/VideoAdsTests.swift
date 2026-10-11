@@ -298,7 +298,7 @@ struct VideoAdsTests {
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed, got \(String(describing: error))"); return }
         #expect(code == 500, "NonLinear: 500")
-        #expect(harness.server.beacons.map(\.event) == ["error"])
+        #expect(await waitUntil { self.harness.server.beacons.map(\.event) == ["error"] })
         #expect(harness.server.beacons.first?.query["code"] == "500")
     }
 

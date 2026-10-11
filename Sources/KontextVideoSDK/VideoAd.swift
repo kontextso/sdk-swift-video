@@ -63,6 +63,11 @@ public final class VideoAd {
         case creativeFailed(code: Int)
         /// `show` found the player's view below 50 % of the ad's size.
         case containerTooSmall
+        /// Timed mode: the window's end passed (by time or by a forward seek) before the ad was shown, or
+        /// before an overlay's `duration` still fitted.
+        case windowPassed
+        /// Timed mode: the viewer seeked, so an ad chosen for the old content time is stale.
+        case seeked
     }
 
     public var id: String { facts.id }
@@ -102,6 +107,8 @@ public final class VideoAd {
     public private(set) var wasShown = false
     /// `true` once `didEnd` was delivered.
     public private(set) var hasEnded = false
+    /// Timed mode: `videoAdDidReachWindow` was delivered.
+    private(set) var windowDelivered = false
 
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
@@ -449,6 +456,24 @@ public final class VideoAd {
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
         facts.isExpired
+    }
+
+    /// Timed mode: the ad has a window.
+    var isWindowed: Bool {
+        if case .window = trigger { return true }
+        return false
+    }
+
+    /// Timed mode: the window opened and the ad is loaded; the app shows it in the callback. Once.
+    func deliverWindow() {
+        guard isLoaded, !wasShown, invalidationReason == nil, !windowDelivered else { return }
+        windowDelivered = true
+        Logger.info("ad \(id.prefix(8)): window reached")
+        DebugReporter.shared.event("ad.windowReached", adId: id)
+        if delegate == nil {
+            Logger.warning("ad \(id.prefix(8)): window reached but no delegate is set; set ad.delegate right after load returns")
+        }
+        delegate?.videoAdDidReachWindow(self)
     }
 
     /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not

@@ -21,6 +21,16 @@ final class TestPlayer {
     }
 }
 
+/// Every `VideoAdsTimingDelegate` call, in order.
+@MainActor
+final class RecordingTimingDelegate: VideoAdsTimingDelegate {
+    private(set) var loadRequests: [(placementId: String, reason: VideoAds.LoadReason)] = []
+
+    func videoAds(_ ads: VideoAds, didRequestLoadOf placementId: String, reason: VideoAds.LoadReason) {
+        loadRequests.append((placementId, reason))
+    }
+}
+
 /// Every delegate call, in order, as a readable line.
 @MainActor
 final class RecordingDelegate: VideoAdDelegate {
@@ -34,6 +44,13 @@ final class RecordingDelegate: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
         events.append("invalidate:\(reason)")
         invalidations.append(reason)
+    }
+
+    private(set) var windowsReached = 0
+
+    func videoAdDidReachWindow(_ ad: VideoAd) {
+        events.append("window")
+        windowsReached += 1
     }
 
     func videoAdDidShow(_ ad: VideoAd) { events.append("show") }
@@ -125,6 +142,7 @@ struct SDKHarness {
         Init.retryDelay = 10_000_000
         FrameBridge.loadTimeout = 8   // the first WebView of a process is slow, several seconds on a CI runner
         VideoAd.videoStartBackstop = 1
+        VideoAds.sampleInterval = 0.02
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }
         Environment.consentDefaults = UserDefaults(suiteName: "KontextVideoSDKTests")!
@@ -148,6 +166,7 @@ struct SDKHarness {
         Init.retryDelay = 2_000_000_000
         FrameBridge.loadTimeout = 10
         VideoAd.videoStartBackstop = 5
+        VideoAds.sampleInterval = 0.25
         ViewabilityMeter.interval = 0.25
         DebugReporter.interval = 1
         DebugReporter.shared.isEnabled = false

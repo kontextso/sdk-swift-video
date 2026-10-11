@@ -20,6 +20,7 @@ sdk-swift-video/
 │   ├── KontextVideo.swift, Configuration.swift     the shared instance and its options
 │   ├── VideoAds.swift, VideoAd.swift               one video's ads; one ad
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
+│   ├── VideoAdBid.swift, VideoAdsTimingDelegate.swift   fetch() before rendering; timed mode's callback
 │   ├── Placements.swift                            overlay / pause / interstitial placements
 │   ├── Model/        what the app passes in: Content, User, Regulatory, Options
 │   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, the client
@@ -109,7 +110,7 @@ Tests/KontextVideoSDKTests/
 ├── Model/        encoding of what the app passes in
 ├── API/          decoding, requests, the client, /init, privacy
 ├── Frame/        the bridge's state machine, the tracker, the meter, the interstitial controller
-├── Core/         KontextVideo, VideoAds, VideoAd, support, the debug reporter
+├── Core/         KontextVideo, VideoAds, VideoAd, bids, timed mode, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
 

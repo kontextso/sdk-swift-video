@@ -47,6 +47,7 @@ extension VideoAd {
             if let ad { return ad }
             guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
             if facts.isExpired { invalidationReason = .expired }
+            if case .window(_, let to) = trigger, owner.playhead >= to { invalidationReason = .windowPassed }
             if let reason = invalidationReason {
                 if reason == .destroyed { throw VideoAdError.destroyed }
                 throw VideoAdError.invalidated(reason)
@@ -60,6 +61,12 @@ extension VideoAd {
             let ad = try await owner.render(self)
             self.ad = ad
             return ad
+        }
+
+        /// Timed mode: the ad has a window.
+        var isWindowed: Bool {
+            if case .window = trigger { return true }
+            return false
         }
 
         /// Whether the bid still counts for its placement's one-unshown-ad rule: not loaded yet, not
