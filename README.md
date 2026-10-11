@@ -149,9 +149,10 @@ let overlay = ads.overlayPlacement("overlay")
 let pause = ads.pausePlacement("pause")
 let midroll = ads.interstitialPlacement("interstitial")
 
-// A strip across the player while the content plays.
+// A strip across the player while the content plays; the SDK removes it after its duration.
 let strip = try await overlay.load(OverlayOptions(
-    positions: [.bottom]             // where you can render it; default: top and bottom
+    positions: [.bottom],            // where you can render it; default: top and bottom
+    maxDuration: 10                  // seconds on screen at most; the server picks a creative that fits
 ))
 
 // A card, or the full player, while the content is paused.
