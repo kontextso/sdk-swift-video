@@ -172,6 +172,11 @@ let interstitial = try await midroll.load(InterstitialOptions(
 // Every option is optional
 let ad = try await overlay.load()
 
+// Deciding before rendering (an app that runs its own auction): fetch the answer, load the winner
+let bid = try await pause.fetch()                   // price, expirationDate, size…; nothing rendered yet
+guard myAuction.accepts(bid.price) else { return }  // dropping a bid costs nothing
+let ad = try await bid.load()                       // renders; the same VideoAd that load() returns
+
 // No fill and failures are errors
 do {
     let ad = try await pause.load()

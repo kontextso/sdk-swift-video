@@ -65,25 +65,25 @@ public final class VideoAd {
         case containerTooSmall
     }
 
-    public let id: String
-    public let placementId: String
-    public let format: AdFormat
-    public let price: Price
+    public var id: String { facts.id }
+    public var placementId: String { facts.placementId }
+    public var format: AdFormat { facts.format }
+    public var price: Price { facts.price }
     /// When the ad stops being showable. The server sends a relative lifetime; this is it as a `Date`, for
     /// the app's eyes. The SDK's own check runs on the monotonic clock, so a changed device clock cannot
     /// expire an ad early or late.
-    public let expirationDate: Date
+    public var expirationDate: Date { facts.expirationDate }
     /// `nil` for an interstitial.
-    public let position: Position?
+    public var position: Position? { facts.position }
     /// `nil` for an interstitial and for a full-screen pause ad.
-    public let size: Size?
+    public var size: Size? { facts.size }
     /// Overlay: how long it stays on screen. Interstitial: the video's length. Seconds; `nil` for a pause ad.
-    public let duration: TimeInterval?
+    public var duration: TimeInterval? { facts.duration }
     /// Interstitial: seconds until the Close may appear; `nil` means no Close before the video completes.
-    public let skipOffset: TimeInterval?
+    public var skipOffset: TimeInterval? { facts.skipOffset }
     /// Set on a rewarded interstitial.
-    public let reward: Reward?
-    public let trigger: Trigger
+    public var reward: Reward? { facts.reward }
+    public var trigger: Trigger { facts.trigger }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -108,8 +108,8 @@ public final class VideoAd {
 
     /// The wire object, for the steps that render and track it.
     let ad: AdPayload
-    /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here.
-    let receivedAt: TimeInterval
+    /// The read-only facts, shared with `Bid`; the expiry counts from the response.
+    let facts: Facts
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
     /// once, so `load` can return a ready ad.
     let bridge: FrameBridge
@@ -136,44 +136,11 @@ public final class VideoAd {
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
 
-    init(ad: AdPayload) {
-        let now = ProcessInfo.processInfo.systemUptime
-        let lifetime = TimeInterval(ad.expires) / 1000
+    /// `facts` are the bid's when the ad comes from one, so the expiry counts from the response, not from
+    /// the moment the bid was loaded. The page starts loading at once.
+    init(ad: AdPayload, facts: Facts? = nil) {
         self.ad = ad
-        self.receivedAt = now
-        id = ad.id
-        placementId = ad.placementId
-        format = ad.format
-        price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
-        expirationDate = Date().addingTimeInterval(lifetime)
-        switch ad.trigger {
-        case .manual: trigger = .manual
-        case .window(let from, let to): trigger = .window(from: TimeInterval(from) / 1000, to: TimeInterval(to) / 1000)
-        }
-        switch ad.details {
-        case .overlay(let position, let size, let duration):
-            self.position = position == .top ? .top : .bottom
-            self.size = Size(width: size.width, height: size.height)
-            self.duration = TimeInterval(duration) / 1000
-            skipOffset = nil
-            reward = nil
-        case .pause(let position, let size):
-            switch position {
-            case .top: self.position = .top
-            case .bottom: self.position = .bottom
-            case .fullscreen: self.position = .fullscreen
-            }
-            self.size = size.map { Size(width: $0.width, height: $0.height) }
-            duration = nil
-            skipOffset = nil
-            reward = nil
-        case .interstitial(let duration, let skipOffset, let reward):
-            position = nil
-            size = nil
-            self.duration = TimeInterval(duration) / 1000
-            self.skipOffset = skipOffset.map { TimeInterval($0) / 1000 }
-            self.reward = reward.map { Reward(label: $0.label, amount: $0.amount) }
-        }
+        self.facts = facts ?? Facts(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
         switch ad.rendering {
         case .frame(let url):
             bridge = FrameBridge(adId: ad.id, url: url, isVideo: ad.creative == .video)
@@ -182,8 +149,9 @@ public final class VideoAd {
         tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
+        let remaining = self.facts.remainingLifetime
         expiryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(lifetime * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !wasShown else { return }
             invalidate(.expired)
         }
@@ -466,7 +434,7 @@ public final class VideoAd {
 
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
-        ProcessInfo.processInfo.systemUptime - receivedAt >= TimeInterval(ad.expires) / 1000
+        facts.isExpired
     }
 
     /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not
