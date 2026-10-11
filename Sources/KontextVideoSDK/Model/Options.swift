@@ -30,10 +30,25 @@ public struct PauseOptions: Encodable, Sendable, Equatable {
 }
 
 public struct OverlayOptions: Encodable, Sendable, Equatable {
+    /// Where the app can render it; the default is top and bottom.
     public let positions: [AdPosition]?
+    /// Seconds on screen at most; the server picks a creative whose `duration` fits. The SDK removes the
+    /// overlay itself when its `duration` elapses.
+    public let maxDuration: TimeInterval?
 
-    public init(positions: [AdPosition]? = nil) {
+    public init(positions: [AdPosition]? = nil, maxDuration: TimeInterval? = nil) {
         self.positions = positions
+        self.maxDuration = maxDuration
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case positions, maxDuration
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(positions, forKey: .positions)
+        try container.encodeIfPresent(maxDuration.map { Int(($0 * 1000).rounded()) }, forKey: .maxDuration)
     }
 }
 

@@ -195,7 +195,9 @@ do {
 Overlay and pause ads are shown with `show(in:)`, inside the view your content plays in: the one holding the
 `AVPlayerLayer`, or `contentOverlayView` of an `AVPlayerViewController`, or a `UIViewRepresentable`-hosted view in
 SwiftUI. The SDK places its own view in it at the ad's position and size (a full-screen pause ad fills it);
-`dismiss()` ends the ad when your content resumes. `show` throws when presentation cannot begin (nothing fired):
+`dismiss()` ends a pause ad when your content resumes. An overlay ends by itself when its `duration` elapses
+(`didEnd(.completed)`); `dismiss()` is for ending it earlier (the content ended, a seek). `show` throws when
+presentation cannot begin (nothing fired):
 `.alreadyShown`, `.invalidated(reason)` or `.containerTooSmall` (the ad is discarded). Set a `VideoAdDelegate` on the ad for everything
 after: `didShow`, `didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every
 way an ad ends, including your own `dismiss()` and `destroy()`. Resume your content in `didEnd`.

@@ -81,6 +81,7 @@ struct ModelEncodingTests {
         let json = try Fixtures.encode(OverlayOptions(positions: [.bottom]))
         #expect(json["positions"] as? [String] == ["bottom"])
         #expect(try Fixtures.encode(OverlayOptions()).isEmpty, "every option is optional")
+        #expect(try Fixtures.encode(OverlayOptions(maxDuration: 10))["maxDuration"] as? Int == 10_000, "seconds in Swift, ms on the wire")
     }
 
     @Test func pauseOptionsEncodePositionsIncludingFullscreen() throws {

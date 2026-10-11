@@ -135,6 +135,8 @@ public final class VideoAd {
     static var videoStartBackstop: TimeInterval = 5
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
+    /// Removes an overlay when its `duration` elapses; the app runs no timer.
+    private var durationTask: Task<Void, Never>?
 
     /// `facts` are the bid's when the ad comes from one, so the expiry counts from the response, not from
     /// the moment the bid was loaded. The page starts loading at once.
@@ -212,7 +214,9 @@ public final class VideoAd {
     }
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
-    /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again.
+    /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again. For an
+    /// overlay this is the way to end it before its `duration` (the content ended, a seek); left alone,
+    /// the SDK removes it when the duration elapses, with `didEnd(.completed)`.
     public func dismiss() {
         guard wasShown, !hasEnded else { return }
         Logger.debug("ad \(id.prefix(8)): dismissed by the app")
@@ -269,6 +273,15 @@ public final class VideoAd {
         if startMeter {
             self.startMeter()
         }
+        if format == .overlay, let duration {
+            // The buyer's NonLinear duration: one clock, the SDK's. `dismiss()` ends it earlier.
+            durationTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                guard let self, !Task.isCancelled, !hasEnded else { return }
+                Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration) s elapsed")
+                end(.completed)
+            }
+        }
     }
 
     private var impressionRecorded = false
@@ -303,6 +316,7 @@ public final class VideoAd {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
         startBackstop?.cancel()
+        durationTask?.cancel()
         meter?.stop()
         meter = nil
         bridge.hide()
@@ -471,6 +485,7 @@ public final class VideoAd {
     deinit {
         expiryTask?.cancel()
         startBackstop?.cancel()
+        durationTask?.cancel()
         meter?.stopTimer()
     }
 }

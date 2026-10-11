@@ -53,7 +53,8 @@ extension VideoAd {
 
     /// How an ad on screen ended: the outcome, not why a view went away.
     public enum EndReason: Sendable, Equatable {
-        /// The video completed and the end card, if any, was closed.
+        /// Interstitial: the video completed and the end card, if any, was closed. Overlay: its
+        /// `duration` elapsed and the SDK removed it.
         case completed
         /// The viewer skipped the video.
         case skipped

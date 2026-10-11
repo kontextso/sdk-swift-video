@@ -191,6 +191,42 @@ struct VideoAdTests {
         #expect(other.subviews.isEmpty, "and is removed at the end")
     }
 
+    @Test func anOverlayIsRemovedBySDKWhenItsDurationElapses() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10a", duration: 200))
+        var sent: [String] = []
+        ad.bridge.onSend = { type, _ in if type != "ad.exposure" { sent.append(type) } }
+        try ad.show(in: harness.player.view)
+        #expect(ad.duration == 0.2)
+        #expect(delegate.endReasons.isEmpty)
+        #expect(await waitUntil(1) { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
+        #expect(ad.hasEnded)
+        #expect(sent == ["ad.show", "ad.hide"])
+        #expect(harness.player.view.subviews.isEmpty)
+        let fired = await beacons()
+        #expect(fired.contains("overlayViewDuration"))
+        #expect(!fired.contains("close"))
+        ad.dismiss()
+        #expect(delegate.endReasons.count == 1, "exactly once")
+    }
+
+    @Test func dismissBeforeTheDurationEndsAnOverlayEarlyAndStopsTheClock() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10b", duration: 150))
+        try ad.show(in: harness.player.view)
+        ad.dismiss()
+        #expect(delegate.endReasons == [.dismissed])
+        await sleepMs(250)
+        #expect(delegate.endReasons == [.dismissed], "the duration clock was cancelled")
+    }
+
+    @Test func aPauseAdHasNoDurationAndStaysUntilDismissed() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p10c"))
+        #expect(ad.duration == nil)
+        try ad.show(in: harness.player.view)
+        await sleepMs(150)
+        #expect(delegate.endReasons.isEmpty)
+        ad.dismiss()
+    }
+
     @Test func dismissEndsWithDismissedAndFiresOverlayViewDurationNotClose() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10"))
         var sent: [String] = []
