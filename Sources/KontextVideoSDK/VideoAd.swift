@@ -63,9 +63,6 @@ public final class VideoAd {
         case creativeFailed(code: Int)
         /// `show` found the player's view below 50 % of the ad's size.
         case containerTooSmall
-        /// The `KontextVideoPlayer` object was deallocated. Terminal for the `VideoAds`: create a new one
-        /// with the new player.
-        case playerUnavailable
     }
 
     public let id: String
@@ -182,10 +179,7 @@ public final class VideoAd {
             bridge = FrameBridge(adId: ad.id, url: url, isVideo: ad.creative == .video)
         }
         tracker = Tracker(adId: ad.id, entries: ad.tracking)
-        tracker.contentPlayhead = { [weak self] in
-            guard let self, let owner, owner.isStarted else { return 0 }
-            return owner.player?.playhead ?? 0
-        }
+        tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
         expiryTask = Task { [weak self] in
@@ -197,21 +191,17 @@ public final class VideoAd {
 
     // MARK: Showing
 
-    /// Shows an overlay or pause ad inside the player's view, at the ad's `position` and `size` (a full-
-    /// screen pause ad fills the view). Throws when presentation cannot begin, with nothing fired:
-    /// `alreadyShown`, `invalidated`, `containerTooSmall` (the ad is discarded), `playerUnavailable`.
-    /// From here until `didEnd` the SDK retains the ad.
-    public func show() throws {
+    /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
+    /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
+    /// Throws when presentation cannot begin, with nothing fired: `alreadyShown`, `invalidated`,
+    /// `containerTooSmall` (the ad is discarded). From here until `didEnd` the SDK retains the ad.
+    public func show(in view: UIView) throws {
         guard format != .interstitial else {
             Environment.assertionFailure("KontextVideo: an interstitial is shown with show(from:)")
             throw VideoAdError.cannotPresent
         }
         try checkShowable()
-        guard let player = owner?.player else {
-            owner?.playerIsGone()
-            throw VideoAdError.invalidated(.playerUnavailable)
-        }
-        let container = player.view
+        let container = view
         let host = UIView(frame: try frame(in: container.bounds))
         host.autoresizingMask = position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
         let webView = bridge.takeWebView()
@@ -230,14 +220,10 @@ public final class VideoAd {
     /// From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController) throws {
         guard format == .interstitial else {
-            Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show()")
+            Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show(in:)")
             throw VideoAdError.cannotPresent
         }
         try checkShowable()
-        guard owner?.player != nil else {
-            owner?.playerIsGone()
-            throw VideoAdError.invalidated(.playerUnavailable)
-        }
         guard viewController.view.window != nil, viewController.presentedViewController == nil else {
             Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
             throw VideoAdError.cannotPresent
@@ -483,11 +469,10 @@ public final class VideoAd {
         ProcessInfo.processInfo.systemUptime - receivedAt >= TimeInterval(ad.expires) / 1000
     }
 
-    /// Whether this ad still counts for its placement's one-at-a-time rule: loading, loaded and unshown,
-    /// or showing.
-    var occupiesPlacement: Bool {
-        if wasShown { return !hasEnded }
-        return invalidationReason == nil && !isExpired
+    /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not
+    /// yet shown. An ad on screen does not block the next load.
+    var isPendingUnshown: Bool {
+        !wasShown && invalidationReason == nil && !isExpired
     }
 
     /// A loaded, unshown ad can no longer be shown; the delegate hears why. For an ad on screen,

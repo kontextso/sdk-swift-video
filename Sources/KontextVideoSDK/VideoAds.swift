@@ -1,4 +1,6 @@
+import AVFoundation
 import Foundation
+import UIKit
 
 /// The ads of one video. Create it as early as you like, for example the next episode's while the
 /// current one plays; any number can be alive at once. Call `destroy()` when the viewer leaves the video.
@@ -12,67 +14,73 @@ public final class VideoAds {
     }
 
     public let content: KontextVideo.Content
-    /// The player the ads are shown in; held weakly, it is usually the view controller that owns this object.
-    public private(set) weak var player: (any KontextVideoPlayer)?
-    /// `true` after `start()`: this content is playing in the player and requests carry its playhead.
-    public private(set) var isStarted = false
+    /// The size of the player, in points, as given at creation; `nil` means full screen.
+    public let playerSize: CGSize?
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
+
+    /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
+    /// `[CONTENTPLAYHEAD]` macro of a beacon, in timed mode. For any player; for an `AVPlayer`,
+    /// `trackPlayhead(of:)` is the one-liner. Setting it replaces a tracked player. Nothing set: 0,
+    /// which is what a request made before the episode plays (a prefetch) should carry.
+    public var playheadProvider: (() -> TimeInterval)? {
+        didSet { if playheadProvider != nil { trackedPlayer = nil } }
+    }
+    /// The `AVPlayer` whose `currentTime()` is the playhead; held weakly.
+    private weak var trackedPlayer: AVPlayer?
 
     /// The placement objects handed out, by format and id: the same typed lookup gives the same object.
     /// The one-ad-at-a-time state lives in this class keyed by id alone, so two typed handles for one id
     /// share it; whichever format is wrong hears it from the server (`invalidPlacement`).
     private var placements: [String: AnyObject] = [:]
 
-    /// One ad per placement at a time: the ad each placement handed out last, while the app keeps it.
+    /// One unshown ad per placement at a time: the ad each placement handed out last, while the app keeps
+    /// it. An ad on screen does not count; the next one may load while it shows.
     private var current: [String: WeakAd] = [:]
     /// Ads on screen, retained from `show` until `didEnd` so dropping the app's reference cannot abort them.
     private var showing: [String: VideoAd] = [:]
-    /// Timed mode: content time (ms) before which a placement must not be requested again.
+    /// Timed mode: the content time (ms) at which the server recommends the placement's next request.
+    /// A recommendation, not a rule: an earlier `load` is an ordinary request.
     private(set) var nextRequestAt: [String: Int] = [:]
     /// Placements with a request in flight.
     private var loading: Set<String> = []
 
-    /// `content` describes the video, `player` the area the ads are shown in. Needs `initialize(with:)`
-    /// to have been called; `/init` itself may still be in flight, loads wait for it.
-    public init(content: KontextVideo.Content, player: any KontextVideoPlayer) {
+    /// `content` describes the video; `playerSize` is the player's size in points, which lets the server
+    /// pick creatives that fit, `nil` (the default) meaning full screen. Needs `initialize(with:)` to have
+    /// been called; `/init` itself may still be in flight, loads wait for it.
+    public init(content: KontextVideo.Content, playerSize: CGSize? = nil) {
         self.content = content
-        self.player = player
+        self.playerSize = playerSize
         KontextVideo.shared.register(self)
         Logger.debug("VideoAds created for video \(content.id)")
     }
 
-    /// Call it when this content starts playing in the player. Before it, every request is a prefetch at
-    /// content time 0 with the player's current size, which is what makes loading the next episode's ads
-    /// while this one plays correct: the player's playhead belongs to the current episode. After it,
-    /// requests and `[CONTENTPLAYHEAD]` use the live playhead.
-    /// A no-op while this object is active; after another `VideoAds` on the same player displaced it,
-    /// calling it again makes this one active and the other one a prefetcher again.
-    public func start() {
-        guard !isDestroyed, !isStarted else { return }
-        // A video start is when a failed /init is tried again (2.2 of the spec).
-        KontextVideo.shared.retryInitIfDue()
-        if let player {
-            KontextVideo.shared.stopOthers(playing: player, except: self)
+    /// Reads the content playhead from this `AVPlayer` whenever the SDK needs one; the player is held
+    /// weakly and `currentTime()` is read at that moment, no observer is attached. With one `AVPlayer`
+    /// reused across episodes, call it when this episode starts playing in it, not at creation: before
+    /// that the player's time belongs to the previous episode. Replaces a `playheadProvider`.
+    public func trackPlayhead(of player: AVPlayer) {
+        playheadProvider = nil
+        trackedPlayer = player
+    }
+
+    /// Content time in seconds, read now: the provider's, the tracked player's, or 0.
+    var playhead: TimeInterval {
+        if let playheadProvider {
+            let value = playheadProvider()
+            return value.isFinite ? max(0, value) : 0
         }
-        isStarted = true
-        Logger.debug("\(content.id): started")
+        if let trackedPlayer {
+            let time = trackedPlayer.currentTime()
+            guard time.isNumeric, !time.seconds.isNaN else { return 0 }
+            return max(0, time.seconds)
+        }
+        return 0
     }
 
-    /// Another `VideoAds` started on the same player: this one is no longer the content playing there,
-    /// so its requests fall back to prefetch mode (content time 0).
-    func stop(because other: VideoAds) {
-        guard isStarted else { return }
-        isStarted = false
-        Logger.warning("\(content.id): stopped, \(other.content.id) started on the same player; destroy the previous content's VideoAds when you move on")
-        // Nothing of this content may sit over the next one; loaded, unshown ads stay for a return.
-        showing.values.forEach { $0.end(.interrupted) }
-    }
-
-    /// Content time in milliseconds as a request sends it: 0 until `start()`.
+    /// Content time in milliseconds as a request sends it.
     var playheadMs: Int {
-        guard isStarted, let player else { return 0 }
-        return Int((player.playhead * 1000).rounded())
+        Int((playhead * 1000).rounded())
     }
 
     /// The overlay placement with this id, as created in the Kontext dashboard. Get it once and keep it.
@@ -104,18 +112,6 @@ public final class VideoAds {
         current.values.compactMap(\.value)
     }
 
-    /// The player was deallocated: terminal for this object. Every loaded ad is invalidated; the warning
-    /// is logged once.
-    func playerIsGone() {
-        if !playerGoneLogged {
-            playerGoneLogged = true
-            Logger.error("\(content.id): the KontextVideoPlayer was deallocated; create a new VideoAds with the new player")
-        }
-        liveAds.forEach { $0.invalidate(.playerUnavailable) }
-    }
-
-    private var playerGoneLogged = false
-
     func adDidBeginShowing(_ ad: VideoAd) {
         showing[ad.placementId] = ad
     }
@@ -131,13 +127,9 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let id = format.placementId
-        if loading.contains(id) || current[id]?.value?.occupiesPlacement == true {
-            Logger.warning("\(id) for \(content.id): load refused, the placement is busy")
+        if loading.contains(id) || current[id]?.value?.isPendingUnshown == true {
+            Logger.warning("\(id) for \(content.id): load refused, the placement has an ad loading or loaded and not yet shown")
             throw VideoAdError.placementBusy
-        }
-        if let at = nextRequestAt[id], playheadMs < at {
-            Logger.debug("\(id) for \(content.id): next request at \(at) ms, playhead is \(playheadMs)")
-            throw VideoAdError.tooEarly(nextRequestAt: TimeInterval(at) / 1000)
         }
         loading.insert(id)
         defer { loading.remove(id) }
@@ -149,15 +141,11 @@ public final class VideoAds {
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
-        guard let player else {
-            playerIsGone()
-            throw VideoAdError.playerUnavailable
-        }
         // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .read(from: player, started: isStarted), format: format)
+                                      player: .make(playerSize: playerSize, playheadMs: playheadMs), format: format)
         Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead ?? 0) ms")
         DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead ?? 0))])
 
@@ -249,7 +237,7 @@ public final class VideoAds {
     /// The spec's rule: when the viewer's data or consent changes, loaded ads that were not shown are
     /// dropped so the next request carries the new values.
     func discardLoadedAds(reason: String) {
-        let ads = liveAds.filter(\.occupiesPlacement)
+        let ads = liveAds.filter(\.isPendingUnshown)
         guard !ads.isEmpty else { return }
         Logger.debug("\(content.id): discarding \(ads.count) loaded ad(s), \(reason)")
         ads.forEach { $0.invalidate(.targetingChanged) }

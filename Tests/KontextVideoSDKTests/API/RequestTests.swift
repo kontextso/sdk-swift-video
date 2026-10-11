@@ -41,9 +41,7 @@ struct RequestTests {
 
     // MARK: AdsRequest
 
-    private func makeAdsRequest(started: Bool = true, playhead: TimeInterval = 12.345) -> AdsRequest {
-        let player = TestPlayer()
-        player.playhead = playhead
+    private func makeAdsRequest(playhead: TimeInterval = 12.345) -> AdsRequest {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
         KontextVideo.shared.variantId = "exp-b"
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
@@ -52,7 +50,7 @@ struct RequestTests {
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), attStatus: "authorized"),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
-            player: .read(from: player, started: started),
+            player: .make(playerSize: CGSize(width: 390, height: 220), playheadMs: Int((playhead * 1000).rounded())),
             format: FormatRequest(placementId: "fullscreen-pause", options: .pause(PauseOptions(positions: [.fullscreen])))
         )
     }
@@ -89,7 +87,7 @@ struct RequestTests {
         request = AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, attStatus: "denied"),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .read(from: TestPlayer(), started: false),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playerSize: nil, playheadMs: 0),
             format: FormatRequest(placementId: "overlay", options: .overlay(OverlayOptions()))
         )
         let json = try Fixtures.encode(request)
@@ -106,37 +104,32 @@ struct RequestTests {
 
     // MARK: PlayerSnapshot
 
-    @Test func snapshotBeforeStartIsAPrefetchAtZero() {
-        let player = TestPlayer()
-        player.playhead = 47
-        let snapshot = PlayerSnapshot.read(from: player, started: false)
-        #expect(snapshot.playhead == nil, "content time 0 until start()")
+    @Test func snapshotSendsTheGivenSizeAndThePlayhead() {
+        let snapshot = PlayerSnapshot.make(playerSize: CGSize(width: 390, height: 220), playheadMs: 47_001)
+        #expect(snapshot.playhead == 47_001)
         #expect(snapshot.width == 390)
         #expect(snapshot.height == 220)
+        #expect(snapshot.fullscreen == false)
     }
 
-    @Test func snapshotAfterStartReadsTheLivePlayheadInMilliseconds() {
-        let player = TestPlayer()
-        player.playhead = 47.0006
-        #expect(PlayerSnapshot.read(from: player, started: true).playhead == 47_001)
-    }
-
-    @Test func snapshotRoundsFractionalBounds() {
-        let player = TestPlayer(size: CGSize(width: 393.4, height: 220.6))
-        let snapshot = PlayerSnapshot.read(from: player, started: false)
+    @Test func snapshotRoundsAFractionalSize() {
+        let snapshot = PlayerSnapshot.make(playerSize: CGSize(width: 393.4, height: 220.6), playheadMs: 0)
         #expect(snapshot.width == 393)
         #expect(snapshot.height == 221)
     }
 
-    @Test func snapshotDetectsFullScreenFromTheWindow() {
+    @Test func snapshotWithoutASizeIsTheScreenFullScreen() {
         let window = TestWindow(size: CGSize(width: 390, height: 844))
         defer { window.tearDown() }
-        let small = TestPlayer()
-        window.add(small.view)
-        #expect(PlayerSnapshot.read(from: small, started: false).fullscreen == false)
-        let full = TestPlayer(size: CGSize(width: 390, height: 844))
-        window.add(full.view)
-        #expect(PlayerSnapshot.read(from: full, started: false).fullscreen == true)
+        Environment.keyWindow = { window.window }
+        let snapshot = PlayerSnapshot.make(playerSize: nil, playheadMs: 0)
+        #expect(snapshot.width == 390 && snapshot.height == 844, "the key window's size in points")
+        #expect(snapshot.fullscreen)
+        #expect(PlayerSnapshot.make(playerSize: CGSize(width: 390, height: 844), playheadMs: 0).fullscreen, "a given size that matches the screen")
+        Environment.keyWindow = { nil }
+        let bare = PlayerSnapshot.make(playerSize: nil, playheadMs: 0)
+        #expect(bare.fullscreen, "no window yet: the main screen")
+        #expect(bare.width == Int(UIScreen.main.bounds.width.rounded()))
     }
 
     // MARK: Device facts

@@ -139,25 +139,26 @@ struct AdsDevice: Encodable, Sendable {
     }
 }
 
-/// What an ads request says about the player, read from the protocol at request time.
+/// What an ads request says about the player: the size the app gave its `VideoAds`, or the screen's
+/// when it gave none, and the playhead read at request time.
 struct PlayerSnapshot: Encodable, Sendable, Equatable {
     let width: Int
     let height: Int
     let fullscreen: Bool
-    /// Milliseconds in content time; `nil` means the start of the video.
-    let playhead: Int?
+    /// Milliseconds in content time; 0 before the episode plays.
+    let playhead: Int
 
-    /// `started` is `VideoAds.start()`: before it, the player's playhead belongs to other content and
-    /// the request is a prefetch at content time 0.
+    /// `playerSize` in points, `nil` for a full-screen player. A given size is sent as is, `fullscreen`
+    /// when it matches the screen.
     @MainActor
-    static func read(from player: any KontextVideoPlayer, started: Bool) -> PlayerSnapshot {
-        let bounds = player.view.bounds
-        let screen = player.view.window?.bounds ?? UIScreen.main.bounds
+    static func make(playerSize: CGSize?, playheadMs: Int) -> PlayerSnapshot {
+        let screen = (Environment.keyWindow()?.bounds ?? UIScreen.main.bounds).size
+        let size = playerSize ?? screen
         return PlayerSnapshot(
-            width: Int(bounds.width.rounded()),
-            height: Int(bounds.height.rounded()),
-            fullscreen: bounds.width >= screen.width - 1 && bounds.height >= screen.height - 1,
-            playhead: started ? Int((player.playhead * 1000).rounded()) : nil
+            width: Int(size.width.rounded()),
+            height: Int(size.height.rounded()),
+            fullscreen: size.width >= screen.width - 1 && size.height >= screen.height - 1,
+            playhead: playheadMs
         )
     }
 }

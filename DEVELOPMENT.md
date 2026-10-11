@@ -21,7 +21,7 @@ sdk-swift-video/
 │   ├── VideoAds.swift, VideoAd.swift               one video's ads; one ad
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── Placements.swift                            overlay / pause / interstitial placements
-│   ├── Model/        what the app passes in: Content, User, Regulatory, Options, the player protocol and adapter
+│   ├── Model/        what the app passes in: Content, User, Regulatory, Options
 │   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, the client
 │   ├── Frame/        rendering: the WebView bridge, the interstitial controller, the tracker, the viewability meter
 │   ├── Support/      Logger, SDKInfo, the debug reporter

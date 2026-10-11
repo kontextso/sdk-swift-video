@@ -21,9 +21,7 @@ struct IntegrationTests {
 
     private func start() async -> VideoAds {
         _ = await KontextVideo.shared.initialize(with: harness.configuration)
-        let ads = VideoAds(content: .init(id: "100001-6", language: "en", title: "Episode 6", duration: 92), player: harness.player)
-        ads.start()
-        return ads
+        return harness.player.ads(for: .init(id: "100001-6", language: "en", title: "Episode 6", duration: 92))
     }
 
     /// Runs JavaScript in the ad's page, as the viewer's actions would.
@@ -48,7 +46,7 @@ struct IntegrationTests {
         #expect(ad.isReady)
         #expect(await waitUntil { self.events(for: "img-pause") == ["loaded"] })
 
-        try ad.show()
+        try ad.show(in: harness.player.view)
         #expect(delegate.events == ["show", "impression"])
         #expect(harness.player.view.subviews.count == 1)
         #expect(await waitUntil { Set(self.events(for: "img-pause")).isSuperset(of: ["creativeView", "iconView", "impression"]) })
@@ -72,7 +70,7 @@ struct IntegrationTests {
         let delegate = RecordingDelegate()
         let ad = try await ads.pausePlacement("pause").load()
         ad.delegate = delegate
-        try ad.show()
+        try ad.show(in: harness.player.view)
         await inPage(ad, "window.close('close')")
         #expect(await waitUntil { delegate.endReasons == [.closed] })
         #expect(await waitUntil { self.events(for: "img-close").contains("close") })
@@ -86,7 +84,7 @@ struct IntegrationTests {
         let delegate = RecordingDelegate()
         let ad = try await ads.pausePlacement("pause").load()
         ad.delegate = delegate
-        try ad.show()
+        try ad.show(in: harness.player.view)
         await inPage(ad, "window.click('https://brand.test/offer', 'creative')")
         await sleepMs(100)
         #expect(opened.isEmpty, "a click the viewer did not make is a forced redirect")
@@ -106,7 +104,7 @@ struct IntegrationTests {
         let delegate = RecordingDelegate()
         let ad = try await ads.pausePlacement("pause").load()
         ad.delegate = delegate
-        try ad.show()
+        try ad.show(in: harness.player.view)
         // A forced redirect: no touch, so the navigation is cancelled and nothing opens.
         await inPage(ad, "window.location.href = 'https://brand.test/forced'")
         await sleepMs(200)
@@ -201,7 +199,7 @@ struct IntegrationTests {
         let delegate = RecordingDelegate()
         let ad = try await ads.overlayPlacement("overlay").load()
         ad.delegate = delegate
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ads.destroy()
         #expect(delegate.endReasons == [.destroyed])
         #expect(harness.player.view.subviews.isEmpty)
@@ -220,22 +218,21 @@ struct IntegrationTests {
         ad.delegate = delegate
         #expect(ad.isReady)
         #expect(await waitUntil(3) { delegate.invalidations == [.expired] })
-        do { try ad.show() } catch VideoAdError.invalidated(.expired) {} catch { Issue.record("expected expired") }
+        do { try ad.show(in: harness.player.view) } catch VideoAdError.invalidated(.expired) {} catch { Issue.record("expected expired") }
         harness.serve(Fixtures.ad(id: "img-exp2"))
         _ = try await ads.pausePlacement("pause").load()
     }
 
-    @Test func startingTheNextEpisodeInterruptsTheOverlayOnScreen() async throws {
+    @Test func movingOnToTheNextEpisodeDestroysThePreviousAdsOnScreen() async throws {
         let ads = await start()
         harness.serve(Fixtures.overlayAd(id: "img-ep1"))
         let delegate = RecordingDelegate()
         let ad = try await ads.overlayPlacement("overlay").load()
         ad.delegate = delegate
-        try ad.show()
-        let next = VideoAds(content: .init(id: "100001-7", language: "en"), player: harness.player)
-        next.start()
-        #expect(delegate.endReasons == [.interrupted])
-        #expect(ads.isStarted == false)
+        try ad.show(in: harness.player.view)
+        let next = harness.player.ads(for: .init(id: "100001-7", language: "en"))
+        ads.destroy()
+        #expect(delegate.endReasons == [.destroyed], "nothing of episode 6 sits over episode 7")
         #expect(harness.player.view.subviews.isEmpty)
         withExtendedLifetime(next) {}
     }
@@ -243,11 +240,12 @@ struct IntegrationTests {
     @Test func prefetchForTheNextEpisodeUsesContentTimeZero() async throws {
         let current = await start()
         harness.player.playhead = 80
-        let next = VideoAds(content: .init(id: "100001-7", language: "en"), player: harness.player)
+        // The next episode's VideoAds has no playhead source yet: the player's time belongs to episode 6.
+        let next = VideoAds(content: .init(id: "100001-7", language: "en"), playerSize: harness.player.view.bounds.size)
         harness.serve(Fixtures.interstitialAd(id: "vid-next"))
         _ = try await next.interstitialPlacement("interstitial").load()
         let player = harness.server.requests(to: "/v2/video/ads").last?.body?["player"] as? [String: Any]
-        #expect(player?["playhead"] == nil, "the player's 80 s belong to the current episode")
+        #expect(player?["playhead"] as? Int == 0, "the player's 80 s belong to the current episode")
         #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["video"] as? [String: Any])?["id"] as? String == "100001-7")
         withExtendedLifetime(current) {}
     }

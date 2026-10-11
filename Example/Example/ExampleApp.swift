@@ -3,8 +3,8 @@ import KontextVideoSDK
 import SwiftUI
 import UIKit
 
-/// The example's player: an AVPlayer in a view with an AVPlayerLayer. The SDK sees it through
-/// `KontextVideo.AVPlayerAdapter`, which reads the playhead from the player and places ads in the view.
+/// The example's player: an AVPlayer in a view with an AVPlayerLayer. The SDK reads the playhead from
+/// the player (`trackPlayhead(of:)`) and places overlay and pause ads in this view (`show(in:)`).
 final class PlayerLayerView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
@@ -19,7 +19,6 @@ final class Demo: ObservableObject {
 
     let contentPlayer = AVPlayer(url: URL(string: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4")!)
     let playerView = PlayerLayerView()
-    let player: KontextVideo.AVPlayerAdapter
     private(set) var ads: VideoAds?
     private(set) var pauseAd: VideoAd?
     private(set) var overlayAd: VideoAd?
@@ -27,7 +26,6 @@ final class Demo: ObservableObject {
 
     init() {
         playerView.playerLayer.player = contentPlayer
-        player = KontextVideo.AVPlayerAdapter(player: contentPlayer, view: playerView)
 
         // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there).
         // On a physical device replace localhost with the Mac's LAN address.
@@ -49,10 +47,11 @@ final class Demo: ObservableObject {
             genre: "romance",
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
-        let ads = VideoAds(content: content, player: player)
+        // The player fills the screen in this example, so no playerSize; a smaller player would pass its size.
+        let ads = VideoAds(content: content)
         self.ads = ads
         contentPlayer.play()
-        ads.start()                  // the episode is playing: requests carry the live playhead
+        ads.trackPlayhead(of: contentPlayer)   // the episode is playing in this player: the SDK reads its time
 
         if CommandLine.arguments.contains("--demo") {
             runScriptedDemo()
@@ -166,7 +165,7 @@ final class Demo: ObservableObject {
             return
         }
         do {
-            try ad.show()
+            try ad.show(in: playerView)
         } catch {
             note("pause show: \(error)")
         }
@@ -180,7 +179,7 @@ final class Demo: ObservableObject {
     func showOverlay() {
         guard let ad = overlayAd else { return }
         do {
-            try ad.show()
+            try ad.show(in: playerView)
         } catch {
             note("overlay show: \(error)")
         }

@@ -79,33 +79,33 @@ struct KontextVideoTests {
         #expect(Date().timeIntervalSince(started) >= 0.1)
     }
 
-    @Test func retryIsNotDueBeforeTheInterval() async {
+    @Test func aFailedInitIsRetriedByTheNextRequestAtOnce() async {
         harness.server.on("/v2/init", .failure(.timedOut))
         _ = await harness.initialize()
+        #expect(harness.server.requests(to: "/v2/init").count == 2, "10 s timeout, one retry")
         harness.server.on("/v2/init", .json(Fixtures.initEnabled()))
-        KontextVideo.initRetryInterval = 300
-        sdk.retryInitIfDue()
-        #expect(sdk.state == .failed)
-        #expect(harness.server.requests(to: "/v2/init").count == 2)
-    }
-
-    @Test func retryWhenDueTriesAgainAndRecovers() async {
-        harness.server.on("/v2/init", .failure(.timedOut))
-        _ = await harness.initialize()
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled()))
-        KontextVideo.initRetryInterval = 0
-        #expect(await sdk.waitUntilEnabled(), "waitUntilEnabled retries a due /init itself")
+        #expect(await sdk.waitUntilEnabled(), "waitUntilEnabled retries a failed /init itself, no waiting period")
         #expect(sdk.state == .enabled)
+        #expect(harness.server.requests(to: "/v2/init").count == 3)
     }
 
-    @Test func startOnAVideoAdsRetriesADueInit() async {
+    @Test func everyRequestRetriesAFailedInitAgain() async {
+        harness.server.on("/v2/init", .failure(.timedOut))
+        _ = await harness.initialize()
+        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(harness.server.requests(to: "/v2/init").count == 6, "two more attempts, each with its own retry")
+        #expect(sdk.state == .failed)
+    }
+
+    @Test func aLoadRetriesADueInit() async throws {
         harness.server.on("/v2/init", .failure(.timedOut))
         _ = await harness.initialize()
         harness.server.on("/v2/init", .json(Fixtures.initEnabled()))
-        KontextVideo.initRetryInterval = 0
-        let ads = VideoAds(content: .init(id: "v", language: "en"), player: harness.player)
-        ads.start()
-        #expect(await waitUntil { self.sdk.state == .enabled })
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-retry"))
+        _ = try? await ads.pausePlacement("pause").load()
+        #expect(sdk.state == .enabled)
     }
 
     @Test func disableFromAnAdsResponseIsTheSameKillSwitch() async {
@@ -127,7 +127,7 @@ struct KontextVideoTests {
     @Test func videoAdsBeforeInitializeAsserts() {
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
-        _ = VideoAds(content: .init(id: "v", language: "en"), player: harness.player)
+        _ = harness.player.ads(for: .init(id: "v", language: "en"))
         #expect(messages.count == 1)
         #expect(messages.first?.contains("initialize(with:)") == true)
     }
@@ -159,23 +159,6 @@ struct KontextVideoTests {
         #expect(UUID(uuidString: id) != nil)
         #expect(KontextVideo.installId == id)
         #expect(KontextVideo.version == SDKInfo.current.version)
-    }
-
-    @Test func stopOthersStopsOnlyStartedVideoAdsOnTheSamePlayer() async {
-        _ = await harness.initialize()
-        let otherPlayer = TestPlayer()
-        let a = VideoAds(content: .init(id: "a", language: "en"), player: harness.player)
-        let b = VideoAds(content: .init(id: "b", language: "en"), player: harness.player)
-        let c = VideoAds(content: .init(id: "c", language: "en"), player: otherPlayer)
-        a.start()
-        c.start()
-        #expect(a.isStarted && c.isStarted)
-        b.start()
-        #expect(b.isStarted)
-        #expect(a.isStarted == false, "displaced by b on the same player")
-        #expect(c.isStarted, "another player is not affected")
-        a.start()
-        #expect(a.isStarted && !b.isStarted, "A, B, A is A active again")
     }
 }
 }

@@ -27,9 +27,8 @@ struct VideoAdTests {
     /// An ad in the loaded state, owned by a `VideoAds`, with a recording delegate.
     private func makeAd(_ payload: [String: Any], loaded: Bool = true) async throws -> (VideoAd, RecordingDelegate, VideoAds) {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep", language: "en"), player: harness.player)
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         owners.all.append(ads)
-        ads.start()
         let ad = VideoAd(ad: try Fixtures.payload(payload))
         ad.owner = ads
         if loaded {
@@ -99,7 +98,7 @@ struct VideoAdTests {
     @Test func notLoadedAdIsNotReady() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p3"), loaded: false)
         #expect(ad.isReady == false)
-        #expect(throws: VideoAdError.self) { try ad.show() }
+        #expect(throws: VideoAdError.self) { try ad.show(in: harness.player.view) }
     }
 
     @Test func expiryIsDeliveredWhileWaiting() async throws {
@@ -109,7 +108,7 @@ struct VideoAdTests {
         #expect(ad.isReady == false)
         #expect(ad.invalidationReason == .expired)
         do {
-            try ad.show()
+            try ad.show(in: harness.player.view)
             Issue.record("expected a throw")
         } catch VideoAdError.invalidated(let reason) {
             #expect(reason == .expired)
@@ -122,7 +121,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p5"))
         var sent: [String] = []
         ad.bridge.onSend = { type, _ in sent.append(type) }
-        try ad.show()
+        try ad.show(in: harness.player.view)
         #expect(ad.wasShown)
         #expect(ad.isReady == false, "shown at most once")
         #expect(delegate.events == ["show", "impression"], "an image counts at show")
@@ -137,14 +136,14 @@ struct VideoAdTests {
 
     @Test func showPlacesABottomOverlayAtTheBottom() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o2"))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         let host = try #require(harness.player.view.subviews.last)
         #expect(host.frame == CGRect(x: 35, y: 130, width: 320, height: 90))
     }
 
     @Test func fullscreenPauseAdFillsThePlayer() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6", position: "fullscreen", size: nil))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         let host = try #require(harness.player.view.subviews.last)
         #expect(host.frame == harness.player.view.bounds)
     }
@@ -152,7 +151,7 @@ struct VideoAdTests {
     @Test func showThrowsContainerTooSmallBelowHalfTheSizeAndDiscardsTheAd() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p7", size: ["width": 600, "height": 600, "scalable": true, "maintainAspectRatio": true]))
         do {
-            try ad.show()
+            try ad.show(in: harness.player.view)
             Issue.record("expected a throw")
         } catch VideoAdError.containerTooSmall(let minimum) {
             #expect(minimum == CGSize(width: 300, height: 300))
@@ -167,37 +166,36 @@ struct VideoAdTests {
 
     @Test func showTwiceThrowsAlreadyShown() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p8"))
-        try ad.show()
-        #expect(throws: VideoAdError.self) { try ad.show() }
-        do { try ad.show() } catch VideoAdError.alreadyShown {} catch { Issue.record("expected alreadyShown") }
+        try ad.show(in: harness.player.view)
+        #expect(throws: VideoAdError.self) { try ad.show(in: harness.player.view) }
+        do { try ad.show(in: harness.player.view) } catch VideoAdError.alreadyShown {} catch { Issue.record("expected alreadyShown") }
     }
 
     @Test func showOnAnInterstitialIsAProgrammerError() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i2"))
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
-        do { try ad.show() } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
+        do { try ad.show(in: harness.player.view) } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
         #expect(messages.count == 1)
         #expect(ad.isReady, "untouched")
     }
 
-    @Test func showWhenThePlayerIsGoneInvalidatesTheAd() async throws {
-        var player: TestPlayer? = TestPlayer()
-        _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep", language: "en"), player: player!)
-        owners.all.append(ads)
-        let ad = VideoAd(ad: try Fixtures.payload(Fixtures.ad(id: "p9")))
-        ad.owner = ads
-        send(ad, "ad.loaded")
-        player = nil
-        do { try ad.show() } catch VideoAdError.invalidated(let reason) { #expect(reason == .playerUnavailable) } catch { Issue.record("expected invalidated") }
+    @Test func showPlacesTheAdInTheViewItIsGiven() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p9"))
+        let other = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 300))
+        window.add(other)
+        try ad.show(in: other)
+        #expect(other.subviews.count == 1, "the SDK's host view went into the view passed to show(in:)")
+        #expect(harness.player.view.subviews.isEmpty)
+        ad.dismiss()
+        #expect(other.subviews.isEmpty, "and is removed at the end")
     }
 
     @Test func dismissEndsWithDismissedAndFiresOverlayViewDurationNotClose() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10"))
         var sent: [String] = []
         ad.bridge.onSend = { type, _ in if type != "ad.exposure" { sent.append(type) } }
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(ad.hasEnded)
@@ -222,7 +220,7 @@ struct VideoAdTests {
 
     @Test func closeEndsWithClosedAndFiresClose() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p12"))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         send(ad, "ad.close", ["reason": "close"])
         #expect(delegate.endReasons == [.closed])
         let fired = await beacons()
@@ -232,7 +230,7 @@ struct VideoAdTests {
 
     @Test func resumeEndsWithResumed() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p13", position: "fullscreen", size: nil))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         send(ad, "ad.close", ["reason": "resume"])
         #expect(delegate.endReasons == [.resumed])
     }
@@ -241,7 +239,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p14"))
         var opened: [URL] = []
         Environment.openURL = { url, completion in opened.append(url); completion(true) }
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
         send(ad, "ad.click", ["url": "https://brand.test/offer", "area": "cta"])
         #expect(delegate.clicks == [VideoAd.Click(url: URL(string: "https://brand.test/offer")!, area: "cta")])
@@ -254,7 +252,7 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p15"))
         var opened: [String] = []
         Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(url.scheme == "https") }
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
         send(ad, "ad.click", ["url": "brandapp://offer", "fallbackUrl": "https://brand.test/offer"])
         #expect(opened == ["brandapp://offer", "https://brand.test/offer"])
@@ -264,7 +262,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16"))
         var opened: [URL] = []
         Environment.openURL = { url, completion in opened.append(url); completion(true) }
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
         send(ad, "ad.open", ["url": "https://adchoices.test", "purpose": "adChoices"])
         #expect(opened.count == 1)
@@ -276,7 +274,7 @@ struct VideoAdTests {
 
     @Test func errorAfterShowIsDidFailThenDidEndFailed() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p17"))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         send(ad, "ad.error", ["code": 405])
         #expect(delegate.events.suffix(2) == ["fail", "end:failed"])
         guard case .creativeFailed(let code) = delegate.failures.first else { Issue.record("expected creativeFailed"); return }
@@ -453,7 +451,7 @@ struct VideoAdTests {
 
     @Test func theOwnerRetainsAShowingAdUntilItEnds() async throws {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep", language: "en"), player: harness.player)
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         owners.all.append(ads)
         weak var weakAd: VideoAd?
         let delegate = RecordingDelegate()
@@ -462,7 +460,7 @@ struct VideoAdTests {
             ad.owner = ads
             ad.delegate = delegate
             send(ad, "ad.loaded")
-            try ad.show()
+            try ad.show(in: harness.player.view)
             weakAd = ad
         }
         #expect(weakAd != nil, "retained while showing")
@@ -473,7 +471,7 @@ struct VideoAdTests {
 
     @Test func invalidatingAShowingAdOnlyEndsItForDestroyed() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p21"))
-        try ad.show()
+        try ad.show(in: harness.player.view)
         ad.invalidate(.expired)
         ad.invalidate(.targetingChanged)
         #expect(delegate.endReasons.isEmpty)

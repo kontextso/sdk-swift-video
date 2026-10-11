@@ -89,7 +89,7 @@ struct DebugReporterTests {
         let pages = FramePageServer()
         pages.install()
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep", language: "en"), player: harness.player)
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         harness.serve(Fixtures.ad(id: "img-dbg"))
         _ = try await ads.pausePlacement("pause").load()
         #expect(await waitUntil { self.allNames().contains("ad.loaded") })

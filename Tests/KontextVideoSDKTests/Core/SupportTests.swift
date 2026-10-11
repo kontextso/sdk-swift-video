@@ -1,11 +1,9 @@
-import AVFoundation
-import AVKit
 import Foundation
 @testable import KontextVideoSDK
 import Testing
 import UIKit
 
-/// The smaller public pieces: error descriptions, delegate defaults, placements, the player adapter.
+/// The smaller public pieces: error descriptions, delegate defaults, placements.
 @MainActor
 struct SupportTests {
     // MARK: VideoAdError
@@ -13,12 +11,10 @@ struct SupportTests {
     @Test func everyErrorReadsAsASentence() {
         let cases: [(VideoAdError, String)] = [
             (.notInitialized, "KontextVideo.shared.initialize(with:) was not called"),
-            (.initializationFailed, "/init failed; no ads until it succeeds"),
+            (.initializationFailed, "/init failed, and retrying it failed too; no ads until it succeeds"),
             (.destroyed, "the VideoAds was destroyed"),
-            (.playerUnavailable, "the KontextVideoPlayer was deallocated"),
             (.disabled(reason: "publisherDisabled"), "the SDK is disabled by the server (publisherDisabled)"),
-            (.placementBusy, "the placement already has an ad loading, loaded or showing"),
-            (.tooEarly(nextRequestAt: 25), "timed mode: not before content time 25.0 s"),
+            (.placementBusy, "the placement already has an ad loading, or loaded and not yet shown"),
             (.invalidPlacement(.unknown(id: "nope")), "placement \"nope\" does not exist for this publisher token"),
             (.invalidPlacement(.formatMismatch(id: "x", expected: .overlay, actual: .pause)), "placement \"x\" is an overlay placement, not pause"),
             (.invalidPlacement(.formatMismatch(id: "x", expected: .pause, actual: .interstitial)), "placement \"x\" is a pause placement, not interstitial"),
@@ -77,7 +73,7 @@ struct SupportTests {
     @Test func placementsForwardTheirIdAndFormat() async {
         SDKHarness.reset()
         Environment.assertionFailure = { _ in }
-        let ads = VideoAds(content: .init(id: "v", language: "en"), player: TestPlayer())
+        let ads = TestPlayer().ads(for: .init(id: "v", language: "en"))
         #expect(ads.overlayPlacement("a").id == "a")
         #expect(ads.pausePlacement("b").id == "b")
         #expect(ads.interstitialPlacement("c").id == "c")
@@ -96,32 +92,6 @@ struct SupportTests {
             }
         }
         SDKHarness.reset()
-    }
-
-    // MARK: AVPlayerAdapter
-
-    @Test func adapterReadsThePlayheadFromThePlayer() {
-        let player = AVPlayer()
-        let view = UIView()
-        let adapter = KontextVideo.AVPlayerAdapter(player: player, view: view)
-        #expect(adapter.view === view)
-        #expect(adapter.player === player)
-        #expect(adapter.playhead == 0, "no item: 0, never NaN")
-    }
-
-    @Test func adapterUsesTheContentOverlayViewOfAPlayerViewController() {
-        let controller = AVPlayerViewController()
-        controller.player = AVPlayer()
-        controller.loadViewIfNeeded()
-        let adapter = KontextVideo.AVPlayerAdapter(playerViewController: controller)
-        #expect(adapter.player === controller.player)
-        #expect(adapter.view === controller.contentOverlayView, "over the video, under the transport controls")
-    }
-
-    @Test func adapterWithoutAPlayerOnTheControllerStillWorks() {
-        let controller = AVPlayerViewController()
-        let adapter = KontextVideo.AVPlayerAdapter(playerViewController: controller)
-        #expect(adapter.playhead == 0)
     }
 
     // MARK: Logger

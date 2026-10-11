@@ -3,14 +3,21 @@ import Foundation
 import Testing
 import UIKit
 
-/// A player for tests: a view the test places in a window, and a playhead the test sets.
+/// A player for tests: a view the test places in a window, and a playhead the test sets. `ads(for:)`
+/// makes a `VideoAds` sized to the view that reads the playhead from here.
 @MainActor
-final class TestPlayer: KontextVideoPlayer {
+final class TestPlayer {
     let view: UIView
     var playhead: TimeInterval = 0
 
     init(size: CGSize = CGSize(width: 390, height: 220)) {
         view = UIView(frame: CGRect(origin: .zero, size: size))
+    }
+
+    func ads(for content: KontextVideo.Content) -> VideoAds {
+        let ads = VideoAds(content: content, playerSize: view.bounds.size)
+        ads.playheadProvider = { [unowned self] in playhead }
+        return ads
     }
 }
 
@@ -139,7 +146,6 @@ struct SDKHarness {
         Environment.reset()
         StubServer.uninstall()
         Init.retryDelay = 2_000_000_000
-        KontextVideo.initRetryInterval = 300
         FrameBridge.loadTimeout = 10
         VideoAd.videoStartBackstop = 5
         ViewabilityMeter.interval = 0.25

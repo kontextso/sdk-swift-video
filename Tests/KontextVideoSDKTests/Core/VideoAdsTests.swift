@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 @testable import KontextVideoSDK
 import Testing
@@ -17,7 +18,7 @@ struct VideoAdsTests {
 
     private func makeAds(content: String = "ep-1", player: TestPlayer? = nil) async -> VideoAds {
         _ = await harness.initialize()
-        return VideoAds(content: .init(id: content, language: "en"), player: player ?? harness.player)
+        return (player ?? harness.player).ads(for: .init(id: content, language: "en"))
     }
 
     private func loadError(_ work: () async throws -> VideoAd) async -> VideoAdError? {
@@ -71,7 +72,7 @@ struct VideoAdsTests {
         #expect(request?["placementId"] as? String == "pause")
         #expect((request?["options"] as? [String: Any])?["positions"] as? [String] == ["top", "fullscreen"])
         #expect((request?["video"] as? [String: Any])?["id"] as? String == "ep-1")
-        #expect((request?["player"] as? [String: Any])?["playhead"] == nil, "a prefetch before start()")
+        #expect((request?["player"] as? [String: Any])?["playhead"] as? Int == 0, "the playhead read at request time")
         #expect(pages.served == ["img-1"], "the page loaded")
         #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("loaded") }, "the loaded beacon fires at ad.loaded")
     }
@@ -79,17 +80,16 @@ struct VideoAdsTests {
     @Test func loadWaitsForInitInFlight() async throws {
         harness.server.on("/v2/init") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.initEnabled()), delay: 0.2) }
         KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
-        let ads = VideoAds(content: .init(id: "v", language: "en"), player: harness.player)
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         harness.serve(Fixtures.ad(id: "img-2"))
         let ad = try await ads.pausePlacement("pause").load()
         #expect(ad.isReady)
         #expect(KontextVideo.shared.state == .enabled)
     }
 
-    @Test func loadAfterStartCarriesTheLivePlayhead() async throws {
+    @Test func loadCarriesThePlayheadReadAtRequestTime() async throws {
         let ads = await makeAds()
         harness.player.playhead = 12.5
-        ads.start()
         harness.serve(Fixtures.ad(id: "img-3"))
         _ = try await ads.pausePlacement("pause").load()
         let player = harness.server.requests(to: "/v2/video/ads").first?.body?["player"] as? [String: Any]
@@ -109,7 +109,7 @@ struct VideoAdsTests {
 
     @Test func loadBeforeInitializeThrowsNotInitialized() async {
         Environment.assertionFailure = { _ in }
-        let ads = VideoAds(content: .init(id: "v", language: "en"), player: harness.player)
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .notInitialized = error else { Issue.record("expected notInitialized, got \(String(describing: error))"); return }
         #expect(harness.server.requests(to: "/v2/video/ads").isEmpty)
@@ -141,27 +141,16 @@ struct VideoAdsTests {
         #expect(ads.isDestroyed)
     }
 
-    @Test func loadWhenThePlayerIsGoneThrowsPlayerUnavailable() async {
-        var player: TestPlayer? = TestPlayer()
-        let ads = await makeAds(player: player)
-        player = nil
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .playerUnavailable = error else { Issue.record("expected playerUnavailable"); return }
-    }
-
-    @Test func loadBeforeNextRequestAtThrowsTooEarly() async throws {
+    @Test func loadBeforeNextRequestAtIsAnOrdinaryRequest() async throws {
         let ads = await makeAds()
-        ads.start()
         harness.serve(Fixtures.overlayAd(id: "img-5"), nextRequestAt: 25_000)
         let ad = try await ads.overlayPlacement("overlay").load()
+        #expect(ads.nextRequestAt["overlay"] == 25_000, "remembered for timed mode")
         ad.invalidate(.targetingChanged)
         harness.player.playhead = 10
-        let error = await loadError { try await ads.overlayPlacement("overlay").load() }
-        guard case .tooEarly(let at) = error else { Issue.record("expected tooEarly"); return }
-        #expect(at == 25)
-        harness.player.playhead = 26
         harness.serve(Fixtures.overlayAd(id: "img-6"))
         _ = try await ads.overlayPlacement("overlay").load()
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "nextRequestAt is a recommendation, not a rule")
     }
 
     // MARK: load: the busy rule
@@ -196,20 +185,24 @@ struct VideoAdsTests {
         #expect(next.id == "img-10")
     }
 
-    @Test func loadAfterTheAdEndedIsAllowed() async throws {
+    @Test func loadWhileTheAdIsOnScreenIsAllowed() async throws {
         let window = TestWindow()
         defer { window.tearDown() }
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-11"))
         let ad = try await ads.pausePlacement("pause").load()
-        try ad.show()
-        let busy = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .placementBusy = busy else { Issue.record("expected placementBusy while showing"); return }
-        ad.dismiss()
+        try ad.show(in: harness.player.view)
         harness.serve(Fixtures.ad(id: "img-12"))
         let next = try await ads.pausePlacement("pause").load()
-        #expect(next.id == "img-12")
+        #expect(next.id == "img-12", "the next ad loads while the current one shows")
+        #expect(ad.hasEnded == false, "the showing ad is untouched")
+        let busy = await loadError { try await ads.pausePlacement("pause").load() }
+        guard case .placementBusy = busy else { Issue.record("expected placementBusy: one unshown ad at a time"); return }
+        ad.dismiss()
+        #expect(next.isReady)
+        try next.show(in: harness.player.view)
+        next.dismiss()
     }
 
     // MARK: load: what the server answers
@@ -379,17 +372,33 @@ struct VideoAdsTests {
         }
     }
 
-    // MARK: start, targeting, destroy
+    // MARK: the playhead, targeting, destroy
 
-    @Test func startIsIdempotentAndNeverTouchesThePlayer() async {
+    @Test func playheadComesFromTheProviderOrTheTrackedPlayerOrIsZero() async {
         let ads = await makeAds()
         harness.player.playhead = 47
-        #expect(ads.isStarted == false)
-        ads.start()
-        ads.start()
-        #expect(ads.isStarted)
-        #expect(harness.player.playhead == 47)
         #expect(ads.playheadMs == 47_000)
+        ads.playheadProvider = { .nan }
+        #expect(ads.playheadMs == 0, "never NaN")
+        ads.playheadProvider = { -3 }
+        #expect(ads.playheadMs == 0, "never negative")
+        let player = AVPlayer()
+        ads.trackPlayhead(of: player)
+        #expect(ads.playheadProvider == nil, "tracking a player replaces the provider")
+        #expect(ads.playheadMs == 0, "no item: 0")
+        ads.playheadProvider = { 5 }
+        #expect(ads.playheadMs == 5_000, "a provider replaces the tracked player")
+        let bare = VideoAds(content: .init(id: "bare", language: "en"))
+        #expect(bare.playheadMs == 0, "nothing set: the start of the video, what a prefetch sends")
+        #expect(bare.playerSize == nil, "full screen by default")
+    }
+
+    @Test func aTrackedPlayerIsHeldWeakly() async {
+        let ads = await makeAds()
+        var player: AVPlayer? = AVPlayer()
+        ads.trackPlayhead(of: player!)
+        player = nil
+        #expect(ads.playheadMs == 0)
     }
 
     @Test func targetingChangeInvalidatesUnshownAds() async throws {
@@ -417,7 +426,7 @@ struct VideoAdsTests {
         let ad = try await ads.pausePlacement("pause").load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
-        try ad.show()
+        try ad.show(in: harness.player.view)
         KontextVideo.shared.variantId = "b"
         #expect(delegate.invalidations.isEmpty)
         #expect(delegate.endReasons.isEmpty)
@@ -437,7 +446,7 @@ struct VideoAdsTests {
         let showingDelegate = RecordingDelegate()
         loaded.delegate = loadedDelegate
         showing.delegate = showingDelegate
-        try showing.show()
+        try showing.show(in: harness.player.view)
         ads.destroy()
         #expect(loadedDelegate.invalidations == [.destroyed])
         #expect(showingDelegate.endReasons == [.destroyed])
@@ -445,7 +454,7 @@ struct VideoAdsTests {
         #expect(showing.hasEnded)
         ads.destroy()
         #expect(showingDelegate.endReasons.count == 1, "destroy twice does nothing more")
-        #expect(throws: VideoAdError.self) { try loaded.show() }
+        #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
     }
 
     @Test func deallocationDoesWhatDestroyDoes() async throws {

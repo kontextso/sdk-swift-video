@@ -13,7 +13,7 @@ public final class KontextVideo {
         /// The server switched the SDK off. Final for this app launch.
         case disabled(reason: String)
         /// `/init` failed twice, usually a bad network at launch. No ads until a later `/init` succeeds:
-        /// the SDK tries again at the next video start, 5 minutes after the failure at the earliest.
+        /// every ads request retries it first, whenever it comes.
         case failed
     }
 
@@ -48,12 +48,9 @@ public final class KontextVideo {
         configuration != nil
     }
 
-    static var initRetryInterval: TimeInterval = 300
-
     /// When the server asked for the debug log (`reportDebug` in the `/init` response).
     private(set) var reportDebug = false
     private var initTask: Task<Void, Never>?
-    private var initFailedAt: Date?
 
     private init() {}
 
@@ -87,7 +84,7 @@ public final class KontextVideo {
     /// Every `VideoAds` registers itself here from its initializer, so the rules that touch all of them
     /// (a targeting change discards every unshown ad) can reach it.
     func register(_ ads: VideoAds) {
-        requireInitialized("VideoAds(video:player:)")
+        requireInitialized("VideoAds(content:playerSize:)")
         liveVideoAds.append(WeakVideoAds(ads))
         liveVideoAds.removeAll { $0.value == nil }
     }
@@ -100,11 +97,11 @@ public final class KontextVideo {
         init(_ value: VideoAds) { self.value = value }
     }
 
-    /// Whether ads may be requested now: waits while `/init` is in flight, retries it when due after a
+    /// Whether ads may be requested now: waits while `/init` is in flight, retries it first after a
     /// failure, and answers `false` when the SDK is off.
     func waitUntilEnabled() async -> Bool {
         if state == .failed {
-            retryInitIfDue()
+            retryInit()
         }
         if state == .initializing {
             await initTask?.value
@@ -136,22 +133,13 @@ public final class KontextVideo {
         return false
     }
 
-    /// Called at the next natural moment after a failed `/init` (a video start): tries again
-    /// when the failure is at least `initRetryInterval` old.
-    func retryInitIfDue() {
-        guard state == .failed, let configuration, let initFailedAt,
-              Date().timeIntervalSince(initFailedAt) >= Self.initRetryInterval else { return }
+    /// After a failed `/init`, every ads request tries it again first; a load is already an explicit
+    /// request for an ad, and one `/init` per load is cheap.
+    func retryInit() {
+        guard state == .failed, let configuration else { return }
         Logger.info("Retrying /init")
         state = .initializing
         initTask = Task { await runInit(configuration: configuration) }
-    }
-
-    /// At most one started `VideoAds` per player: starting one stops the others on the same player object.
-    func stopOthers(playing player: any KontextVideoPlayer, except ads: VideoAds) {
-        for entry in liveVideoAds {
-            guard let other = entry.value, other !== ads, other.player === player else { continue }
-            other.stop(because: ads)
-        }
     }
 
     /// The spec's rule: when `user`, `regulatory` or `variantId` changes, every loaded ad that was not
@@ -173,7 +161,6 @@ public final class KontextVideo {
         regulatory = nil
         variantId = nil
         reportDebug = false
-        initFailedAt = nil
         liveVideoAds.removeAll()
         DebugReporter.shared.isEnabled = false
         Logger.level = .warning
@@ -188,7 +175,6 @@ public final class KontextVideo {
                 self.reportDebug = reportDebug
                 DebugReporter.shared.isEnabled = reportDebug
                 DebugReporter.shared.event("init.response", state: ["enabled": true])
-                initFailedAt = nil
                 state = .enabled
                 Logger.info("Enabled")
             case .disabled(let reason):
@@ -196,7 +182,6 @@ public final class KontextVideo {
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {
-            initFailedAt = Date()
             state = .failed
             Logger.error("/init failed, no ads until it succeeds: \(error)")
         }

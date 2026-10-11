@@ -58,8 +58,8 @@ KontextVideo.shared.initialize(with: configuration) { state in … }
 ```
 
 All options, with their defaults. The SDK's model types are nested in `KontextVideo` (`KontextVideo.Configuration`,
-`.User`, `.Content`, `.Player`), as `UIButton.Configuration`, so they never collide with your app's own `User` or
-`Player`; where Swift can infer the type, `.init(…)` is enough.
+`.User`, `.Content`), as `UIButton.Configuration`, so they never collide with your app's own `User` or `Content`;
+where Swift can infer the type, `.init(…)` is enough.
 
 ```swift
 KontextVideo.Configuration(
@@ -82,56 +82,53 @@ KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read 
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
-### 2. The player
+### 2. The player area and the playhead
 
-`KontextVideoPlayer` is a protocol your own player object conforms to. It gives the SDK two things: the view the
-content plays in, where overlay and pause ads go and whose size and full-screen state the SDK reads itself, and the
-content playhead in seconds. The same model as Google IMA (`IMAAdDisplayContainer` + `IMAContentPlayhead`).
-
-For an `AVPlayer` the SDK ships the conformance: `KontextVideo.AVPlayerAdapter`. Keep it alive as long as the player
-screen; the SDK holds it weakly.
+There is no player object to conform or wrap. The SDK needs two facts about your player and takes each where it is
+cheapest: the player's size, given once when you create the `VideoAds` (nothing for a full-screen player, the usual
+case), and the content playhead, which the SDK *reads* when it needs one (at a request, in beacon macros) rather than
+having you push it. For an `AVPlayer`, `trackPlayhead(of:)` is the whole integration; for any other player set a
+closure. The view the ad goes into is passed at `show(in:)`. This is Google IMA's model (`IMAContentPlayhead`,
+`IMAAVPlayerContentPlayhead`), without the protocol.
 
 ```swift
-// AVPlayer in your own view (the one holding the AVPlayerLayer)
-let player = KontextVideo.AVPlayerAdapter(player: avPlayer, view: playerView)
+let ads = VideoAds(content: content)                                        // full screen
+let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220))   // or the size in points
 
-// AVPlayerViewController: ads go into its contentOverlayView, under the transport controls
-let player = KontextVideo.AVPlayerAdapter(playerViewController: playerViewController)
+ads.trackPlayhead(of: avPlayer)                   // AVPlayer: the SDK reads currentTime() itself, holds the player weakly
+ads.playheadProvider = { myPlayer.currentTime }   // any other player: seconds
 
-// Any other player: conform your own object
-extension MyPlayerController: KontextVideoPlayer {
-    var view: UIView { playerView }                               // the content's view; ads are placed in it
-    var playhead: TimeInterval { currentTime }                    // content time, seconds
-}
+try ad.show(in: playerView)                       // the view the content plays in (see 5)
 ```
+
+Attach the playhead any time, before or after loading: a request made before the player exists carries content time
+0, which is what a prefetch should say. With one `AVPlayer` reused across episodes (`replaceCurrentItem`), call
+`trackPlayhead(of:)` when the episode starts playing in it, not when you create the `VideoAds`, or the next
+episode's prefetch would carry the previous episode's time.
 
 ### 3. Create the ads for a video
 
 One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
-plays. `KontextVideo.Content` describes the video ("content" is the ad-industry word for it): `id` is your own id, in
-any scheme; everything else is optional context that helps targeting. Times are seconds. Leave `mediaRating` unset
-when you do not know it; the SDK never guesses.
+plays; any number can be alive at once. `KontextVideo.Content` describes the video ("content" is the ad-industry
+word for it): `id` is your own id, in any scheme; everything else is optional context that helps targeting. Times
+are seconds. Leave `mediaRating` unset when you do not know it; the SDK never guesses.
 
-Call `ads.start()` when the episode starts playing. Before that, requests are prefetches at content time 0, so you can
-load the next episode's ads while this one plays; after it, requests carry the live playhead. One started `VideoAds` per
-player: starting the next episode's stops the previous one (and logs a warning); destroy the previous one when you move on.
+When the viewer moves on to the next episode, `destroy()` the previous episode's `VideoAds` (see 7): an ad of it
+still on screen ends with `didEnd(.destroyed)`, so nothing of episode 5 sits over episode 6.
 
 ```swift
-let ads = VideoAds(
-    content: .init(
-        id: "100001-6",
-        language: "en",
-        title: "Episode 6",
-        duration: 92,                // seconds
-        episodeNumber: 6,
-        genre: "romance",
-        mediaRating: .safe,          // optional; unset = unknown
-        series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
-    ),
-    player: self                     // your KontextVideoPlayer
-)
+let ads = VideoAds(content: .init(
+    id: "100001-6",
+    language: "en",
+    title: "Episode 6",
+    duration: 92,                // seconds
+    episodeNumber: 6,
+    genre: "romance",
+    mediaRating: .safe,          // optional; unset = unknown
+    series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
+))
 
-ads.start()                          // when the episode starts playing
+ads.trackPlayhead(of: avPlayer)  // when the episode starts playing
 ```
 
 ### 4. Placements and loading the ads
@@ -142,8 +139,10 @@ publisher starts with one per format: `overlay`, `pause`, `interstitial`.
 
 Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. `load` is
 `async` and returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready. You own
-the ad you get; keep a reference until it is shown, drop it and it is gone. One ad per placement at a time. Loads
-started while the SDK is still initialising wait for it.
+the ad you get; keep a reference until it is shown, drop it and it is gone. One *unshown* ad per placement at a
+time: a second `load` while one is loading or waiting to be shown throws `.placementBusy`, but a `load` while the
+previous ad is on screen is fine, so the next one is ready the moment the current one ends. Loads started while the
+SDK is still initialising wait for it; after a failed `/init`, every `load` retries it first.
 
 ```swift
 let overlay = ads.overlayPlacement("overlay")
@@ -182,15 +181,17 @@ do {
     // an integration bug: unknown id or wrong format; fix the id or the dashboard
 } catch {
     // .placementBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,
-    // .playerUnavailable, .creativeFailed(code:), .request(error), CancellationError
+    // .creativeFailed(code:), .request(error), CancellationError
 }
 ```
 
 ### 5. Show it, listen, dismiss
 
-Overlay and pause ads are shown with `show()`, inside your player's `view`; `dismiss()` ends them when your content
-resumes. `show` throws when presentation cannot begin (nothing fired): `.alreadyShown`, `.invalidated(reason)`,
-`.containerTooSmall` (the ad is discarded) or `.playerUnavailable`. Set a `VideoAdDelegate` on the ad for everything
+Overlay and pause ads are shown with `show(in:)`, inside the view your content plays in: the one holding the
+`AVPlayerLayer`, or `contentOverlayView` of an `AVPlayerViewController`, or a `UIViewRepresentable`-hosted view in
+SwiftUI. The SDK places its own view in it at the ad's position and size (a full-screen pause ad fills it);
+`dismiss()` ends the ad when your content resumes. `show` throws when presentation cannot begin (nothing fired):
+`.alreadyShown`, `.invalidated(reason)` or `.containerTooSmall` (the ad is discarded). Set a `VideoAdDelegate` on the ad for everything
 after: `didShow`, `didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every
 way an ad ends, including your own `dismiss()` and `destroy()`. Resume your content in `didEnd`.
 
@@ -199,7 +200,7 @@ let ad = try await pause.load()
 ad.delegate = self
 
 func viewerPaused() {
-    if let ad = pauseAd, ad.isReady { try? ad.show() } else { loadPauseAd() }   // show if ready, else load
+    if let ad = pauseAd, ad.isReady { try? ad.show(in: playerView) } else { loadPauseAd() }   // show if ready, else load
 }
 
 func viewerResumed() {

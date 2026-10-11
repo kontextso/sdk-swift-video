@@ -16,22 +16,16 @@ public enum VideoAdError: Error, Sendable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion when the
     /// `VideoAds` was created; a release build gets this error instead, and works once `initialize` runs.
     case notInitialized
-    /// `/init` failed and is not due for a retry yet (the SDK tries again at the next video start, 5 minutes
-    /// after the failure at the earliest). No ads until it succeeds.
+    /// `/init` failed, and the retry this `load` made failed too. Every `load` retries it; no ads until
+    /// it succeeds.
     case initializationFailed
     /// The `VideoAds` was destroyed. It is terminal: create a new one for the next content.
     case destroyed
-    /// The `KontextVideoPlayer` object was deallocated. Terminal for the `VideoAds` (the SDK holds the
-    /// player weakly and cannot re-attach one): its loaded ads are invalidated with the same reason, and
-    /// `show` on one throws `invalidated(.playerUnavailable)`. Create a new `VideoAds` with the new player.
-    case playerUnavailable
     /// The server switched the SDK off for this app launch (`/init` or an ads response said so).
     case disabled(reason: String)
-    /// The placement already has an ad loading, loaded but not shown, or showing. One ad per placement at
-    /// a time: show it, let it end, or drop it, then load again.
+    /// The placement already has an ad loading, or loaded but not shown. One unshown ad per placement at
+    /// a time: show it or drop it, then load again. An ad on screen does not block the next load.
     case placementBusy
-    /// Timed mode: the server said not to ask for this placement again before this content time (seconds).
-    case tooEarly(nextRequestAt: TimeInterval)
     /// An unknown placement id or a format that does not match the dashboard.
     case invalidPlacement(InvalidPlacement)
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
@@ -62,17 +56,13 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .notInitialized:
             return "KontextVideo.shared.initialize(with:) was not called"
         case .initializationFailed:
-            return "/init failed; no ads until it succeeds"
+            return "/init failed, and retrying it failed too; no ads until it succeeds"
         case .destroyed:
             return "the VideoAds was destroyed"
-        case .playerUnavailable:
-            return "the KontextVideoPlayer was deallocated"
         case .disabled(let reason):
             return "the SDK is disabled by the server (\(reason))"
         case .placementBusy:
-            return "the placement already has an ad loading, loaded or showing"
-        case .tooEarly(let at):
-            return "timed mode: not before content time \(at) s"
+            return "the placement already has an ad loading, or loaded and not yet shown"
         case .invalidPlacement(.unknown(let id)):
             return "placement \"\(id)\" does not exist for this publisher token"
         case .invalidPlacement(.formatMismatch(let id, let expected, let actual)):
