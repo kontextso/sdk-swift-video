@@ -147,6 +147,9 @@ struct PlayerSnapshot: Encodable, Sendable, Equatable {
     let fullscreen: Bool
     /// Milliseconds in content time; 0 before the episode plays.
     let playhead: Int
+    /// Whether an ad video can start by itself: `false` in Low Power Mode, where WebKit refuses autoplay
+    /// and the viewer taps Play (the server prices it as click-to-play, OpenRTB playbackmethod 2).
+    let autoplay: Bool
 
     /// `playerSize` in points, `nil` for a full-screen player. A given size is sent as is, `fullscreen`
     /// when it matches the screen.
@@ -158,7 +161,8 @@ struct PlayerSnapshot: Encodable, Sendable, Equatable {
             width: Int(size.width.rounded()),
             height: Int(size.height.rounded()),
             fullscreen: size.width >= screen.width - 1 && size.height >= screen.height - 1,
-            playhead: playheadMs
+            playhead: playheadMs,
+            autoplay: !Environment.isLowPowerModeEnabled()
         )
     }
 }

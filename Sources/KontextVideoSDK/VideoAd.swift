@@ -152,6 +152,9 @@ public final class VideoAd {
     /// page that is itself dead after `ad.show`.
     private var startBackstop: Task<Void, Never>?
     static var videoStartBackstop: TimeInterval = 5
+    /// Click-to-play: how long the ad waits for the viewer's tap after `video.playRequired`; the page's
+    /// own timeout is the same, and either ends the ad as a creative that did not start (405).
+    static var playRequiredTimeout: TimeInterval = 15
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
@@ -553,6 +556,19 @@ public final class VideoAd {
             tracker.adPlayhead = playhead
             tracker.fire("skip")
             end(.skipped)
+        case .playRequired:
+            // Click-to-play (Low Power Mode): the start backstop stands down and a longer one takes
+            // over, so a linear ad with the content paused and no close before Play is never a trap;
+            // the page gives up at the same 15 s. Not an error, nothing fires; the impression waits.
+            Logger.info("ad \(id.prefix(8)): autoplay refused, waiting up to \(Int(Self.playRequiredTimeout)) s for the viewer's tap")
+            DebugReporter.shared.event("ad.playRequired", adId: id)
+            startBackstop?.cancel()
+            startBackstop = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(Self.playRequiredTimeout * 1_000_000_000))
+                guard let self, !Task.isCancelled, !hasEnded, !impressionRecorded else { return }
+                Logger.warning("ad \(id.prefix(8)): no tap within \(Int(Self.playRequiredTimeout)) s; the creative did not start")
+                handle(.error(code: 405))
+            }
         case .video(let name, let playhead):
             tracker.adPlayhead = playhead
             Logger.debug("ad \(id.prefix(8)): video.\(name)")

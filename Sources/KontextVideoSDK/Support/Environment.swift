@@ -29,6 +29,8 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: () -> Bool = { UIApplication.shared.applicationState == .active }
+    /// Low Power Mode: WebKit refuses to autoplay video, the ad becomes click-to-play.
+    static var isLowPowerModeEnabled: () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }
 
     static func reset() {
         session = .shared
@@ -43,5 +45,6 @@ enum Environment {
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = { UIApplication.shared.applicationState == .active }
+        isLowPowerModeEnabled = { ProcessInfo.processInfo.isLowPowerModeEnabled }
     }
 }

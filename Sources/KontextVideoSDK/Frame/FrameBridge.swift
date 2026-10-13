@@ -17,6 +17,9 @@ enum FrameEvent: Sendable {
     case skip(playhead: Int)
     /// `start`, `firstQuartile`, `midpoint`, `thirdQuartile`, `pause`, `resume`, `mute`, `unmute`.
     case video(name: String, playhead: Int)
+    /// The platform refused to start the video by itself (Low Power Mode); the page shows Play and waits
+    /// for the viewer, up to 15 s.
+    case playRequired
     /// The ad video passed a `progress` entry's offset.
     case progress(offset: Int, playhead: Int)
     /// The video played to the end. The SDK fires `complete` and grants the reward.
@@ -301,6 +304,9 @@ final class FrameBridge: NSObject {
         case "video.progress":
             guard state == .shown, let offset = (body["offset"] as? NSNumber)?.intValue else { return }
             onEvent?(.progress(offset: offset, playhead: playhead))
+        case "video.playRequired":
+            guard state == .shown else { return }
+            onEvent?(.playRequired)
         case "ad.error":
             guard state == .loading || state == .loaded || state == .shown else { return }
             fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)))
