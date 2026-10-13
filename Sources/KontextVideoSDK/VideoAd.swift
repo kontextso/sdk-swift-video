@@ -313,49 +313,62 @@ public final class VideoAd {
         if startMeter {
             self.startMeter()
         }
-        if format == .overlay, let duration {
-            // The buyer's NonLinear duration: one clock, the SDK's, counting time on screen only: it
-            // freezes while the app is not active and resumes on foreground. `dismiss()` ends it earlier.
-            durationRemaining = duration
+        if format != .linear {
+            // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
+            // `duration` runs on it, so both freeze in the background and resume on foreground.
             observeActivity()
-            if Environment.isApplicationActive() { startDurationClock() }
+            if Environment.isApplicationActive() { activeSince = ProcessInfo.processInfo.systemUptime }
+            if format == .overlay, duration != nil { startDurationClock() }
         }
     }
 
-    /// Seconds of the overlay's `duration` still to show; counted down only while the app is active.
-    private var durationRemaining: TimeInterval = 0
-    private var durationStartedAt: TimeInterval?
+    /// When the current stretch of active time on screen began; `nil` while the app is not active.
+    private var activeSince: TimeInterval?
+    /// Active time on screen before the current stretch, seconds.
+    private var activeAccumulated: TimeInterval = 0
     private var activityObservers: [any NSObjectProtocol] = []
 
+    /// Seconds the ad has been on screen while the app was active.
+    var activeTimeOnScreen: TimeInterval {
+        activeAccumulated + (activeSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
+    }
+
+    /// The buyer's NonLinear `duration`, counted on active time only. `dismiss()` ends it earlier.
     private func startDurationClock() {
-        guard durationTask == nil, !hasEnded else { return }
-        let remaining = durationRemaining
-        durationStartedAt = ProcessInfo.processInfo.systemUptime
+        guard durationTask == nil, !hasEnded, let duration else { return }
+        let remaining = max(0, duration - activeTimeOnScreen)
         durationTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(max(0, remaining) * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !hasEnded else { return }
-            Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
+            Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration) s on screen elapsed")
             end(.completed)
         }
     }
 
-    private func pauseDurationClock() {
-        guard let task = durationTask, let startedAt = durationStartedAt else { return }
-        task.cancel()
+    private func applicationDidResignActive() {
+        if let since = activeSince {
+            activeAccumulated += ProcessInfo.processInfo.systemUptime - since
+            activeSince = nil
+        }
+        durationTask?.cancel()
         durationTask = nil
-        durationStartedAt = nil
-        durationRemaining = max(0, durationRemaining - (ProcessInfo.processInfo.systemUptime - startedAt))
-        Logger.debug("ad \(id.prefix(8)): overlay clock frozen with \(durationRemaining) s left")
+        Logger.debug("ad \(id.prefix(8)): clock frozen at \(activeAccumulated) s on screen")
+    }
+
+    private func applicationDidBecomeActive() {
+        guard !hasEnded, activeSince == nil else { return }
+        activeSince = ProcessInfo.processInfo.systemUptime
+        if format == .overlay { startDurationClock() }
     }
 
     private func observeActivity() {
         let center = NotificationCenter.default
         activityObservers = [
             center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.pauseDurationClock() }
+                MainActor.assumeIsolated { self?.applicationDidResignActive() }
             },
             center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.startDurationClock() }
+                MainActor.assumeIsolated { self?.applicationDidBecomeActive() }
             },
         ]
     }
@@ -412,8 +425,12 @@ public final class VideoAd {
             }
         }
         if format != .linear {
-            // The ad was on screen, whatever ended it.
-            tracker.fire("overlayViewDuration")
+            // The ad was on screen, whatever ended it; `[VIEWDURATION]` is the active time, not the wall clock.
+            if let since = activeSince {
+                activeAccumulated += ProcessInfo.processInfo.systemUptime - since
+                activeSince = nil
+            }
+            tracker.fire("overlayViewDuration", viewDurationMs: Int((activeAccumulated * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
         DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
@@ -488,8 +505,9 @@ public final class VideoAd {
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.host ?? url.absoluteString)")
             // The end card selects its own `click` entries; anything else is the creative's.
-            tracker.fire("click", part: area == "endCard" ? "endCard" : nil)
-            open(url, fallback: fallbackUrl)
+            // One occurrence: the beacon and the click-through carry the same fire id (API page 2.5).
+            let fireId = tracker.fire("click", part: area == "endCard" ? "endCard" : nil)
+            open(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
             delegate?.videoAd(self, didClick: Click(url: url, area: area))
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.host ?? url.absoluteString)")

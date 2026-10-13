@@ -26,6 +26,7 @@ struct TrackingInfo: Sendable {
             status = await ATTrackingManager.requestTrackingAuthorization()
             Logger.info("ATT: \(name(of: status))")
         }
+        KontextVideo.shared.noteTrackingAuthorization(status)
         var ifa: IFA?
         if status == .authorized {
             let id = ASIdentifierManager.shared().advertisingIdentifier.uuidString

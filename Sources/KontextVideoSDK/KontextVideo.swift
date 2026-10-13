@@ -1,5 +1,7 @@
+import AppTrackingTransparency
 import Foundation
 import KontextKit
+import UIKit
 
 /// Entry point of the Kontext Video SDK.
 @MainActor
@@ -66,6 +68,7 @@ public final class KontextVideo {
         Logger.level = configuration.logLevel
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
+        observeTrackingAuthorization()
         initTask = Task {
             await runInit(configuration: configuration)
             completion?(state)
@@ -142,8 +145,28 @@ public final class KontextVideo {
         initTask = Task { await runInit(configuration: configuration) }
     }
 
-    /// The spec's rule: when `user`, `regulatory` or `variantId` changes, every loaded ad that was not
-    /// shown yet is discarded, and the next request for each format carries the new values.
+    /// The ATT status is the fourth targeting input, and the only one the app does not set: re-read
+    /// whenever the app becomes active (the publisher's own prompt, the viewer in Settings) and after
+    /// the SDK's prompt (`noteTrackingAuthorization`); a change discards pending ads like the others.
+    private var lastTrackingStatus = ATTrackingManager.trackingAuthorizationStatus
+    private var activityObserver: (any NSObjectProtocol)?
+
+    private func observeTrackingAuthorization() {
+        guard activityObserver == nil else { return }
+        activityObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.noteTrackingAuthorization(ATTrackingManager.trackingAuthorizationStatus) }
+        }
+    }
+
+    /// Called with a freshly read status; discards pending ads when it differs from the last one seen.
+    func noteTrackingAuthorization(_ status: ATTrackingManager.AuthorizationStatus) {
+        guard status != lastTrackingStatus else { return }
+        lastTrackingStatus = status
+        targetingChanged("ATT status")
+    }
+
+    /// The spec's rule: when `user`, `regulatory`, `variantId` or the ATT status changes, every loaded
+    /// ad that was not shown yet is discarded, and the next request for each format carries the new values.
     private func targetingChanged(_ what: String) {
         Logger.debug("\(what) changed")
         for entry in liveVideoAds {
