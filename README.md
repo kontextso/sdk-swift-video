@@ -221,7 +221,11 @@ func viewerResumed() {
 
 extension PlayerController: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
-        contentPlayer.play()
+        switch ad.format {
+        case .linear: contentPlayer.play()                          // the ad paused the content: every ending resumes it
+        case .pause: if reason == .resumed { contentPlayer.play() } // the viewer paused: only Resume says play
+        case .overlay: break                                        // the content never stopped
+        }
     }
 }
 ```
