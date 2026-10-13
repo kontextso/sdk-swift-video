@@ -167,14 +167,21 @@ final class FrameBridge: NSObject {
 
     // MARK: SDK → page
 
-    /// The page is on screen: it starts whatever the creative does when visible.
+    /// The variant the SDK chose from the ad's `sizes` for the real box; the page lays it out.
+    var chosenSize: (width: Int, height: Int)?
+
+    /// The page is on screen: it starts whatever the creative does when visible, in the chosen size.
     func show() {
         guard state == .loaded else {
             Logger.warning("frame \(adId.prefix(8)): show() in state \(state), ignored")
             return
         }
         state = .shown
-        send("ad.show")
+        if let chosenSize {
+            send("ad.show", ["size": ["width": chosenSize.width, "height": chosenSize.height]])
+        } else {
+            send("ad.show")
+        }
     }
 
     /// How much of the box is on screen, from the viewability meter.

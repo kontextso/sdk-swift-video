@@ -81,7 +81,13 @@ public final class VideoAd {
     /// `nil` for a linear ad.
     public var position: Position? { facts.position }
     /// `nil` for a linear ad and for a full-screen pause ad.
-    public var size: Size? { facts.size }
+    /// Before `show`: the default variant. After `show`: the variant the SDK chose for the view.
+    public var size: Size? { chosenSize ?? facts.size }
+    /// Every size the creative was built for, the default first (`nil` for a linear ad and a
+    /// full-screen pause ad). The SDK picks the best fit for the view at `show`: the largest that fits
+    /// without scaling, else the one with the best scale still at or above 50 %.
+    public var sizes: [Size] { facts.sizes }
+    private var chosenSize: Size?
     /// Overlay: how long it stays on screen. Linear: the video's length. Seconds; `nil` for a pause ad.
     public var duration: TimeInterval? { facts.duration }
     /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
@@ -193,6 +199,7 @@ public final class VideoAd {
         host.addSubview(webView)
         container.addSubview(host)
         hostView = host
+        bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
         begin()
     }
 
@@ -270,11 +277,23 @@ public final class VideoAd {
         guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: ad.creative == .video ? 400 : 500)) }
     }
 
-    /// Where the ad goes in the player's view: the nominal size, scaled down to fit, never below 50 %.
+    /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
+    /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
+    /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
-        guard position != .fullscreen, let size else { return bounds }
+        guard position != .fullscreen, let defaultSize = facts.size else { return bounds }
+        let candidates = facts.sizes.isEmpty ? [defaultSize] : facts.sizes
+        func fit(_ candidate: Size) -> CGFloat {
+            min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
+        }
+        let unscaled = candidates.filter { fit($0) >= 1 }
+        let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
+            ?? candidates.max { fit($0) < fit($1) }
+            ?? defaultSize
+        chosenSize = size
+        if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
         let nominal = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
-        let scale = min(1, bounds.width / nominal.width, bounds.height / nominal.height)
+        let scale = fit(size)
         guard scale >= Self.minimumScale else {
             let minimum = CGSize(width: (nominal.width * Self.minimumScale).rounded(.up), height: (nominal.height * Self.minimumScale).rounded(.up))
             Logger.warning("ad \(id.prefix(8)): player view \(Int(bounds.width))×\(Int(bounds.height)) is below 50 % of the ad's \(size.width)×\(size.height); discarded")

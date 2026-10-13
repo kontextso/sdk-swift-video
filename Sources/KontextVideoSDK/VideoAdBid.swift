@@ -16,6 +16,8 @@ extension VideoAd {
         public var expirationDate: Date { facts.expirationDate }
         public var position: Position? { facts.position }
         public var size: Size? { facts.size }
+        /// Every size the creative was built for, the default first; the SDK picks one at `show`.
+        public var sizes: [Size] { facts.sizes }
         public var duration: TimeInterval? { facts.duration }
         public var skipOffset: TimeInterval? { facts.skipOffset }
         public var reward: Reward? { facts.reward }
@@ -93,6 +95,7 @@ extension VideoAd {
         let expirationDate: Date
         let position: Position?
         let size: Size?
+        let sizes: [Size]
         let duration: TimeInterval?
         let skipOffset: TimeInterval?
         let reward: Reward?
@@ -115,13 +118,15 @@ extension VideoAd {
             case .window(let from, let to): trigger = .window(from: TimeInterval(from) / 1000, to: TimeInterval(to) / 1000)
             }
             switch ad.details {
-            case .overlay(let position, let size, let duration):
+            case .overlay(let position, let size, let sizes, let duration):
                 self.position = position == .top ? .top : .bottom
                 self.size = Size(width: size.width, height: size.height)
+                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 self.duration = TimeInterval(duration) / 1000
                 skipOffset = nil
                 reward = nil
-            case .pause(let position, let size):
+            case .pause(let position, let size, let sizes):
+                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 switch position {
                 case .top: self.position = .top
                 case .bottom: self.position = .bottom
@@ -134,6 +139,7 @@ extension VideoAd {
             case .linear(let duration, let skipOffset, let reward):
                 position = nil
                 size = nil
+                sizes = []
                 self.duration = TimeInterval(duration) / 1000
                 self.skipOffset = skipOffset.map { TimeInterval($0) / 1000 }
                 self.reward = reward.map { Reward(label: $0.label, amount: $0.amount) }
