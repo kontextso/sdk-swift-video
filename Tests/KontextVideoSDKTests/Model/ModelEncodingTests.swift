@@ -45,13 +45,12 @@ struct ModelEncodingTests {
     // MARK: User, Regulatory
 
     @Test func userEncodesOnlySetFields() throws {
-        let json = try Fixtures.encode(KontextVideo.User(id: "u1", email: "a@b.c", yearOfBirth: 1994, gender: .female))
+        let json = try Fixtures.encode(KontextVideo.User(id: "u1", email: "a@b.c", keywords: ["drama"]))
         #expect(json["id"] as? String == "u1")
         #expect(json["email"] as? String == "a@b.c")
-        #expect(json["yearOfBirth"] as? Int == 1994)
-        #expect(json["gender"] as? String == "female")
+        #expect(json["keywords"] as? [String] == ["drama"])
         #expect(json["emailHash"] == nil)
-        #expect(json["keywords"] == nil)
+        #expect(json.count == 3, "no demographics: yob and gender are deprecated in OpenRTB 2.6")
     }
 
     @Test func userEqualityDrivesTargetingChanges() {

@@ -76,7 +76,7 @@ has it. Set these on the shared instance whenever you learn them, from anywhere;
 them, and ads already loaded but not shown are discarded. `nil` clears a value.
 
 ```swift
-KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com", yearOfBirth: 1994)
+KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com")
 KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
                                                             // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); what you set wins
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
