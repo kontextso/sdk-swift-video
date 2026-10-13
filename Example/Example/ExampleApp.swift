@@ -22,7 +22,7 @@ final class Demo: ObservableObject {
     private(set) var ads: VideoAds?
     private(set) var pauseAd: VideoAd?
     private(set) var overlayAd: VideoAd?
-    private(set) var interstitial: VideoAd?
+    private(set) var linear: VideoAd?
 
     init() {
         playerView.playerLayer.player = contentPlayer
@@ -52,6 +52,7 @@ final class Demo: ObservableObject {
         self.ads = ads
         contentPlayer.play()
         ads.trackPlayhead(of: contentPlayer)   // the episode is playing in this player: the SDK reads its time
+        ads.timingDelegate = self              // timed mode: the SDK says when a load is due; the app loads
 
         if CommandLine.arguments.contains("--demo") {
             runScriptedDemo()
@@ -69,8 +70,8 @@ final class Demo: ObservableObject {
             showOverlay()
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             dismissOverlay()
-            await loadInterstitialAndWait()
-            showInterstitial()
+            await loadLinearAndWait()
+            showLinear()
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             // Something outside the SDK dismisses the presentation: didEnd(.interrupted)
             Self.topViewController?.presentingViewController?.dismiss(animated: true)
@@ -88,31 +89,31 @@ final class Demo: ObservableObject {
         }
     }
 
-    private func loadInterstitialAndWait() async {
+    private func loadLinearAndWait() async {
         do {
-            let ad = try await ads!.interstitialPlacement("interstitial").load(InterstitialOptions(timing: .midroll))
+            let ad = try await ads!.linearPlacement("linear").load(LinearOptions(timing: .midroll))
             ad.delegate = self
-            interstitial = ad
-            note("interstitial \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
+            linear = ad
+            note("linear ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
         } catch {
-            note("interstitial load: \(error)")
+            note("linear ad load: \(error)")
         }
     }
 
-    func loadInterstitial() {
-        Task { await loadInterstitialAndWait() }
+    func loadLinear() {
+        Task { await loadLinearAndWait() }
     }
 
-    /// The interstitial is presented by the SDK from the key window's top view controller (`show()`); the
+    /// The linear ad is presented by the SDK from the key window's top view controller (`show()`); the
     /// content pauses here and resumes in didEnd.
-    func showInterstitial() {
-        guard let ad = interstitial else { return }
+    func showLinear() {
+        guard let ad = linear else { return }
         contentPlayer.pause()
         do {
             try ad.show()
         } catch {
             contentPlayer.play()                 // never started: undo here, no delegate call follows
-            note("interstitial show: \(error)")
+            note("linear ad show: \(error)")
         }
     }
 
@@ -178,7 +179,7 @@ final class Demo: ObservableObject {
     }
 
     func showOverlay() {
-        guard let ad = overlayAd else { return }
+        guard let ad = overlayAd, ad.isReady else { return }   // a windowed overlay may already be up (videoAdDidReachWindow)
         do {
             try ad.show(in: playerView)
         } catch {
@@ -205,6 +206,21 @@ extension Demo: VideoAdDelegate {
         note("\(ad.format) \(ad.id.prefix(8)) invalidated: \(reason)")
     }
 
+    /// Timed mode: the ad's window opened. An overlay goes into the player view now; a linear ad pauses
+    /// the content and presents. Not shown by the window's end: didInvalidate(.windowPassed).
+    func videoAdDidReachWindow(_ ad: VideoAd) {
+        note("\(ad.format) \(ad.id.prefix(8)) window reached")
+        do {
+            switch ad.format {
+            case .overlay: try ad.show(in: playerView)
+            case .linear: contentPlayer.pause(); try ad.show()
+            case .pause: break
+            }
+        } catch {
+            note("\(ad.format) show at window: \(error)")
+        }
+    }
+
     func videoAdDidRecordImpression(_ ad: VideoAd) {
         note("\(ad.format) \(ad.id.prefix(8)) impression")
     }
@@ -223,10 +239,10 @@ extension Demo: VideoAdDelegate {
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
         note("\(ad.format) \(ad.id.prefix(8)) ended: \(reason)")
-        if ad.format == .interstitial { contentPlayer.play() }      // every way it ends lands here
+        if ad.format == .linear { contentPlayer.play() }      // every way it ends lands here
         if ad === pauseAd { pauseAd = nil }
         if ad === overlayAd { overlayAd = nil }
-        if ad === interstitial { interstitial = nil }
+        if ad === linear { linear = nil }
     }
 }
 
@@ -238,5 +254,13 @@ struct ExampleApp: App {
         WindowGroup {
             ContentView(demo: demo)
         }
+    }
+}
+
+extension Demo: VideoAdsTimingDelegate {
+    /// The SDK never loads by itself: it says when a load makes sense (the server's nextRequestAt came, the
+    /// viewer seeked, a pending ad was discarded) and the app decides. The demo logs it; a real app loads.
+    func videoAds(_ ads: VideoAds, didRequestLoadOf placementId: String, reason: VideoAds.LoadReason) {
+        note("load due for \(placementId): \(reason)")
     }
 }

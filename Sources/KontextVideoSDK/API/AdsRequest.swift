@@ -63,7 +63,7 @@ struct FormatRequest: Sendable, Equatable {
         switch options {
         case .overlay: return .overlay
         case .pause: return .pause
-        case .interstitial: return .interstitial
+        case .linear: return .linear
         }
     }
 }
@@ -72,14 +72,14 @@ struct FormatRequest: Sendable, Equatable {
 enum FormatOptions: Encodable, Sendable, Equatable {
     case overlay(OverlayOptions)
     case pause(PauseOptions)
-    case interstitial(InterstitialOptions)
+    case linear(LinearOptions)
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .overlay(let options): try container.encode(options)
         case .pause(let options): try container.encode(options)
-        case .interstitial(let options): try container.encode(options)
+        case .linear(let options): try container.encode(options)
         }
     }
 }

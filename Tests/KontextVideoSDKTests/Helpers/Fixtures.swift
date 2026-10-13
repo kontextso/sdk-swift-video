@@ -84,8 +84,8 @@ enum Fixtures {
         ad(id: id, placementId: placementId, format: "overlay", position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
-    static func interstitialAd(id: String = "ad-i", placementId: String = "interstitial", duration: Int = 10_000, skipOffset: Int? = 5000, reward: [String: Any]? = nil) -> [String: Any] {
-        ad(id: id, placementId: placementId, format: "interstitial", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
+    static func linearAd(id: String = "ad-i", placementId: String = "linear", duration: Int = 10_000, skipOffset: Int? = 5000, reward: [String: Any]? = nil) -> [String: Any] {
+        ad(id: id, placementId: placementId, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
     }
 
     static func adsResponse(_ ad: [String: Any], nextRequestAt: Int? = nil) -> [String: Any] {

@@ -1,11 +1,11 @@
 import UIKit
 import WebKit
 
-/// The full-screen container the SDK presents for an interstitial. It owns nothing but the layout: the
+/// The full-screen container the SDK presents for a linear ad. It owns nothing but the layout: the
 /// ad owns the page and decides when it ends; the controller tells the ad when the system took the
 /// presentation away (`.interrupted`).
 @MainActor
-final class InterstitialViewController: UIViewController {
+final class LinearViewController: UIViewController {
     /// Set by the ad while it dismisses the controller itself, so `viewDidDisappear` is not an interruption.
     var isEndingByAd = false
     /// Called when the view left the screen and the ad did not ask for it.

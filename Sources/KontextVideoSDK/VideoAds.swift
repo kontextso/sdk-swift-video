@@ -119,9 +119,9 @@ public final class VideoAds {
         placement(id) { PausePlacement(id: id, ads: self) }
     }
 
-    /// The interstitial placement with this id, as created in the Kontext dashboard. Get it once and keep it.
-    public func interstitialPlacement(_ id: String) -> InterstitialPlacement {
-        placement(id) { InterstitialPlacement(id: id, ads: self) }
+    /// The linear placement with this id, as created in the Kontext dashboard. Get it once and keep it.
+    public func linearPlacement(_ id: String) -> LinearPlacement {
+        placement(id) { LinearPlacement(id: id, ads: self) }
     }
 
     /// One object per (format, id).
@@ -268,7 +268,7 @@ public final class VideoAds {
             case "unknownPlacement":
                 return .unknown(id: format.placementId)
             case "placementFormatMismatch":
-                // `detail` reads "expected overlay, got interstitial" when the server names the dashboard's format.
+                // `detail` reads "expected overlay, got linear" when the server names the dashboard's format.
                 let expected = item.detail.flatMap { detail -> AdFormat? in
                     guard let range = detail.range(of: "expected ") else { return nil }
                     let word = detail[range.upperBound...].prefix { $0.isLetter }

@@ -29,8 +29,8 @@ struct TimedModeTests {
         Fixtures.overlayAd(id: id, duration: duration).merging(["trigger": ["kind": "window", "from": from, "to": to]]) { $1 }
     }
 
-    private func windowedInterstitial(_ id: String, from: Int, to: Int) -> [String: Any] {
-        Fixtures.interstitialAd(id: id).merging(["trigger": ["kind": "window", "from": from, "to": to]]) { $1 }
+    private func windowedLinear(_ id: String, from: Int, to: Int) -> [String: Any] {
+        Fixtures.linearAd(id: id).merging(["trigger": ["kind": "window", "from": from, "to": to]]) { $1 }
     }
 
     private func ticks(_ n: Int = 3) async {
@@ -106,11 +106,11 @@ struct TimedModeTests {
         #expect(delegate.windowsReached == 0)
     }
 
-    @Test func anInterstitialWindowIsOpenUntilItsEnd() async throws {
+    @Test func aLinearWindowIsOpenUntilItsEnd() async throws {
         let ads = await makeAds()
         harness.player.playhead = 10
-        harness.serve(windowedInterstitial("vid-w5", from: 20_000, to: 21_000))
-        let ad = try await ads.interstitialPlacement("interstitial").load()
+        harness.serve(windowedLinear("vid-w5", from: 20_000, to: 21_000))
+        let ad = try await ads.linearPlacement("linear").load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         await play(to: 20.9)

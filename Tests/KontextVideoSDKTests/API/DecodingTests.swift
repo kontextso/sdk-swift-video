@@ -99,25 +99,25 @@ struct DecodingTests {
         #expect(duration == 6000)
     }
 
-    @Test func interstitialAdWithSkipOffsetAndReward() throws {
-        let ad = try Fixtures.payload(Fixtures.interstitialAd(duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
-        #expect(ad.format == .interstitial)
+    @Test func linearAdWithSkipOffsetAndReward() throws {
+        let ad = try Fixtures.payload(Fixtures.linearAd(duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
+        #expect(ad.format == .linear)
         #expect(ad.creative == .video)
-        guard case .interstitial(let duration, let skipOffset, let reward) = ad.details else { Issue.record("expected interstitial"); return }
+        guard case .linear(let duration, let skipOffset, let reward) = ad.details else { Issue.record("expected linear"); return }
         #expect(duration == 15_000)
         #expect(skipOffset == 5000)
         #expect(reward == AdPayload.Reward(label: "coins", amount: 50))
     }
 
-    @Test func rewardedInterstitialHasNoSkipOffset() throws {
-        let ad = try Fixtures.payload(Fixtures.interstitialAd(skipOffset: nil, reward: ["label": "coins", "amount": 50]))
-        guard case .interstitial(_, let skipOffset, let reward) = ad.details else { Issue.record("expected interstitial"); return }
+    @Test func rewardedLinearHasNoSkipOffset() throws {
+        let ad = try Fixtures.payload(Fixtures.linearAd(skipOffset: nil, reward: ["label": "coins", "amount": 50]))
+        guard case .linear(_, let skipOffset, let reward) = ad.details else { Issue.record("expected linear"); return }
         #expect(skipOffset == nil)
         #expect(reward != nil)
     }
 
     @Test func trackingEntriesKeepOffsetAndPart() throws {
-        let ad = try Fixtures.payload(Fixtures.interstitialAd())
+        let ad = try Fixtures.payload(Fixtures.linearAd())
         let progress = ad.tracking.first { $0.event == "progress" }
         #expect(progress?.offset == 5000)
         #expect(progress?.part == nil)

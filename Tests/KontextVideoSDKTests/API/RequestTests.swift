@@ -99,7 +99,7 @@ struct RequestTests {
     @Test func formatRequestKnowsItsFormat() {
         #expect(FormatRequest(placementId: "x", options: .overlay(OverlayOptions())).format == .overlay)
         #expect(FormatRequest(placementId: "x", options: .pause(PauseOptions())).format == .pause)
-        #expect(FormatRequest(placementId: "x", options: .interstitial(InterstitialOptions())).format == .interstitial)
+        #expect(FormatRequest(placementId: "x", options: .linear(LinearOptions())).format == .linear)
     }
 
     // MARK: PlayerSnapshot

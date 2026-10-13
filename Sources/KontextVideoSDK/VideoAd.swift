@@ -44,7 +44,7 @@ public final class VideoAd {
         case window(from: TimeInterval, to: TimeInterval)
     }
 
-    /// What the viewer earns when a rewarded interstitial completes.
+    /// What the viewer earns when a rewarded linear ad completes.
     public struct Reward: Sendable, Equatable {
         public let label: String
         public let amount: Double
@@ -78,15 +78,15 @@ public final class VideoAd {
     /// the app's eyes. The SDK's own check runs on the monotonic clock, so a changed device clock cannot
     /// expire an ad early or late.
     public var expirationDate: Date { facts.expirationDate }
-    /// `nil` for an interstitial.
+    /// `nil` for a linear ad.
     public var position: Position? { facts.position }
-    /// `nil` for an interstitial and for a full-screen pause ad.
+    /// `nil` for a linear ad and for a full-screen pause ad.
     public var size: Size? { facts.size }
-    /// Overlay: how long it stays on screen. Interstitial: the video's length. Seconds; `nil` for a pause ad.
+    /// Overlay: how long it stays on screen. Linear: the video's length. Seconds; `nil` for a pause ad.
     public var duration: TimeInterval? { facts.duration }
-    /// Interstitial: seconds until the Close may appear; `nil` means no Close before the video completes.
+    /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
     public var skipOffset: TimeInterval? { facts.skipOffset }
-    /// Set on a rewarded interstitial.
+    /// Set on a rewarded linear ad.
     public var reward: Reward? { facts.reward }
     public var trigger: Trigger { facts.trigger }
 
@@ -134,8 +134,8 @@ public final class VideoAd {
     weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: UIView?
-    /// The controller the SDK presented for an interstitial.
-    private var interstitialController: InterstitialViewController?
+    /// The controller the SDK presented for a linear ad.
+    private var linearController: LinearViewController?
     /// `video.complete` arrived; the next `ad.close` is the end card closing, not the viewer giving up.
     private var completed = false
     /// Delivers `didInvalidate(.expired)` when the time comes.
@@ -179,8 +179,8 @@ public final class VideoAd {
     /// Throws when presentation cannot begin, with nothing fired: `alreadyShown`, `invalidated`,
     /// `containerTooSmall` (the ad is discarded). From here until `didEnd` the SDK retains the ad.
     public func show(in view: UIView) throws {
-        guard format != .interstitial else {
-            Environment.assertionFailure("KontextVideo: an interstitial is shown with show(from:)")
+        guard format != .linear else {
+            Environment.assertionFailure("KontextVideo: a linear ad is shown with show(from:)")
             throw VideoAdError.presenterUnavailable
         }
         try checkShowable()
@@ -196,7 +196,7 @@ public final class VideoAd {
         begin()
     }
 
-    /// Presents an interstitial full screen. From `viewController` when given, which must be on screen
+    /// Presents a linear ad full screen. From `viewController` when given, which must be on screen
     /// and not already presenting; with `nil` (the default) from the key window's top view controller,
     /// as AdMob's `present(from: nil)` and MAX's `showAd()` do. Pass the controller when the guess would
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
@@ -205,7 +205,7 @@ public final class VideoAd {
     /// SDK dismisses it: the video completing, a skip, a close, an error, or an interruption, each ending
     /// in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
-        guard format == .interstitial else {
+        guard format == .linear else {
             Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show(in:)")
             throw VideoAdError.presenterUnavailable
         }
@@ -224,13 +224,13 @@ public final class VideoAd {
             }
             presenter = top
         }
-        let controller = InterstitialViewController(webView: bridge.takeWebView())
+        let controller = LinearViewController(webView: bridge.takeWebView())
         controller.onInterrupted = { [weak self] in
             guard let self else { return }
             Logger.warning("ad \(id.prefix(8)): presentation interrupted")
             end(.interrupted)
         }
-        interstitialController = controller
+        linearController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         presenter.present(controller, animated: true) { [weak self] in
@@ -360,14 +360,14 @@ public final class VideoAd {
         bridge.hide()
         hostView?.removeFromSuperview()
         hostView = nil
-        if let controller = interstitialController {
-            interstitialController = nil
+        if let controller = linearController {
+            linearController = nil
             controller.isEndingByAd = true
             if controller.presentingViewController != nil, reason != .interrupted {
                 controller.dismiss(animated: true)
             }
         }
-        if format != .interstitial {
+        if format != .linear {
             // The ad was on screen, whatever ended it.
             tracker.fire("overlayViewDuration")
         }
@@ -455,9 +455,9 @@ public final class VideoAd {
             open(url, fallback: nil)
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(). An
-            // interstitial's close before `complete` is a skip whatever the page called it: the outcome
+            // linear ad's close before `complete` is a skip whatever the page called it: the outcome
             // is what the app hears, and `.closed` is for the overlay and pause formats.
-            if format == .interstitial, !completed {
+            if format == .linear, !completed {
                 tracker.fire("skip")
                 end(.skipped)
             } else {

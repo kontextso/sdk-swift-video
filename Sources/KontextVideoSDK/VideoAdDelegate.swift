@@ -17,7 +17,7 @@ public protocol VideoAdDelegate: AnyObject {
     /// the creative died while waiting. `isReady` is `false`; `show` throws `.invalidated(reason)`.
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason)
     /// Timed mode: the ad's window opened, show it now (`show(in:)` for an overlay; pause the content and
-    /// `show(from:)` for an interstitial). Not shown by the window's end: `didInvalidate(.windowPassed)`.
+    /// `show(from:)` for a linear ad). Not shown by the window's end: `didInvalidate(.windowPassed)`.
     func videoAdDidReachWindow(_ ad: VideoAd)
 
     // After a successful show, in order: the impression, then interactions, then exactly one didEnd
@@ -27,7 +27,7 @@ public protocol VideoAdDelegate: AnyObject {
     func videoAdDidRecordImpression(_ ad: VideoAd)
     /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where (`creative`, `endCard`, ...).
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
-    /// A rewarded interstitial completed: grant the reward.
+    /// A rewarded linear ad completed: grant the reward.
     func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward)
     /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows.
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
@@ -57,14 +57,14 @@ extension VideoAd {
 
     /// How an ad on screen ended: the outcome, not why a view went away.
     public enum EndReason: Sendable, Equatable {
-        /// Interstitial: the video played to the end; the viewer closing the end card afterwards is still
+        /// Linear: the video played to the end; the viewer closing the end card afterwards is still
         /// this, the close is only how a finished ad leaves the screen. Overlay: its `duration` elapsed and
         /// the SDK removed it.
         case completed
         /// The viewer skipped the video.
         case skipped
         /// Overlay or pause ad: the viewer tapped its close control before it ended on its own (a pause
-        /// ad's close leaves the content paused; Resume is `.resumed`). Never for an interstitial: a close
+        /// ad's close leaves the content paused; Resume is `.resumed`). Never for a linear ad: a close
         /// before the end is `.skipped`, after it `.completed`; the outcome, not the gesture.
         case closed
         /// The viewer tapped Resume on a full-screen pause ad.

@@ -17,7 +17,7 @@ struct SupportTests {
             (.placementBusy, "the placement already has an ad loading, or loaded and not yet shown"),
             (.invalidPlacement(.unknown(id: "nope")), "placement \"nope\" does not exist for this publisher token"),
             (.invalidPlacement(.formatMismatch(id: "x", expected: .overlay, actual: .pause)), "placement \"x\" is an overlay placement, not pause"),
-            (.invalidPlacement(.formatMismatch(id: "x", expected: .pause, actual: .interstitial)), "placement \"x\" is a pause placement, not interstitial"),
+            (.invalidPlacement(.formatMismatch(id: "x", expected: .pause, actual: .linear)), "placement \"x\" is a pause placement, not linear"),
             (.invalidPlacement(.formatMismatch(id: "x", expected: nil, actual: .overlay)), "placement \"x\" is not an overlay placement"),
             (.noFill(reason: "noAdMatch"), "no fill (noAdMatch)"),
             (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
@@ -75,12 +75,12 @@ struct SupportTests {
         let ads = TestPlayer().ads(for: .init(id: "v", language: "en"))
         #expect(ads.overlayPlacement("a").id == "a")
         #expect(ads.pausePlacement("b").id == "b")
-        #expect(ads.interstitialPlacement("c").id == "c")
+        #expect(ads.linearPlacement("c").id == "c")
         // Not initialized: every load throws before any request, which proves the forwarding reaches VideoAds.
         for work in [
             { try await ads.overlayPlacement("a").load() },
             { try await ads.pausePlacement("b").load() },
-            { try await ads.interstitialPlacement("c").load() },
+            { try await ads.linearPlacement("c").load() },
         ] as [() async throws -> VideoAd] {
             do {
                 _ = try await work()

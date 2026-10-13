@@ -131,7 +131,7 @@ extension VideoAd {
                 duration = nil
                 skipOffset = nil
                 reward = nil
-            case .interstitial(let duration, let skipOffset, let reward):
+            case .linear(let duration, let skipOffset, let reward):
                 position = nil
                 size = nil
                 self.duration = TimeInterval(duration) / 1000

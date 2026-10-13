@@ -21,10 +21,10 @@ sdk-swift-video/
 │   ├── VideoAds.swift, VideoAd.swift               one video's ads; one ad
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── VideoAdBid.swift, VideoAdsTimingDelegate.swift   fetch() before rendering; timed mode's callback
-│   ├── Placements.swift                            overlay / pause / interstitial placements
+│   ├── Placements.swift                            overlay / pause / linear placements
 │   ├── Model/        what the app passes in: Content, User, Regulatory, Options
 │   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, the client
-│   ├── Frame/        rendering: the WebView bridge, the interstitial controller, the tracker, the viewability meter
+│   ├── Frame/        rendering: the WebView bridge, the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      Logger, SDKInfo, the debug reporter
 │   └── PrivacyInfo.xcprivacy
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
@@ -56,7 +56,7 @@ xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
 `--demo` as a launch argument runs every flow without touching the screen: a pause ad shown and dismissed, an
-overlay, an interstitial interrupted from outside, an ad dropped without being shown, and `destroy()` with an ad
+overlay, a linear ad interrupted from outside, an ad dropped without being shown, and `destroy()` with an ad
 on screen. From a terminal:
 
 ```bash
@@ -109,7 +109,7 @@ Tests/KontextVideoSDKTests/
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
 ├── API/          decoding, requests, the client, /init, privacy
-├── Frame/        the bridge's state machine, the tracker, the meter, the interstitial controller
+├── Frame/        the bridge's state machine, the tracker, the meter, the linear-ad controller
 ├── Core/         KontextVideo, VideoAds, VideoAd, bids, timed mode, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
@@ -123,6 +123,6 @@ Rules the suites follow:
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
 
 What the package runner cannot do, and where it is covered instead: there is no `UIWindowScene`, so UIKit never
-completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The interstitial
+completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The linear ad
 tests therefore assert what the SDK asked UIKit to do and drive the controller's disappearance decision directly;
 the example app's `--demo` run against the mock covers the real presentation, interruption and dismissal.

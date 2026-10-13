@@ -46,7 +46,7 @@ public enum VideoAdError: Error, Sendable {
     case invalidated(VideoAd.InvalidationReason)
     /// The player's view is below 50 % of the ad's size. The ad is discarded; load again with the real size.
     case containerTooSmall(minimum: CGSize)
-    /// No view controller can present the interstitial right now: the one given is already presenting or
+    /// No view controller can present the linear ad right now: the one given is already presenting or
     /// not on screen; with `show()`, there is no key window or its top controller is mid-transition or a
     /// system alert or sheet. The ad stays ready: try again later, or pass the right controller. Also
     /// thrown in a release build when the wrong `show` is used for the format.
@@ -93,6 +93,6 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
     public var errorDescription: String? { description }
 
     private func article(_ format: AdFormat) -> String {
-        format == .overlay || format == .interstitial ? "an" : "a"
+        format == .overlay || format == .linear ? "an" : "a"
     }
 }

@@ -3,7 +3,7 @@ Pod::Spec.new do |spec|
     spec.version              = '0.1.0'
     spec.summary              = 'Kontext.so Video SDK'
     spec.description          = <<-DESC
-    The official Swift SDK for Kontext.so video ads (overlay, pause and interstitial) in video-first iOS apps.
+    The official Swift SDK for Kontext.so video ads (overlay, pause and linear) in video-first iOS apps.
                                 DESC
     spec.homepage             = 'https://github.com/kontextso/sdk-swift-video'
     spec.license              = { :type => 'Apache-2.0', :file => 'LICENSE' }

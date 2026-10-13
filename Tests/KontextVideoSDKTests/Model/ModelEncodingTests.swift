@@ -89,19 +89,19 @@ struct ModelEncodingTests {
         #expect(json["positions"] as? [String] == ["top", "fullscreen"])
     }
 
-    @Test func interstitialOptionsEncodeMaxDurationInMilliseconds() throws {
-        let json = try Fixtures.encode(InterstitialOptions(timing: .preroll, maxDuration: 30, muted: true, rewarded: false))
+    @Test func linearOptionsEncodeMaxDurationInMilliseconds() throws {
+        let json = try Fixtures.encode(LinearOptions(timing: .preroll, maxDuration: 30, muted: true, rewarded: false))
         #expect(json["timing"] as? String == "preroll")
         #expect(json["maxDuration"] as? Int == 30_000)
         #expect(json["muted"] as? Bool == true)
         #expect(json["rewarded"] as? Bool == false)
-        #expect(try Fixtures.encode(InterstitialOptions()).isEmpty)
+        #expect(try Fixtures.encode(LinearOptions()).isEmpty)
     }
 
     @Test func adFormatRawValuesMatchTheWire() {
         #expect(AdFormat.overlay.rawValue == "overlay")
         #expect(AdFormat.pause.rawValue == "pause")
-        #expect(AdFormat.interstitial.rawValue == "interstitial")
+        #expect(AdFormat.linear.rawValue == "linear")
     }
 
     // MARK: Configuration

@@ -16,7 +16,7 @@ struct TrackerTests {
     }
 
     private func makeTracker(video: Bool = true) throws -> Tracker {
-        let entries = try Fixtures.payload(video ? Fixtures.interstitialAd(id: "ad-1") : Fixtures.ad(id: "ad-1")).tracking
+        let entries = try Fixtures.payload(video ? Fixtures.linearAd(id: "ad-1") : Fixtures.ad(id: "ad-1")).tracking
         return Tracker(adId: "ad-1", entries: entries)
     }
 

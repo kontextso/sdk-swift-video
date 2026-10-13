@@ -44,7 +44,7 @@ struct AdPayload: Decodable, Sendable {
         let url: String
         /// `progress` only: milliseconds into the ad video at which to fire.
         let offset: Int?
-        /// `endCard` for the interstitial's end card; `nil` for the main creative.
+        /// `endCard` for the linear ad's end card; `nil` for the main creative.
         let part: String?
     }
 
@@ -68,7 +68,7 @@ struct AdPayload: Decodable, Sendable {
         /// `size` is `nil` for the fullscreen variant.
         case pause(position: PauseOptions.Position, size: Size?)
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
-        case interstitial(duration: Int, skipOffset: Int?, reward: Reward?)
+        case linear(duration: Int, skipOffset: Int?, reward: Reward?)
     }
 
     let id: String
@@ -141,8 +141,8 @@ struct AdPayload: Decodable, Sendable {
             } else {
                 details = .pause(position: position, size: try container.decode(Size.self, forKey: .size))
             }
-        case .interstitial:
-            details = .interstitial(
+        case .linear:
+            details = .linear(
                 duration: try container.decode(Int.self, forKey: .duration),
                 skipOffset: try container.decodeIfPresent(Int.self, forKey: .skipOffset),
                 reward: try container.decodeIfPresent(Reward.self, forKey: .reward)

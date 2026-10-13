@@ -29,8 +29,8 @@ struct ContentView: View {
                 Button("Dismiss") { demo.dismissOverlay() }
             }
             HStack {
-                Button("Load interstitial") { demo.loadInterstitial() }
-                Button("Show") { demo.showInterstitial() }
+                Button("Load linear") { demo.loadLinear() }
+                Button("Show") { demo.showLinear() }
                 Spacer()
                 Button("Destroy") { demo.destroy() }
             }

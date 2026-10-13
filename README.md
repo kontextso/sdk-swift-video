@@ -135,7 +135,7 @@ ads.trackPlayhead(of: avPlayer)  // when the episode starts playing
 
 A placement is a piece of your inventory, created in the Kontext dashboard with a format and an id you chose
 (`episode-midroll`, `fullscreen-pause`); demand, floors, frequency caps and reporting are configured there. Every
-publisher starts with one per format: `overlay`, `pause`, `interstitial`.
+publisher starts with one per format: `overlay`, `pause`, `linear`.
 
 Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. `load` is
 `async` and returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready. You own
@@ -147,7 +147,7 @@ SDK is still initialising wait for it; after a failed `/init`, every `load` retr
 ```swift
 let overlay = ads.overlayPlacement("overlay")
 let pause = ads.pausePlacement("pause")
-let midroll = ads.interstitialPlacement("interstitial")
+let midroll = ads.linearPlacement("linear")
 
 // A strip across the player while the content plays; the SDK removes it after its duration.
 let strip = try await overlay.load(OverlayOptions(
@@ -163,7 +163,7 @@ card.price.value                     // your own auction, if you run one
 card.expirationDate                  // a Date
 
 // A full-screen video at a moment you pick.
-let interstitial = try await midroll.load(InterstitialOptions(
+let linear = try await midroll.load(LinearOptions(
     timing: .preroll,                // where you will show it; default: .midroll
     maxDuration: 30,                 // seconds
     muted: false,                    // start with the sound off; default: false
@@ -224,7 +224,7 @@ extension PlayerController: VideoAdDelegate {
 }
 ```
 
-An interstitial is presented by the SDK itself, full screen: `show()` presents from the key window's top view
+A linear ad is presented by the SDK itself, full screen: `show()` presents from the key window's top view
 controller (as AdMob's `present(from: nil)` and MAX's `showAd()` do), `show(from:)` from a controller you name when
 that guess would be wrong (a player presented as a sheet, a second window). Only the SDK dismisses it (the video
 completed, a skip, a close, an error, an interruption, or your `destroy()`), and every way ends in one `didEnd`. Pause
@@ -233,11 +233,11 @@ controller can present right now (yours is off screen or already presenting; wit
 controller mid-transition); the ad stays ready, try again later or pass the right controller.
 
 ```swift
-let interstitial = try await midroll.load()
-interstitial.delegate = self
+let linear = try await midroll.load()
+linear.delegate = self
 contentPlayer.pause()
 do {
-    try interstitial.show()                      // or show(from: self)
+    try linear.show()                      // or show(from: self)
 } catch {
     contentPlayer.play()                 // never started: undo here, no delegate call follows
 }
@@ -272,7 +272,7 @@ extension PlayerController: VideoAdDelegate, VideoAdsTimingDelegate {
     func videoAdDidReachWindow(_ ad: VideoAd) {
         switch ad.format {
         case .overlay: try? ad.show(in: playerView)
-        case .interstitial: contentPlayer.pause(); try? ad.show(from: self)   // resume in didEnd
+        case .linear: contentPlayer.pause(); try? ad.show(from: self)   // resume in didEnd
         default: break
         }
     }

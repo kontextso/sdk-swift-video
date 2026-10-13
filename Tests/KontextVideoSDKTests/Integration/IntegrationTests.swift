@@ -120,13 +120,13 @@ struct IntegrationTests {
         ad.dismiss()
     }
 
-    // MARK: Interstitial, video creative
+    // MARK: Linear, video creative
 
-    @Test func interstitialPlaysToCompletionWithTheReward() async throws {
+    @Test func linearPlaysToCompletionWithTheReward() async throws {
         let ads = await start()
-        harness.serve(Fixtures.interstitialAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
+        harness.serve(Fixtures.linearAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
         let delegate = RecordingDelegate()
-        let ad = try await ads.interstitialPlacement("interstitial").load(InterstitialOptions(rewarded: true))
+        let ad = try await ads.linearPlacement("linear").load(LinearOptions(rewarded: true))
         ad.delegate = delegate
         #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
@@ -146,11 +146,11 @@ struct IntegrationTests {
         #expect(!events(for: "vid-full").contains("skip"))
     }
 
-    @Test func interstitialSkipped() async throws {
+    @Test func linearSkipped() async throws {
         let ads = await start()
-        harness.serve(Fixtures.interstitialAd(id: "vid-skip"))
+        harness.serve(Fixtures.linearAd(id: "vid-skip"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.interstitialPlacement("interstitial").load()
+        let ad = try await ads.linearPlacement("linear").load()
         ad.delegate = delegate
         try ad.show(from: window.root)
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
@@ -161,11 +161,11 @@ struct IntegrationTests {
         #expect(!events(for: "vid-skip").contains("complete"))
     }
 
-    @Test func interstitialThatFailsDuringPlayback() async throws {
+    @Test func linearThatFailsDuringPlayback() async throws {
         let ads = await start()
-        harness.serve(Fixtures.interstitialAd(id: "vid-fail"))
+        harness.serve(Fixtures.linearAd(id: "vid-fail"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.interstitialPlacement("interstitial").load()
+        let ad = try await ads.linearPlacement("linear").load()
         ad.delegate = delegate
         try ad.show(from: window.root)
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
@@ -242,8 +242,8 @@ struct IntegrationTests {
         harness.player.playhead = 80
         // The next episode's VideoAds has no playhead source yet: the player's time belongs to episode 6.
         let next = VideoAds(content: .init(id: "100001-7", language: "en"), playerSize: harness.player.view.bounds.size)
-        harness.serve(Fixtures.interstitialAd(id: "vid-next"))
-        _ = try await next.interstitialPlacement("interstitial").load()
+        harness.serve(Fixtures.linearAd(id: "vid-next"))
+        _ = try await next.linearPlacement("linear").load()
         let player = harness.server.requests(to: "/v2/video/ads").last?.body?["player"] as? [String: Any]
         #expect(player?["playhead"] as? Int == 0, "the player's 80 s belong to the current episode")
         #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["video"] as? [String: Any])?["id"] as? String == "100001-7")

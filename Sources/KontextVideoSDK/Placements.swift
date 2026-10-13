@@ -1,10 +1,10 @@
 /// A placement is a piece of the publisher's inventory, created in the Kontext dashboard with a format
 /// and an id the publisher chose (`episode-midroll`, `fullscreen-pause`). Demand, floors, frequency caps
 /// and reporting are configured there; the SDK only sends the id. Every publisher starts with one per
-/// format: `overlay`, `pause`, `interstitial`.
+/// format: `overlay`, `pause`, `linear`.
 ///
 /// One object per placement, obtained once from `VideoAds` and kept, as MAX's `MAInterstitialAd` or
-/// LevelPlay's `LPMInterstitialAd`. One unshown ad per placement at a time; `load` returns the ad, ready
+/// LevelPlay's `LPMLinearAd`. One unshown ad per placement at a time; `load` returns the ad, ready
 /// to show, or throws a `VideoAdError` (no fill, busy placement, failed request, SDK not ready), or
 /// `CancellationError`. `fetch` is the first half of `load`: the server's answer as a `VideoAd.Bid`,
 /// nothing rendered, for an app that decides before rendering; `bid.load()` is the second half.
@@ -56,7 +56,7 @@ public final class PausePlacement {
 
 /// A full-screen video at a moment the app picks: before, during or after the content.
 @MainActor
-public final class InterstitialPlacement {
+public final class LinearPlacement {
     public let id: String
     private unowned let ads: VideoAds
 
@@ -65,15 +65,15 @@ public final class InterstitialPlacement {
         self.ads = ads
     }
 
-    /// Requests an interstitial. `timing` says where the app will show it, `maxDuration` caps the
+    /// Requests a linear ad. `timing` says where the app will show it, `maxDuration` caps the
     /// video, `muted` starts it with the sound off, `rewarded` asks for a non-skippable video with a
     /// reward granted when it completes.
-    public func load(_ options: InterstitialOptions = InterstitialOptions()) async throws -> VideoAd {
-        try await ads.load(FormatRequest(placementId: id, options: .interstitial(options)))
+    public func load(_ options: LinearOptions = LinearOptions()) async throws -> VideoAd {
+        try await ads.load(FormatRequest(placementId: id, options: .linear(options)))
     }
 
-    /// Requests an interstitial and returns the server's answer without rendering it; `bid.load()` renders.
-    public func fetch(_ options: InterstitialOptions = InterstitialOptions()) async throws -> VideoAd.Bid {
-        try await ads.fetch(FormatRequest(placementId: id, options: .interstitial(options)))
+    /// Requests a linear ad and returns the server's answer without rendering it; `bid.load()` renders.
+    public func fetch(_ options: LinearOptions = LinearOptions()) async throws -> VideoAd.Bid {
+        try await ads.fetch(FormatRequest(placementId: id, options: .linear(options)))
     }
 }

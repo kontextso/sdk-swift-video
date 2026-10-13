@@ -83,8 +83,8 @@ struct VideoAdTests {
         #expect(ad.trigger == .window(from: 4, to: 10))
     }
 
-    @Test func interstitialAdExposesVideoFacts() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i1", duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
+    @Test func linearAdExposesVideoFacts() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i1", duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
         #expect(ad.position == nil)
         #expect(ad.size == nil)
         #expect(ad.duration == 15)
@@ -102,7 +102,9 @@ struct VideoAdTests {
     }
 
     @Test func expiryIsDeliveredWhileWaiting() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p4", expires: 150))
+        // 400 ms, not less: the first WebView of a process can take longer to load than a tight expiry,
+        // and an ad that expired before load returned is correct but not what this test is about.
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p4", expires: 400))
         #expect(ad.isReady)
         #expect(await waitUntil(1) { delegate.invalidations == [.expired] })
         #expect(ad.isReady == false)
@@ -171,8 +173,8 @@ struct VideoAdTests {
         do { try ad.show(in: harness.player.view) } catch VideoAdError.alreadyShown {} catch { Issue.record("expected alreadyShown") }
     }
 
-    @Test func showOnAnInterstitialIsAProgrammerError() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i2"))
+    @Test func showOnAnLinearIsAProgrammerError() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i2"))
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
         do { try ad.show(in: harness.player.view) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
@@ -330,7 +332,7 @@ struct VideoAdTests {
     // MARK: Video
 
     @Test func videoImpressionWaitsForTheFirstFrame() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i3"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i3"))
         try ad.show(from: window.root)
         #expect(delegate.events.isEmpty, "no impression at show for a video")
         var fired = await beacons()
@@ -344,7 +346,7 @@ struct VideoAdTests {
     }
 
     @Test func videoEventsFireTheirBeaconsWithTheAdPlayhead() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i4"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i4"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.firstQuartile", ["playhead": 2500])
@@ -363,7 +365,7 @@ struct VideoAdTests {
     }
 
     @Test func completeFiresCompleteAndTheEndCardsCreativeViewAndTheReward() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i5", reward: ["label": "coins", "amount": 50]))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i5", reward: ["label": "coins", "amount": 50]))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
@@ -377,7 +379,7 @@ struct VideoAdTests {
     }
 
     @Test func endCardClickUsesTheEndCardsEntry() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i6"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i6"))
         Environment.openURL = { _, completion in completion(true) }
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
@@ -390,7 +392,7 @@ struct VideoAdTests {
     }
 
     @Test func skipEndsWithSkipped() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i7"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i7"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 6000])
@@ -403,7 +405,7 @@ struct VideoAdTests {
 
     @Test func noVideoStartWithinTheBackstopFails() async throws {
         VideoAd.videoStartBackstop = 0.15
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i8"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i8"))
         try ad.show(from: window.root)
         #expect(await waitUntil(1) { delegate.endReasons == [.failed] })
         guard case .creativeFailed(let code) = delegate.failures.first else { Issue.record("expected creativeFailed"); return }
@@ -413,10 +415,10 @@ struct VideoAdTests {
     // MARK: show(from:)
 
     @Test func showFromPresentsFullScreenAndTheSDKDismissesAtTheEnd() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i9"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i9"))
         try ad.show(from: window.root)
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? InterstitialViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearViewController)
         #expect(presented.modalPresentationStyle == .fullScreen)
         #expect(presented.view.subviews.first === ad.bridge.webView)
         #expect(presented.prefersStatusBarHidden)
@@ -430,14 +432,14 @@ struct VideoAdTests {
     }
 
     @Test func showFromWhenNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i10"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10"))
         let detached = UIViewController()
         do { try ad.show(from: detached) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         #expect(ad.isReady, "retryable")
     }
 
     @Test func showFromWhenAlreadyPresentingThrowsPresenterUnavailable() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i11"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i11"))
         let other = UIViewController()
         window.root.present(other, animated: false)
         do { try ad.show(from: window.root) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
@@ -448,22 +450,22 @@ struct VideoAdTests {
     @Test func showWithoutAPresenterUsesTheKeyWindowsTopViewController() async throws {
         // The package runner never completes a modal transition, so the "top" here is the root; the
         // walk through presentedViewController is covered by the example's --demo run.
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i13"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i13"))
         Environment.keyWindow = { [window] in window.window }
         try ad.show()
-        #expect(await waitUntil { self.window.root.presentedViewController is InterstitialViewController })
+        #expect(await waitUntil { self.window.root.presentedViewController is LinearViewController })
         #expect(ad.wasShown)
     }
 
     @Test func showWithoutAPresenterAndNoKeyWindowThrowsPresenterUnavailableAndKeepsTheAd() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i14"))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i14"))
         Environment.keyWindow = { nil }
         do { try ad.show() } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         #expect(ad.isReady, "retryable, or pass the controller")
     }
 
-    @Test func anInterstitialsCloseBeforeCompleteIsASkip() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i15"))
+    @Test func aLinearAdsCloseBeforeCompleteIsASkip() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i15"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "ad.close", ["reason": "close"])
@@ -481,10 +483,10 @@ struct VideoAdTests {
     }
 
     @Test func dismissalFromOutsideIsInterrupted() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i12"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i12"))
         try ad.show(from: window.root)
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? InterstitialViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearViewController)
         // What viewDidDisappear sees when the presenter is dismissed underneath the ad.
         presented.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
         #expect(delegate.endReasons == [.interrupted])
@@ -495,12 +497,12 @@ struct VideoAdTests {
         #expect(delegate.endReasons.count == 1)
     }
 
-    @Test func destroyWhileAnInterstitialIsUpEndsWithDestroyedAndDismisses() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.interstitialAd(id: "i13"))
+    @Test func destroyWhileAnLinearIsUpEndsWithDestroyedAndDismisses() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? InterstitialViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearViewController)
         ads.destroy()
         #expect(delegate.endReasons == [.destroyed])
         #expect(presented.isEndingByAd, "the SDK asked UIKit to dismiss")

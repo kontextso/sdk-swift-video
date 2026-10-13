@@ -40,7 +40,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         #expect(ads.pausePlacement("x") === ads.pausePlacement("x"))
         #expect(ads.overlayPlacement("x") === ads.overlayPlacement("x"))
-        #expect(ads.interstitialPlacement("x") === ads.interstitialPlacement("x"))
+        #expect(ads.linearPlacement("x") === ads.linearPlacement("x"))
         #expect(ads.pausePlacement("x") !== ads.pausePlacement("y"))
         #expect(ads.pausePlacement("x").id == "x")
     }
@@ -49,10 +49,10 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-1", placementId: "x"))), delay: 0.3) }
         let pause = ads.pausePlacement("x")
-        let interstitial = ads.interstitialPlacement("x")
+        let linear = ads.linearPlacement("x")
         let first = Task { try await pause.load() }
         await sleepMs(50)
-        let error = await loadError { try await interstitial.load() }
+        let error = await loadError { try await linear.load() }
         guard case .placementBusy = error else { Issue.record("expected placementBusy, got \(String(describing: error))"); return }
         _ = try? await first.value
     }
@@ -258,13 +258,13 @@ struct VideoAdsTests {
 
     @Test func formatMismatchParsesTheExpectedFormat() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch", title: "x", detail: "expected overlay, got interstitial"), status: 400))
-        let error = await loadError { try await ads.interstitialPlacement("episode-overlay").load() }
+        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch", title: "x", detail: "expected overlay, got linear"), status: 400))
+        let error = await loadError { try await ads.linearPlacement("episode-overlay").load() }
         guard case .invalidPlacement(.formatMismatch(let id, let expected, let actual)) = error else { Issue.record("expected formatMismatch"); return }
         #expect(id == "episode-overlay")
         #expect(expected == .overlay)
-        #expect(actual == .interstitial)
-        #expect(error?.description == "placement \"episode-overlay\" is an overlay placement, not interstitial")
+        #expect(actual == .linear)
+        #expect(error?.description == "placement \"episode-overlay\" is an overlay placement, not linear")
     }
 
     @Test func formatMismatchWithoutDetailStillNamesTheActualFormat() async {
@@ -304,12 +304,12 @@ struct VideoAdsTests {
 
     @Test func creativeThatReportsAnErrorThrowsItsCode() async {
         let ads = await makeAds()
-        harness.serve(Fixtures.interstitialAd(id: "err-1"))
-        let error = await loadError { try await ads.interstitialPlacement("interstitial").load() }
+        harness.serve(Fixtures.linearAd(id: "err-1"))
+        let error = await loadError { try await ads.linearPlacement("linear").load() }
         guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed"); return }
         #expect(code == 502)
-        harness.serve(Fixtures.interstitialAd(id: "vid-1"))
-        _ = try? await ads.interstitialPlacement("interstitial").load()
+        harness.serve(Fixtures.linearAd(id: "vid-1"))
+        _ = try? await ads.linearPlacement("linear").load()
         #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "the placement was free again")
     }
 

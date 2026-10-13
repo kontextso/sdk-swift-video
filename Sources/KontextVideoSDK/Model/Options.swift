@@ -6,7 +6,7 @@ public enum AdFormat: String, Codable, Sendable {
     /// A card, or the full player, while the content is paused.
     case pause
     /// A full-screen video at a moment the app picks.
-    case interstitial
+    case linear
 }
 
 public enum AdPosition: String, Codable, Sendable {
@@ -52,7 +52,7 @@ public struct OverlayOptions: Encodable, Sendable, Equatable {
     }
 }
 
-public struct InterstitialOptions: Encodable, Sendable, Equatable {
+public struct LinearOptions: Encodable, Sendable, Equatable {
     public enum Timing: String, Encodable, Sendable {
         case preroll
         case midroll
