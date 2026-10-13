@@ -34,6 +34,16 @@ struct TrackerTests {
         #expect(beacons.map(\.event) == ["impression"])
     }
 
+    @Test func everyFireCarriesItsOwnFireIdSharedByItsURLs() async throws {
+        let tracker = try makeTracker()
+        tracker.fire("impression")
+        tracker.fire("click")
+        let beacons = await fired()
+        let fids = beacons.map { $0.query["fid"] ?? "" }
+        #expect(fids.allSatisfy { UUID(uuidString: $0) != nil }, "a UUID per fire: \(fids)")
+        #expect(Set(fids).count == beacons.count, "a different fire id per event occurrence")
+    }
+
     @Test func firesTheGetWithTheSDKsTimeoutAndNoCache() async throws {
         let tracker = try makeTracker()
         tracker.fire("loaded")

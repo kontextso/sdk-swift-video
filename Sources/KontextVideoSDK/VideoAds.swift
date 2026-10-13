@@ -21,6 +21,13 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// The size of the player, in points, as given at creation; `nil` means full screen.
     public let playerSize: CGSize?
+    /// The player's size in points, read at every request, for a player that is not full screen or that
+    /// rotates; a size given once at creation would go stale. `nil` (the default) means `playerSize`,
+    /// or the screen when that is `nil` too.
+    public var playerSizeProvider: (() -> CGSize)?
+    /// The render budget: how many rendered, unshown ads may exist at a time across all `VideoAds` of
+    /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered.
+    nonisolated(unsafe) static var renderBudget = 3
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
@@ -138,6 +145,11 @@ public final class VideoAds {
         current.values.compactMap(\.value)
     }
 
+    /// At most one ad is presented per `VideoAds` at a time, whatever the formats.
+    var isShowingAnAd: Bool {
+        !showing.isEmpty
+    }
+
     func adDidBeginShowing(_ ad: VideoAd) {
         showing[ad.placementId] = ad
         updateMonitor()
@@ -150,8 +162,17 @@ public final class VideoAds {
 
     /// `fetch` then `load` on the bid, in one call: the ad, ready to show, or an error from either step.
     func load(_ format: FormatRequest) async throws -> VideoAd {
+        try checkRenderBudget(placementId: format.placementId)   // before the request: a load that cannot render asks for nothing
         let bid = try await fetch(format)
         return try await bid.load()
+    }
+
+    /// The render budget: at most `renderBudget` rendered, unshown ads across the app's `VideoAds`.
+    private func checkRenderBudget(placementId: String) throws {
+        guard RenderedAds.count < Self.renderBudget else {
+            Logger.warning("\(placementId) for \(content.id): \(Self.renderBudget) rendered ads are already waiting to be shown; load refused")
+            throw VideoAdError.tooManyLoadedAds
+        }
     }
 
     /// One request for one placement, run on the caller's task so cancelling that task cancels the request.
@@ -179,7 +200,7 @@ public final class VideoAds {
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playerSize: playerSize, playheadMs: playheadMs), format: format)
+                                      player: .make(playerSize: playerSizeProvider?() ?? playerSize, playheadMs: playheadMs), format: format)
         Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead) ms")
         DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead))])
 
@@ -205,12 +226,12 @@ public final class VideoAds {
             if case .window = ad.trigger { warnIfNoPlayheadSource() }
             updateMonitor()
             return bid
-        case .noFill(let reason, _, let next):
+        case .noFill(let reason, let retryAfter, let next):
             nextRequestAt[id] = next
             Logger.info("\(id) for \(content.id): no fill (\(reason))\(next.map { ", next request at \($0) ms" } ?? "")")
             DebugReporter.shared.event("ads.response", state: ["placementId": .string(id), "filled": false, "reason": .string(reason)])
             updateMonitor()
-            throw VideoAdError.noFill(reason: reason)
+            throw VideoAdError.noFill(reason: reason, retryAfter: retryAfter.map { TimeInterval($0) / 1000 })
         case .disabled(let reason):
             KontextVideo.shared.disable(reason: reason)
             throw VideoAdError.disabled(reason: reason)
@@ -222,7 +243,9 @@ public final class VideoAds {
     func render(_ bid: VideoAd.Bid) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let id = bid.placementId
+        try checkRenderBudget(placementId: id)
         let videoAd = VideoAd(ad: bid.payload, facts: bid.facts)
+        RenderedAds.add(videoAd)
         videoAd.owner = self
         current[id] = WeakAd(videoAd)
         bids[id] = nil
@@ -468,5 +491,31 @@ public final class VideoAds {
         case .manual: return "manual"
         case .window(let from, let to): return "window \(from)–\(to) ms"
         }
+    }
+}
+
+/// The rendered, unshown ads of the whole app, for the render budget (`VideoAds.renderBudget`): an ad
+/// joins when its page starts loading and leaves when shown, invalidated or deallocated. Weak, so a
+/// dropped ad leaves by itself.
+@MainActor
+enum RenderedAds {
+    private struct Entry { weak var value: VideoAd? }
+    private static var ads: [Entry] = []
+
+    static var count: Int {
+        ads.removeAll { $0.value == nil }
+        return ads.count
+    }
+
+    static func add(_ ad: VideoAd) {
+        ads.append(Entry(value: ad))
+    }
+
+    static func remove(_ ad: VideoAd) {
+        ads.removeAll { $0.value == nil || $0.value === ad }
+    }
+
+    static func reset() {
+        ads = []
     }
 }

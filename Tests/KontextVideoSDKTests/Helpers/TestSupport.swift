@@ -142,6 +142,9 @@ struct SDKHarness {
         FrameBridge.loadTimeout = 8   // the first WebView of a process is slow, several seconds on a CI runner
         VideoAd.videoStartBackstop = 1
         VideoAds.sampleInterval = 0.02
+        VideoAds.renderBudget = 3
+        RenderedAds.reset()
+        Environment.isApplicationActive = { true }
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }
         Environment.consentDefaults = UserDefaults(suiteName: "KontextVideoSDKTests")!

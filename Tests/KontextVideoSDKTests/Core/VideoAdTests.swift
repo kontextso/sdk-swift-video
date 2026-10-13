@@ -193,6 +193,52 @@ struct VideoAdTests {
         #expect(other.subviews.isEmpty, "and is removed at the end")
     }
 
+    @Test func showWhileAnotherAdOfTheVideoAdsIsOnScreenThrowsAnotherAdShowing() async throws {
+        let (overlay, _, ads) = try await makeAd(Fixtures.overlayAd(id: "p9a"))
+        try overlay.show(in: harness.player.view)
+        let pause = VideoAd(ad: try Fixtures.payload(Fixtures.ad(id: "p9b")))
+        pause.owner = ads
+        pause.bridge.receive(message("ad.loaded", adId: pause.id), from: sender)
+        do { try pause.show(in: harness.player.view) } catch VideoAdError.anotherAdShowing {} catch { Issue.record("expected anotherAdShowing, got \(error)") }
+        #expect(pause.isReady, "untouched")
+        #expect(pause.wasShown == false)
+        overlay.dismiss()
+        try pause.show(in: harness.player.view)
+        #expect(pause.wasShown)
+    }
+
+    @Test func anOverlaysClockFreezesWhileTheAppIsNotActive() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c", duration: 300))
+        try ad.show(in: harness.player.view)
+        await sleepMs(100)
+        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+        await sleepMs(400)
+        #expect(delegate.endReasons.isEmpty, "frozen: 400 ms in the background did not count")
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        #expect(await waitUntil(1) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
+    }
+
+    @Test func anOverlayShownWhileInactiveStartsItsClockOnActivation() async throws {
+        Environment.isApplicationActive = { false }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10d", duration: 150))
+        try ad.show(in: harness.player.view)
+        await sleepMs(300)
+        #expect(delegate.endReasons.isEmpty)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        #expect(await waitUntil(1) { delegate.endReasons == [.completed] })
+    }
+
+    @Test func aPagesCloseWithReasonCompleteEndsCompletedWithoutACloseBeacon() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i16"))
+        try ad.show(from: window.root)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.complete", ["playhead": 10_000])
+        send(ad, "ad.close", ["reason": "complete"])
+        #expect(delegate.endReasons == [.completed])
+        let fired = await beacons()
+        #expect(fired.contains("complete") && !fired.contains("close"), "nobody closed anything")
+    }
+
     @Test func anOverlayIsRemovedBySDKWhenItsDurationElapses() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10a", duration: 200))
         var sent: [String] = []

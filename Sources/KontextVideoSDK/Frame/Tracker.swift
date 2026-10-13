@@ -24,11 +24,14 @@ final class Tracker {
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
     /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`.
     func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil) {
+        // One fire id per event occurrence, shared by every URL of it: the server dedupes on
+        // (adId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
+        let fireId = UUID().uuidString.lowercased()
         for (index, entry) in entries.enumerated() where !fired.contains(index) {
             guard entry.event == event, entry.part == part else { continue }
             if let offset, entry.offset != offset { continue }
             fired.insert(index)
-            guard let url = URL(string: substitute(entry.url, errorCode: errorCode)) else {
+            guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId)) else {
                 Logger.warning("ad \(adId.prefix(8)): \(event) beacon has an invalid URL")
                 continue
             }
@@ -41,9 +44,10 @@ final class Tracker {
         entries.contains { $0.event == event && $0.part == part }
     }
 
-    private func substitute(_ template: String, errorCode: Int?) -> String {
+    private func substitute(_ template: String, errorCode: Int?, fireId: String) -> String {
         template
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
+            .replacingOccurrences(of: "[FIREID]", with: fireId)
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
             .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
             .replacingOccurrences(of: "[ADPLAYHEAD]", with: Self.encode(Self.playhead(seconds: TimeInterval(adPlayhead) / 1000)))

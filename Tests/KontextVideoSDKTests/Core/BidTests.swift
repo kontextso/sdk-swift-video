@@ -170,7 +170,7 @@ struct BidTests {
         do {
             _ = try await ads.overlayPlacement("overlay").fetch()
             Issue.record("expected noFill")
-        } catch VideoAdError.noFill(let reason) {
+        } catch VideoAdError.noFill(let reason, _) {
             #expect(reason == "noAdMatch")
         }
         ads.destroy()

@@ -7,7 +7,7 @@ enum Fixtures {
 
     static func tracking(video: Bool, origin: String = "https://ads.test", adId: String = "ad-1") -> [[String: Any]] {
         let url = { (event: String, extra: String) -> String in
-            "\(origin)/events/\(adId)/\(event)?\(extra.isEmpty ? "" : extra + "&")cb=[CACHEBUSTING]&ts=[TIMESTAMP]&cph=[CONTENTPLAYHEAD]"
+            "\(origin)/events/\(adId)/\(event)?\(extra.isEmpty ? "" : extra + "&")cb=[CACHEBUSTING]&fid=[FIREID]&ts=[TIMESTAMP]&cph=[CONTENTPLAYHEAD]"
         }
         var entries: [[String: Any]] = [
             ["event": "loaded", "url": url("loaded", "")],

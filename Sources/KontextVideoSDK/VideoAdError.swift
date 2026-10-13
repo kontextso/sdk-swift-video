@@ -26,11 +26,17 @@ public enum VideoAdError: Error, Sendable {
     /// The placement already has an ad loading, or loaded but not shown. One unshown ad per placement at
     /// a time: show it or drop it, then load again. An ad on screen does not block the next load.
     case placementBusy
+    /// Three rendered, unshown ads already exist across the app's `VideoAds` (the render budget: a
+    /// rendered ad is a live WebView with its media; fetched bids do not count). Show or drop one first;
+    /// to prefetch several episodes, `fetch()` early and `bid.load()` near presentation.
+    case tooManyLoadedAds
     /// An unknown placement id or a format that does not match the dashboard.
     case invalidPlacement(InvalidPlacement)
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
     /// `contentUnsafe`, `placementDisabled`, ... Not a failure; the app decides when to ask again.
-    case noFill(reason: String)
+    /// `retryAfter`: the server's advice, in seconds, on when another request could succeed; `nil` when
+    /// it gave none. The SDK itself retries only on `temporaryError`.
+    case noFill(reason: String, retryAfter: TimeInterval?)
     /// The request failed: no network, a timeout, a server error, an unexpected answer.
     case request(Error)
     /// The server had an ad, but its creative did not load: the frame page failed or did not report
@@ -42,6 +48,9 @@ public enum VideoAdError: Error, Sendable {
 
     /// An ad is shown at most once.
     case alreadyShown
+    /// Another ad of this `VideoAds` is on screen; at most one is presented at a time, whatever the
+    /// formats. This ad is untouched and still ready: `dismiss()` the other, then show.
+    case anotherAdShowing
     /// The ad was lost before `show`; the delegate's `didInvalidate` had the same reason.
     case invalidated(VideoAd.InvalidationReason)
     /// The player's view is below 50 % of the ad's size. The ad is discarded; load again with the real size.
@@ -66,6 +75,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the SDK is disabled by the server (\(reason))"
         case .placementBusy:
             return "the placement already has an ad loading, or loaded and not yet shown"
+        case .tooManyLoadedAds:
+            return "\(VideoAds.renderBudget) rendered ads are waiting to be shown; show or drop one first"
         case .invalidPlacement(.unknown(let id)):
             return "placement \"\(id)\" does not exist for this publisher token"
         case .invalidPlacement(.formatMismatch(let id, let expected, let actual)):
@@ -73,14 +84,16 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
                 return "placement \"\(id)\" is \(article(expected)) \(expected.rawValue) placement, not \(actual.rawValue)"
             }
             return "placement \"\(id)\" is not \(article(actual)) \(actual.rawValue) placement"
-        case .noFill(let reason):
-            return "no fill (\(reason))"
+        case .noFill(let reason, let retryAfter):
+            return "no fill (\(reason))" + (retryAfter.map { "; try again in \(Int($0)) s" } ?? "")
         case .request(let error):
             return "request failed: \(error)"
         case .creativeFailed(let code):
             return "the creative failed to load (VAST error \(code))"
         case .alreadyShown:
             return "the ad was already shown"
+        case .anotherAdShowing:
+            return "another ad of this VideoAds is on screen; dismiss it first"
         case .invalidated(let reason):
             return "the ad was invalidated (\(reason))"
         case .containerTooSmall(let minimum):

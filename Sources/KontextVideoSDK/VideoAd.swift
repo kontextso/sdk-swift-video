@@ -264,6 +264,7 @@ public final class VideoAd {
 
     private func checkShowable() throws {
         if wasShown { throw VideoAdError.alreadyShown }
+        if let owner, owner.isShowingAnAd { throw VideoAdError.anotherAdShowing }
         if isExpired { invalidate(.expired) }
         if let reason = invalidationReason { throw VideoAdError.invalidated(reason) }
         guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: ad.creative == .video ? 400 : 500)) }
@@ -289,6 +290,7 @@ public final class VideoAd {
     /// Presentation began: the page is told, the owner retains the ad; `show` returning is the app's signal.
     private func begin(startMeter: Bool = true) {
         wasShown = true
+        RenderedAds.remove(self)
         expiryTask?.cancel()
         owner?.adDidBeginShowing(self)
         bridge.show()
@@ -312,14 +314,55 @@ public final class VideoAd {
             self.startMeter()
         }
         if format == .overlay, let duration {
-            // The buyer's NonLinear duration: one clock, the SDK's. `dismiss()` ends it earlier.
-            durationTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                guard let self, !Task.isCancelled, !hasEnded else { return }
-                Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration) s elapsed")
-                end(.completed)
-            }
+            // The buyer's NonLinear duration: one clock, the SDK's, counting time on screen only: it
+            // freezes while the app is not active and resumes on foreground. `dismiss()` ends it earlier.
+            durationRemaining = duration
+            observeActivity()
+            if Environment.isApplicationActive() { startDurationClock() }
         }
+    }
+
+    /// Seconds of the overlay's `duration` still to show; counted down only while the app is active.
+    private var durationRemaining: TimeInterval = 0
+    private var durationStartedAt: TimeInterval?
+    private var activityObservers: [any NSObjectProtocol] = []
+
+    private func startDurationClock() {
+        guard durationTask == nil, !hasEnded else { return }
+        let remaining = durationRemaining
+        durationStartedAt = ProcessInfo.processInfo.systemUptime
+        durationTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, remaining) * 1_000_000_000))
+            guard let self, !Task.isCancelled, !hasEnded else { return }
+            Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
+            end(.completed)
+        }
+    }
+
+    private func pauseDurationClock() {
+        guard let task = durationTask, let startedAt = durationStartedAt else { return }
+        task.cancel()
+        durationTask = nil
+        durationStartedAt = nil
+        durationRemaining = max(0, durationRemaining - (ProcessInfo.processInfo.systemUptime - startedAt))
+        Logger.debug("ad \(id.prefix(8)): overlay clock frozen with \(durationRemaining) s left")
+    }
+
+    private func observeActivity() {
+        let center = NotificationCenter.default
+        activityObservers = [
+            center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pauseDurationClock() }
+            },
+            center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.startDurationClock() }
+            },
+        ]
+    }
+
+    private func stopObservingActivity() {
+        activityObservers.forEach(NotificationCenter.default.removeObserver)
+        activityObservers = []
     }
 
     private var impressionRecorded = false
@@ -355,6 +398,7 @@ public final class VideoAd {
         hasEnded = true
         startBackstop?.cancel()
         durationTask?.cancel()
+        stopObservingActivity()
         meter?.stop()
         meter = nil
         bridge.hide()
@@ -454,12 +498,16 @@ public final class VideoAd {
             }
             open(url, fallback: nil)
         case .close(let reason):
-            // The page's own close control; not fired for the app's dismiss() or destroy(). An
-            // linear ad's close before `complete` is a skip whatever the page called it: the outcome
-            // is what the app hears, and `.closed` is for the overlay and pause formats.
+            // The page's own close control; not fired for the app's dismiss() or destroy(). A linear
+            // ad's close before `complete` is a skip whatever the page called it: the outcome is what
+            // the app hears, and `.closed` is for the overlay and pause formats. `reason: complete` is
+            // the page ending itself after the video completed with no end card: nobody closed
+            // anything, so no VAST `close` fires.
             if format == .linear, !completed {
                 tracker.fire("skip")
                 end(.skipped)
+            } else if reason == "complete" {
+                end(.completed)
             } else {
                 tracker.fire("close")
                 end(completed ? .completed : (reason == "resume" ? .resumed : .closed))
@@ -532,6 +580,7 @@ public final class VideoAd {
         }
         guard invalidationReason == nil else { return }
         invalidationReason = reason
+        RenderedAds.remove(self)
         expiryTask?.cancel()
         bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
@@ -552,6 +601,7 @@ public final class VideoAd {
         expiryTask?.cancel()
         startBackstop?.cancel()
         durationTask?.cancel()
+        activityObservers.forEach(NotificationCenter.default.removeObserver)
         meter?.stopTimer()
     }
 }

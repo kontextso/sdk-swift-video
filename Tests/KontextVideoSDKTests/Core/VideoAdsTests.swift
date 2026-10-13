@@ -87,6 +87,43 @@ struct VideoAdsTests {
         #expect(KontextVideo.shared.state == .enabled)
     }
 
+    @Test func playerSizeProviderIsReadAtEachRequest() async throws {
+        let ads = await makeAds()
+        var size = CGSize(width: 390, height: 220)
+        ads.playerSizeProvider = { size }
+        harness.serve(Fixtures.ad(id: "img-3a"))
+        let first = try await ads.pausePlacement("pause").load()
+        size = CGSize(width: 844, height: 390)                       // rotated
+        _ = first
+        harness.serve(Fixtures.ad(id: "img-3b"))
+        _ = try await ads.overlayPlacement("overlay").load()
+        let players = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["player"] as? [String: Any] }
+        #expect(players.map { $0["width"] as? Int } == [390, 844], "the size at each request, not at creation")
+        #expect(players.map { $0["height"] as? Int } == [220, 390])
+    }
+
+    @Test func renderBudgetRefusesAFourthUnshownAdAcrossVideoAds() async throws {
+        let ads = await makeAds()
+        let other = harness.player.ads(for: .init(id: "ep-next", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-b1"))
+        let a = try await ads.pausePlacement("pause").load()
+        harness.serve(Fixtures.ad(id: "img-b2"))
+        let b = try await ads.overlayPlacement("overlay").load()
+        harness.serve(Fixtures.ad(id: "img-b3"))
+        let c = try await other.pausePlacement("pause").load()
+        harness.serve(Fixtures.ad(id: "img-b4"))
+        let requests = harness.server.requests(to: "/v2/video/ads").count
+        let error = await loadError { try await other.overlayPlacement("overlay").load() }
+        guard case .tooManyLoadedAds = error else { Issue.record("expected tooManyLoadedAds, got \(String(describing: error))"); return }
+        #expect(harness.server.requests(to: "/v2/video/ads").count == requests, "refused before any request")
+        let bid = try await other.overlayPlacement("overlay").fetch()
+        #expect(bid.isPending, "fetch is not rendering and is not budgeted")
+        try a.show(in: harness.player.view)
+        _ = try await bid.load()
+        withExtendedLifetime((a, b, c)) {}
+        other.destroy()
+    }
+
     @Test func loadCarriesThePlayheadReadAtRequestTime() async throws {
         let ads = await makeAds()
         harness.player.playhead = 12.5
@@ -211,9 +248,19 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .noFill(let reason) = error else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason, _) = error else { Issue.record("expected noFill"); return }
         #expect(reason == "frequencyCap")
         #expect(error?.description == "no fill (frequencyCap)")
+    }
+
+    @Test func retryAfterOnAnotherReasonIsPassedToTheAppNotRetried() async throws {
+        let ads = await makeAds()
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap", retryAfter: 1_800_000)))
+        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        guard case .noFill(let reason, let retryAfter) = error else { Issue.record("expected noFill"); return }
+        #expect(reason == "frequencyCap")
+        #expect(retryAfter == 1800, "seconds, from the wire's ms")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "only temporaryError is retried by the SDK")
     }
 
     @Test func retryAfterIsTheOneRetryTheSDKDoesItself() async throws {

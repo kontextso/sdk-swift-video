@@ -27,6 +27,8 @@ enum Environment {
     }
     /// Where the IAB consent keys are read from.
     static var consentDefaults: UserDefaults = .standard
+    /// Whether the app is active, for the clocks that count only time on screen.
+    static var isApplicationActive: () -> Bool = { UIApplication.shared.applicationState == .active }
 
     static func reset() {
         session = .shared
@@ -40,5 +42,6 @@ enum Environment {
         openURL = { url, completion in UIApplication.shared.open(url, options: [:], completionHandler: completion) }
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
+        isApplicationActive = { UIApplication.shared.applicationState == .active }
     }
 }

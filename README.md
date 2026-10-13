@@ -97,6 +97,7 @@ let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220)
 
 ads.trackPlayhead(of: avPlayer)                   // AVPlayer: the SDK reads currentTime() itself, holds the player weakly
 ads.playheadProvider = { myPlayer.currentTime }   // any other player: seconds
+ads.playerSizeProvider = { playerView.bounds.size } // a player that is not full screen or rotates: read at every request
 
 try ad.show(in: playerView)                       // the view the content plays in (see 5)
 ```
@@ -196,10 +197,11 @@ do {
 Overlay and pause ads are shown with `show(in:)`, inside the view your content plays in: the one holding the
 `AVPlayerLayer`, or `contentOverlayView` of an `AVPlayerViewController`, or a `UIViewRepresentable`-hosted view in
 SwiftUI. The SDK places its own view in it at the ad's position and size (a full-screen pause ad fills it);
-`dismiss()` ends a pause ad when your content resumes. An overlay ends by itself when its `duration` elapses
-(`didEnd(.completed)`); `dismiss()` is for ending it earlier (the content ended, a seek). `show` throws when
+`dismiss()` ends a pause ad when your content resumes. An overlay ends by itself when its `duration` of time on screen elapses
+(`didEnd(.completed)`; the clock freezes while the app is in the background); `dismiss()` is for ending it earlier (the content ended, a seek). `show` throws when
 presentation cannot begin (nothing fired):
-`.alreadyShown`, `.invalidated(reason)` or `.containerTooSmall` (the ad is discarded); `show` returning is the signal that
+`.alreadyShown`, `.anotherAdShowing` (one ad on screen per `VideoAds`: dismiss the other first), `.invalidated(reason)` or
+`.containerTooSmall` (the ad is discarded); `show` returning is the signal that
 presentation began, there is no "did show" callback. Set a `VideoAdDelegate` on the ad for everything after:
 `didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every way an ad ends,
 including your own `dismiss()` and `destroy()` (delivered synchronously, from inside that call). Resume your content in
