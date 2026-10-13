@@ -274,7 +274,9 @@ extension PlayerController: VideoAdDelegate, VideoAdsTimingDelegate {
     func videoAdDidReachWindow(_ ad: VideoAd) {
         switch ad.format {
         case .overlay: try? ad.show(in: playerView)
-        case .linear: contentPlayer.pause(); try? ad.show(from: self)   // resume in didEnd
+        case .linear:
+            contentPlayer.pause()
+            do { try ad.show() } catch { contentPlayer.play() }       // threw: never started, no didEnd follows; resume here
         default: break
         }
     }

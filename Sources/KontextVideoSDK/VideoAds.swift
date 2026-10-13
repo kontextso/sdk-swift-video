@@ -70,6 +70,9 @@ public final class VideoAds {
     /// Timed mode: the content time (ms) at which the server recommends the placement's next request.
     /// A recommendation, not a rule: an earlier `load` is an ordinary request.
     private(set) var nextRequestAt: [String: Int] = [:]
+    /// Timed mode: placements whose `nextRequestAt` came while they were busy (an unshown ad or a
+    /// pending bid); the request is reported when the placement is free again, not lost.
+    private(set) var deferredRequests: Set<String> = []
     /// Placements with a request in flight.
     private var loading: Set<String> = []
 
@@ -140,6 +143,11 @@ public final class VideoAds {
         return placement
     }
 
+    /// One unshown ad per placement: loading, fetched and not loaded, or loaded and not shown.
+    private func isBusy(_ id: String) -> Bool {
+        loading.contains(id) || current[id]?.value?.isPendingUnshown == true || bids[id]?.value?.isPending == true
+    }
+
     /// Every ad this object handed out that the app still holds and that is not yet gone.
     private var liveAds: [VideoAd] {
         current.values.compactMap(\.value)
@@ -148,6 +156,17 @@ public final class VideoAds {
     /// At most one ad is presented per `VideoAds` at a time, whatever the formats.
     var isShowingAnAd: Bool {
         !showing.isEmpty
+    }
+
+    /// A pending (unshown) ad or bid of a placement is gone before it was shown: the placement is free
+    /// and a load makes sense, so the timing delegate hears it, once, whatever the reason, except
+    /// `.destroyed` (nothing to load into) and `.seeked` (reported per placement by the seek itself).
+    /// A deferred `nextRequestAt` of the placement is folded in: one request, not two.
+    func pendingAdWasDiscarded(placementId id: String, reason: VideoAd.InvalidationReason) {
+        guard !isDestroyed, reason != .destroyed, reason != .seeked else { return }
+        deferredRequests.remove(id)
+        timingDelegate?.videoAds(self, didRequestLoadOf: id, reason: .adDiscarded(reason))
+        updateMonitor()
     }
 
     func adDidBeginShowing(_ ad: VideoAd) {
@@ -182,7 +201,7 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let id = format.placementId
-        if loading.contains(id) || current[id]?.value?.isPendingUnshown == true || bids[id]?.value?.isPending == true {
+        if isBusy(id) {
             Logger.warning("\(id) for \(content.id): load refused, the placement has an ad loading, fetched or loaded and not yet shown")
             throw VideoAdError.placementBusy
         }
@@ -355,6 +374,7 @@ public final class VideoAds {
         current.removeAll()
         bids.removeAll()
         nextRequestAt.removeAll()
+        deferredRequests.removeAll()
         stopMonitor()
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
@@ -365,7 +385,7 @@ public final class VideoAds {
     /// `nextRequestAt`, a windowed overlay on screen (a seek out of its window ends it).
     private var needsMonitor: Bool {
         guard !isDestroyed else { return false }
-        if !nextRequestAt.isEmpty { return true }
+        if !nextRequestAt.isEmpty || !deferredRequests.isEmpty { return true }
         if liveBids.contains(where: { $0.isPending && $0.isWindowed }) { return true }
         if liveAds.contains(where: { $0.isWindowed && $0.isPendingUnshown }) { return true }
         return showing.values.contains { $0.isWindowed && $0.format == .overlay }
@@ -411,21 +431,31 @@ public final class VideoAds {
         }
         for (id, at) in nextRequestAt where now >= TimeInterval(at) / 1000 {
             nextRequestAt[id] = nil
-            Logger.info("\(id) for \(content.id): nextRequestAt \(at) ms reached")
+            if isBusy(id) {
+                // The placement still holds an unshown ad: a load now would be refused. Reported the
+                // moment the placement is free (the next sample), never lost.
+                Logger.info("\(id) for \(content.id): nextRequestAt \(at) ms reached while the placement is busy; deferred")
+                deferredRequests.insert(id)
+            } else {
+                Logger.info("\(id) for \(content.id): nextRequestAt \(at) ms reached")
+                timingDelegate?.videoAds(self, didRequestLoadOf: id, reason: .nextRequestReached)
+            }
+        }
+        for id in deferredRequests.sorted() where !isBusy(id) {
+            deferredRequests.remove(id)
+            Logger.info("\(id) for \(content.id): placement free, the deferred nextRequestAt is due")
             timingDelegate?.videoAds(self, didRequestLoadOf: id, reason: .nextRequestReached)
         }
         for bid in liveBids where bid.isPending {
             guard case .window(_, let to) = bid.trigger, now >= to else { continue }
-            bid.invalidate(.windowPassed)
-            timingDelegate?.videoAds(self, didRequestLoadOf: bid.placementId, reason: .adDiscarded(.windowPassed))
+            bid.invalidate(.windowPassed)   // the invalidation reports the load request
         }
         for ad in liveAds where ad.isPendingUnshown {
             guard case .window(let from, let to) = ad.trigger else { continue }
             let fits = ad.format == .overlay ? now + (ad.duration ?? 0) <= to : now < to
             if !fits {
                 Logger.info("ad \(ad.id.prefix(8)): window \(from)–\(to) s passed at \(now) s")
-                ad.invalidate(.windowPassed)
-                timingDelegate?.videoAds(self, didRequestLoadOf: ad.placementId, reason: .adDiscarded(.windowPassed))
+                ad.invalidate(.windowPassed)   // the invalidation reports the load request
             } else if now >= from {
                 ad.deliverWindow()
             }
@@ -454,7 +484,9 @@ public final class VideoAds {
             }
         }
         placements.append(contentsOf: nextRequestAt.keys.sorted())
+        placements.append(contentsOf: deferredRequests.sorted())
         nextRequestAt.removeAll()
+        deferredRequests.removeAll()
         var notified: Set<String> = []
         for id in placements where notified.insert(id).inserted {
             timingDelegate?.videoAds(self, didRequestLoadOf: id, reason: .seeked)

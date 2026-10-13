@@ -217,6 +217,8 @@ extension Demo: VideoAdDelegate {
             case .pause: break
             }
         } catch {
+            // Never started: no didEnd follows, so the content resumes here, not in the delegate
+            if ad.format == .linear { contentPlayer.play() }
             note("\(ad.format) show at window: \(error)")
         }
     }

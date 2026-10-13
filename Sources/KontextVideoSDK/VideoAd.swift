@@ -645,6 +645,7 @@ public final class VideoAd {
         } else {
             delegate?.videoAd(self, didInvalidate: reason)
         }
+        owner?.pendingAdWasDiscarded(placementId: placementId, reason: reason)
     }
 
     /// Dropping the last reference releases everything: the bridge tears the page down in its own

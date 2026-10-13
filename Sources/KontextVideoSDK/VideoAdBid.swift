@@ -82,6 +82,7 @@ extension VideoAd {
             guard ad == nil, invalidationReason == nil else { return }
             invalidationReason = reason
             Logger.debug("bid \(id.prefix(8)) invalidated: \(reason)")
+            owner?.pendingAdWasDiscarded(placementId: placementId, reason: reason)
         }
     }
 
