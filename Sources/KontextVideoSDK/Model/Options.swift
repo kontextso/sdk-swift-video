@@ -61,8 +61,7 @@ public struct InterstitialOptions: Encodable, Sendable, Equatable {
 
     /// Where the app will show it; the default is `midroll`.
     public let timing: Timing?
-    /// Milliseconds.
-    /// Caps the video length, in seconds.
+    /// Caps the video length, in seconds (milliseconds on the wire).
     public let maxDuration: TimeInterval?
     /// Start with the sound off; the default is `false`.
     public let muted: Bool?

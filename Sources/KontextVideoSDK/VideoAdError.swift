@@ -46,8 +46,11 @@ public enum VideoAdError: Error, Sendable {
     case invalidated(VideoAd.InvalidationReason)
     /// The player's view is below 50 % of the ad's size. The ad is discarded; load again with the real size.
     case containerTooSmall(minimum: CGSize)
-    /// The interstitial's view controller is already presenting, or not on screen. The ad stays ready.
-    case cannotPresent
+    /// No view controller can present the interstitial right now: the one given is already presenting or
+    /// not on screen; with `show()`, there is no key window or its top controller is mid-transition or a
+    /// system alert or sheet. The ad stays ready: try again later, or pass the right controller. Also
+    /// thrown in a release build when the wrong `show` is used for the format.
+    case presenterUnavailable
 }
 
 extension VideoAdError: CustomStringConvertible, LocalizedError {
@@ -82,8 +85,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the ad was invalidated (\(reason))"
         case .containerTooSmall(let minimum):
             return "the player's view is too small for the ad; at least \(Int(minimum.width))×\(Int(minimum.height)) points are needed"
-        case .cannotPresent:
-            return "the view controller cannot present now"
+        case .presenterUnavailable:
+            return "no view controller can present the ad now"
         }
     }
 

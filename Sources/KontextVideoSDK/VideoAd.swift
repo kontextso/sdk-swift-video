@@ -100,13 +100,19 @@ public final class VideoAd {
     /// Why the ad was invalidated, once it was.
     public private(set) var invalidationReason: InvalidationReason?
 
-    /// Receives the ad's moments. Held weakly.
-    public weak var delegate: (any VideoAdDelegate)?
+    /// Receives the ad's moments. Held weakly. Timed mode: a window that opened before the delegate was
+    /// set is delivered the moment it is, so `load()` returning and `ad.delegate = self` on the next line
+    /// never miss it, whatever the sampler did in between.
+    public weak var delegate: (any VideoAdDelegate)? {
+        didSet { if windowReached, delegate != nil { deliverWindow() } }
+    }
 
     /// `true` from a successful `show` on; an ad is shown at most once.
     public private(set) var wasShown = false
     /// `true` once `didEnd` was delivered.
     public private(set) var hasEnded = false
+    /// Timed mode: the sampler saw the window open while the ad was ready.
+    private var windowReached = false
     /// Timed mode: `videoAdDidReachWindow` was delivered.
     private(set) var windowDelivered = false
 
@@ -175,7 +181,7 @@ public final class VideoAd {
     public func show(in view: UIView) throws {
         guard format != .interstitial else {
             Environment.assertionFailure("KontextVideo: an interstitial is shown with show(from:)")
-            throw VideoAdError.cannotPresent
+            throw VideoAdError.presenterUnavailable
         }
         try checkShowable()
         let container = view
@@ -190,20 +196,33 @@ public final class VideoAd {
         begin()
     }
 
-    /// Presents an interstitial full screen from `viewController`, which must be on screen and not already
-    /// presenting. Throws when presentation cannot begin, with nothing fired: `alreadyShown`,
-    /// `invalidated`, `cannotPresent` (the ad stays ready; try again later). Only the SDK dismisses it:
-    /// the video completing, a skip, a close, an error, or an interruption, each ending in one `didEnd`.
-    /// From here until `didEnd` the SDK retains the ad.
-    public func show(from viewController: UIViewController) throws {
+    /// Presents an interstitial full screen. From `viewController` when given, which must be on screen
+    /// and not already presenting; with `nil` (the default) from the key window's top view controller,
+    /// as AdMob's `present(from: nil)` and MAX's `showAd()` do. Pass the controller when the guess would
+    /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
+    /// Throws when presentation cannot begin, with nothing fired: `alreadyShown`, `invalidated`,
+    /// `presenterUnavailable` (the ad stays ready; try again later or pass the right controller). Only the
+    /// SDK dismisses it: the video completing, a skip, a close, an error, or an interruption, each ending
+    /// in one `didEnd`. From here until `didEnd` the SDK retains the ad.
+    public func show(from viewController: UIViewController? = nil) throws {
         guard format == .interstitial else {
             Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show(in:)")
-            throw VideoAdError.cannotPresent
+            throw VideoAdError.presenterUnavailable
         }
         try checkShowable()
-        guard viewController.view.window != nil, viewController.presentedViewController == nil else {
-            Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
-            throw VideoAdError.cannotPresent
+        let presenter: UIViewController
+        if let viewController {
+            guard viewController.view.window != nil, viewController.presentedViewController == nil else {
+                Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
+                throw VideoAdError.presenterUnavailable
+            }
+            presenter = viewController
+        } else {
+            guard let top = Self.topViewController() else {
+                Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
+                throw VideoAdError.presenterUnavailable
+            }
+            presenter = top
         }
         let controller = InterstitialViewController(webView: bridge.takeWebView())
         controller.onInterrupted = { [weak self] in
@@ -214,10 +233,23 @@ public final class VideoAd {
         interstitialController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
-        viewController.present(controller, animated: true) { [weak self] in
+        presenter.present(controller, animated: true) { [weak self] in
             self?.startMeter()
         }
         begin(startMeter: false)
+    }
+
+    /// The key window's root controller, followed through what it presents to the top, as the peers do
+    /// (AdMob 11, MAX). `nil` when there is no key window or the top controller cannot present: it is
+    /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that
+    /// can, and the ad goes over it, as a peer's would.
+    static func topViewController() -> UIViewController? {
+        guard var controller = Environment.keyWindow()?.rootViewController else { return nil }
+        while let presented = controller.presentedViewController, !presented.isBeingDismissed {
+            controller = presented
+        }
+        guard controller.view.window != nil, !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
+        return controller
     }
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
@@ -254,7 +286,7 @@ public final class VideoAd {
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
-    /// Presentation began: the page is told, the owner retains the ad, the delegate hears `didShow`.
+    /// Presentation began: the page is told, the owner retains the ad; `show` returning is the app's signal.
     private func begin(startMeter: Bool = true) {
         wasShown = true
         expiryTask?.cancel()
@@ -265,7 +297,6 @@ public final class VideoAd {
         // creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        delegate?.videoAdDidShow(self)
         if ad.creative == .image {
             recordImpression()
         } else {
@@ -423,9 +454,16 @@ public final class VideoAd {
             }
             open(url, fallback: nil)
         case .close(let reason):
-            // The page's own close control; not fired for the app's dismiss() or destroy().
-            tracker.fire("close")
-            end(completed ? .completed : (reason == "resume" ? .resumed : .closed))
+            // The page's own close control; not fired for the app's dismiss() or destroy(). An
+            // interstitial's close before `complete` is a skip whatever the page called it: the outcome
+            // is what the app hears, and `.closed` is for the overlay and pause formats.
+            if format == .interstitial, !completed {
+                tracker.fire("skip")
+                end(.skipped)
+            } else {
+                tracker.fire("close")
+                end(completed ? .completed : (reason == "resume" ? .resumed : .closed))
+            }
         case .skip(let playhead):
             tracker.adPlayhead = playhead
             tracker.fire("skip")
@@ -467,13 +505,16 @@ public final class VideoAd {
     /// Timed mode: the window opened and the ad is loaded; the app shows it in the callback. Once.
     func deliverWindow() {
         guard isLoaded, !wasShown, invalidationReason == nil, !windowDelivered else { return }
-        windowDelivered = true
-        Logger.info("ad \(id.prefix(8)): window reached")
-        DebugReporter.shared.event("ad.windowReached", adId: id)
-        if delegate == nil {
-            Logger.warning("ad \(id.prefix(8)): window reached but no delegate is set; set ad.delegate right after load returns")
+        if !windowReached {
+            windowReached = true
+            Logger.info("ad \(id.prefix(8)): window reached")
+            DebugReporter.shared.event("ad.windowReached", adId: id)
         }
-        delegate?.videoAdDidReachWindow(self)
+        // No delegate yet: the app is between `load()` returning and `ad.delegate = self`, or forgot it.
+        // Delivered when the delegate is set (the property's didSet), or on the next sample.
+        guard let delegate else { return }
+        windowDelivered = true
+        delegate.videoAdDidReachWindow(self)
     }
 
     /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not

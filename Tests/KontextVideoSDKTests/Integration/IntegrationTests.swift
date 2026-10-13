@@ -47,7 +47,7 @@ struct IntegrationTests {
         #expect(await waitUntil { self.events(for: "img-pause") == ["loaded"] })
 
         try ad.show(in: harness.player.view)
-        #expect(delegate.events == ["show", "impression"])
+        #expect(delegate.events == ["impression"])
         #expect(harness.player.view.subviews.count == 1)
         #expect(await waitUntil { Set(self.events(for: "img-pause")).isSuperset(of: ["creativeView", "iconView", "impression"]) })
         #expect(await waitUntil(2) { self.events(for: "img-pause").contains("viewable") }, "50 % for 1 s")
@@ -131,7 +131,7 @@ struct IntegrationTests {
         #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
         try ad.show(from: window.root)
-        #expect(delegate.events == ["show"])
+        #expect(delegate.events.isEmpty)
         #expect(await waitUntil(3) { delegate.events.contains("impression") }, "at video.start")
         #expect(await waitUntil(3) { delegate.rewards.count == 1 }, "at video.complete")
         #expect(delegate.endReasons.isEmpty, "the end card is up")

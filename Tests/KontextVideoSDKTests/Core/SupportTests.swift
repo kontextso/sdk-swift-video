@@ -24,7 +24,7 @@ struct SupportTests {
             (.alreadyShown, "the ad was already shown"),
             (.invalidated(.expired), "the ad was invalidated (expired)"),
             (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the player's view is too small for the ad; at least 150×150 points are needed"),
-            (.cannotPresent, "the view controller cannot present now"),
+            (.presenterUnavailable, "no view controller can present the ad now"),
         ]
         for (error, expected) in cases {
             #expect(error.description == expected)
@@ -42,11 +42,10 @@ struct SupportTests {
         let delegate = Minimal()
         let ad = VideoAd(ad: try Fixtures.payload(Fixtures.ad(id: "d1")))
         delegate.videoAd(ad, didInvalidate: .expired)
-        delegate.videoAdDidShow(ad)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: "creative"))
         delegate.videoAd(ad, didEarn: VideoAd.Reward(label: "coins", amount: 1))
-        delegate.videoAd(ad, didFail: .cannotPresent)
+        delegate.videoAd(ad, didFail: .presenterUnavailable)
         delegate.videoAd(ad, didEnd: .completed)
     }
 

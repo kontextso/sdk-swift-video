@@ -103,12 +103,13 @@ final class Demo: ObservableObject {
         Task { await loadInterstitialAndWait() }
     }
 
-    /// The interstitial is presented by the SDK over everything; the content would pause here and resume in didEnd.
+    /// The interstitial is presented by the SDK from the key window's top view controller (`show()`); the
+    /// content pauses here and resumes in didEnd.
     func showInterstitial() {
-        guard let ad = interstitial, let presenter = Self.topViewController else { return }
+        guard let ad = interstitial else { return }
         contentPlayer.pause()
         do {
-            try ad.show(from: presenter)
+            try ad.show()
         } catch {
             contentPlayer.play()                 // never started: undo here, no delegate call follows
             note("interstitial show: \(error)")
@@ -202,10 +203,6 @@ final class Demo: ObservableObject {
 extension Demo: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
         note("\(ad.format) \(ad.id.prefix(8)) invalidated: \(reason)")
-    }
-
-    func videoAdDidShow(_ ad: VideoAd) {
-        note("\(ad.format) \(ad.id.prefix(8)) shown")
     }
 
     func videoAdDidRecordImpression(_ ad: VideoAd) {

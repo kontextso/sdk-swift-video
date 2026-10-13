@@ -60,7 +60,7 @@ struct TimedModeTests {
         await play(to: 20.1)
         #expect(await waitUntil { delegate.windowsReached == 1 })
         try ad.show(in: harness.player.view)
-        #expect(delegate.events.contains("show"))
+        #expect(ad.wasShown)
         await ticks()
         #expect(delegate.windowsReached == 1, "once")
         ad.dismiss()
@@ -156,14 +156,21 @@ struct TimedModeTests {
         #expect(await waitUntil { delegate.windowsReached == 1 }, "on the first sample after resume")
     }
 
-    @Test func noDelegateAtTheWindowLogsAWarningAndCountsAsDelivered() async throws {
+    @Test func aWindowReachedBeforeTheDelegateIsSetIsDeliveredWhenItIs() async throws {
         let ads = await makeAds()
         harness.player.playhead = 10
         harness.serve(windowed("img-w9", from: 20_000, to: 40_000))
         let ad = try await ads.overlayPlacement("overlay").load()
         await play(to: 21)
-        #expect(await waitUntil { ad.windowDelivered })
+        await ticks()
+        #expect(ad.windowDelivered == false, "nobody to deliver to yet")
         #expect(ad.isReady, "still showable by hand")
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        #expect(delegate.windowsReached == 1, "delivered the moment the delegate arrives, not on the next sample")
+        #expect(ad.windowDelivered)
+        await ticks()
+        #expect(delegate.windowsReached == 1, "once")
     }
 
     // MARK: nextRequestAt

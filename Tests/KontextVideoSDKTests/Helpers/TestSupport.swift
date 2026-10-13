@@ -53,7 +53,6 @@ final class RecordingDelegate: VideoAdDelegate {
         windowsReached += 1
     }
 
-    func videoAdDidShow(_ ad: VideoAd) { events.append("show") }
     func videoAdDidRecordImpression(_ ad: VideoAd) { events.append("impression") }
 
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {

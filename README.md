@@ -199,9 +199,11 @@ SwiftUI. The SDK places its own view in it at the ad's position and size (a full
 `dismiss()` ends a pause ad when your content resumes. An overlay ends by itself when its `duration` elapses
 (`didEnd(.completed)`); `dismiss()` is for ending it earlier (the content ended, a seek). `show` throws when
 presentation cannot begin (nothing fired):
-`.alreadyShown`, `.invalidated(reason)` or `.containerTooSmall` (the ad is discarded). Set a `VideoAdDelegate` on the ad for everything
-after: `didShow`, `didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every
-way an ad ends, including your own `dismiss()` and `destroy()`. Resume your content in `didEnd`.
+`.alreadyShown`, `.invalidated(reason)` or `.containerTooSmall` (the ad is discarded); `show` returning is the signal that
+presentation began, there is no "did show" callback. Set a `VideoAdDelegate` on the ad for everything after:
+`didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every way an ad ends,
+including your own `dismiss()` and `destroy()` (delivered synchronously, from inside that call). Resume your content in
+`didEnd`, and only there.
 
 ```swift
 let ad = try await pause.load()
@@ -222,17 +224,20 @@ extension PlayerController: VideoAdDelegate {
 }
 ```
 
-An interstitial is presented by the SDK itself, full screen, with `show(from:)`; only the SDK dismisses it (the video
+An interstitial is presented by the SDK itself, full screen: `show()` presents from the key window's top view
+controller (as AdMob's `present(from: nil)` and MAX's `showAd()` do), `show(from:)` from a controller you name when
+that guess would be wrong (a player presented as a sheet, a second window). Only the SDK dismisses it (the video
 completed, a skip, a close, an error, an interruption, or your `destroy()`), and every way ends in one `didEnd`. Pause
-your content before `show(from:)` and resume it in `didEnd`. `show(from:)` also throws `.cannotPresent` when the view
-controller is not on screen or already presenting; the ad stays ready, try again later.
+your content before `show` and resume it in `didEnd`. `show` also throws `.presenterUnavailable` when no view
+controller can present right now (yours is off screen or already presenting; with `show()`, no key window or a top
+controller mid-transition); the ad stays ready, try again later or pass the right controller.
 
 ```swift
 let interstitial = try await midroll.load()
 interstitial.delegate = self
 contentPlayer.pause()
 do {
-    try interstitial.show(from: self)
+    try interstitial.show()                      // or show(from: self)
 } catch {
     contentPlayer.play()                 // never started: undo here, no delegate call follows
 }

@@ -124,7 +124,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         #expect(ad.wasShown)
         #expect(ad.isReady == false, "shown at most once")
-        #expect(delegate.events == ["show", "impression"], "an image counts at show")
+        #expect(delegate.events == ["impression"], "an image counts at show")
         #expect(sent.first == "ad.show")
         let host = try #require(harness.player.view.subviews.last)
         #expect(host.subviews.first === ad.bridge.webView)
@@ -159,7 +159,7 @@ struct VideoAdTests {
         #expect(ad.isReady == false)
         #expect(ad.invalidationReason == .containerTooSmall)
         #expect(delegate.invalidations == [.containerTooSmall])
-        #expect(delegate.events.contains("show") == false)
+        #expect(ad.wasShown == false)
         #expect(harness.player.view.subviews.isEmpty)
         #expect(await beacons() == ["loaded"], "nothing fired beyond the loaded that came before")
     }
@@ -175,7 +175,7 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i2"))
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
-        do { try ad.show(in: harness.player.view) } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
+        do { try ad.show(in: harness.player.view) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         #expect(messages.count == 1)
         #expect(ad.isReady, "untouched")
     }
@@ -332,11 +332,11 @@ struct VideoAdTests {
     @Test func videoImpressionWaitsForTheFirstFrame() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i3"))
         try ad.show(from: window.root)
-        #expect(delegate.events == ["show"], "no impression at show for a video")
+        #expect(delegate.events.isEmpty, "no impression at show for a video")
         var fired = await beacons()
         #expect(fired.contains("creativeView") && !fired.contains("impression"))
         send(ad, "video.start", ["playhead": 0])
-        #expect(delegate.events == ["show", "impression"])
+        #expect(delegate.events == ["impression"])
         fired = await beacons()
         #expect(fired.contains("impression") && fired.contains("start"))
         send(ad, "video.start", ["playhead": 0])
@@ -429,27 +429,54 @@ struct VideoAdTests {
         #expect(presented.view.subviews.isEmpty || presented.view.subviews.first !== ad.bridge.webView || ad.hasEnded)
     }
 
-    @Test func showFromWhenNotOnScreenThrowsCannotPresentAndKeepsTheAd() async throws {
+    @Test func showFromWhenNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i10"))
         let detached = UIViewController()
-        do { try ad.show(from: detached) } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
+        do { try ad.show(from: detached) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         #expect(ad.isReady, "retryable")
     }
 
-    @Test func showFromWhenAlreadyPresentingThrowsCannotPresent() async throws {
+    @Test func showFromWhenAlreadyPresentingThrowsPresenterUnavailable() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i11"))
         let other = UIViewController()
         window.root.present(other, animated: false)
-        do { try ad.show(from: window.root) } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
+        do { try ad.show(from: window.root) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         window.root.dismiss(animated: false)
         #expect(ad.isReady)
+    }
+
+    @Test func showWithoutAPresenterUsesTheKeyWindowsTopViewController() async throws {
+        // The package runner never completes a modal transition, so the "top" here is the root; the
+        // walk through presentedViewController is covered by the example's --demo run.
+        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i13"))
+        Environment.keyWindow = { [window] in window.window }
+        try ad.show()
+        #expect(await waitUntil { self.window.root.presentedViewController is InterstitialViewController })
+        #expect(ad.wasShown)
+    }
+
+    @Test func showWithoutAPresenterAndNoKeyWindowThrowsPresenterUnavailableAndKeepsTheAd() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.interstitialAd(id: "i14"))
+        Environment.keyWindow = { nil }
+        do { try ad.show() } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
+        #expect(ad.isReady, "retryable, or pass the controller")
+    }
+
+    @Test func anInterstitialsCloseBeforeCompleteIsASkip() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.interstitialAd(id: "i15"))
+        try ad.show(from: window.root)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "ad.close", ["reason": "close"])
+        #expect(delegate.endReasons == [.skipped], "the outcome, not the gesture: .closed is for overlay and pause ads")
+        let fired = await beacons()
+        #expect(fired.contains("skip") && !fired.contains("close"))
     }
 
     @Test func showFromOnAPauseAdIsAProgrammerError() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p19"))
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
-        do { try ad.show(from: window.root) } catch VideoAdError.cannotPresent {} catch { Issue.record("expected cannotPresent") }
+        do { try ad.show(from: window.root) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
         #expect(messages.count == 1)
     }
 
