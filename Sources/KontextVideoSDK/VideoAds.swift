@@ -21,10 +21,9 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// The size of the player, in points, as given at creation; `nil` means full screen.
     public let playerSize: CGSize?
-    /// The player's size in points, read at every request, for a player that is not full screen or that
-    /// rotates; a size given once at creation would go stale. `nil` (the default) means `playerSize`,
-    /// or the screen when that is `nil` too.
-    public var playerSizeProvider: (() -> CGSize)?
+    /// The bounds of the last view an ad of this `VideoAds` was shown in: the real box, used for every
+    /// request after the first `show(in:)` instead of the creation-time hint.
+    private var lastShownBox: CGSize?
     /// The render budget: how many rendered, unshown ads may exist at a time across all `VideoAds` of
     /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered.
     nonisolated(unsafe) static var renderBudget = 3
@@ -169,8 +168,9 @@ public final class VideoAds {
         updateMonitor()
     }
 
-    func adDidBeginShowing(_ ad: VideoAd) {
+    func adDidBeginShowing(_ ad: VideoAd, in box: CGSize? = nil) {
         showing[ad.placementId] = ad
+        if let box, box.width > 0, box.height > 0 { lastShownBox = box }
         updateMonitor()
     }
 
@@ -219,7 +219,7 @@ public final class VideoAds {
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playerSize: playerSizeProvider?() ?? playerSize, playheadMs: playheadMs), format: format)
+                                      player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), format: format)
         Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead) ms")
         DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead))])
 

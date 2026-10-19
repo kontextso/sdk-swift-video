@@ -87,18 +87,17 @@ struct VideoAdsTests {
         #expect(KontextVideo.shared.state == .enabled)
     }
 
-    @Test func playerSizeProviderIsReadAtEachRequest() async throws {
-        let ads = await makeAds()
-        var size = CGSize(width: 390, height: 220)
-        ads.playerSizeProvider = { size }
+    @Test func requestsAfterTheFirstShowCarryTheShownViewsBox() async throws {
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), playerSize: CGSize(width: 390, height: 220))
+        _ = await harness.initialize()
         harness.serve(Fixtures.ad(id: "img-3a"))
         let first = try await ads.pausePlacement("pause").load()
-        size = CGSize(width: 844, height: 390)                       // rotated
-        _ = first
+        harness.player.view.frame = CGRect(x: 0, y: 0, width: 844, height: 390)   // the real box turned out different
+        try first.show(in: harness.player.view)
         harness.serve(Fixtures.ad(id: "img-3b"))
         _ = try await ads.overlayPlacement("overlay").load()
         let players = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["player"] as? [String: Any] }
-        #expect(players.map { $0["width"] as? Int } == [390, 844], "the size at each request, not at creation")
+        #expect(players.map { $0["width"] as? Int } == [390, 844], "the hint for the first request, the shown view's box after")
         #expect(players.map { $0["height"] as? Int } == [220, 390])
     }
 

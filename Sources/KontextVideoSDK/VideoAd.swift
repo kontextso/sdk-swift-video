@@ -196,6 +196,7 @@ public final class VideoAd {
         container.addSubview(host)
         hostView = host
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
+        shownBox = container.bounds.size
         begin()
     }
 
@@ -303,11 +304,14 @@ public final class VideoAd {
     }
 
     /// Presentation began: the page is told, the owner retains the ad; `show` returning is the app's signal.
+    /// The view's box at `show(in:)`, handed to the owner for its next requests.
+    private var shownBox: CGSize?
+
     private func begin(startMeter: Bool = true) {
         wasShown = true
         RenderedAds.remove(self)
         expiryTask?.cancel()
-        owner?.adDidBeginShowing(self)
+        owner?.adDidBeginShowing(self, in: shownBox)
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image

@@ -14,8 +14,8 @@ final class TestPlayer {
         view = UIView(frame: CGRect(origin: .zero, size: size))
     }
 
-    func ads(for content: KontextVideo.Content) -> VideoAds {
-        let ads = VideoAds(content: content, playerSize: view.bounds.size)
+    func ads(for content: KontextVideo.Content, playerSize: CGSize? = nil) -> VideoAds {
+        let ads = VideoAds(content: content, playerSize: playerSize ?? view.bounds.size)
         ads.playheadProvider = { [unowned self] in playhead }
         return ads
     }

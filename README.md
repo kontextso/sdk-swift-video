@@ -97,7 +97,6 @@ let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220)
 
 ads.trackPlayhead(of: avPlayer)                   // AVPlayer: the SDK reads currentTime() itself, holds the player weakly
 ads.playheadProvider = { myPlayer.currentTime }   // any other player: seconds
-ads.playerSizeProvider = { playerView.bounds.size } // a player that is not full screen or rotates: read at every request
 
 try ad.show(in: playerView)                       // the view the content plays in (see 5)
 ```
