@@ -140,7 +140,6 @@ struct SDKHarness {
         server.on("/v2/debug", .empty())
         Init.retryDelay = 10_000_000
         FrameBridge.loadTimeout = 8   // the first WebView of a process is slow, several seconds on a CI runner
-        VideoAd.videoStartBackstop = 1
         VideoAds.sampleInterval = 0.02
         VideoAds.renderBudget = 3
         RenderedAds.reset()
@@ -167,7 +166,6 @@ struct SDKHarness {
         StubServer.uninstall()
         Init.retryDelay = 2_000_000_000
         FrameBridge.loadTimeout = 10
-        VideoAd.videoStartBackstop = 5
         VideoAds.sampleInterval = 0.25
         ViewabilityMeter.interval = 0.25
         DebugReporter.interval = 1

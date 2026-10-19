@@ -449,15 +449,6 @@ struct VideoAdTests {
         #expect(harness.server.beacons.first { $0.event == "skip" }?.query["aph"] == "00:00:06.000")
     }
 
-    @Test func noVideoStartWithinTheBackstopFails() async throws {
-        VideoAd.videoStartBackstop = 0.15
-        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i8"))
-        try ad.show(from: window.root)
-        #expect(await waitUntil(1) { delegate.endReasons == [.failed] })
-        guard case .creativeFailed(let code) = delegate.failures.first else { Issue.record("expected creativeFailed"); return }
-        #expect(code == 405)
-    }
-
     // MARK: show(from:)
 
     @Test func showFromPresentsFullScreenAndTheSDKDismissesAtTheEnd() async throws {
