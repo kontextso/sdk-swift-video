@@ -119,21 +119,21 @@ extension VideoAd {
             case .window(let from, let to): trigger = .window(from: TimeInterval(from) / 1000, to: TimeInterval(to) / 1000)
             }
             switch ad.details {
-            case .overlay(let position, let size, let sizes, let duration):
+            case .overlay(let position, let sizes, let duration):
                 self.position = position == .top ? .top : .bottom
-                self.size = Size(width: size.width, height: size.height)
                 self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
+                self.size = self.sizes.first
                 self.duration = TimeInterval(duration) / 1000
                 skipOffset = nil
                 reward = nil
-            case .pause(let position, let size, let sizes):
+            case .pause(let position, let sizes):
                 self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
+                self.size = self.sizes.first
                 switch position {
                 case .top: self.position = .top
                 case .bottom: self.position = .bottom
                 case .fullscreen: self.position = .fullscreen
                 }
-                self.size = size.map { Size(width: $0.width, height: $0.height) }
                 duration = nil
                 skipOffset = nil
                 reward = nil

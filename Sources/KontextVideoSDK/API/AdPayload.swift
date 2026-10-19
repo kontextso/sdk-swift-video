@@ -56,11 +56,13 @@ struct AdPayload: Decodable, Sendable {
         let maintainAspectRatio: Bool
     }
 
-    /// The variants, the default first and never missing from the list, whatever the server sent.
-    private static func variants(_ size: Size, _ sizes: [Size]?) -> [Size] {
-        var list = sizes ?? []
-        if !list.contains(size) { list.insert(size, at: 0) }
-        return list
+    /// `sizes`, at least one entry, the first built for the request's player.
+    private static func sizes(from container: KeyedDecodingContainer<CodingKeys>) throws -> [Size] {
+        let sizes = try container.decode([Size].self, forKey: .sizes)
+        guard !sizes.isEmpty else {
+            throw DecodingError.dataCorruptedError(forKey: .sizes, in: container, debugDescription: "sizes must have at least one entry")
+        }
+        return sizes
     }
 
     struct Reward: Decodable, Sendable, Equatable {
@@ -71,10 +73,11 @@ struct AdPayload: Decodable, Sendable {
     /// What each format adds to the common fields.
     enum Details: Sendable, Equatable {
         /// `duration`: milliseconds to keep it on screen. `sizes`: every variant the creative carries
-        /// assets for, `size` first; the SDK picks the best fit for the real box at show.
-        case overlay(position: AdPosition, size: Size, sizes: [Size], duration: Int)
-        /// `size` is `nil` for the fullscreen variant.
-        case pause(position: PauseOptions.Position, size: Size?, sizes: [Size])
+        /// assets for, at least one, the first built for the request's player; the SDK picks the best fit
+        /// for the real box at show.
+        case overlay(position: AdPosition, sizes: [Size], duration: Int)
+        /// `sizes` is empty for the fullscreen variant.
+        case pause(position: PauseOptions.Position, sizes: [Size])
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
         case linear(duration: Int, skipOffset: Int?, reward: Reward?)
     }
@@ -95,7 +98,7 @@ struct AdPayload: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, placementId, format, creative, trigger, price, expires, rendering, tracking, vastUrl
-        case position, size, sizes, duration, skipOffset, reward
+        case position, sizes, duration, skipOffset, reward
     }
 
     private enum TriggerKeys: String, CodingKey {
@@ -137,21 +140,14 @@ struct AdPayload: Decodable, Sendable {
 
         switch format {
         case .overlay:
-            let size = try container.decode(Size.self, forKey: .size)
             details = .overlay(
                 position: try container.decode(AdPosition.self, forKey: .position),
-                size: size,
-                sizes: Self.variants(size, try container.decodeIfPresent([Size].self, forKey: .sizes)),
+                sizes: try Self.sizes(from: container),
                 duration: try container.decode(Int.self, forKey: .duration)
             )
         case .pause:
             let position = try container.decode(PauseOptions.Position.self, forKey: .position)
-            if position == .fullscreen {
-                details = .pause(position: position, size: nil, sizes: [])
-            } else {
-                let size = try container.decode(Size.self, forKey: .size)
-                details = .pause(position: position, size: size, sizes: Self.variants(size, try container.decodeIfPresent([Size].self, forKey: .sizes)))
-            }
+            details = .pause(position: position, sizes: position == .fullscreen ? [] : try Self.sizes(from: container))
         case .linear:
             details = .linear(
                 duration: try container.decode(Int.self, forKey: .duration),

@@ -72,7 +72,7 @@ enum Fixtures {
             "vastUrl": "https://ads.test/v2/video/ads/\(id)/vast",
         ]
         if let position { ad["position"] = position }
-        if let size { ad["size"] = size }
+        if let size { ad["sizes"] = [size] }
         if let duration { ad["duration"] = duration }
         if let skipOffset { ad["skipOffset"] = skipOffset }
         if let reward { ad["reward"] = reward }
