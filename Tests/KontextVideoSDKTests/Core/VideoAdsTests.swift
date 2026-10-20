@@ -244,7 +244,7 @@ struct VideoAdsTests {
 
     @Test func aTemporaryErrorIsANoFillLikeAnyOtherNeverRetried() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError", retryAfter: 50)))
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError")))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .noFill("temporaryError") = error else { Issue.record("expected noFill"); return }
         #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "the SDK never retries an ads request")

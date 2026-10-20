@@ -97,9 +97,8 @@ enum Fixtures {
         return response
     }
 
-    static func noFill(_ reason: String = "noAdMatch", retryAfter: Int? = nil, nextRequestAt: Int? = nil) -> [String: Any] {
+    static func noFill(_ reason: String = "noAdMatch", nextRequestAt: Int? = nil) -> [String: Any] {
         var response: [String: Any] = ["enabled": true, "noFillReason": reason]
-        if let retryAfter { response["retryAfter"] = retryAfter }
         if let nextRequestAt { response["nextRequestAt"] = nextRequestAt }
         return response
     }

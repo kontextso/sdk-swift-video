@@ -40,7 +40,7 @@ struct DecodingTests {
     }
 
     @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
-        let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", retryAfter: 5000, nextRequestAt: 38_000))
+        let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", nextRequestAt: 38_000))
         guard case .noFill(let reason) = response else { Issue.record("expected noFill"); return }
         #expect(reason == "temporaryError")
     }
@@ -167,7 +167,7 @@ struct DecodingTests {
     }
 
     @Test func errorResponseDecodes() throws {
-        let response = try decode(APIErrorResponse.self, ["errors": [["status": "429", "code": "rateLimited", "title": "slow down"]], "retryAfter": 1500])
+        let response = try decode(APIErrorResponse.self, ["errors": [["status": "429", "code": "rateLimited", "title": "slow down"]]])
         #expect(response.errors.first?.code == "rateLimited")
         #expect(response.errors.first?.detail == nil)
     }
