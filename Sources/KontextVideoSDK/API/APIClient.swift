@@ -60,8 +60,7 @@ struct APIErrorResponse: Decodable, Sendable {
     }
 
     let errors: [Item]
-    /// Milliseconds; present on 429 and 5xx. Not acted on today.
-    let retryAfter: Int?
+    // The body's `retryAfter` (429 and 5xx) is not read: the SDK never retries those statuses.
 }
 
 /// Sends JSON requests to the ad server's `/v2/` routes.

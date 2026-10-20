@@ -165,6 +165,5 @@ struct DecodingTests {
         let response = try decode(APIErrorResponse.self, ["errors": [["status": "429", "code": "rateLimited", "title": "slow down"]], "retryAfter": 1500])
         #expect(response.errors.first?.code == "rateLimited")
         #expect(response.errors.first?.detail == nil)
-        #expect(response.retryAfter == 1500)
     }
 }
