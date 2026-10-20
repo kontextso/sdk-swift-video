@@ -61,9 +61,9 @@ enum InitResponse: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if try container.decode(Bool.self, forKey: .enabled) {
-            self = .enabled(reportDebug: try container.decodeIfPresent(Bool.self, forKey: .reportDebug) ?? false)
+            self = .enabled(reportDebug: (try? container.decodeIfPresent(Bool.self, forKey: .reportDebug)) ?? false)
         } else {
-            self = .disabled(reason: try container.decodeIfPresent(String.self, forKey: .disabledReason) ?? "unknown")
+            self = .disabled(reason: (try? container.decodeIfPresent(String.self, forKey: .disabledReason)) ?? AdsResponse.unknownReason)
         }
     }
 }

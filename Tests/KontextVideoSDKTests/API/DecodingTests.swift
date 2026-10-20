@@ -52,6 +52,13 @@ struct DecodingTests {
         #expect(retryAfter == nil)
     }
 
+    @Test func adsResponseReasonsOfTheWrongTypeReadUnknown() throws {
+        guard case .noFill(let reason, _) = try decode(AdsResponse.self, ["enabled": true, "noFillReason": 7]) else { Issue.record("expected noFill"); return }
+        #expect(reason == AdsResponse.unknownReason, "the answer is understood, the reason is not")
+        guard case .disabled(let disabled) = try decode(AdsResponse.self, ["enabled": false, "disabledReason": ["x"]]) else { Issue.record("expected disabled"); return }
+        #expect(disabled == AdsResponse.unknownReason)
+    }
+
     @Test func adsResponseDisabled() throws {
         guard case .disabled(let reason) = try decode(AdsResponse.self, Fixtures.disabled("publisherDisabled")) else { Issue.record("expected disabled"); return }
         #expect(reason == "publisherDisabled")
