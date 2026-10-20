@@ -118,7 +118,10 @@ struct APIClient: Sendable {
     }
 }
 
-/// What a route with no body answers (`/debug`, a `204`): `post` returns one without touching the decoder.
+/// What a route with no body answers (`/debug`, a `204`). `post` is generic in what it returns and the
+/// caller names the type, so a route that returns nothing still needs a `Decodable` type to name;
+/// `post` returns one of these for an empty body without touching the decoder. The alternative, a
+/// second `post` without a return value, would repeat the request building and the error mapping.
 struct EmptyResponse: Decodable {
     init() {}
     init(from decoder: Decoder) throws {}
