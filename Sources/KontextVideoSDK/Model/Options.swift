@@ -14,7 +14,7 @@ public enum AdPosition: String, Codable, Sendable {
     case bottom
 }
 
-public struct PauseOptions: Encodable, Sendable, Equatable {
+public struct PauseOptions: Encodable, Sendable, Equatable, PlacementOptions {
     public enum Position: String, Codable, Sendable {
         case top
         case bottom
@@ -27,9 +27,12 @@ public struct PauseOptions: Encodable, Sendable, Equatable {
     public init(positions: [Position]? = nil) {
         self.positions = positions
     }
+
+    public static let `default` = PauseOptions()
+    public var formatOptions: FormatOptions { .pause(self) }
 }
 
-public struct OverlayOptions: Encodable, Sendable, Equatable {
+public struct OverlayOptions: Encodable, Sendable, Equatable, PlacementOptions {
     /// Where the app can render it; the default is top and bottom.
     public let positions: [AdPosition]?
     /// Seconds on screen at most; the server picks a creative whose `duration` fits. The SDK removes the
@@ -40,6 +43,9 @@ public struct OverlayOptions: Encodable, Sendable, Equatable {
         self.positions = positions
         self.maxDuration = maxDuration
     }
+
+    public static let `default` = OverlayOptions()
+    public var formatOptions: FormatOptions { .overlay(self) }
 
     private enum CodingKeys: String, CodingKey {
         case positions, maxDuration
@@ -52,7 +58,9 @@ public struct OverlayOptions: Encodable, Sendable, Equatable {
     }
 }
 
-public struct LinearOptions: Encodable, Sendable, Equatable {
+/// `timing` says where the app will show it, `maxDuration` caps the video, `muted` starts it with the
+/// sound off, `rewarded` asks for a non-skippable video with a reward granted when it completes.
+public struct LinearOptions: Encodable, Sendable, Equatable, PlacementOptions {
     public enum Timing: String, Encodable, Sendable {
         case preroll
         case midroll
@@ -74,6 +82,9 @@ public struct LinearOptions: Encodable, Sendable, Equatable {
         self.muted = muted
         self.rewarded = rewarded
     }
+
+    public static let `default` = LinearOptions()
+    public var formatOptions: FormatOptions { .linear(self) }
 
     private enum CodingKeys: String, CodingKey {
         case timing, maxDuration, muted, rewarded

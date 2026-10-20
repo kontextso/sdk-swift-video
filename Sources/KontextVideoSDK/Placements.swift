@@ -4,75 +4,43 @@
 /// format: `overlay`, `pause`, `linear`.
 ///
 /// One object per placement, obtained once from `VideoAds` and kept, as MAX's `MAInterstitialAd` or
-/// LevelPlay's `LPMInterstitialAd`. One unshown ad per placement at a time; `load` returns the ad, ready
+/// LevelPlay's `LPMInterstitialAd`. `OverlayPlacement`, `PausePlacement` and `LinearPlacement` are this
+/// class with the format's options. One unshown ad per placement at a time; `load` returns the ad, ready
 /// to show, or throws a `VideoAdError` (no fill, busy placement, failed request, SDK not ready), or
 /// `CancellationError`. `fetch` is the first half of `load`: the server's answer as a `VideoAd.Bid`,
 /// nothing rendered, for an app that decides before rendering; `bid.load()` is the second half.
+@MainActor
+public final class Placement<Options: PlacementOptions> {
+    public let id: String
+    private unowned let ads: VideoAds
+
+    init(id: String, ads: VideoAds) {
+        self.id = id
+        self.ads = ads
+    }
+
+    /// Requests an ad and renders it: ready to show, or throws. See the options type for what can be asked.
+    public func load(_ options: Options = .default) async throws -> VideoAd {
+        try await ads.load(FormatRequest(placementId: id, options: options.formatOptions))
+    }
+
+    /// Requests an ad and returns the server's answer without rendering it; `bid.load()` renders.
+    public func fetch(_ options: Options = .default) async throws -> VideoAd.Bid {
+        try await ads.fetch(FormatRequest(placementId: id, options: options.formatOptions))
+    }
+}
 
 /// A strip across the player while the content plays, shown at a moment the app picks.
-@MainActor
-public final class OverlayPlacement {
-    public let id: String
-    private unowned let ads: VideoAds
-
-    init(id: String, ads: VideoAds) {
-        self.id = id
-        self.ads = ads
-    }
-
-    /// Requests an overlay. `positions`: where the app can render it; the default is top and bottom.
-    public func load(_ options: OverlayOptions = OverlayOptions()) async throws -> VideoAd {
-        try await ads.load(FormatRequest(placementId: id, options: .overlay(options)))
-    }
-
-    /// Requests an overlay and returns the server's answer without rendering it; `bid.load()` renders.
-    public func fetch(_ options: OverlayOptions = OverlayOptions()) async throws -> VideoAd.Bid {
-        try await ads.fetch(FormatRequest(placementId: id, options: .overlay(options)))
-    }
-}
-
+public typealias OverlayPlacement = Placement<OverlayOptions>
 /// A card at the top or bottom, or the full player, while the content is paused.
-@MainActor
-public final class PausePlacement {
-    public let id: String
-    private unowned let ads: VideoAds
-
-    init(id: String, ads: VideoAds) {
-        self.id = id
-        self.ads = ads
-    }
-
-    /// Requests a pause ad. `positions`: what the app can render; the default is top and bottom.
-    public func load(_ options: PauseOptions = PauseOptions()) async throws -> VideoAd {
-        try await ads.load(FormatRequest(placementId: id, options: .pause(options)))
-    }
-
-    /// Requests a pause ad and returns the server's answer without rendering it; `bid.load()` renders.
-    public func fetch(_ options: PauseOptions = PauseOptions()) async throws -> VideoAd.Bid {
-        try await ads.fetch(FormatRequest(placementId: id, options: .pause(options)))
-    }
-}
-
+public typealias PausePlacement = Placement<PauseOptions>
 /// A full-screen video at a moment the app picks: before, during or after the content.
-@MainActor
-public final class LinearPlacement {
-    public let id: String
-    private unowned let ads: VideoAds
+public typealias LinearPlacement = Placement<LinearOptions>
 
-    init(id: String, ads: VideoAds) {
-        self.id = id
-        self.ads = ads
-    }
-
-    /// Requests a linear ad. `timing` says where the app will show it, `maxDuration` caps the
-    /// video, `muted` starts it with the sound off, `rewarded` asks for a non-skippable video with a
-    /// reward granted when it completes.
-    public func load(_ options: LinearOptions = LinearOptions()) async throws -> VideoAd {
-        try await ads.load(FormatRequest(placementId: id, options: .linear(options)))
-    }
-
-    /// Requests a linear ad and returns the server's answer without rendering it; `bid.load()` renders.
-    public func fetch(_ options: LinearOptions = LinearOptions()) async throws -> VideoAd.Bid {
-        try await ads.fetch(FormatRequest(placementId: id, options: .linear(options)))
-    }
+/// The options of one format, as a placement's `load` and `fetch` take them.
+public protocol PlacementOptions: Sendable {
+    /// Every option left to its default.
+    static var `default`: Self { get }
+    /// The `options` object of the request, tagged with the format.
+    var formatOptions: FormatOptions { get }
 }

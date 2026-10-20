@@ -68,13 +68,14 @@ struct FormatRequest: Sendable, Equatable {
     }
 }
 
-/// The `options` object, encoded as whichever format's options it holds.
-enum FormatOptions: Encodable, Sendable, Equatable {
+/// The `options` object of a request, tagged with its format. Public only because `PlacementOptions`
+/// names it; an app never builds one.
+public enum FormatOptions: Encodable, Sendable, Equatable {
     case overlay(OverlayOptions)
     case pause(PauseOptions)
     case linear(LinearOptions)
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .overlay(let options): try container.encode(options)
