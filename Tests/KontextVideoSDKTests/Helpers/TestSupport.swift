@@ -2,7 +2,6 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 import UIKit
-import WebKit
 
 /// A player for tests: a view the test places in a window, and a playhead the test sets. `ads(for:)`
 /// makes a `VideoAds` sized to the view that reads the playhead from here.
@@ -140,7 +139,7 @@ struct SDKHarness {
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
         Init.retryDelay = 10_000_000
-        FrameBridge.loadTimeout = 15  // a CI runner can be slow; the warm-up below keeps real loads far under it
+        FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
         VideoAds.sampleInterval = 0.02
         VideoAds.renderBudget = 3
         RenderedAds.reset()
@@ -176,30 +175,29 @@ struct SDKHarness {
     }
 }
 
-/// The first `WKWebView` of a process spawns the web content process, which on a cold CI runner can take
-/// longer than a frame page's load timeout. Loading one empty page once, before the first test that needs
-/// a page, moves that cost out of every test.
+/// The first frame page of a process is slow: WebKit spawns a web content process for the bridge's
+/// non-persistent data store, and on a cold CI runner that took longer than the page-load timeout.
+/// Loading one real frame page once, through the real bridge, before the first test that needs a page,
+/// moves that cost out of every test.
 @MainActor
 enum WebKitWarmup {
     private static var done = false
-    private static var webView: WKWebView?
 
     static func ensure() async {
         guard !done else { return }
         done = true
-        let webView = WKWebView(frame: .zero)
-        self.webView = webView
-        let navigator = Navigator()
-        webView.navigationDelegate = navigator
-        webView.loadHTMLString("<html></html>", baseURL: nil)
-        _ = await waitUntil(20) { navigator.finished }
-        webView.navigationDelegate = nil
-        self.webView = nil
-    }
-
-    private final class Navigator: NSObject, WKNavigationDelegate {
-        var finished = false
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finished = true }
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finished = true }
+        // A page server of its own, so no suite sees the warm-up page in what its server served.
+        let previous = Environment.schemeHandlers
+        FramePageServer().install()
+        let bridge = FrameBridge(adId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
+        var loaded = false
+        bridge.onEvent = { if case .loaded = $0 { loaded = true } }
+        let timeout = FrameBridge.loadTimeout
+        FrameBridge.loadTimeout = 60
+        bridge.load()
+        _ = await waitUntil(60) { loaded }
+        bridge.hide()
+        FrameBridge.loadTimeout = timeout
+        Environment.schemeHandlers = previous
     }
 }
