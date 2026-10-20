@@ -244,34 +244,21 @@ public final class VideoAds {
             // Swift's convention for a cancelled task is `CancellationError`; URLSession says `.cancelled`.
             if case .transport(let urlError) = error, urlError.code == .cancelled { throw CancellationError() }
             if Task.isCancelled { throw CancellationError() }
-            if case .http(400, let errors) = error, let problem = invalidPlacement(in: errors, format: format) {
-                Logger.error("\(request.placementId) for \(content.id): \(VideoAdError.invalidPlacement(problem))")
-                throw VideoAdError.invalidPlacement(problem)
+            if case .http(400, let errors) = error, let message = invalidPlacement(in: errors, format: format) {
+                Logger.error("\(request.placementId) for \(content.id): \(VideoAdError.invalidPlacement(id: request.placementId, message: message))")
+                throw VideoAdError.invalidPlacement(id: request.placementId, message: message)
             }
             Logger.error("\(request.placementId) for \(content.id): request failed, \(error)")
             throw VideoAdError.request(error)
         }
     }
 
-    /// The server's dedicated codes for a wrong placement id, so the app reads a sentence, not a 400.
-    private func invalidPlacement(in errors: [APIErrorResponse.Item], format: FormatRequest) -> VideoAdError.InvalidPlacement? {
-        for item in errors {
-            switch item.code {
-            case APIErrorResponse.Code.unknownPlacement:
-                return .unknown(id: format.placementId)
-            case APIErrorResponse.Code.placementFormatMismatch:
-                // `detail` reads "expected overlay, got linear" when the server names the dashboard's format.
-                let expected = item.detail.flatMap { detail -> AdFormat? in
-                    guard let range = detail.range(of: "expected ") else { return nil }
-                    let word = detail[range.upperBound...].prefix { $0.isLetter }
-                    return AdFormat(rawValue: String(word))
-                }
-                return .formatMismatch(id: format.placementId, expected: expected, actual: format.format)
-            default:
-                continue
-            }
-        }
-        return nil
+    /// The server's dedicated codes for a wrong placement id, with its own sentence, so the app reads
+    /// "placement "x": …" instead of an HTTP 400.
+    private func invalidPlacement(in errors: [APIErrorResponse.Item], format: FormatRequest) -> String? {
+        let codes = [APIErrorResponse.Code.unknownPlacement, APIErrorResponse.Code.placementFormatMismatch]
+        guard let item = errors.first(where: { codes.contains($0.code) }) else { return nil }
+        return item.detail ?? item.title ?? item.code
     }
 
     /// Every bid this object handed out that the app still holds and has not loaded or lost.

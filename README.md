@@ -184,7 +184,7 @@ do {
     let ad = try await pause.load()
 } catch VideoAdError.noFill(let reason) {
     // nothing to show; reason: noAdMatch, frequencyCap, …
-} catch VideoAdError.invalidPlacement(let problem) {
+} catch VideoAdError.invalidPlacement(let id, let message) {
     // an integration bug: unknown id or wrong format; fix the id or the dashboard
 } catch {
     // .placementBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,

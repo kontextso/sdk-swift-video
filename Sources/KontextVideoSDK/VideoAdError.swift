@@ -4,15 +4,6 @@ import UIKit
 /// Why `load` or `show` could not do its job. Thrown, never delivered through the delegate: a thrown error
 /// means nothing happened on screen and nothing was fired.
 public enum VideoAdError: Error, Sendable {
-    /// What is wrong with a placement id. An integration bug: fix the id or the dashboard.
-    public enum InvalidPlacement: Sendable, Equatable {
-        /// No placement with this id exists for the publisher token.
-        case unknown(id: String)
-        /// The placement exists, with another format. `expected` is the dashboard's format when the
-        /// server named it.
-        case formatMismatch(id: String, expected: AdFormat?, actual: AdFormat)
-    }
-
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion when the
     /// `VideoAds` was created; a release build gets this error instead, and works once `initialize` runs.
     case notInitialized
@@ -30,8 +21,9 @@ public enum VideoAdError: Error, Sendable {
     /// rendered ad is a live WebView with its media; fetched bids do not count). Show or drop one first;
     /// to prefetch several episodes, `fetch()` early and `bid.load()` near presentation.
     case tooManyLoadedAds
-    /// An unknown placement id or a format that does not match the dashboard.
-    case invalidPlacement(InvalidPlacement)
+    /// No placement with this id exists for the publisher token, or it has another format than the one
+    /// requested. An integration bug: fix the id or the dashboard. `message` is the server's sentence.
+    case invalidPlacement(id: String, message: String)
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
     /// `contentUnsafe`, `placementDisabled`, `temporaryError`, ... Not a failure, and never retried by
     /// the SDK; the app decides when to ask again.
@@ -76,13 +68,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the placement already has an ad loading, or loaded and not yet shown"
         case .tooManyLoadedAds:
             return "\(VideoAds.renderBudget) rendered ads are waiting to be shown; show or drop one first"
-        case .invalidPlacement(.unknown(let id)):
-            return "placement \"\(id)\" does not exist for this publisher token"
-        case .invalidPlacement(.formatMismatch(let id, let expected, let actual)):
-            if let expected {
-                return "placement \"\(id)\" is \(article(expected)) \(expected.rawValue) placement, not \(actual.rawValue)"
-            }
-            return "placement \"\(id)\" is not \(article(actual)) \(actual.rawValue) placement"
+        case .invalidPlacement(let id, let message):
+            return "placement \"\(id)\": \(message)"
         case .noFill(let reason):
             return "no fill (\(reason))"
         case .request(let error):
@@ -103,8 +90,4 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
     }
 
     public var errorDescription: String? { description }
-
-    private func article(_ format: AdFormat) -> String {
-        format == .overlay || format == .linear ? "an" : "a"
-    }
 }

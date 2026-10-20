@@ -259,34 +259,23 @@ struct VideoAdsTests {
         #expect(KontextVideo.shared.state == .disabled(reason: "appVersionDisabled"))
     }
 
-    @Test func unknownPlacementIsAnInvalidPlacement() async {
+    @Test func unknownPlacementIsAnInvalidPlacementWithTheServersSentence() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.errors("unknownPlacement", title: "unknown placementId \"nope\""), status: 400))
         let error = await loadError { try await ads.pausePlacement("nope").load() }
-        guard case .invalidPlacement(.unknown(let id)) = error else { Issue.record("expected unknown placement, got \(String(describing: error))"); return }
+        guard case .invalidPlacement(let id, let message) = error else { Issue.record("expected invalidPlacement, got \(String(describing: error))"); return }
         #expect(id == "nope")
-        #expect(error?.description == "placement \"nope\" does not exist for this publisher token")
+        #expect(message == "unknown placementId \"nope\"")
+        #expect(error?.description == "placement \"nope\": unknown placementId \"nope\"")
     }
 
-    @Test func formatMismatchParsesTheExpectedFormat() async {
+    @Test func formatMismatchIsAnInvalidPlacementWithTheServersDetail() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch", title: "x", detail: "expected overlay, got linear"), status: 400))
+        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch", title: "format mismatch", detail: "expected overlay, got linear"), status: 400))
         let error = await loadError { try await ads.linearPlacement("episode-overlay").load() }
-        guard case .invalidPlacement(.formatMismatch(let id, let expected, let actual)) = error else { Issue.record("expected formatMismatch"); return }
+        guard case .invalidPlacement(let id, let message) = error else { Issue.record("expected invalidPlacement"); return }
         #expect(id == "episode-overlay")
-        #expect(expected == .overlay)
-        #expect(actual == .linear)
-        #expect(error?.description == "placement \"episode-overlay\" is an overlay placement, not linear")
-    }
-
-    @Test func formatMismatchWithoutDetailStillNamesTheActualFormat() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch"), status: 400))
-        let error = await loadError { try await ads.pausePlacement("p").load() }
-        guard case .invalidPlacement(.formatMismatch(_, let expected, let actual)) = error else { Issue.record("expected formatMismatch"); return }
-        #expect(expected == nil)
-        #expect(actual == .pause)
-        #expect(error?.description == "placement \"p\" is not a pause placement")
+        #expect(message == "expected overlay, got linear", "detail when the server gives one, else title, else the code")
     }
 
     @Test func otherClientErrorsAreRequestErrors() async {
