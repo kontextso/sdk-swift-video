@@ -32,6 +32,14 @@ enum APIError: Error, CustomStringConvertible {
 /// `placementFormatMismatch`), reads `unknown` when absent, so a server that sends less than the
 /// contract still gets its message into the log and never makes the SDK drop the whole body.
 struct APIErrorResponse: Decodable, Sendable {
+    /// The codes the SDK knows. An open set: the server may add codes, which reach the log as they are.
+    enum Code {
+        /// The SDK's own stand-in for a missing or malformed `code`.
+        static let unknown = "unknown"
+        static let unknownPlacement = "unknownPlacement"
+        static let placementFormatMismatch = "placementFormatMismatch"
+    }
+
     struct Item: Decodable, Sendable {
         let status: String?
         let code: String
@@ -46,7 +54,7 @@ struct APIErrorResponse: Decodable, Sendable {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             status = try? container.decodeIfPresent(String.self, forKey: .status)
-            code = (try? container.decodeIfPresent(String.self, forKey: .code)) ?? "unknown"
+            code = (try? container.decodeIfPresent(String.self, forKey: .code)) ?? Code.unknown
             title = try? container.decodeIfPresent(String.self, forKey: .title)
             detail = try? container.decodeIfPresent(String.self, forKey: .detail)
         }

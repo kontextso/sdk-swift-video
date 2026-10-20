@@ -270,9 +270,9 @@ public final class VideoAds {
     private func invalidPlacement(in errors: [APIErrorResponse.Item], format: FormatRequest) -> VideoAdError.InvalidPlacement? {
         for item in errors {
             switch item.code {
-            case "unknownPlacement":
+            case APIErrorResponse.Code.unknownPlacement:
                 return .unknown(id: format.placementId)
-            case "placementFormatMismatch":
+            case APIErrorResponse.Code.placementFormatMismatch:
                 // `detail` reads "expected overlay, got linear" when the server names the dashboard's format.
                 let expected = item.detail.flatMap { detail -> AdFormat? in
                     guard let range = detail.range(of: "expected ") else { return nil }
