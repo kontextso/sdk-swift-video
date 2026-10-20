@@ -2,6 +2,7 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 import UIKit
+import WebKit
 
 /// A player for tests: a view the test places in a window, and a playhead the test sets. `ads(for:)`
 /// makes a `VideoAds` sized to the view that reads the playhead from here.
@@ -139,7 +140,7 @@ struct SDKHarness {
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
         Init.retryDelay = 10_000_000
-        FrameBridge.loadTimeout = 8   // the first WebView of a process is slow, several seconds on a CI runner
+        FrameBridge.loadTimeout = 15  // a CI runner can be slow; the warm-up below keeps real loads far under it
         VideoAds.sampleInterval = 0.02
         VideoAds.renderBudget = 3
         RenderedAds.reset()
@@ -150,9 +151,11 @@ struct SDKHarness {
         Environment.consentDefaults.removePersistentDomain(forName: "KontextVideoSDKTests")
     }
 
-    /// Initializes the SDK and waits until `/init` answered.
+    /// Initializes the SDK and waits until `/init` answered. Also the moment WebKit is warmed up, so the
+    /// first frame page of the process does not pay for spawning the web content process.
     func initialize() async -> KontextVideo.State {
-        await KontextVideo.shared.initialize(with: configuration)
+        await WebKitWarmup.ensure()
+        return await KontextVideo.shared.initialize(with: configuration)
     }
 
     /// Serves `ad` for the next ads request.
@@ -170,5 +173,33 @@ struct SDKHarness {
         ViewabilityMeter.interval = 0.25
         DebugReporter.interval = 1
         DebugReporter.shared.isEnabled = false
+    }
+}
+
+/// The first `WKWebView` of a process spawns the web content process, which on a cold CI runner can take
+/// longer than a frame page's load timeout. Loading one empty page once, before the first test that needs
+/// a page, moves that cost out of every test.
+@MainActor
+enum WebKitWarmup {
+    private static var done = false
+    private static var webView: WKWebView?
+
+    static func ensure() async {
+        guard !done else { return }
+        done = true
+        let webView = WKWebView(frame: .zero)
+        self.webView = webView
+        let navigator = Navigator()
+        webView.navigationDelegate = navigator
+        webView.loadHTMLString("<html></html>", baseURL: nil)
+        _ = await waitUntil(20) { navigator.finished }
+        webView.navigationDelegate = nil
+        self.webView = nil
+    }
+
+    private final class Navigator: NSObject, WKNavigationDelegate {
+        var finished = false
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finished = true }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finished = true }
     }
 }

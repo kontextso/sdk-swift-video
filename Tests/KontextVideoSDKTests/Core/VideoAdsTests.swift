@@ -350,6 +350,7 @@ struct VideoAdsTests {
 
     @Test func creativeThatNeverLoadsThrowsCreativeFailedWithTheGeneralCode() async {
         let ads = await makeAds()
+        FrameBridge.loadTimeout = 0.5   // the page is served in-process; the generous CI default would add 8 s
         harness.serve(Fixtures.ad(id: "dead-1"))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed, got \(String(describing: error))"); return }

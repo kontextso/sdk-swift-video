@@ -4,7 +4,7 @@
 /// format: `overlay`, `pause`, `linear`.
 ///
 /// One object per placement, obtained once from `VideoAds` and kept, as MAX's `MAInterstitialAd` or
-/// LevelPlay's `LPMLinearAd`. One unshown ad per placement at a time; `load` returns the ad, ready
+/// LevelPlay's `LPMInterstitialAd`. One unshown ad per placement at a time; `load` returns the ad, ready
 /// to show, or throws a `VideoAdError` (no fill, busy placement, failed request, SDK not ready), or
 /// `CancellationError`. `fetch` is the first half of `load`: the server's answer as a `VideoAd.Bid`,
 /// nothing rendered, for an app that decides before rendering; `bid.load()` is the second half.

@@ -6,21 +6,15 @@ on:
   pull_request:
 
 jobs:
-  build:
-    name: Build
+  # The tests build the SDK; this job builds the example app against it, which is what catches a public
+  # API change that breaks a real integration.
+  example:
+    name: Example app
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
-      - name: Build the SDK
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -scheme KontextVideoSDK \
-            -destination 'generic/platform=iOS Simulator' \
-            -skipPackagePluginValidation \
-            | tail -50
       - name: Build the example
         run: |
           set -o pipefail

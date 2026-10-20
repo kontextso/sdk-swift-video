@@ -212,7 +212,7 @@ struct IntegrationTests {
 
     @Test func expiredAdCannotBeShown() async throws {
         let ads = await start()
-        harness.serve(Fixtures.ad(id: "img-exp", expires: 2000))
+        harness.serve(Fixtures.ad(id: "img-exp", expires: 700))   // enough for the page to load first
         let delegate = RecordingDelegate()
         let ad = try await ads.pausePlacement("pause").load()
         ad.delegate = delegate
