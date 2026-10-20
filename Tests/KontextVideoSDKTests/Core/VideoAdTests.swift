@@ -265,6 +265,17 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.dismissed], "the duration clock was cancelled")
     }
 
+    @Test func anOverlayWithoutADurationStaysUntilTheAppEndsIt() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p10e", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true]))
+        #expect(ad.duration == nil, "no duration on the wire: a sticky overlay")
+        try ad.show(in: harness.player.view)
+        await sleepMs(150)
+        #expect(delegate.endReasons.isEmpty, "no clock runs")
+        ad.dismiss()
+        #expect(delegate.endReasons == [.dismissed])
+        #expect(await beacons().contains("overlayViewDuration"))
+    }
+
     @Test func aPauseAdHasNoDurationAndStaysUntilDismissed() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p10c"))
         #expect(ad.duration == nil)

@@ -76,7 +76,8 @@ public final class VideoAd {
     /// without scaling, else the one with the best scale still at or above 50 %.
     public var sizes: [Size] { facts.sizes }
     private var chosenSize: Size?
-    /// Overlay: how long it stays on screen. Linear: the video's length. Seconds; `nil` for a pause ad.
+    /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
+    /// the video's length. Seconds; always `nil` for a pause ad.
     public var duration: TimeInterval? { facts.duration }
     /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
     public var skipOffset: TimeInterval? { facts.skipOffset }
@@ -237,8 +238,9 @@ public final class VideoAd {
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
     /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again. For an
-    /// overlay this is the way to end it before its `duration` (the content ended, a seek); left alone,
-    /// the SDK removes it when the duration elapses, with `didEnd(.completed)`.
+    /// overlay with a `duration` this is the way to end it earlier (the content ended, a seek); left alone,
+    /// the SDK removes it when the duration elapses, with `didEnd(.completed)`. An overlay without one,
+    /// like a pause ad, stays until this, the viewer's close control or `destroy()`.
     public func dismiss() {
         guard wasShown, !hasEnded else { return }
         Logger.debug("ad \(id.prefix(8)): dismissed by the app")

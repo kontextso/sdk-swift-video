@@ -109,7 +109,7 @@ extension VideoAd {
                 self.position = position == .top ? .top : .bottom
                 self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 self.size = self.sizes.first
-                self.duration = TimeInterval(duration) / 1000
+                self.duration = duration.map { TimeInterval($0) / 1000 }
                 skipOffset = nil
                 reward = nil
             case .pause(let position, let sizes):
