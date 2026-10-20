@@ -115,6 +115,24 @@ struct APIClientTests {
         }
     }
 
+    @Test func aTaskCancelledBeforePostSendsNothing() async {
+        server.on("/v2/ping", .json(["ok": true]))
+        let client = self.client
+        let task = Task { () throws -> Reply in
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return try await client.post("ping", body: Body(hello: "x"))
+        }
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("expected a throw")
+        } catch is CancellationError {
+        } catch {
+            Issue.record("expected CancellationError, got \(error)")
+        }
+        #expect(server.requests.isEmpty, "nothing left the device")
+    }
+
     // MARK: Init
 
     @Test func initRetriesOnceOnARetryableFailureWithTheSameRequestId() async throws {

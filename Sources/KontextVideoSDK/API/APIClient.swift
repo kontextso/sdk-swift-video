@@ -88,6 +88,7 @@ struct APIClient: Sendable {
         body: Body,
         timeout: TimeInterval = APIClient.defaultTimeout
     ) async throws -> Response {
+        try Task.checkCancellation()   // a task cancelled before this point sends nothing
         var request = URLRequest(url: baseURL.appendingPathComponent("v2/\(path)"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
