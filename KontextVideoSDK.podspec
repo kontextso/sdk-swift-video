@@ -16,7 +16,6 @@ Pod::Spec.new do |spec|
     spec.source               = { :git => 'https://github.com/kontextso/sdk-swift-video.git', :tag => spec.version.to_s }
     spec.source_files         = 'Sources/KontextVideoSDK/**/*.swift'
     spec.resource_bundles     = { 'KontextVideoSDKPrivacy' => ['Sources/KontextVideoSDK/PrivacyInfo.xcprivacy'] }
-    spec.frameworks           = 'UIKit', 'WebKit', 'AVFoundation', 'AVKit', 'AdSupport', 'AppTrackingTransparency'
 
     # Pre-1.0 KontextKit: pin exact, the same version sdk-swift uses. Once KontextKit hits 1.0, switch to `~> 1.0`.
     spec.dependency 'KontextKit', '0.1.0'
