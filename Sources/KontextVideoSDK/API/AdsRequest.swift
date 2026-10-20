@@ -42,7 +42,7 @@ struct AdsRequest: Encodable, Sendable {
             attStatus: tracking.attStatus,
             // What the publisher set wins per field; the rest comes from the CMP's shared storage.
             regulatory: ConsentStorage.read(merging: sdk.regulatory),
-            sdk: .current,
+            sdk: SDKInfo(),
             app: .current(),
             device: .current(),
             player: player,
@@ -134,7 +134,7 @@ struct AdsDevice: Encodable, Sendable {
             ),
             power: Power(batteryLevel: battery.batteryLevel.map { Int($0.rounded()) }, batteryState: battery.batteryState, lowPowerMode: battery.lowPowerMode),
             audio: Audio(volume: audio.volume, muted: audio.muted),
-            network: Network(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.current.version)")
+            network: Network(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.version)")
         )
     }
 }

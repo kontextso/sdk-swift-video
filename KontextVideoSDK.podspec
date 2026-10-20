@@ -1,6 +1,7 @@
 Pod::Spec.new do |spec|
     spec.name                 = 'KontextVideoSDK'
-    spec.version              = '0.1.0'
+    # The version lives in the SDK, which sends it with every request; the tag and this spec follow it.
+    spec.version              = File.read(File.join(__dir__, 'Sources/KontextVideoSDK/API/SDKInfo.swift'))[/static let version = "([^"]+)"/, 1]
     spec.summary              = 'Kontext.so Video SDK'
     spec.description          = <<-DESC
     The official Swift SDK for Kontext.so video ads (overlay, pause and linear) in video-first iOS apps.

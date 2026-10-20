@@ -37,7 +37,7 @@ struct InitRequest: Encodable, Sendable {
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: installId,
-            sdk: .current,
+            sdk: SDKInfo(),
             app: .current(),
             device: Device(os: .current(), hardware: .current()),
             attribution: .current()

@@ -26,26 +26,27 @@ Move the `## Unreleased` entries in `CHANGELOG.md` under a new `## 0.1.0` headin
 * Fix …
 ```
 
-## 3. Bump the version in three places
+## 3. Bump the version
 
-They must match; the SDK sends its version with every request.
+One place: `SDKInfo.version` in `Sources/KontextVideoSDK/API/SDKInfo.swift`. The SDK sends it with every request,
+the podspec reads it from that line, and CI refuses a release tag that does not match it. The README's
+`from: "0.1.0"` means "that version or newer" and stays as it is.
 
 ```
-KontextVideoSDK.podspec                          spec.version = '0.1.0'
-Sources/KontextVideoSDK/Support/SDKInfo.swift    static let current = SDKInfo(name: "sdk-swift-video", version: "0.1.0")
-README.md                                        .package(url: …, from: "0.1.0")
+Sources/KontextVideoSDK/API/SDKInfo.swift    static let version = "0.1.0"
 ```
 
 ## 4. Commit and tag
 
 ```bash
-git add CHANGELOG.md KontextVideoSDK.podspec Sources/KontextVideoSDK/Support/SDKInfo.swift README.md
+git add CHANGELOG.md Sources/KontextVideoSDK/API/SDKInfo.swift
 git commit -m "Release 0.1.0"
 git tag -a 0.1.0 -m "Release 0.1.0"
 git push origin main 0.1.0
 ```
 
-The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`.
+The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`. The push of the tag runs the
+`release-tag` CI job, which fails if the tag and `SDKInfo.version` differ.
 
 ## 5. Publish to CocoaPods trunk
 

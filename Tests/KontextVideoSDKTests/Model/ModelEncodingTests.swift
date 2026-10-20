@@ -124,12 +124,12 @@ struct ModelEncodingTests {
     // MARK: SDKInfo
 
     @Test func sdkInfoIsASemanticVersion() throws {
-        #expect(SDKInfo.current.name == "sdk-swift-video")
-        let parts = SDKInfo.current.version.split(separator: ".")
+        #expect(SDKInfo.name == "sdk-swift-video")
+        let parts = SDKInfo.version.split(separator: ".")
         #expect(parts.count == 3)
         #expect(parts.allSatisfy { Int($0) != nil })
-        let json = try Fixtures.encode(SDKInfo.current)
+        let json = try Fixtures.encode(SDKInfo())
         #expect(json["name"] as? String == "sdk-swift-video")
-        #expect(json["version"] as? String == SDKInfo.current.version)
+        #expect(json["version"] as? String == SDKInfo.version)
     }
 }

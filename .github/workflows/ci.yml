@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: ["**"]
+    tags: ["*"]
   pull_request:
 
 jobs:
@@ -45,3 +46,17 @@ jobs:
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)"
+
+  # A release tag must be the version the SDK reports (SDKInfo.version), or publishers see one
+  # version on GitHub and another in our logs.
+  release-tag:
+    name: Release tag matches SDKInfo.version
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="${GITHUB_REF_NAME}"
+          version=$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/KontextVideoSDK/API/SDKInfo.swift)
+          echo "tag $tag, SDKInfo.version $version"
+          [ "$tag" = "$version" ] || { echo "::error::tag $tag does not match SDKInfo.version $version"; exit 1; }

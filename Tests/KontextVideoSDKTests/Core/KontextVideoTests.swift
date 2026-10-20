@@ -158,7 +158,7 @@ struct KontextVideoTests {
         let id = KontextVideo.installId
         #expect(UUID(uuidString: id) != nil)
         #expect(KontextVideo.installId == id)
-        #expect(KontextVideo.version == SDKInfo.current.version)
+        #expect(KontextVideo.version == SDKInfo.version)
     }
 }
 }

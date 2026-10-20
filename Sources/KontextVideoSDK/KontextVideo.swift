@@ -21,7 +21,7 @@ public final class KontextVideo {
 
     public static let shared = KontextVideo()
 
-    public nonisolated static let version = SDKInfo.current.version
+    public nonisolated static let version = SDKInfo.version
 
     /// Identifies this installation of the app. Created on first use and kept until the app is uninstalled.
     public static var installId: String {

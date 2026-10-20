@@ -74,7 +74,7 @@ final class DebugReporter {
         guard isEnabled, !buffer.isEmpty, let configuration = KontextVideo.shared.configuration else { return }
         let events = buffer
         buffer.removeAll()
-        let request = Request(publisherToken: configuration.publisherToken, installId: KontextVideo.installId, sdk: .current, events: events)
+        let request = Request(publisherToken: configuration.publisherToken, installId: KontextVideo.installId, sdk: SDKInfo(), events: events)
         let client = APIClient(baseURL: configuration.adServerURL)
         do {
             let _: EmptyResponse = try await client.post("debug", body: request)
