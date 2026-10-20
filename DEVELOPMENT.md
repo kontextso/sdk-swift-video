@@ -17,15 +17,15 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 ```
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
-│   ├── KontextVideo.swift, Configuration.swift     the shared instance and its options
-│   ├── VideoAds.swift, VideoAd.swift               one video's ads; one ad
-│   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
-│   ├── VideoAdBid.swift, VideoAdsTimingDelegate.swift   fetch() before rendering; timed mode's callback
-│   ├── Placements.swift                            overlay / pause / linear placements
-│   ├── Model/        what the app passes in: Content, User, Regulatory, Options
-│   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, the client
-│   ├── Frame/        rendering: the WebView bridge, the linear-ad controller, the tracker, the viewability meter
-│   ├── Support/      Logger, SDKInfo, the debug reporter
+│   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
+│   ├── VideoAds.swift, VideoAds+TimedMode.swift    one video's ads; its clock, windows, nextRequestAt and seeks
+│   ├── VideoAd.swift, VideoAdBid.swift             one ad; the server's answer before rendering (fetch())
+│   ├── VideoAdDelegate.swift, VideoAdsTimingDelegate.swift   the lifecycle callbacks; timed mode's "a load is due"
+│   ├── VideoAdError.swift, Placements.swift        what load and show throw; overlay / pause / linear placements
+│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
+│   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, SDKInfo, the client
+│   ├── Rendering/    the WebView bridge (frame protocol), the linear-ad controller, the tracker, the viewability meter
+│   ├── Support/      Logger, Environment (the test seams), the debug reporter
 │   └── PrivacyInfo.xcprivacy
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
 ├── Package.swift            SPM manifest
@@ -34,8 +34,8 @@ sdk-swift-video/
 └── KontextKit-v2-updates.md what the next KontextKit should change, and where this SDK works around it
 ```
 
-The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `API/` is the wire, `Frame/`
-is rendering, `Support/` is plumbing.
+The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `API/` is the wire, `Rendering/`
+is what happens on screen (the Notion hub's "Rendering" section), `Support/` is plumbing.
 
 ## Building
 
@@ -109,7 +109,7 @@ Tests/KontextVideoSDKTests/
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
 ├── API/          decoding, requests, the client, /init, privacy
-├── Frame/        the bridge's state machine, the tracker, the meter, the linear-ad controller
+├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
 ├── Core/         KontextVideo, VideoAds, VideoAd, bids, timed mode, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
