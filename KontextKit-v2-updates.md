@@ -40,3 +40,16 @@ Meanwhile: `HardwareInfo.current()` in `DeviceInfo.swift` maps the strings.
 Report points (`UIScreen.main.bounds`) and keep `dpr`, or add `pointWidth` and `pointHeight` next to the pixel values.
 
 Meanwhile: `AdsDevice.current()` in `Sources/KontextVideoSDK/API/AdsRequest.swift` divides by `dpr`.
+
+## 5. Consent beyond TCF
+
+`TCFDataProvider.getTCFData()` reads only the TCF keys (`IABTCF_TCString`, `IABTCF_gdprApplies`). The v2 API also
+carries the Global Privacy Platform string and sections (`IABGPP_HDR_GppString`, `IABGPP_GppSID`, written as `2_7` or
+`2,7`) and the legacy US Privacy string (`IABUSPrivacy_String`), and both SDKs want the same tolerant parsing of
+`gdprApplies` (number, boolean or string; only 0 and 1 count) for every key.
+
+Add the three keys to the provider (a `ConsentData` with `gpp`, `gppSid`, `usPrivacy` next to the TCF fields), keeping
+the reading in one place; the merge with the publisher's own values stays in each SDK (the CMP wins, the publisher
+fills what it did not write).
+
+Meanwhile: `ConsentStorage.read` in `Sources/KontextVideoSDK/API/Privacy.swift` reads all five keys itself.

@@ -78,7 +78,8 @@ them, and ads already loaded but not shown are discarded. `nil` clears a value.
 ```swift
 KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com")
 KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
-                                                            // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); what you set wins
+                                                            // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); the CMP's values win,
+                                                            // yours fill in what it did not write
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 

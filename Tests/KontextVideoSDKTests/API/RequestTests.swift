@@ -177,15 +177,25 @@ struct RequestTests {
         #expect(regulatory?.coppa == nil, "coppa can only come from the publisher")
     }
 
-    @Test func consentStorageExplicitValuesWinPerField() {
+    @Test func consentStorageTheCMPWinsAndThePublisherFillsTheRest() {
         let defaults = UserDefaults(suiteName: "consent-test-2")!
         defaults.removePersistentDomain(forName: "consent-test-2")
         defaults.set(0, forKey: "IABTCF_gdprApplies")
         defaults.set("STORED", forKey: "IABTCF_TCString")
-        let regulatory = ConsentStorage.read(merging: KontextVideo.Regulatory(gdpr: true, coppa: true), defaults: defaults)
-        #expect(regulatory?.gdpr == true, "explicit wins")
-        #expect(regulatory?.gdprConsent == "STORED", "stored fills the rest")
-        #expect(regulatory?.coppa == true)
+        let regulatory = ConsentStorage.read(merging: KontextVideo.Regulatory(gdpr: true, gdprConsent: "MINE", coppa: true, usPrivacy: "1YNN"), defaults: defaults)
+        #expect(regulatory?.gdpr == false, "the CMP's live value wins")
+        #expect(regulatory?.gdprConsent == "STORED")
+        #expect(regulatory?.usPrivacy == "1YNN", "what the CMP did not write comes from the publisher")
+        #expect(regulatory?.coppa == true, "coppa only ever comes from the publisher")
+    }
+
+    @Test func consentStorageReadsGdprAppliesAsCMPsWriteIt() {
+        let defaults = UserDefaults(suiteName: "consent-test-5")!
+        defaults.removePersistentDomain(forName: "consent-test-5")
+        for (raw, expected) in [(1 as Any, true), (0 as Any, false), (true as Any, true), ("1" as Any, true), ("0" as Any, false), (2 as Any, nil), ("yes" as Any, nil), (1.5 as Any, nil)] as [(Any, Bool?)] {
+            defaults.set(raw, forKey: "IABTCF_gdprApplies")
+            #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gdpr == expected, "\(raw) -> \(String(describing: expected))")
+        }
     }
 
     @Test func consentStorageIsNilWhenNothingIsKnown() {

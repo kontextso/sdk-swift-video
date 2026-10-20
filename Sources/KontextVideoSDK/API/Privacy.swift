@@ -62,19 +62,20 @@ struct TrackingInfo: Sendable {
 }
 
 /// The consent signals a consent management platform writes to `UserDefaults` under the IAB's shared
-/// keys (TCF v2, GPP, US Privacy). What the publisher set on `KontextVideo.shared.regulatory` wins per
-/// field; `coppa` can only come from the publisher.
+/// keys (TCF v2, GPP, US Privacy). The CMP's values win: they are the live, authoritative consent, as
+/// AdMob and MAX read them with no override at all. What the publisher set on
+/// `KontextVideo.shared.regulatory` fills in what the CMP did not write (a publisher without an
+/// IAB-writing CMP passes consent by hand); `coppa` can only come from the publisher.
 enum ConsentStorage {
     @MainActor
     static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
         let defaults = defaults ?? Environment.consentDefaults
-        let gdprApplies: Bool? = defaults.object(forKey: "IABTCF_gdprApplies").flatMap { ($0 as? NSNumber)?.intValue }.map { $0 == 1 }
         let gppSid: [Int]? = (defaults.string(forKey: "IABGPP_GppSID") ?? "")
             .split(whereSeparator: { $0 == "_" || $0 == "," })
             .compactMap { Int($0) }
             .nonEmpty
         let stored = KontextVideo.Regulatory(
-            gdpr: gdprApplies,
+            gdpr: gdprApplies(defaults.object(forKey: "IABTCF_gdprApplies")),
             gdprConsent: defaults.string(forKey: "IABTCF_TCString").nonEmpty,
             coppa: nil,
             gpp: defaults.string(forKey: "IABGPP_HDR_GppString").nonEmpty,
@@ -82,15 +83,33 @@ enum ConsentStorage {
             usPrivacy: defaults.string(forKey: "IABUSPrivacy_String").nonEmpty
         )
         let merged = KontextVideo.Regulatory(
-            gdpr: explicit?.gdpr ?? stored.gdpr,
-            gdprConsent: explicit?.gdprConsent ?? stored.gdprConsent,
+            gdpr: stored.gdpr ?? explicit?.gdpr,
+            gdprConsent: stored.gdprConsent ?? explicit?.gdprConsent,
             coppa: explicit?.coppa,
-            gpp: explicit?.gpp ?? stored.gpp,
-            gppSid: explicit?.gppSid ?? stored.gppSid,
-            usPrivacy: explicit?.usPrivacy ?? stored.usPrivacy
+            gpp: stored.gpp ?? explicit?.gpp,
+            gppSid: stored.gppSid ?? explicit?.gppSid,
+            usPrivacy: stored.usPrivacy ?? explicit?.usPrivacy
         )
         let isEmpty = merged.gdpr == nil && merged.gdprConsent == nil && merged.coppa == nil && merged.gpp == nil && merged.gppSid == nil && merged.usPrivacy == nil
         return isEmpty ? nil : merged
+    }
+
+    /// `IABTCF_gdprApplies` as CMPs actually write it: a number, a boolean or a string. Exactly 0 or 1
+    /// (the TCF v2.2 values); anything else is unknown, never forwarded as junk.
+    private static func gdprApplies(_ raw: Any?) -> Bool? {
+        let value: Int?
+        if let number = raw as? NSNumber {
+            value = Int(exactly: number.doubleValue)
+        } else if let string = raw as? String {
+            value = Int(string.trimmingCharacters(in: .whitespaces))
+        } else {
+            value = nil
+        }
+        switch value {
+        case 1: return true
+        case 0: return false
+        default: return nil
+        }
     }
 }
 
