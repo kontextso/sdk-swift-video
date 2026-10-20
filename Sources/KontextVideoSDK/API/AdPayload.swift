@@ -96,11 +96,11 @@ struct AdPayload: Decodable, Sendable {
     let expires: Int
     let rendering: Rendering
     let tracking: [TrackingEvent]
-    let vastUrl: URL
     let details: Details
+    // Not read: `vastUrl` (for players that render VAST themselves) and, in the response, `nextRequestAt`.
 
     private enum CodingKeys: String, CodingKey {
-        case id, placementId, format, creative, trigger, price, expires, rendering, tracking, vastUrl
+        case id, placementId, format, creative, trigger, price, expires, rendering, tracking
         case position, sizes, duration, skipOffset, reward
     }
 
@@ -121,7 +121,6 @@ struct AdPayload: Decodable, Sendable {
         price = try container.decode(Price.self, forKey: .price)
         expires = try container.decode(Int.self, forKey: .expires)
         tracking = try container.decode([TrackingEvent].self, forKey: .tracking)
-        vastUrl = try container.decode(URL.self, forKey: .vastUrl)
 
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
         switch try trigger.decode(String.self, forKey: .kind) {

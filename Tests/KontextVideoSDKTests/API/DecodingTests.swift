@@ -78,7 +78,6 @@ struct DecodingTests {
         #expect(ad.price == AdPayload.Price(value: 7.5, currency: "USD", precision: .exact))
         #expect(ad.trigger == .manual)
         #expect(ad.rendering == .frame(URL(string: "kontext-test://frames/frame/ad-1")!))
-        #expect(ad.vastUrl.absoluteString == "https://ads.test/v2/video/ads/ad-1/vast")
         guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .top)
         #expect(sizes == [AdPayload.Size(width: 300, height: 300, scalable: true, maintainAspectRatio: true)])
@@ -131,6 +130,12 @@ struct DecodingTests {
         let endCard = ad.tracking.first { $0.event == "creativeView" && $0.part == "endCard" }
         #expect(endCard != nil)
         #expect(ad.tracking.filter { $0.event == "click" }.count == 2, "the creative's and the end card's")
+    }
+
+    @Test func anAdWithoutAVastUrlDecodes() throws {
+        var ad = Fixtures.ad()
+        ad["vastUrl"] = nil
+        #expect(try Fixtures.payload(ad).id == "ad-1", "the SDK never reads it; it is for players that render VAST")
     }
 
     @Test func unknownTriggerKindIsRejected() {
