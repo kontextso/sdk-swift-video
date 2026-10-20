@@ -2,7 +2,9 @@ import Foundation
 
 /// `POST /init`: 10 s, then one retry with the same request after 2 s.
 enum Init {
-    /// A constant in spirit; a variable so the tests can shrink the wait.
+    /// A constant in spirit; a variable so the tests can shrink the wait. `nonisolated(unsafe)`: a mutable
+    /// global is a data race to the compiler, which would otherwise demand an actor around it; this one
+    /// is written only by the test harness before anything runs, so the race is accepted, not fixed.
     nonisolated(unsafe) static var retryDelay: UInt64 = 2_000_000_000
 
     static func send(_ request: InitRequest, client: APIClient) async throws -> InitResponse {
