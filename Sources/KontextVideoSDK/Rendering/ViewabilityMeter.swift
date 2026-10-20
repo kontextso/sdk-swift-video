@@ -12,6 +12,7 @@ final class ViewabilityMeter {
         case viewUndetermined
     }
 
+    /// How often the box is measured. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 0.25
     static let threshold: Double = 0.5
 

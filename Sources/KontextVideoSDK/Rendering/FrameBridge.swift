@@ -42,6 +42,7 @@ final class FrameBridge: NSObject {
         case ended
     }
 
+    /// `ad.loaded` must arrive within this. A constant in spirit; a variable so the tests can set it.
     static var loadTimeout: TimeInterval = 10
     /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1

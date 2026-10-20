@@ -505,7 +505,7 @@ public final class VideoAd {
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.host ?? url.absoluteString)")
             // The end card selects its own `click` entries; anything else is the creative's.
-            // One occurrence: the beacon and the click-through carry the same fire id (API page 2.5).
+            // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
             let fireId = tracker.fire("click", part: area == "endCard" ? "endCard" : nil)
             open(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
             delegate?.videoAd(self, didClick: Click(url: url, area: area))

@@ -108,7 +108,7 @@ Tests/KontextVideoSDKTests/
 │                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
-├── API/          decoding, requests, the client, /init, privacy
+├── API/          decoding, requests, the client, privacy
 ├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
 ├── Core/         KontextVideo, VideoAds, VideoAd, bids, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end

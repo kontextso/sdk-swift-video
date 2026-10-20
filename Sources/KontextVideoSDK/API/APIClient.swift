@@ -58,13 +58,6 @@ struct APIErrorResponse: Decodable, Sendable {
             title = try? container.decodeIfPresent(String.self, forKey: .title)
             detail = try? container.decodeIfPresent(String.self, forKey: .detail)
         }
-
-        init(status: String? = nil, code: String, title: String? = nil, detail: String? = nil) {
-            self.status = status
-            self.code = code
-            self.title = title
-            self.detail = detail
-        }
     }
 
     let errors: [Item]

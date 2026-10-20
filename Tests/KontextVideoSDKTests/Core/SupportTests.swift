@@ -75,14 +75,17 @@ struct SupportTests {
         #expect(ads.overlayPlacement("a").id == "a")
         #expect(ads.pausePlacement("b").id == "b")
         #expect(ads.linearPlacement("c").id == "c")
-        // Not initialized: every load throws before any request, which proves the forwarding reaches VideoAds.
+        // Not initialized: every load and fetch throws before any request, which proves the forwarding reaches VideoAds.
         for work in [
-            { try await ads.overlayPlacement("a").load() },
-            { try await ads.pausePlacement("b").load() },
-            { try await ads.linearPlacement("c").load() },
-        ] as [() async throws -> VideoAd] {
+            { _ = try await ads.overlayPlacement("a").load() },
+            { _ = try await ads.pausePlacement("b").load() },
+            { _ = try await ads.linearPlacement("c").load() },
+            { _ = try await ads.overlayPlacement("a").fetch() },
+            { _ = try await ads.pausePlacement("b").fetch() },
+            { _ = try await ads.linearPlacement("c").fetch() },
+        ] as [() async throws -> Void] {
             do {
-                _ = try await work()
+                try await work()
                 Issue.record("expected notInitialized")
             } catch VideoAdError.notInitialized {
             } catch {

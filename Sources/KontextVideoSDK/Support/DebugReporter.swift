@@ -50,6 +50,7 @@ final class DebugReporter {
     }
 
     static let shared = DebugReporter()
+    /// At most one request per interval. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 1
 
     /// Set from the `/init` response; nothing is sent while `false`.

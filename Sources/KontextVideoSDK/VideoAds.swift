@@ -25,7 +25,9 @@ public final class VideoAds {
     /// request after the first `show(in:)` instead of the creation-time hint.
     private var lastShownBox: CGSize?
     /// The render budget: how many rendered, unshown ads may exist at a time across all `VideoAds` of
-    /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered.
+    /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered. A constant
+    /// in spirit; a variable so the tests can set it (`nonisolated(unsafe)`: written only by the test
+    /// harness before anything runs, read from `VideoAdError`'s description off the main actor).
     nonisolated(unsafe) static var renderBudget = 3
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false

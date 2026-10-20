@@ -121,7 +121,7 @@ struct TrackerTests {
     @Test func invalidURLsAreSkippedWithoutStoppingOthers() async throws {
         let tracker = Tracker(adId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?x=[CACHEBUSTING]", offset: nil, part: nil),
-            AdPayload.TrackingEvent(event: "impression", url: "not a url at all \u{1F600}", offset: nil, part: nil),
+            AdPayload.TrackingEvent(event: "impression", url: "", offset: nil, part: nil),   // the one string URL(string:) still refuses
         ])
         tracker.fire("impression")
         #expect(await fired().map(\.event) == ["impression"])

@@ -9,8 +9,7 @@
 /// `CancellationError`. `fetch` is the first half of `load`: the server's answer as a `VideoAd.Bid`,
 /// nothing rendered, for an app that decides before rendering; `bid.load()` is the second half.
 
-/// A strip across the player while the content plays. Shown in a window the server derived from the
-/// content (timed mode) or at a moment the app picks (manual mode).
+/// A strip across the player while the content plays, shown at a moment the app picks.
 @MainActor
 public final class OverlayPlacement {
     public let id: String
