@@ -27,9 +27,6 @@ public final class VideoAds {
     /// The render budget: how many rendered, unshown ads may exist at a time across all `VideoAds` of
     /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered.
     nonisolated(unsafe) static var renderBudget = 3
-    /// The longest `retryAfter` a `load` waits through by itself on `temporaryError`; a longer one is
-    /// handed to the app in `noFill(retryAfter:)` instead, so a load never blocks for minutes.
-    static let maxSelfRetryDelayMs = 10_000
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
@@ -191,17 +188,7 @@ public final class VideoAds {
         Logger.debug("\(id) for \(content.id): requesting \(format.format) at playhead \(request.player.playhead) ms")
         DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead))])
 
-        var response = try await send(request, format: format)
-        if case .noFill("temporaryError", let retryAfter?) = response, retryAfter <= Self.maxSelfRetryDelayMs {
-            // The one retry the SDK does by itself: the server asked for it (`temporaryError`). Any other
-            // reason's advice, or a wait too long for a `load` to sit through, is passed to the app.
-            Logger.info("\(id) for \(content.id): no fill (temporaryError), retrying in \(retryAfter) ms as the server asked")
-            try await Task.sleep(nanoseconds: UInt64(retryAfter) * 1_000_000)
-            guard !isDestroyed else { throw VideoAdError.destroyed }
-            var retry = request
-            retry.requestId = UUID().uuidString.lowercased()
-            response = try await send(retry, format: format)
-        }
+        let response = try await send(request, format: format)
         guard !isDestroyed else { throw VideoAdError.destroyed }
 
         switch response {
@@ -211,10 +198,10 @@ public final class VideoAds {
             let bid = VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
             bids[id] = WeakBid(bid)
             return bid
-        case .noFill(let reason, let retryAfter):
+        case .noFill(let reason):
             Logger.info("\(id) for \(content.id): no fill (\(reason))")
             DebugReporter.shared.event("ads.response", state: ["placementId": .string(id), "filled": false, "reason": .string(reason)])
-            throw VideoAdError.noFill(reason: reason, retryAfter: retryAfter.map { TimeInterval($0) / 1000 })
+            throw VideoAdError.noFill(reason: reason)
         case .disabled(let reason):
             KontextVideo.shared.disable(reason: reason)
             throw VideoAdError.disabled(reason: reason)
@@ -247,8 +234,8 @@ public final class VideoAds {
         return videoAd
     }
 
-    /// Ads requests are not retried by the SDK (beyond the server's own `retryAfter`): a timeout counts as
-    /// `temporaryError`, and the app asks again at the placement's next natural moment.
+    /// Ads requests are never retried by the SDK: a timeout, a server error or a no-fill of any reason is
+    /// thrown, and the app asks again at the placement's next natural moment.
     private func send(_ request: AdsRequest, format: FormatRequest) async throws -> AdsResponse {
         let client = APIClient(baseURL: request.adServerURL)
         do {

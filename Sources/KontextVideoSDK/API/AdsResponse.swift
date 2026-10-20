@@ -6,8 +6,7 @@ enum AdsResponse: Decodable, Sendable {
     static let unknownReason = "unknown"
 
     case ad(AdPayload)
-    /// `retryAfter`: milliseconds, only with `temporaryError`.
-    case noFill(reason: String, retryAfter: Int?)
+    case noFill(reason: String)
     /// The server switched the SDK off.
     case disabled(reason: String)
 
@@ -16,7 +15,6 @@ enum AdsResponse: Decodable, Sendable {
         case disabledReason
         case ad
         case noFillReason
-        case retryAfter
     }
 
     init(from decoder: Decoder) throws {
@@ -28,10 +26,7 @@ enum AdsResponse: Decodable, Sendable {
         if let ad = try container.decodeIfPresent(AdPayload.self, forKey: .ad) {
             self = .ad(ad)
         } else {
-            self = .noFill(
-                reason: (try? container.decodeIfPresent(String.self, forKey: .noFillReason)) ?? Self.unknownReason,
-                retryAfter: try container.decodeIfPresent(Int.self, forKey: .retryAfter)
-            )
+            self = .noFill(reason: (try? container.decodeIfPresent(String.self, forKey: .noFillReason)) ?? Self.unknownReason)
         }
     }
 }

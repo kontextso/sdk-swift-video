@@ -237,50 +237,17 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .noFill(let reason, _) = error else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason) = error else { Issue.record("expected noFill"); return }
         #expect(reason == "frequencyCap")
         #expect(error?.description == "no fill (frequencyCap)")
     }
 
-    @Test func retryAfterOnAnotherReasonIsPassedToTheAppNotRetried() async throws {
+    @Test func aTemporaryErrorIsANoFillLikeAnyOtherNeverRetried() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap", retryAfter: 1_800_000)))
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError", retryAfter: 50)))
         let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .noFill(let reason, let retryAfter) = error else { Issue.record("expected noFill"); return }
-        #expect(reason == "frequencyCap")
-        #expect(retryAfter == 1800, "seconds, from the wire's ms")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "only temporaryError is retried by the SDK")
-    }
-
-    @Test func retryAfterIsTheOneRetryTheSDKDoesItself() async throws {
-        let ads = await makeAds()
-        var calls = 0
-        harness.server.on("/v2/video/ads") { _ in
-            calls += 1
-            return calls == 1 ? .json(Fixtures.noFill("temporaryError", retryAfter: 50)) : .json(Fixtures.adsResponse(Fixtures.ad(id: "img-13")))
-        }
-        let ad = try await ads.pausePlacement("pause").load()
-        #expect(ad.id == "img-13")
-        let ids = harness.server.requests(to: "/v2/video/ads").map { $0.body?["requestId"] as? String }
-        #expect(ids.count == 2)
-        #expect(ids[0] != ids[1], "a new request, not a replay")
-    }
-
-    @Test func aRetryAfterTooLongToWaitThroughIsPassedToTheApp() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError", retryAfter: VideoAds.maxSelfRetryDelayMs + 1)))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .noFill("temporaryError", let retryAfter) = error else { Issue.record("expected noFill"); return }
-        #expect(retryAfter == TimeInterval(VideoAds.maxSelfRetryDelayMs + 1) / 1000)
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "a load never sits through a long wait")
-    }
-
-    @Test func noFillAfterTheRetryIsThrown() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError", retryAfter: 20)))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .noFill = error else { Issue.record("expected noFill"); return }
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "retried once, never in a loop")
+        guard case .noFill("temporaryError") = error else { Issue.record("expected noFill"); return }
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "the SDK never retries an ads request")
     }
 
     @Test func disabledResponseSwitchesTheSDKOff() async {

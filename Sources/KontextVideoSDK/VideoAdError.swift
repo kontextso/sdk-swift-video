@@ -33,10 +33,9 @@ public enum VideoAdError: Error, Sendable {
     /// An unknown placement id or a format that does not match the dashboard.
     case invalidPlacement(InvalidPlacement)
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
-    /// `contentUnsafe`, `placementDisabled`, ... Not a failure; the app decides when to ask again.
-    /// `retryAfter`: the server's advice, in seconds, on when another request could succeed; `nil` when
-    /// it gave none. The SDK itself retries only on `temporaryError`.
-    case noFill(reason: String, retryAfter: TimeInterval?)
+    /// `contentUnsafe`, `placementDisabled`, `temporaryError`, ... Not a failure, and never retried by
+    /// the SDK; the app decides when to ask again.
+    case noFill(reason: String)
     /// The request failed: no network, a timeout, a server error, an unexpected answer.
     case request(Error)
     /// The server had an ad, but its creative did not load: the frame page failed or did not report
@@ -84,8 +83,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
                 return "placement \"\(id)\" is \(article(expected)) \(expected.rawValue) placement, not \(actual.rawValue)"
             }
             return "placement \"\(id)\" is not \(article(actual)) \(actual.rawValue) placement"
-        case .noFill(let reason, let retryAfter):
-            return "no fill (\(reason))" + (retryAfter.map { "; try again in \(Int($0)) s" } ?? "")
+        case .noFill(let reason):
+            return "no fill (\(reason))"
         case .request(let error):
             return "request failed: \(error)"
         case .creativeFailed(let code):

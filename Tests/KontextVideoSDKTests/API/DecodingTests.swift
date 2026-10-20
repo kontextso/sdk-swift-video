@@ -39,21 +39,19 @@ struct DecodingTests {
         #expect(ad.id == "ad-1")
     }
 
-    @Test func adsResponseNoFillWithRetryAfter() throws {
+    @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
         let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", retryAfter: 5000, nextRequestAt: 38_000))
-        guard case .noFill(let reason, let retryAfter) = response else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason) = response else { Issue.record("expected noFill"); return }
         #expect(reason == "temporaryError")
-        #expect(retryAfter == 5000)
     }
 
     @Test func adsResponseNoFillDefaults() throws {
-        guard case .noFill(let reason, let retryAfter) = try decode(AdsResponse.self, ["enabled": true]) else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason) = try decode(AdsResponse.self, ["enabled": true]) else { Issue.record("expected noFill"); return }
         #expect(reason == "unknown")
-        #expect(retryAfter == nil)
     }
 
     @Test func adsResponseReasonsOfTheWrongTypeReadUnknown() throws {
-        guard case .noFill(let reason, _) = try decode(AdsResponse.self, ["enabled": true, "noFillReason": 7]) else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason) = try decode(AdsResponse.self, ["enabled": true, "noFillReason": 7]) else { Issue.record("expected noFill"); return }
         #expect(reason == AdsResponse.unknownReason, "the answer is understood, the reason is not")
         guard case .disabled(let disabled) = try decode(AdsResponse.self, ["enabled": false, "disabledReason": ["x"]]) else { Issue.record("expected disabled"); return }
         #expect(disabled == AdsResponse.unknownReason)
