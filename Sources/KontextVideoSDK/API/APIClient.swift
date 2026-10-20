@@ -27,9 +27,10 @@ enum APIError: Error, CustomStringConvertible {
     }
 }
 
-/// The ad server's error body (JSON:API-shaped, see the API's Common page). Only `code` is required to
-/// decode: it is the one field the SDK acts on (`unknownPlacement`, `placementFormatMismatch`), and a
-/// body missing a human-readable `title` must not lose it.
+/// The ad server's error body (JSON:API-shaped, see the API's Common page). Decoded leniently: every
+/// field is optional and `code`, the one field the SDK acts on (`unknownPlacement`,
+/// `placementFormatMismatch`), reads `unknown` when absent, so a server that sends less than the
+/// contract still gets its message into the log and never makes the SDK drop the whole body.
 struct APIErrorResponse: Decodable, Sendable {
     struct Item: Decodable, Sendable {
         let status: String?
@@ -37,6 +38,25 @@ struct APIErrorResponse: Decodable, Sendable {
         /// A short human-readable summary, for the log.
         let title: String?
         let detail: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case status, code, title, detail
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try? container.decodeIfPresent(String.self, forKey: .status)
+            code = (try? container.decodeIfPresent(String.self, forKey: .code)) ?? "unknown"
+            title = try? container.decodeIfPresent(String.self, forKey: .title)
+            detail = try? container.decodeIfPresent(String.self, forKey: .detail)
+        }
+
+        init(status: String? = nil, code: String, title: String? = nil, detail: String? = nil) {
+            self.status = status
+            self.code = code
+            self.title = title
+            self.detail = detail
+        }
     }
 
     let errors: [Item]
