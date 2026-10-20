@@ -15,7 +15,7 @@ final class DebugReporter {
     }
 
     /// A string, a number or a boolean.
-    enum Value: Encodable, Sendable, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
+    enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
         case string(String)
         case number(Double)
         case bool(Bool)
@@ -30,6 +30,14 @@ final class DebugReporter {
             case .string(let value): try container.encode(value)
             case .number(let value): try container.encode(value)
             case .bool(let value): try container.encode(value)
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .string(let value): return value
+            case .number(let value): return value == value.rounded() ? String(Int(value)) : String(value)
+            case .bool(let value): return String(value)
             }
         }
     }
@@ -54,11 +62,23 @@ final class DebugReporter {
 
     private init() {}
 
-    /// Records an event; it leaves with the next batch.
+    /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
+    /// device console, in the same shape, whether or not the server asked for it.
     func event(_ name: String, adId: String? = nil, level: String? = nil, state: [String: Value]? = nil) {
+        Logger.debug(Self.line(name, adId: adId, state: state))
         guard isEnabled else { return }
         buffer.append(Event(at: Int(Date().timeIntervalSince1970 * 1000), name: name, adId: adId, level: level, state: state))
         scheduleFlush()
+    }
+
+    /// `ad.loaded ad=f1a2b3c4 durationMs=842`, the event as the console shows it.
+    static func line(_ name: String, adId: String?, state: [String: Value]?) -> String {
+        var parts = [name]
+        if let adId { parts.append("ad=\(adId.prefix(8))") }
+        for (key, value) in (state ?? [:]).sorted(by: { $0.key < $1.key }) {
+            parts.append("\(key)=\(value)")
+        }
+        return parts.joined(separator: " ")
     }
 
     private func scheduleFlush() {

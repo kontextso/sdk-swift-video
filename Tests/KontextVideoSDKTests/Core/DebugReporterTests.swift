@@ -103,6 +103,11 @@ struct DebugReporterTests {
         }
     }
 
+    @Test func anEventReadsAsOneConsoleLine() {
+        #expect(DebugReporter.line("ad.loaded", adId: "f1a2b3c4-5d6e", state: ["durationMs": 842, "format": "pause", "filled": true]) == "ad.loaded ad=f1a2b3c4 durationMs=842 filled=true format=pause")
+        #expect(DebugReporter.line("init.response", adId: nil, state: nil) == "init.response")
+    }
+
     private func allNames() -> [String] {
         harness.server.requests(to: "/v2/debug").flatMap { ($0.body?["events"] as? [[String: Any]]) ?? [] }.compactMap { $0["name"] as? String }
     }
