@@ -101,6 +101,10 @@ public final class VideoAd {
     public private(set) var wasShown = false
     /// `true` once `didEnd` was delivered.
     public private(set) var hasEnded = false
+    /// Whether the creative ran to its end: a video reached `complete` (the reward was granted), an
+    /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
+    /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
+    public private(set) var isCompleted = false
 
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
@@ -122,8 +126,6 @@ public final class VideoAd {
     private var hostView: UIView?
     /// The controller the SDK presented for a linear ad.
     private var linearController: LinearViewController?
-    /// `video.complete` arrived; the next `ad.close` is the end card closing, not the viewer giving up.
-    private var completed = false
     /// Delivers `didInvalidate(.expired)` when the time comes.
     private var expiryTask: Task<Void, Never>?
     /// Fires the `tracking` entries, each once.
@@ -335,6 +337,7 @@ public final class VideoAd {
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !hasEnded else { return }
             Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration) s on screen elapsed")
+            isCompleted = true
             end(.completed)
         }
     }
@@ -513,19 +516,19 @@ public final class VideoAd {
             }
             open(url, fallback: nil)
         case .close(let reason):
-            // The page's own close control; not fired for the app's dismiss() or destroy(). The outcome
-            // is by format, not by gesture: a linear ad's close before `complete` is a skip, after it
-            // (the end card's ✕) the ad completed; an overlay or pause ad is `.closed` or `.resumed`
-            // however far its video got. `reason: complete` is the page ending itself after the video
-            // completed with no end card: nobody closed anything, so no VAST `close` fires.
-            if format == .linear, !completed {
+            // The page's own close control; not fired for the app's dismiss() or destroy(). The reason is
+            // the gesture, the same in every format; `isCompleted` says whether the video ran to its
+            // end. A linear ad's close before `complete` is a skip. `reason: complete` is the page ending
+            // itself after the video completed with no end card: nobody closed anything, so no VAST
+            // `close` fires.
+            if format == .linear, !isCompleted {
                 tracker.fire("skip")
                 end(.skipped)
             } else if reason == "complete" {
                 end(.completed)
             } else {
                 tracker.fire("close")
-                end(format == .linear ? .completed : (reason == "resume" ? .resumed : .closed))
+                end(reason == "resume" ? .resumed : .closed)
             }
         case .skip(let playhead):
             tracker.adPlayhead = playhead
@@ -543,7 +546,7 @@ public final class VideoAd {
             tracker.fire("progress", offset: offset)
         case .complete(let playhead):
             tracker.adPlayhead = playhead
-            completed = true
+            isCompleted = true
             tracker.fire("complete")
             // The end card, when there is one, becomes visible now.
             tracker.fire("creativeView", part: "endCard")

@@ -51,17 +51,17 @@ extension VideoAd {
         public let area: String
     }
 
-    /// How an ad on screen ended: the outcome, not why a view went away.
+    /// How an ad on screen ended: who or what took it off the screen. Whether the creative ran to its
+    /// end is a separate fact, `isCompleted`, so the same gesture gives the same reason in every format:
+    /// a linear ad whose end card the viewer closes is `.closed` with `isCompleted == true`.
     public enum EndReason: Sendable, Equatable {
-        /// Linear: the video played to the end; the viewer closing the end card afterwards is still
-        /// this, the close is only how a finished ad leaves the screen. Overlay: its `duration` elapsed and
-        /// the SDK removed it.
+        /// The ad ended by itself, nobody touched it: an overlay's `duration` elapsed and the SDK removed
+        /// it; a linear ad without an end card ended after its video completed.
         case completed
-        /// The viewer skipped the video.
+        /// The viewer tapped a linear ad's Skip (or close) before the video ended.
         case skipped
-        /// Overlay or pause ad: the viewer tapped its close control before it ended on its own (a pause
-        /// ad's close leaves the content paused; Resume is `.resumed`). Never for a linear ad: a close
-        /// before the end is `.skipped`, after it `.completed`; the outcome, not the gesture.
+        /// The viewer tapped the ad's close control: an overlay's or pause card's ✕ (a pause ad's ✕ leaves
+        /// the content paused; Resume is `.resumed`), or a linear ad's end card ✕ after the video completed.
         case closed
         /// The viewer tapped Resume on a full-screen pause ad.
         case resumed

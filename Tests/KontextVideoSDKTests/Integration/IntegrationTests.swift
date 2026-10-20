@@ -139,8 +139,9 @@ struct IntegrationTests {
         let progress = harness.server.beacons.first { $0.adId == "vid-full" && $0.event == "progress" }
         #expect(progress?.query["offset"] == "5000")
 
+        #expect(ad.isCompleted)
         await inPage(ad, "window.closeEndCard()")
-        #expect(await waitUntil { delegate.endReasons == [.completed] })
+        #expect(await waitUntil { delegate.endReasons == [.closed] }, "the end card's ✕ is .closed; isCompleted says the video was watched")
         #expect(await waitUntil { self.events(for: "vid-full").contains("close") })
         #expect(!events(for: "vid-full").contains("overlayViewDuration"), "linear ads have no view duration")
         #expect(!events(for: "vid-full").contains("skip"))

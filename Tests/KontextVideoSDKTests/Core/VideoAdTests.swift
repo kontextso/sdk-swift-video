@@ -233,7 +233,8 @@ struct VideoAdTests {
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         send(ad, "ad.close", ["reason": "complete"])
-        #expect(delegate.endReasons == [.completed])
+        #expect(delegate.endReasons == [.completed], "the page ended itself: nobody closed anything")
+        #expect(ad.isCompleted)
         let fired = await beacons()
         #expect(fired.contains("complete") && !fired.contains("close"), "nobody closed anything")
     }
@@ -247,6 +248,7 @@ struct VideoAdTests {
         #expect(delegate.endReasons.isEmpty)
         #expect(await waitUntil(1) { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
         #expect(ad.hasEnded)
+        #expect(ad.isCompleted, "the duration elapsed")
         #expect(sent == ["ad.show", "ad.hide"])
         #expect(harness.player.view.subviews.isEmpty)
         let fired = await beacons()
@@ -261,6 +263,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
+        #expect(ad.isCompleted == false, "ended before its duration")
         await sleepMs(250)
         #expect(delegate.endReasons == [.dismissed], "the duration clock was cancelled")
     }
@@ -336,7 +339,8 @@ struct VideoAdTests {
         send(ad, "video.complete", ["playhead": 6000])
         #expect(ad.hasEnded == false, "a pause ad outlives its video")
         send(ad, "ad.close", ["reason": "resume"])
-        #expect(delegate.endReasons == [.resumed], "the outcome is by format: only Resume resumes the content")
+        #expect(delegate.endReasons == [.resumed], "the gesture: only Resume resumes the content")
+        #expect(ad.isCompleted, "and the video did run to its end")
         let fired = await beacons()
         #expect(fired.contains("complete") && fired.contains("close") && fired.contains("overlayViewDuration"))
     }
@@ -477,8 +481,10 @@ struct VideoAdTests {
         let fired = await beacons()
         #expect(fired.contains("complete"))
         #expect(fired.contains("creativeView(endCard)"))
+        #expect(ad.isCompleted, "the video ran to its end")
         send(ad, "ad.close", ["reason": "close"])
-        #expect(delegate.endReasons == [.completed], "the close after complete is the end card closing")
+        #expect(delegate.endReasons == [.closed], "the ✕ is .closed in every format; isCompleted says the video was watched")
+        #expect(ad.isCompleted)
     }
 
     @Test func endCardClickUsesTheEndCardsEntry() async throws {
@@ -563,7 +569,8 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "ad.close", ["reason": "close"])
-        #expect(delegate.endReasons == [.skipped], "the outcome, not the gesture: .closed is for overlay and pause ads")
+        #expect(delegate.endReasons == [.skipped], "a close before the end is a skip")
+        #expect(ad.isCompleted == false)
         let fired = await beacons()
         #expect(fired.contains("skip") && !fired.contains("close"))
     }
