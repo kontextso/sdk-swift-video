@@ -52,7 +52,6 @@ final class Demo: ObservableObject {
         self.ads = ads
         contentPlayer.play()
         ads.trackPlayhead(of: contentPlayer)   // the episode is playing in this player: the SDK reads its time
-        ads.timingDelegate = self              // timed mode: the SDK says when a load is due; the app loads
 
         if CommandLine.arguments.contains("--demo") {
             runScriptedDemo()
@@ -179,7 +178,7 @@ final class Demo: ObservableObject {
     }
 
     func showOverlay() {
-        guard let ad = overlayAd, ad.isReady else { return }   // a windowed overlay may already be up (videoAdDidReachWindow)
+        guard let ad = overlayAd, ad.isReady else { return }
         do {
             try ad.show(in: playerView)
         } catch {
@@ -204,23 +203,6 @@ final class Demo: ObservableObject {
 extension Demo: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
         note("\(ad.format) \(ad.id.prefix(8)) invalidated: \(reason)")
-    }
-
-    /// Timed mode: the ad's window opened. An overlay goes into the player view now; a linear ad pauses
-    /// the content and presents. Not shown by the window's end: didInvalidate(.windowPassed).
-    func videoAdDidReachWindow(_ ad: VideoAd) {
-        note("\(ad.format) \(ad.id.prefix(8)) window reached")
-        do {
-            switch ad.format {
-            case .overlay: try ad.show(in: playerView)
-            case .linear: contentPlayer.pause(); try ad.show()
-            case .pause: break
-            }
-        } catch {
-            // Never started: no didEnd follows, so the content resumes here, not in the delegate
-            if ad.format == .linear { contentPlayer.play() }
-            note("\(ad.format) show at window: \(error)")
-        }
     }
 
     func videoAdDidRecordImpression(_ ad: VideoAd) {
@@ -256,13 +238,5 @@ struct ExampleApp: App {
         WindowGroup {
             ContentView(demo: demo)
         }
-    }
-}
-
-extension Demo: VideoAdsTimingDelegate {
-    /// The SDK never loads by itself: it says when a load makes sense (the server's nextRequestAt came, the
-    /// viewer seeked, a pending ad was discarded) and the app decides. The demo logs it; a real app loads.
-    func videoAds(_ ads: VideoAds, didRequestLoadOf placementId: String, reason: VideoAds.LoadReason) {
-        note("load due for \(placementId): \(reason)")
     }
 }

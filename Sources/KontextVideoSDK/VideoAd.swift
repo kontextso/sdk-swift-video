@@ -37,13 +37,6 @@ public final class VideoAd {
         case fullscreen
     }
 
-    public enum Trigger: Sendable, Equatable {
-        /// The app decides the moment.
-        case manual
-        /// Timed mode: show it between `from` and `to`, seconds in content time.
-        case window(from: TimeInterval, to: TimeInterval)
-    }
-
     /// What the viewer earns when a rewarded linear ad completes.
     public struct Reward: Sendable, Equatable {
         public let label: String
@@ -63,11 +56,6 @@ public final class VideoAd {
         case creativeFailed(code: Int)
         /// `show` found the player's view below 50 % of the ad's size.
         case containerTooSmall
-        /// Timed mode: the window's end passed (by time or by a forward seek) before the ad was shown, or
-        /// before an overlay's `duration` still fitted.
-        case windowPassed
-        /// Timed mode: the viewer seeked, so an ad chosen for the old content time is stale.
-        case seeked
     }
 
     public var id: String { facts.id }
@@ -94,7 +82,6 @@ public final class VideoAd {
     public var skipOffset: TimeInterval? { facts.skipOffset }
     /// Set on a rewarded linear ad.
     public var reward: Reward? { facts.reward }
-    public var trigger: Trigger { facts.trigger }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -106,21 +93,13 @@ public final class VideoAd {
     /// Why the ad was invalidated, once it was.
     public private(set) var invalidationReason: InvalidationReason?
 
-    /// Receives the ad's moments. Held weakly. Timed mode: a window that opened before the delegate was
-    /// set is delivered the moment it is, so `load()` returning and `ad.delegate = self` on the next line
-    /// never miss it, whatever the sampler did in between.
-    public weak var delegate: (any VideoAdDelegate)? {
-        didSet { if windowReached, delegate != nil { deliverWindow() } }
-    }
+    /// Receives the ad's moments. Held weakly.
+    public weak var delegate: (any VideoAdDelegate)?
 
     /// `true` from a successful `show` on; an ad is shown at most once.
     public private(set) var wasShown = false
     /// `true` once `didEnd` was delivered.
     public private(set) var hasEnded = false
-    /// Timed mode: the sampler saw the window open while the ad was ready.
-    private var windowReached = false
-    /// Timed mode: `videoAdDidReachWindow` was delivered.
-    private(set) var windowDelivered = false
 
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
@@ -578,27 +557,6 @@ public final class VideoAd {
         facts.isExpired
     }
 
-    /// Timed mode: the ad has a window.
-    var isWindowed: Bool {
-        if case .window = trigger { return true }
-        return false
-    }
-
-    /// Timed mode: the window opened and the ad is loaded; the app shows it in the callback. Once.
-    func deliverWindow() {
-        guard isLoaded, !wasShown, invalidationReason == nil, !windowDelivered else { return }
-        if !windowReached {
-            windowReached = true
-            Logger.info("ad \(id.prefix(8)): window reached")
-            DebugReporter.shared.event("ad.windowReached", adId: id)
-        }
-        // No delegate yet: the app is between `load()` returning and `ad.delegate = self`, or forgot it.
-        // Delivered when the delegate is set (the property's didSet), or on the next sample.
-        guard let delegate else { return }
-        windowDelivered = true
-        delegate.videoAdDidReachWindow(self)
-    }
-
     /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not
     /// yet shown. An ad on screen does not block the next load.
     var isPendingUnshown: Bool {
@@ -626,7 +584,6 @@ public final class VideoAd {
         } else {
             delegate?.videoAd(self, didInvalidate: reason)
         }
-        owner?.pendingAdWasDiscarded(placementId: placementId, reason: reason)
     }
 
     /// Dropping the last reference releases everything: the bridge tears the page down in its own

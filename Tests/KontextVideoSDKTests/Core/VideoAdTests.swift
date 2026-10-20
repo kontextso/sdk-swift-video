@@ -68,19 +68,18 @@ struct VideoAdTests {
         #expect(ad.duration == nil)
         #expect(ad.skipOffset == nil)
         #expect(ad.reward == nil)
-        #expect(ad.trigger == .manual)
         let lifetime = ad.expirationDate.timeIntervalSince(before)
         #expect(lifetime > 89 && lifetime < 91, "expires (ms from receipt) as a Date")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
     }
 
-    @Test func overlayAdExposesSecondsAndTheWindow() async throws {
+    @Test func overlayAdExposesSecondsAndATimedAnswerIsAnOrdinaryAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o1", format: "overlay", trigger: ["kind": "window", "from": 4000, "to": 10_000], position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
         #expect(ad.position == .bottom)
         #expect(ad.duration == 6)
-        #expect(ad.trigger == .window(from: 4, to: 10))
+        #expect(ad.isReady, "no timed mode yet: the window on the wire changes nothing for the app")
     }
 
     @Test func linearAdExposesVideoFacts() async throws {

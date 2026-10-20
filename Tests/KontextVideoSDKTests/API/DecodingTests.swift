@@ -33,26 +33,23 @@ struct DecodingTests {
 
     // MARK: AdsResponse
 
-    @Test func adsResponseWithAd() throws {
+    @Test func adsResponseWithAdIgnoresTimedModeFields() throws {
         let response = try decode(AdsResponse.self, Fixtures.adsResponse(Fixtures.ad(), nextRequestAt: 25_000))
-        guard case .ad(let ad, let next) = response else { Issue.record("expected ad"); return }
+        guard case .ad(let ad) = response else { Issue.record("expected ad"); return }
         #expect(ad.id == "ad-1")
-        #expect(next == 25_000)
     }
 
     @Test func adsResponseNoFillWithRetryAfter() throws {
         let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", retryAfter: 5000, nextRequestAt: 38_000))
-        guard case .noFill(let reason, let retryAfter, let next) = response else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason, let retryAfter) = response else { Issue.record("expected noFill"); return }
         #expect(reason == "temporaryError")
         #expect(retryAfter == 5000)
-        #expect(next == 38_000)
     }
 
     @Test func adsResponseNoFillDefaults() throws {
-        guard case .noFill(let reason, let retryAfter, let next) = try decode(AdsResponse.self, ["enabled": true]) else { Issue.record("expected noFill"); return }
+        guard case .noFill(let reason, let retryAfter) = try decode(AdsResponse.self, ["enabled": true]) else { Issue.record("expected noFill"); return }
         #expect(reason == "unknown")
         #expect(retryAfter == nil)
-        #expect(next == nil)
     }
 
     @Test func adsResponseDisabled() throws {

@@ -258,46 +258,6 @@ you move on.
 ads.destroy()
 ```
 
-### 7. Timed mode
-
-When Kontext has analysed your videos (uploaded in advance), an ad comes back with a window in content time
-(`ad.trigger == .window(from:to:)`) in which it should be shown, and the response names when to ask for the
-placement's next ad. The SDK watches the playhead you gave it in step 2 and tells you; it never loads or shows
-by itself. Nothing changes in how you load.
-
-```swift
-ads.trackPlayhead(of: avPlayer)          // the clock; timed mode cannot work without it
-ads.timingDelegate = self                // VideoAdsTimingDelegate
-
-overlayAd = try await overlay.load()     // comes back with a window
-overlayAd.delegate = self                // set it right away: the window is delivered here
-
-extension PlayerController: VideoAdDelegate, VideoAdsTimingDelegate {
-    // The ad's window opened: show it now. Not shown by its end: didInvalidate(.windowPassed)
-    func videoAdDidReachWindow(_ ad: VideoAd) {
-        switch ad.format {
-        case .overlay: try? ad.show(in: playerView)
-        case .linear:
-            contentPlayer.pause()
-            do { try ad.show() } catch { contentPlayer.play() }       // threw: never started, no didEnd follows; resume here
-        default: break
-        }
-    }
-
-    // A load makes sense now: the server's moment came (.nextRequestReached), the viewer seeked (.seeked,
-    // the pending ads were discarded), or a pending ad was lost (.adDiscarded)
-    func videoAds(_ ads: VideoAds, didRequestLoadOf placementId: String, reason: VideoAds.LoadReason) {
-        Task { overlayAd = try? await overlay.load(); overlayAd?.delegate = self }
-    }
-}
-```
-
-The rules: the playhead is sampled every 250 ms only while there is something to watch; a jump of more than 2 s
-between two samples (or `AVPlayerItem.timeJumpedNotification` on a tracked player) is a seek, which discards every
-pending windowed ad (`didInvalidate(.seeked)`) and ends an overlay the viewer seeked out of (`didEnd(.interrupted)`);
-an overlay is offered only while its `duration` still fits before the window's end; a window the viewer seeked past
-is not played later; the content never waits for an ad.
-
 ## License
 
 Apache 2.0, see [LICENSE](LICENSE).

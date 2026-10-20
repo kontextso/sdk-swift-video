@@ -21,7 +21,6 @@ extension VideoAd {
         public var duration: TimeInterval? { facts.duration }
         public var skipOffset: TimeInterval? { facts.skipOffset }
         public var reward: Reward? { facts.reward }
-        public var trigger: Trigger { facts.trigger }
 
         let facts: Facts
         /// The wire object, handed to the `VideoAd` at `load()`.
@@ -49,7 +48,6 @@ extension VideoAd {
             if let ad { return ad }
             guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
             if facts.isExpired { invalidate(.expired) }
-            if case .window(_, let to) = trigger, owner.playhead >= to { invalidate(.windowPassed) }
             if let reason = invalidationReason {
                 if reason == .destroyed { throw VideoAdError.destroyed }
                 throw VideoAdError.invalidated(reason)
@@ -65,12 +63,6 @@ extension VideoAd {
             return ad
         }
 
-        /// Timed mode: the ad has a window.
-        var isWindowed: Bool {
-            if case .window = trigger { return true }
-            return false
-        }
-
         /// Whether the bid still counts for its placement's one-unshown-ad rule: not loaded yet, not
         /// discarded, not expired.
         var isPending: Bool {
@@ -82,7 +74,6 @@ extension VideoAd {
             guard ad == nil, invalidationReason == nil else { return }
             invalidationReason = reason
             Logger.debug("bid \(id.prefix(8)) invalidated: \(reason)")
-            owner?.pendingAdWasDiscarded(placementId: placementId, reason: reason)
         }
     }
 
@@ -100,7 +91,6 @@ extension VideoAd {
         let duration: TimeInterval?
         let skipOffset: TimeInterval?
         let reward: Reward?
-        let trigger: Trigger
         /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here.
         let receivedAt: TimeInterval
         /// Seconds the ad lives from receipt.
@@ -114,10 +104,6 @@ extension VideoAd {
             format = ad.format
             price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
             expirationDate = Date().addingTimeInterval(lifetime - (ProcessInfo.processInfo.systemUptime - receivedAt))
-            switch ad.trigger {
-            case .manual: trigger = .manual
-            case .window(let from, let to): trigger = .window(from: TimeInterval(from) / 1000, to: TimeInterval(to) / 1000)
-            }
             switch ad.details {
             case .overlay(let position, let sizes, let duration):
                 self.position = position == .top ? .top : .bottom

@@ -34,28 +34,14 @@ public final class VideoAds {
     public private(set) var isDestroyed = false
 
     /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
-    /// `[CONTENTPLAYHEAD]` macro of a beacon, in timed mode. For any player; for an `AVPlayer`,
+    /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
     /// `trackPlayhead(of:)` is the one-liner. Setting it replaces a tracked player. Nothing set: 0,
     /// which is what a request made before the episode plays (a prefetch) should carry.
     public var playheadProvider: (() -> TimeInterval)? {
         didSet { if playheadProvider != nil { trackedPlayer = nil } }
     }
     /// The `AVPlayer` whose `currentTime()` is the playhead; held weakly.
-    weak var trackedPlayer: AVPlayer? {
-        didSet { observeTimeJumps() }
-    }
-
-    /// Timed mode: told when a load for a placement makes sense. Held weakly.
-    public weak var timingDelegate: (any VideoAdsTimingDelegate)?
-
-    /// Timed mode's clock: how often the playhead is sampled while there is something to watch.
-    static var sampleInterval: TimeInterval = 0.25
-    /// A jump between two samples larger than this, in either direction, is a seek.
-    static var seekThreshold: TimeInterval = 2
-    var monitor: Timer?
-    var lastSample: TimeInterval?
-    var timeJumpObserver: NSObjectProtocol?
-    var noPlayheadSourceLogged = false
+    private weak var trackedPlayer: AVPlayer?
 
     /// The placement objects handed out, by format and id: the same typed lookup gives the same object.
     /// The one-ad-at-a-time state lives in this class keyed by id alone, so two typed handles for one id
@@ -68,13 +54,7 @@ public final class VideoAds {
     /// The bid each placement handed out last and the app has not loaded yet; counts like an unshown ad.
     private var bids: [String: WeakBid] = [:]
     /// Ads on screen, retained from `show` until `didEnd` so dropping the app's reference cannot abort them.
-    var showing: [String: VideoAd] = [:]
-    /// Timed mode: the content time (ms) at which the server recommends the placement's next request.
-    /// A recommendation, not a rule: an earlier `load` is an ordinary request.
-    var nextRequestAt: [String: Int] = [:]
-    /// Timed mode: placements whose `nextRequestAt` came while they were busy (an unshown ad or a
-    /// pending bid); the request is reported when the placement is free again, not lost.
-    var deferredRequests: Set<String> = []
+    private var showing: [String: VideoAd] = [:]
     /// Placements with a request in flight.
     private var loading: Set<String> = []
 
@@ -95,11 +75,6 @@ public final class VideoAds {
     public func trackPlayhead(of player: AVPlayer) {
         playheadProvider = nil
         trackedPlayer = player
-    }
-
-    /// Whether the SDK has anywhere to read the playhead from.
-    var hasPlayheadSource: Bool {
-        playheadProvider != nil || trackedPlayer != nil
     }
 
     /// Content time in seconds, read now: the provider's, the tracked player's, or 0.
@@ -146,12 +121,12 @@ public final class VideoAds {
     }
 
     /// One unshown ad per placement: loading, fetched and not loaded, or loaded and not shown.
-    func isBusy(_ id: String) -> Bool {
+    private func isBusy(_ id: String) -> Bool {
         loading.contains(id) || current[id]?.value?.isPendingUnshown == true || bids[id]?.value?.isPending == true
     }
 
     /// Every ad this object handed out that the app still holds and that is not yet gone.
-    var liveAds: [VideoAd] {
+    private var liveAds: [VideoAd] {
         current.values.compactMap(\.value)
     }
 
@@ -160,26 +135,13 @@ public final class VideoAds {
         !showing.isEmpty
     }
 
-    /// A pending (unshown) ad or bid of a placement is gone before it was shown: the placement is free
-    /// and a load makes sense, so the timing delegate hears it, once, whatever the reason, except
-    /// `.destroyed` (nothing to load into) and `.seeked` (reported per placement by the seek itself).
-    /// A deferred `nextRequestAt` of the placement is folded in: one request, not two.
-    func pendingAdWasDiscarded(placementId id: String, reason: VideoAd.InvalidationReason) {
-        guard !isDestroyed, reason != .destroyed, reason != .seeked else { return }
-        deferredRequests.remove(id)
-        timingDelegate?.videoAds(self, didRequestLoadOf: id, reason: .adDiscarded(reason))
-        updateMonitor()
-    }
-
     func adDidBeginShowing(_ ad: VideoAd, in box: CGSize? = nil) {
         showing[ad.placementId] = ad
         if let box, box.width > 0, box.height > 0 { lastShownBox = box }
-        updateMonitor()
     }
 
     func adDidEnd(_ ad: VideoAd) {
         if showing[ad.placementId] === ad { showing[ad.placementId] = nil }
-        updateMonitor()
     }
 
     /// `fetch` then `load` on the bid, in one call: the ad, ready to show, or an error from either step.
@@ -230,7 +192,7 @@ public final class VideoAds {
         DebugReporter.shared.event("ads.request", state: ["placementId": .string(id), "format": .string(format.format.rawValue), "playhead": .number(Double(request.player.playhead))])
 
         var response = try await send(request, format: format)
-        if case .noFill("temporaryError", let retryAfter?, _) = response, retryAfter <= Self.maxSelfRetryDelayMs {
+        if case .noFill("temporaryError", let retryAfter?) = response, retryAfter <= Self.maxSelfRetryDelayMs {
             // The one retry the SDK does by itself: the server asked for it (`temporaryError`). Any other
             // reason's advice, or a wait too long for a `load` to sit through, is passed to the app.
             Logger.info("\(id) for \(content.id): no fill (temporaryError), retrying in \(retryAfter) ms as the server asked")
@@ -243,20 +205,15 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
 
         switch response {
-        case .ad(let ad, let next):
-            nextRequestAt[id] = next
-            Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)) \(describe(ad.trigger)), \(ad.price.value) \(ad.price.currency) cpm\(next.map { ", next request at \($0) ms" } ?? "")")
+        case .ad(let ad):
+            Logger.info("\(id) for \(content.id): \(ad.format) ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["placementId": .string(id), "filled": true])
             let bid = VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
             bids[id] = WeakBid(bid)
-            if case .window = ad.trigger { warnIfNoPlayheadSource() }
-            updateMonitor()
             return bid
-        case .noFill(let reason, let retryAfter, let next):
-            nextRequestAt[id] = next
-            Logger.info("\(id) for \(content.id): no fill (\(reason))\(next.map { ", next request at \($0) ms" } ?? "")")
+        case .noFill(let reason, let retryAfter):
+            Logger.info("\(id) for \(content.id): no fill (\(reason))")
             DebugReporter.shared.event("ads.response", state: ["placementId": .string(id), "filled": false, "reason": .string(reason)])
-            updateMonitor()
             throw VideoAdError.noFill(reason: reason, retryAfter: retryAfter.map { TimeInterval($0) / 1000 })
         case .disabled(let reason):
             KontextVideo.shared.disable(reason: reason)
@@ -275,7 +232,6 @@ public final class VideoAds {
         videoAd.owner = self
         current[id] = WeakAd(videoAd)
         bids[id] = nil
-        updateMonitor()
         let started = ProcessInfo.processInfo.systemUptime
         do {
             try await videoAd.awaitLoaded()
@@ -332,7 +288,7 @@ public final class VideoAds {
     }
 
     /// Every bid this object handed out that the app still holds and has not loaded or lost.
-    var liveBids: [VideoAd.Bid] {
+    private var liveBids: [VideoAd.Bid] {
         bids.values.compactMap(\.value)
     }
 
@@ -350,8 +306,6 @@ public final class VideoAds {
     /// Deallocation does what `destroy()` does. Loads in flight hold `self` for their duration, so none
     /// is running here; ads on screen are retained by `showing` and end with `.destroyed`.
     deinit {
-        monitor?.invalidate()
-        if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }
         let showing = Array(self.showing.values)
         let loaded = current.values.compactMap(\.value)
         let pending = bids.values.compactMap(\.value)
@@ -380,18 +334,9 @@ public final class VideoAds {
         showing.removeAll()
         current.removeAll()
         bids.removeAll()
-        nextRequestAt.removeAll()
-        deferredRequests.removeAll()
-        stopMonitor()
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 
-    private func describe(_ trigger: AdPayload.Trigger) -> String {
-        switch trigger {
-        case .manual: return "manual"
-        case .window(let from, let to): return "window \(from)–\(to) ms"
-        }
-    }
 }
 
 /// The rendered, unshown ads of the whole app, for the render budget (`VideoAds.renderBudget`): an ad

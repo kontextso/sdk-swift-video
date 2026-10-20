@@ -21,16 +21,6 @@ final class TestPlayer {
     }
 }
 
-/// Every `VideoAdsTimingDelegate` call, in order.
-@MainActor
-final class RecordingTimingDelegate: VideoAdsTimingDelegate {
-    private(set) var loadRequests: [(placementId: String, reason: VideoAds.LoadReason)] = []
-
-    func videoAds(_ ads: VideoAds, didRequestLoadOf placementId: String, reason: VideoAds.LoadReason) {
-        loadRequests.append((placementId, reason))
-    }
-}
-
 /// Every delegate call, in order, as a readable line.
 @MainActor
 final class RecordingDelegate: VideoAdDelegate {
@@ -44,13 +34,6 @@ final class RecordingDelegate: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
         events.append("invalidate:\(reason)")
         invalidations.append(reason)
-    }
-
-    private(set) var windowsReached = 0
-
-    func videoAdDidReachWindow(_ ad: VideoAd) {
-        events.append("window")
-        windowsReached += 1
     }
 
     func videoAdDidRecordImpression(_ ad: VideoAd) { events.append("impression") }
@@ -140,7 +123,6 @@ struct SDKHarness {
         server.on("/v2/debug", .empty())
         Init.retryDelay = 10_000_000
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
-        VideoAds.sampleInterval = 0.02
         VideoAds.renderBudget = 3
         RenderedAds.reset()
         Environment.isApplicationActive = { true }
@@ -158,8 +140,8 @@ struct SDKHarness {
     }
 
     /// Serves `ad` for the next ads request.
-    func serve(_ ad: [String: Any], nextRequestAt: Int? = nil) {
-        server.on("/v2/video/ads", .json(Fixtures.adsResponse(ad, nextRequestAt: nextRequestAt)))
+    func serve(_ ad: [String: Any]) {
+        server.on("/v2/video/ads", .json(Fixtures.adsResponse(ad)))
     }
 
     static func reset() {
@@ -168,7 +150,6 @@ struct SDKHarness {
         StubServer.uninstall()
         Init.retryDelay = 2_000_000_000
         FrameBridge.loadTimeout = 10
-        VideoAds.sampleInterval = 0.25
         ViewabilityMeter.interval = 0.25
         DebugReporter.interval = 1
         DebugReporter.shared.isEnabled = false

@@ -1,9 +1,9 @@
-/// The answer to `POST /video/ads`.
+/// The answer to `POST /video/ads`. `nextRequestAt` (timed mode) is on the wire but not read: the SDK
+/// has no timed mode yet, every ad is shown at a moment the app picks.
 enum AdsResponse: Decodable, Sendable {
-    /// `nextRequestAt`: milliseconds in content time; do not ask for this format again before the playhead reaches it.
-    case ad(AdPayload, nextRequestAt: Int?)
+    case ad(AdPayload)
     /// `retryAfter`: milliseconds, only with `temporaryError`.
-    case noFill(reason: String, retryAfter: Int?, nextRequestAt: Int?)
+    case noFill(reason: String, retryAfter: Int?)
     /// The server switched the SDK off.
     case disabled(reason: String)
 
@@ -13,7 +13,6 @@ enum AdsResponse: Decodable, Sendable {
         case ad
         case noFillReason
         case retryAfter
-        case nextRequestAt
     }
 
     init(from decoder: Decoder) throws {
@@ -22,14 +21,12 @@ enum AdsResponse: Decodable, Sendable {
             self = .disabled(reason: try container.decodeIfPresent(String.self, forKey: .disabledReason) ?? "unknown")
             return
         }
-        let nextRequestAt = try container.decodeIfPresent(Int.self, forKey: .nextRequestAt)
         if let ad = try container.decodeIfPresent(AdPayload.self, forKey: .ad) {
-            self = .ad(ad, nextRequestAt: nextRequestAt)
+            self = .ad(ad)
         } else {
             self = .noFill(
                 reason: try container.decodeIfPresent(String.self, forKey: .noFillReason) ?? "unknown",
-                retryAfter: try container.decodeIfPresent(Int.self, forKey: .retryAfter),
-                nextRequestAt: nextRequestAt
+                retryAfter: try container.decodeIfPresent(Int.self, forKey: .retryAfter)
             )
         }
     }

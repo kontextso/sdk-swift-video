@@ -3,10 +3,12 @@ import Foundation
 /// One served ad as the wire sends it: everything the SDK needs to place, show, time and track it.
 /// `VideoAd` is the public object built from it.
 struct AdPayload: Decodable, Sendable {
+    /// When the server meant the ad to be shown. Decoded so a timed-mode answer is still a valid ad; not
+    /// acted on: the SDK has no timed mode yet, and the app picks every moment.
     enum Trigger: Sendable, Equatable {
         /// The app decides the moment.
         case manual
-        /// Timed mode: show it between `from` and `to`, milliseconds in content time.
+        /// Timed mode: meant for `from`…`to`, milliseconds in content time.
         case window(from: Int, to: Int)
     }
 

@@ -18,10 +18,10 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
-│   ├── VideoAds.swift, VideoAds+TimedMode.swift    one video's ads; its clock, windows, nextRequestAt and seeks
+│   ├── VideoAds.swift                              one video's ads: placements, loading, the playhead
 │   ├── VideoAd.swift, VideoAdBid.swift             one ad; the server's answer before rendering (fetch())
-│   ├── VideoAdDelegate.swift, VideoAdsTimingDelegate.swift   the lifecycle callbacks; timed mode's "a load is due"
-│   ├── VideoAdError.swift, Placements.swift        what load and show throw; overlay / pause / linear placements
+│   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
+│   ├── Placements.swift                            overlay / pause / linear placements
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
 │   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, SDKInfo, the client
 │   ├── Rendering/    the WebView bridge (frame protocol), the linear-ad controller, the tracker, the viewability meter
@@ -110,7 +110,7 @@ Tests/KontextVideoSDKTests/
 ├── Model/        encoding of what the app passes in
 ├── API/          decoding, requests, the client, /init, privacy
 ├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
-├── Core/         KontextVideo, VideoAds, VideoAd, bids, timed mode, support, the debug reporter
+├── Core/         KontextVideo, VideoAds, VideoAd, bids, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
 

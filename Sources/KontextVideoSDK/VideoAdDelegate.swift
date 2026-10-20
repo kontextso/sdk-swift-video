@@ -16,9 +16,6 @@ public protocol VideoAdDelegate: AnyObject {
     /// A loaded ad can no longer be shown: it expired, targeting changed, its `VideoAds` was destroyed, or
     /// the creative died while waiting. `isReady` is `false`; `show` throws `.invalidated(reason)`.
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason)
-    /// Timed mode: the ad's window opened, show it now (`show(in:)` for an overlay; pause the content and
-    /// `show(from:)` for a linear ad). Not shown by the window's end: `didInvalidate(.windowPassed)`.
-    func videoAdDidReachWindow(_ ad: VideoAd)
 
     // After a successful show, in order: the impression, then interactions, then exactly one didEnd
 
@@ -37,7 +34,6 @@ public protocol VideoAdDelegate: AnyObject {
 
 public extension VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {}
-    func videoAdDidReachWindow(_ ad: VideoAd) {}
     func videoAdDidRecordImpression(_ ad: VideoAd) {}
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {}
     func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {}
@@ -72,7 +68,7 @@ extension VideoAd {
         /// The creative failed or stalled; `didFail` came first.
         case failed
         /// The presentation disappeared for a reason the SDK did not cause: the presenting view controller
-        /// was dismissed under it, the app navigated away, the viewer seeked out of an overlay's window.
+        /// was dismissed under it, the app navigated away.
         case interrupted
         /// The app called `dismiss()`.
         case dismissed

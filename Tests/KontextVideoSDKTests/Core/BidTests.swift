@@ -31,7 +31,6 @@ struct BidTests {
         #expect(bid.position == .top)
         #expect(bid.size != nil)
         #expect(bid.duration == 6)
-        #expect(bid.trigger == .manual)
         #expect(bid.expirationDate > Date())
         #expect(bid.isPending)
         #expect(pages.served.isEmpty, "no page was loaded")
@@ -97,8 +96,6 @@ struct BidTests {
 
     @Test func loadAfterExpiryThrowsInvalidatedExpired() async throws {
         let ads = await makeAds()
-        let timing = RecordingTimingDelegate()
-        ads.timingDelegate = timing
         harness.serve(Fixtures.ad(id: "img-b7", expires: 100))
         let bid = try await ads.pausePlacement("pause").fetch()
         await sleepMs(150)
@@ -108,7 +105,6 @@ struct BidTests {
             Issue.record("expected invalidated(.expired)")
         } catch VideoAdError.invalidated(.expired) {}
         #expect(bid.invalidationReason == .expired)
-        #expect(timing.loadRequests.first?.reason == .adDiscarded(.expired), "a discard found at load is reported like any other")
         #expect(pages.served.isEmpty)
         harness.serve(Fixtures.ad(id: "img-b8"))
         _ = try await ads.pausePlacement("pause").fetch()

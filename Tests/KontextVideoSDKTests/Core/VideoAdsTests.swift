@@ -178,18 +178,6 @@ struct VideoAdsTests {
         #expect(ads.isDestroyed)
     }
 
-    @Test func loadBeforeNextRequestAtIsAnOrdinaryRequest() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.overlayAd(id: "img-5"), nextRequestAt: 25_000)
-        let ad = try await ads.overlayPlacement("overlay").load()
-        #expect(ads.nextRequestAt["overlay"] == 25_000, "remembered for timed mode")
-        ad.invalidate(.targetingChanged)
-        harness.player.playhead = 10
-        harness.serve(Fixtures.overlayAd(id: "img-6"))
-        _ = try await ads.overlayPlacement("overlay").load()
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "nextRequestAt is a recommendation, not a rule")
-    }
-
     // MARK: load: the busy rule
 
     @Test func loadWhileLoadingIsBusy() async throws {
@@ -216,6 +204,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-9"))
         var ad: VideoAd? = try await ads.pausePlacement("pause").load()
+        #expect(ad?.isReady == true)
         ad = nil
         harness.serve(Fixtures.ad(id: "img-10"))
         let next = try await ads.pausePlacement("pause").load()
