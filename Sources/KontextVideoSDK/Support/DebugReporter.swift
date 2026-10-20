@@ -84,9 +84,3 @@ final class DebugReporter {
         }
     }
 }
-
-/// A `204` with no body.
-struct EmptyResponse: Decodable {
-    init() {}
-    init(from decoder: Decoder) throws {}
-}

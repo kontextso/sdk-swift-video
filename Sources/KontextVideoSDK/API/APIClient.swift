@@ -117,3 +117,9 @@ struct APIClient: Sendable {
         }
     }
 }
+
+/// What a route with no body answers (`/debug`, a `204`): `post` returns one without touching the decoder.
+struct EmptyResponse: Decodable {
+    init() {}
+    init(from decoder: Decoder) throws {}
+}
