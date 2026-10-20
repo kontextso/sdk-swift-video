@@ -148,6 +148,13 @@ struct DecodingTests {
 
     // MARK: APIErrorResponse
 
+    @Test func errorResponseNeedsOnlyTheCode() throws {
+        let response = try decode(APIErrorResponse.self, ["errors": [["code": "unknownPlacement"]]])
+        #expect(response.errors.first?.code == "unknownPlacement")
+        #expect(response.errors.first?.title == nil)
+        #expect(APIError.http(status: 400, errors: response.errors).description == "HTTP 400: unknownPlacement", "the code stands in for a missing title")
+    }
+
     @Test func errorResponseDecodes() throws {
         let response = try decode(APIErrorResponse.self, ["errors": [["status": "429", "code": "rateLimited", "title": "slow down"]], "retryAfter": 1500])
         #expect(response.errors.first?.code == "rateLimited")

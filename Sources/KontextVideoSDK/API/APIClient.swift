@@ -21,23 +21,26 @@ enum APIError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .transport(let error): return "transport error: \(error.localizedDescription)"
-        case .http(let status, let errors): return "HTTP \(status)" + (errors.isEmpty ? "" : ": " + errors.map(\.title).joined(separator: "; "))
+        case .http(let status, let errors): return "HTTP \(status)" + (errors.isEmpty ? "" : ": " + errors.map { $0.title ?? $0.code }.joined(separator: "; "))
         case .decoding(let error): return "decoding error: \(error)"
         }
     }
 }
 
-/// The ad server's error body.
+/// The ad server's error body (JSON:API-shaped, see the API's Common page). Only `code` is required to
+/// decode: it is the one field the SDK acts on (`unknownPlacement`, `placementFormatMismatch`), and a
+/// body missing a human-readable `title` must not lose it.
 struct APIErrorResponse: Decodable, Sendable {
     struct Item: Decodable, Sendable {
-        let status: String
+        let status: String?
         let code: String
-        let title: String
+        /// A short human-readable summary, for the log.
+        let title: String?
         let detail: String?
     }
 
     let errors: [Item]
-    /// Milliseconds; present on 429 and 5xx.
+    /// Milliseconds; present on 429 and 5xx. Not acted on today.
     let retryAfter: Int?
 }
 
