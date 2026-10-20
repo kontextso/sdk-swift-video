@@ -1,3 +1,4 @@
+import AppTrackingTransparency
 import AVFoundation
 import Foundation
 @testable import KontextVideoSDK
@@ -88,8 +89,8 @@ struct VideoAdsTests {
     }
 
     @Test func requestsAfterTheFirstShowCarryTheShownViewsBox() async throws {
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), playerSize: CGSize(width: 390, height: 220))
         _ = await harness.initialize()
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), playerSize: CGSize(width: 390, height: 220))
         harness.serve(Fixtures.ad(id: "img-3a"))
         let first = try await ads.pausePlacement("pause").load()
         harness.player.view.frame = CGRect(x: 0, y: 0, width: 844, height: 390)   // the real box turned out different
@@ -274,6 +275,15 @@ struct VideoAdsTests {
         let ids = harness.server.requests(to: "/v2/video/ads").map { $0.body?["requestId"] as? String }
         #expect(ids.count == 2)
         #expect(ids[0] != ids[1], "a new request, not a replay")
+    }
+
+    @Test func aRetryAfterTooLongToWaitThroughIsPassedToTheApp() async {
+        let ads = await makeAds()
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError", retryAfter: VideoAds.maxSelfRetryDelayMs + 1)))
+        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        guard case .noFill("temporaryError", let retryAfter) = error else { Issue.record("expected noFill"); return }
+        #expect(retryAfter == TimeInterval(VideoAds.maxSelfRetryDelayMs + 1) / 1000)
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "a load never sits through a long wait")
     }
 
     @Test func noFillAfterTheRetryIsThrown() async {
@@ -461,6 +471,19 @@ struct VideoAdsTests {
         #expect(delegate.invalidations.count == 1, "the same value again changes nothing")
         harness.serve(Fixtures.ad(id: "img-18"))
         _ = try await ads.pausePlacement("pause").load()
+    }
+
+    @Test func anATTStatusChangeIsATargetingChange() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-17a"))
+        let ad = try await ads.pausePlacement("pause").load()   // the request noted the device's real status
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        let real = ATTrackingManager.trackingAuthorizationStatus
+        KontextVideo.shared.noteTrackingAuthorization(real)
+        #expect(delegate.invalidations.isEmpty, "the same status again changes nothing")
+        KontextVideo.shared.noteTrackingAuthorization(real == .denied ? .authorized : .denied)
+        #expect(delegate.invalidations == [.targetingChanged], "the viewer changed their mind in Settings")
     }
 
     @Test func targetingChangeLeavesAnAdOnScreenAlone() async throws {

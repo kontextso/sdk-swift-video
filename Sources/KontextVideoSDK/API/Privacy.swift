@@ -16,6 +16,14 @@ struct TrackingInfo: Sendable {
     let ifa: IFA?
     /// `authorized`, `denied`, `notDetermined`, `restricted`; `device.ext.atts` on the demand side.
     let attStatus: String
+    /// The status as the OS reports it, for the SDK's own change detection.
+    let status: ATTrackingManager.AuthorizationStatus
+
+    init(ifa: IFA?, status: ATTrackingManager.AuthorizationStatus) {
+        self.ifa = ifa
+        self.status = status
+        attStatus = Self.name(of: status)
+    }
 
     /// Reads the current state. With `requestAuthorization`, shows the App Tracking Transparency dialog
     /// first when the user has not answered yet (the app's Info.plist needs `NSUserTrackingUsageDescription`).
@@ -26,7 +34,6 @@ struct TrackingInfo: Sendable {
             status = await ATTrackingManager.requestTrackingAuthorization()
             Logger.info("ATT: \(name(of: status))")
         }
-        KontextVideo.shared.noteTrackingAuthorization(status)
         var ifa: IFA?
         if status == .authorized {
             let id = ASIdentifierManager.shared().advertisingIdentifier.uuidString
@@ -34,7 +41,7 @@ struct TrackingInfo: Sendable {
                 ifa = IFA(id: id)
             }
         }
-        return TrackingInfo(ifa: ifa, attStatus: name(of: status))
+        return TrackingInfo(ifa: ifa, status: status)
     }
 
     private static func name(of status: ATTrackingManager.AuthorizationStatus) -> String {

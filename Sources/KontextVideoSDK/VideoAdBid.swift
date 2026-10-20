@@ -48,8 +48,8 @@ extension VideoAd {
         public func load() async throws -> VideoAd {
             if let ad { return ad }
             guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
-            if facts.isExpired { invalidationReason = .expired }
-            if case .window(_, let to) = trigger, owner.playhead >= to { invalidationReason = .windowPassed }
+            if facts.isExpired { invalidate(.expired) }
+            if case .window(_, let to) = trigger, owner.playhead >= to { invalidate(.windowPassed) }
             if let reason = invalidationReason {
                 if reason == .destroyed { throw VideoAdError.destroyed }
                 throw VideoAdError.invalidated(reason)

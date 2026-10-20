@@ -64,9 +64,6 @@ struct TrackerTests {
         #expect(beacons[0].query["part"] == nil)
         #expect(beacons[1].query["part"] == "endCard")
         #expect(beacons[2].query["part"] == "endCard")
-        #expect(tracker.has("click"))
-        #expect(tracker.has("click", part: "endCard"))
-        #expect(!tracker.has("skip", part: "endCard"))
     }
 
     @Test func selectsProgressByOffset() async throws {

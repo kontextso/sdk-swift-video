@@ -8,40 +8,41 @@ import WebKit
 enum Environment {
     /// The session every request and beacon goes through.
     static var session: URLSession = .shared
-    /// Where a loading WebView is parked so WebKit buffers its video.
-    static var keyWindow: () -> UIWindow? = {
+    /// Where a loading WebView is parked so WebKit buffers its video, and where `show()` finds its presenter.
+    static var keyWindow: () -> UIWindow? = defaultKeyWindow
+    /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
+    static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
+    /// Opens a URL the page asked for; the completion says whether it could.
+    static var openURL: (URL, @escaping (Bool) -> Void) -> Void = defaultOpenURL
+    /// A programmer error: stops a debug build. Tests record it instead.
+    static var assertionFailure: (String) -> Void = { Swift.assertionFailure($0) }
+    /// Where the IAB consent keys are read from.
+    static var consentDefaults: UserDefaults = .standard
+    /// Whether the app is active, for the clocks that count only time on screen.
+    static var isApplicationActive: () -> Bool = defaultIsApplicationActive
+
+    static func reset() {
+        session = .shared
+        keyWindow = defaultKeyWindow
+        schemeHandlers = [:]
+        openURL = defaultOpenURL
+        assertionFailure = { Swift.assertionFailure($0) }
+        consentDefaults = .standard
+        isApplicationActive = defaultIsApplicationActive
+    }
+
+    private static func defaultKeyWindow() -> UIWindow? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
             .first { $0.isKeyWindow }
     }
-    /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
-    static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
-    /// Opens a URL the page asked for; the completion says whether it could.
-    static var openURL: (URL, @escaping (Bool) -> Void) -> Void = { url, completion in
+
+    private static func defaultOpenURL(_ url: URL, completion: @escaping (Bool) -> Void) {
         UIApplication.shared.open(url, options: [:], completionHandler: completion)
     }
-    /// A programmer error: stops a debug build. Tests record it instead.
-    static var assertionFailure: (String) -> Void = { message in
-        Swift.assertionFailure(message)
-    }
-    /// Where the IAB consent keys are read from.
-    static var consentDefaults: UserDefaults = .standard
-    /// Whether the app is active, for the clocks that count only time on screen.
-    static var isApplicationActive: () -> Bool = { UIApplication.shared.applicationState == .active }
 
-    static func reset() {
-        session = .shared
-        keyWindow = {
-            UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap(\.windows)
-                .first { $0.isKeyWindow }
-        }
-        schemeHandlers = [:]
-        openURL = { url, completion in UIApplication.shared.open(url, options: [:], completionHandler: completion) }
-        assertionFailure = { Swift.assertionFailure($0) }
-        consentDefaults = .standard
-        isApplicationActive = { UIApplication.shared.applicationState == .active }
+    private static func defaultIsApplicationActive() -> Bool {
+        UIApplication.shared.applicationState == .active
     }
 }

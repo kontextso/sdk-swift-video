@@ -48,7 +48,7 @@ struct RequestTests {
         return AdsRequest.make(
             sdk: KontextVideo.shared,
             configuration: configuration,
-            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), attStatus: "authorized"),
+            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
             player: .make(playerSize: CGSize(width: 390, height: 220), playheadMs: Int((playhead * 1000).rounded())),
             format: FormatRequest(placementId: "fullscreen-pause", options: .pause(PauseOptions(positions: [.fullscreen])))
@@ -78,7 +78,7 @@ struct RequestTests {
         let device = json["device"] as? [String: Any]
         #expect((device?["screen"] as? [String: Any])?["dpr"] is Double)
         #expect((device?["network"] as? [String: Any])?["userAgent"] is String)
-        #expect(device?["power"] != nil)
+        #expect((device?["power"] as? [String: Any])?["lowPowerMode"] is Bool, "the server derives click-to-play from it")
         #expect(device?["audio"] != nil)
     }
 
@@ -86,7 +86,7 @@ struct RequestTests {
         var request = makeAdsRequest()
         request = AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
-            tracking: TrackingInfo(ifa: nil, attStatus: "denied"),
+            tracking: TrackingInfo(ifa: nil, status: .denied),
             content: KontextVideo.Content(id: "v", language: "en"), player: .make(playerSize: nil, playheadMs: 0),
             format: FormatRequest(placementId: "overlay", options: .overlay(OverlayOptions()))
         )

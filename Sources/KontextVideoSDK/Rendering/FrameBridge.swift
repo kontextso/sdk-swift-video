@@ -11,7 +11,8 @@ enum FrameEvent: Sendable {
     case click(url: URL, fallbackUrl: URL?, area: String)
     /// The page needs a URL opened that is not an ad click (`purpose`: `adChoices`, ...). Fires no `click`.
     case open(url: URL, purpose: String)
-    /// The viewer dismissed the ad with the page's control. `reason` is `close` or `resume`.
+    /// The page's own end: the viewer's close control (`reason` `close` or `resume`), or the page ending
+    /// itself after the video completed with no end card (`complete`).
     case close(reason: String)
     /// The viewer dismissed a video before it completed.
     case skip(playhead: Int)
@@ -137,7 +138,7 @@ final class FrameBridge: NSObject {
     /// WebView sits in the key window, invisible and inert, at the size the ad will have. Removed on show
     /// (the ad's own view takes it) and on end.
     private func parkOffscreen() {
-        guard webView.window == nil, let window = Self.keyWindow else { return }
+        guard webView.window == nil, let window = Environment.keyWindow() else { return }
         webView.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: window.bounds.height)
         webView.alpha = 0
         webView.isUserInteractionEnabled = false
@@ -159,10 +160,6 @@ final class FrameBridge: NSObject {
     func takeWebView() -> WKWebView {
         unpark()
         return webView
-    }
-
-    private static var keyWindow: UIWindow? {
-        Environment.keyWindow()
     }
 
     // MARK: SDK → page
@@ -238,6 +235,7 @@ final class FrameBridge: NSObject {
             self.port = port
         }
 
+        @MainActor
         init(_ frame: WKFrameInfo) {
             self.init(isMainFrame: frame.isMainFrame, scheme: frame.securityOrigin.protocol, host: frame.securityOrigin.host, port: frame.securityOrigin.port)
         }

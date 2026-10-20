@@ -279,13 +279,12 @@ public final class VideoAd {
     /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
         guard position != .fullscreen, let defaultSize = facts.size else { return bounds }
-        let candidates = facts.sizes.isEmpty ? [defaultSize] : facts.sizes
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
-        let unscaled = candidates.filter { fit($0) >= 1 }
+        let unscaled = facts.sizes.filter { fit($0) >= 1 }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
-            ?? candidates.max { fit($0) < fit($1) }
+            ?? facts.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
@@ -332,8 +331,7 @@ public final class VideoAd {
             // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
             // `duration` runs on it, so both freeze in the background and resume on foreground.
             observeActivity()
-            if Environment.isApplicationActive() { activeSince = ProcessInfo.processInfo.systemUptime }
-            if format == .overlay, duration != nil { startDurationClock() }
+            if Environment.isApplicationActive() { beginActiveStretch() }
         }
     }
 
@@ -372,8 +370,13 @@ public final class VideoAd {
 
     private func applicationDidBecomeActive() {
         guard !hasEnded, activeSince == nil else { return }
+        beginActiveStretch()
+    }
+
+    /// The app is active and the ad on screen: the clocks run from now.
+    private func beginActiveStretch() {
         activeSince = ProcessInfo.processInfo.systemUptime
-        if format == .overlay { startDurationClock() }
+        if format == .overlay, duration != nil { startDurationClock() }
     }
 
     private func observeActivity() {
@@ -494,7 +497,7 @@ public final class VideoAd {
         }
     }
 
-    /// What the page reports, mapped to the delegate. TODO(step 4): fire the tracking entries.
+    /// What the page reports, mapped to the beacons and the delegate.
     private func handle(_ event: FrameEvent) {
         switch event {
         case .loaded:
@@ -529,11 +532,11 @@ public final class VideoAd {
             }
             open(url, fallback: nil)
         case .close(let reason):
-            // The page's own close control; not fired for the app's dismiss() or destroy(). A linear
-            // ad's close before `complete` is a skip whatever the page called it: the outcome is what
-            // the app hears, and `.closed` is for the overlay and pause formats. `reason: complete` is
-            // the page ending itself after the video completed with no end card: nobody closed
-            // anything, so no VAST `close` fires.
+            // The page's own close control; not fired for the app's dismiss() or destroy(). The outcome
+            // is by format, not by gesture: a linear ad's close before `complete` is a skip, after it
+            // (the end card's ✕) the ad completed; an overlay or pause ad is `.closed` or `.resumed`
+            // however far its video got. `reason: complete` is the page ending itself after the video
+            // completed with no end card: nobody closed anything, so no VAST `close` fires.
             if format == .linear, !completed {
                 tracker.fire("skip")
                 end(.skipped)
@@ -541,7 +544,7 @@ public final class VideoAd {
                 end(.completed)
             } else {
                 tracker.fire("close")
-                end(completed ? .completed : (reason == "resume" ? .resumed : .closed))
+                end(format == .linear ? .completed : (reason == "resume" ? .resumed : .closed))
             }
         case .skip(let playhead):
             tracker.adPlayhead = playhead

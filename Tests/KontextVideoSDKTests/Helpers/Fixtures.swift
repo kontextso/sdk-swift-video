@@ -5,7 +5,8 @@ import Foundation
 enum Fixtures {
     static let frameOrigin = "kontext-test://frames"
 
-    static func tracking(video: Bool, origin: String = "https://ads.test", adId: String = "ad-1") -> [[String: Any]] {
+    /// `video`: the creative's events; `nonLinear`: an overlay or pause ad's `overlayViewDuration`.
+    static func tracking(video: Bool, nonLinear: Bool = true, origin: String = "https://ads.test", adId: String = "ad-1") -> [[String: Any]] {
         let url = { (event: String, extra: String) -> String in
             "\(origin)/events/\(adId)/\(event)?\(extra.isEmpty ? "" : extra + "&")cb=[CACHEBUSTING]&fid=[FIREID]&ts=[TIMESTAMP]&cph=[CONTENTPLAYHEAD]"
         }
@@ -38,8 +39,9 @@ enum Fixtures {
                 ["event": "creativeView", "url": url("creativeView", "part=endCard"), "part": "endCard"],
                 ["event": "click", "url": url("click", "part=endCard"), "part": "endCard"],
             ]
-        } else {
-            entries.append(["event": "overlayViewDuration", "url": url("overlayViewDuration", "")])
+        }
+        if nonLinear {
+            entries.append(["event": "overlayViewDuration", "url": url("overlayViewDuration", "ovd=[VIEWDURATION]")])
         }
         return entries
     }
@@ -53,6 +55,7 @@ enum Fixtures {
         trigger: [String: Any] = ["kind": "manual"],
         position: String? = "top",
         size: [String: Any]? = ["width": 300, "height": 300, "scalable": true, "maintainAspectRatio": true],
+        moreSizes: [[String: Any]] = [],
         duration: Int? = nil,
         skipOffset: Int? = nil,
         reward: [String: Any]? = nil,
@@ -68,11 +71,11 @@ enum Fixtures {
             "price": ["model": "cpm", "value": 7.5, "currency": "USD", "precision": "exact"],
             "expires": expires,
             "rendering": ["kind": "frame", "url": frameURL ?? "\(frameOrigin)/frame/\(id)"],
-            "tracking": tracking(video: creative == "video", adId: id),
+            "tracking": tracking(video: creative == "video", nonLinear: format != "linear", adId: id),
             "vastUrl": "https://ads.test/v2/video/ads/\(id)/vast",
         ]
         if let position { ad["position"] = position }
-        if let size { ad["sizes"] = [size] }
+        if let size { ad["sizes"] = [size] + moreSizes }
         if let duration { ad["duration"] = duration }
         if let skipOffset { ad["skipOffset"] = skipOffset }
         if let reward { ad["reward"] = reward }

@@ -156,14 +156,4 @@ struct AdPayload: Decodable, Sendable {
             )
         }
     }
-
-    /// The URLs to fire for one event of one part (`nil` = the main creative).
-    func trackingURLs(_ event: String, part: String? = nil) -> [String] {
-        tracking.filter { $0.event == event && $0.part == part }.map(\.url)
-    }
-
-    /// `true` when the ad has an end card: it has tracking entries of its own.
-    var hasEndCard: Bool {
-        tracking.contains { $0.part == "endCard" }
-    }
 }

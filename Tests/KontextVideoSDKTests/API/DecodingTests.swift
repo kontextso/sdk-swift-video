@@ -77,25 +77,30 @@ struct DecodingTests {
         #expect(ad.trigger == .manual)
         #expect(ad.rendering == .frame(URL(string: "kontext-test://frames/frame/ad-1")!))
         #expect(ad.vastUrl.absoluteString == "https://ads.test/v2/video/ads/ad-1/vast")
-        guard case .pause(let position, let size) = ad.details else { Issue.record("expected pause"); return }
+        guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .top)
-        #expect(size == AdPayload.Size(width: 300, height: 300, scalable: true, maintainAspectRatio: true))
+        #expect(sizes == [AdPayload.Size(width: 300, height: 300, scalable: true, maintainAspectRatio: true)])
     }
 
-    @Test func fullscreenPauseAdHasNoSize() throws {
+    @Test func fullscreenPauseAdHasNoSizes() throws {
         let ad = try Fixtures.payload(Fixtures.ad(position: "fullscreen", size: nil))
-        guard case .pause(let position, let size) = ad.details else { Issue.record("expected pause"); return }
+        guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .fullscreen)
-        #expect(size == nil)
+        #expect(sizes.isEmpty)
+    }
+
+    @Test func anEmptySizesListIsRejected() {
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(size: nil, extra: ["sizes": []])) }
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(size: nil)) }
     }
 
     @Test func overlayAdWithWindowTrigger() throws {
         let ad = try Fixtures.payload(Fixtures.ad(format: "overlay", trigger: ["kind": "window", "from": 4000, "to": 10_000], position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
         #expect(ad.trigger == .window(from: 4000, to: 10_000))
-        guard case .overlay(let position, let size, let duration) = ad.details else { Issue.record("expected overlay"); return }
+        guard case .overlay(let position, let sizes, let duration) = ad.details else { Issue.record("expected overlay"); return }
         #expect(position == .bottom)
-        #expect(size.width == 300)
+        #expect(sizes.map(\.width) == [300])
         #expect(duration == 6000)
     }
 

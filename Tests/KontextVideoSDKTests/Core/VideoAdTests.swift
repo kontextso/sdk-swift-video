@@ -319,6 +319,53 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.resumed])
     }
 
+    @Test func aPauseAdsVideoCompletingDoesNotChangeHowItsCloseEnds() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p13v", creative: "video", position: "fullscreen", size: nil))
+        try ad.show(in: harness.player.view)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.complete", ["playhead": 6000])
+        #expect(ad.hasEnded == false, "a pause ad outlives its video")
+        send(ad, "ad.close", ["reason": "resume"])
+        #expect(delegate.endReasons == [.resumed], "the outcome is by format: only Resume resumes the content")
+        let fired = await beacons()
+        #expect(fired.contains("complete") && fired.contains("close") && fired.contains("overlayViewDuration"))
+    }
+
+    @Test func overlayViewDurationCarriesTheActiveTimeOnScreenInMilliseconds() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13d"))
+        try ad.show(in: harness.player.view)
+        await sleepMs(120)
+        ad.dismiss()
+        _ = await beacons()
+        let ovd = try #require(harness.server.beacons.first { $0.event == "overlayViewDuration" }?.query["ovd"].flatMap(Int.init))
+        #expect(ovd >= 100 && ovd < 400, "[VIEWDURATION] is ms on screen: \(ovd)")
+    }
+
+    @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {
+        let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13s", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
+        #expect(ad.sizes == [VideoAd.Size(width: 320, height: 90), VideoAd.Size(width: 728, height: 90)])
+        #expect(ad.size == VideoAd.Size(width: 320, height: 90), "the default before show")
+        var shown: [String: Any]?
+        ad.bridge.onSend = { type, payload in if type == "ad.show" { shown = payload } }
+        let landscape = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        window.add(landscape)
+        try ad.show(in: landscape)
+        #expect(ad.size == VideoAd.Size(width: 728, height: 90), "the player turned out wide: the wide variant")
+        #expect((shown?["size"] as? [String: Int]) == ["width": 728, "height": 90], "the page is told which variant")
+        #expect(try #require(landscape.subviews.last).frame == CGRect(x: 58, y: 300, width: 728, height: 90))
+        ad.dismiss()
+    }
+
+    @Test func showFallsBackToTheBestScaledSizeWhenNoneFits() async throws {
+        let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13t", format: "overlay", position: "bottom", size: ["width": 600, "height": 100, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
+        try ad.show(in: harness.player.view)   // 390 wide: 600×100 fits at 0.65, 728×90 at 0.54
+        #expect(ad.size == VideoAd.Size(width: 600, height: 100), "the variant with the best scale")
+        #expect(try #require(harness.player.view.subviews.last).frame.width == 390)
+        ad.dismiss()
+    }
+
     @Test func clickOpensTheURLFiresClickAndTellsTheDelegate() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p14"))
         var opened: [URL] = []

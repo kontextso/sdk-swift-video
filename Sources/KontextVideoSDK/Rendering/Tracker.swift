@@ -48,11 +48,6 @@ final class Tracker {
         URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil)) ?? url
     }
 
-    /// Whether an entry for this event exists (fired or not); for decisions like "is there an end card".
-    func has(_ event: String, part: String? = nil) -> Bool {
-        entries.contains { $0.event == event && $0.part == part }
-    }
-
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?) -> String {
         template
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
