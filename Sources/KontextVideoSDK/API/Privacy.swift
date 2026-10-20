@@ -2,12 +2,18 @@ import AdSupport
 import AppTrackingTransparency
 import Foundation
 
-/// The advertising identifier, as the request carries it. Omitted entirely when the OS gives the
-/// all-zeros id (ATT not authorized); `attStatus` says why.
+/// The advertising identifier, as the request carries it. Sent only when the IDFA is real: with ATT
+/// `authorized` the OS gives the id, in every other state it gives all zeros. Zeros are not sent as an
+/// empty id with a flag, the object is omitted, which is what the IAB's iOS 14 guidance and every
+/// exchange expect (buyers key on the absence of `ifa`); `attStatus` carries the reason, and the server
+/// derives OpenRTB `device.ext.atts` and `lmt` (1 unless authorized) from it, never from this object.
 struct IFA: Encodable, Sendable {
     let id: String
     let type = "idfa"
-    /// Never `true` on iOS: an opted-out device returns no id at all. Kept for the CTV platforms.
+    /// Never `true` on iOS: since iOS 10 an opted-out device returns no id at all, so an id is always one
+    /// that may be used. Kept because the shared `IFA` type serves platforms that hand out an id together
+    /// with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs), where the id still works
+    /// for frequency capping and fraud but not for targeting.
     let limitAdTracking = false
 }
 
