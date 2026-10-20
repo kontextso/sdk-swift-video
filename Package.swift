@@ -20,6 +20,11 @@ let package = Package(
             path: "Sources/KontextVideoSDK",
             resources: [
                 .copy("PrivacyInfo.xcprivacy"),
+            ],
+            swiftSettings: [
+                // Swift 6's isolation and Sendable checking, as warnings: what a publisher building in
+                // Swift 6 language mode would see as errors.
+                .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
         .testTarget(

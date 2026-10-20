@@ -322,7 +322,8 @@ public final class VideoAd {
     private var activeSince: TimeInterval?
     /// Active time on screen before the current stretch, seconds.
     private var activeAccumulated: TimeInterval = 0
-    private var activityObservers: [any NSObjectProtocol] = []
+    /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
+    nonisolated(unsafe) private var activityObservers: [any NSObjectProtocol] = []
 
     /// Seconds the ad has been on screen while the app was active.
     var activeTimeOnScreen: TimeInterval {
@@ -595,9 +596,20 @@ public final class VideoAd {
     /// `deinit`; the timer and the expiry task are stopped here. Never reached while the ad is on screen,
     /// because its `VideoAds` retains it until `didEnd`.
     deinit {
-        expiryTask?.cancel()
-        durationTask?.cancel()
-        activityObservers.forEach(NotificationCenter.default.removeObserver)
-        meter?.stopTimer()
+        let expiry = expiryTask
+        let clock = durationTask
+        let observers = activityObservers
+        let meter = self.meter
+        let teardown: @MainActor () -> Void = {
+            expiry?.cancel()
+            clock?.cancel()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            meter?.stopTimer()
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { teardown() }
+        } else {
+            Task { @MainActor in teardown() }
+        }
     }
 }

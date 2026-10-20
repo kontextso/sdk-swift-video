@@ -5,7 +5,8 @@ import os
 enum Logger {
     private static let output = os.Logger(subsystem: "so.kontext.video", category: "KontextVideoSDK")
     private static let lock = NSLock()
-    private static var storedLevel: KontextVideo.Configuration.LogLevel = .warning
+    /// Read from any thread; every access goes through `lock`, which is what `nonisolated(unsafe)` accepts.
+    nonisolated(unsafe) private static var storedLevel: KontextVideo.Configuration.LogLevel = .warning
 
     static var level: KontextVideo.Configuration.LogLevel {
         get { lock.withLock { storedLevel } }
