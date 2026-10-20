@@ -189,11 +189,28 @@ public final class KontextVideo {
         Logger.level = .warning
     }
 
+    /// `/init`'s one retry: after a failure that may clear (no network, a 5xx, a 429), the same request
+    /// is sent again after `initRetryDelay`, with the same `requestId` so the server replays rather than
+    /// registers twice. A 4xx or a malformed answer is not retried. A constant in spirit; a variable so
+    /// the tests can shrink the wait (`nonisolated(unsafe)`: a global the test harness writes before
+    /// anything runs, the race is accepted, not fixed).
+    nonisolated(unsafe) static var initRetryDelay: UInt64 = 2_000_000_000
+
+    static func sendInit(_ request: InitRequest, client: APIClient) async throws -> InitResponse {
+        do {
+            return try await client.post("init", body: request)
+        } catch let error as APIError where error.isRetryable {
+            Logger.warning("/init failed (\(error)); retrying in \(initRetryDelay / 1_000_000) ms")
+            try await Task.sleep(nanoseconds: initRetryDelay)
+            return try await client.post("init", body: request)
+        }
+    }
+
     private func runInit(configuration: Configuration) async {
         let client = APIClient(baseURL: configuration.adServerURL)
         let request = InitRequest.make(configuration: configuration, installId: Self.installId)
         do {
-            switch try await Init.send(request, client: client) {
+            switch try await Self.sendInit(request, client: client) {
             case .enabled(let reportDebug):
                 self.reportDebug = reportDebug
                 DebugReporter.shared.isEnabled = reportDebug

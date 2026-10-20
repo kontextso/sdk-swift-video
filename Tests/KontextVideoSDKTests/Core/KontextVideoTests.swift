@@ -160,5 +160,38 @@ struct KontextVideoTests {
         #expect(KontextVideo.installId == id)
         #expect(KontextVideo.version == SDKInfo.version)
     }
+
+    // MARK: The /init retry
+
+    @Test func initRetriesOnceOnARetryableFailureWithTheSameRequestId() async throws {
+        var calls = 0
+        harness.server.on("/v2/init") { _ in
+            calls += 1
+            return calls == 1 ? .failure(.timedOut) : .json(Fixtures.initEnabled(reportDebug: true))
+        }
+        KontextVideo.initRetryDelay = 1_000_000
+        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
+        let response = try await KontextVideo.sendInit(request, client: APIClient(baseURL: harness.server.baseURL))
+        guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
+        #expect(reportDebug)
+        let ids = harness.server.requests(to: "/v2/init").map { $0.body?["requestId"] as? String }
+        #expect(ids.count == 2)
+        #expect(ids[0] == ids[1], "a retry after a lost response sends the same id, so the server runs no second auction")
+    }
+
+    @Test func initDoesNotRetryAClientError() async {
+        harness.server.on("/v2/init", .json(Fixtures.errors("invalidRequest"), status: 400))
+        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
+        await #expect(throws: APIError.self) { try await KontextVideo.sendInit(request, client: APIClient(baseURL: harness.server.baseURL)) }
+        #expect(harness.server.requests(to: "/v2/init").count == 1)
+    }
+
+    @Test func initGivesUpAfterTheSecondFailure() async {
+        harness.server.on("/v2/init", .failure(.timedOut))
+        KontextVideo.initRetryDelay = 1_000_000
+        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
+        await #expect(throws: APIError.self) { try await KontextVideo.sendInit(request, client: APIClient(baseURL: harness.server.baseURL)) }
+        #expect(harness.server.requests(to: "/v2/init").count == 2)
+    }
 }
 }

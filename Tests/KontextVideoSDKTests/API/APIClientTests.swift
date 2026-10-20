@@ -132,38 +132,5 @@ struct APIClientTests {
         }
         #expect(server.requests.isEmpty, "nothing left the device")
     }
-
-    // MARK: Init
-
-    @Test func initRetriesOnceOnARetryableFailureWithTheSameRequestId() async throws {
-        var calls = 0
-        server.on("/v2/init") { _ in
-            calls += 1
-            return calls == 1 ? .failure(.timedOut) : .json(Fixtures.initEnabled(reportDebug: true))
-        }
-        Init.retryDelay = 1_000_000
-        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: server.baseURL), installId: "i")
-        let response = try await Init.send(request, client: client)
-        guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
-        #expect(reportDebug)
-        let ids = server.requests(to: "/v2/init").map { $0.body?["requestId"] as? String }
-        #expect(ids.count == 2)
-        #expect(ids[0] == ids[1], "a retry after a lost response sends the same id, so the server runs no second auction")
-    }
-
-    @Test func initDoesNotRetryAClientError() async {
-        server.on("/v2/init", .json(Fixtures.errors("invalidRequest"), status: 400))
-        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: server.baseURL), installId: "i")
-        await #expect(throws: APIError.self) { try await Init.send(request, client: client) }
-        #expect(server.requests(to: "/v2/init").count == 1)
-    }
-
-    @Test func initGivesUpAfterTheSecondFailure() async {
-        server.on("/v2/init", .failure(.timedOut))
-        Init.retryDelay = 1_000_000
-        let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: server.baseURL), installId: "i")
-        await #expect(throws: APIError.self) { try await Init.send(request, client: client) }
-        #expect(server.requests(to: "/v2/init").count == 2)
-    }
 }
 }
