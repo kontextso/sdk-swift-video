@@ -213,6 +213,10 @@ struct RequestTests {
         #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [7])
         defaults.set("8,10", forKey: "IABGPP_GppSID")
         #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [8, 10])
+        defaults.set(7, forKey: "IABGPP_GppSID")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [7], "a CMP writing one section as a number")
+        defaults.set("x_y", forKey: "IABGPP_GppSID")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == nil, "junk is absent, not forwarded")
     }
 }
 }

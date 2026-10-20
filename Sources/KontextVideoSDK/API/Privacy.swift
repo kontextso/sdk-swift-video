@@ -70,16 +70,12 @@ enum ConsentStorage {
     @MainActor
     static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
         let defaults = defaults ?? Environment.consentDefaults
-        let gppSid: [Int]? = (defaults.string(forKey: "IABGPP_GppSID") ?? "")
-            .split(whereSeparator: { $0 == "_" || $0 == "," })
-            .compactMap { Int($0) }
-            .nonEmpty
         let stored = KontextVideo.Regulatory(
             gdpr: gdprApplies(defaults.object(forKey: "IABTCF_gdprApplies")),
             gdprConsent: defaults.string(forKey: "IABTCF_TCString").nonEmpty,
             coppa: nil,
             gpp: defaults.string(forKey: "IABGPP_HDR_GppString").nonEmpty,
-            gppSid: gppSid,
+            gppSid: gppSections(defaults.object(forKey: "IABGPP_GppSID")),
             usPrivacy: defaults.string(forKey: "IABUSPrivacy_String").nonEmpty
         )
         let merged = KontextVideo.Regulatory(
@@ -92,6 +88,16 @@ enum ConsentStorage {
         )
         let isEmpty = merged.gdpr == nil && merged.gdprConsent == nil && merged.coppa == nil && merged.gpp == nil && merged.gppSid == nil && merged.usPrivacy == nil
         return isEmpty ? nil : merged
+    }
+
+    /// `IABGPP_GppSID` is a string of section ids, `2_7` or `2,7` (the GPP in-app spec); a CMP that writes
+    /// one section as a number is read too.
+    private static func gppSections(_ raw: Any?) -> [Int]? {
+        if let number = raw as? NSNumber, let section = Int(exactly: number.doubleValue) {
+            return [section]
+        }
+        guard let string = raw as? String else { return nil }
+        return string.split(whereSeparator: { $0 == "_" || $0 == "," }).compactMap { Int($0) }.nonEmpty
     }
 
     /// `IABTCF_gdprApplies` as CMPs actually write it: a number, a boolean or a string. Exactly 0 or 1
