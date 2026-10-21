@@ -36,7 +36,8 @@ struct DebugReporterTests {
         #expect(names.contains("init.response"))
         #expect(names.contains("ads.request") && names.contains("ad.loaded"))
         let request = try #require(events.first { $0["name"] as? String == "ads.request" })
-        #expect(request["at"] is Int)
+        let createdAt = try #require(request["createdAt"] as? String)
+        #expect(createdAt.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#, options: .regularExpression) != nil, "ISO 8601 with milliseconds, UTC: \(createdAt)")
         #expect(request["adId"] == nil)
         let state = request["state"] as? [String: Any]
         #expect(state?["placementId"] as? String == "pause")

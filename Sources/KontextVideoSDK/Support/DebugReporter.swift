@@ -7,7 +7,8 @@ import Foundation
 @MainActor
 final class DebugReporter {
     struct Event: Encodable, Sendable {
-        let at: Int
+        /// Device time, ISO 8601 with milliseconds in UTC, as every Kontext API writes wall-clock time.
+        let createdAt: String
         let name: String
         let adId: String?
         let level: String?
@@ -42,6 +43,13 @@ final class DebugReporter {
         }
     }
 
+    /// `2026-10-21T18:00:00.482Z`. `ISO8601DateFormatter.string(from:)` is documented thread-safe.
+    nonisolated(unsafe) private static let timestamp: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     private struct Request: Encodable {
         let publisherToken: String
         let installId: String
@@ -68,7 +76,7 @@ final class DebugReporter {
     func event(_ name: String, adId: String? = nil, level: String? = nil, state: [String: Value]? = nil) {
         Logger.debug(Self.line(name, adId: adId, state: state))
         guard isEnabled else { return }
-        buffer.append(Event(at: Int(Date().timeIntervalSince1970 * 1000), name: name, adId: adId, level: level, state: state))
+        buffer.append(Event(createdAt: Self.timestamp.string(from: Date()), name: name, adId: adId, level: level, state: state))
         scheduleFlush()
     }
 
