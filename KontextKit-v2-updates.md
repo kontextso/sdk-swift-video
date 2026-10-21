@@ -67,4 +67,5 @@ depending on `KontextKit` and the binary target). CocoaPods: subspecs `KontextKi
 `import KontextKitOM` where it uses `OMManager`; sdk-swift-video depends on `KontextKit` only, and adds the OM product
 on the day it implements Open Measurement (Google IMA Notes, decision 6).
 
-Meanwhile: nothing to do here; the video SDK's `Package.swift` and podspec stay as they are until KontextKit 0.2.
+Done: kontextso/kontextkit-ios#6 (0.2.0) and kontextso/sdk-swift#131. Here: bump the pin to `0.2.0` once the tag exists; the
+product name `KontextKit` is unchanged, so nothing else moves.
