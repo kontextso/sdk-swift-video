@@ -104,7 +104,10 @@ extension VideoAd {
             price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
             switch ad.details {
             case .overlay(let position, let sizes, let duration):
-                self.position = position == .top ? .top : .bottom
+                switch position {
+                case .top: self.position = .top
+                case .bottom: self.position = .bottom
+                }
                 self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 self.duration = duration.map { TimeInterval($0) / 1000 }
                 skipOffset = nil
