@@ -53,3 +53,18 @@ the reading in one place; the merge with the publisher's own values stays in eac
 fills what it did not write).
 
 Meanwhile: `ConsentStorage.read` in `Sources/KontextVideoSDK/API/Privacy.swift` reads all five keys itself.
+
+## 6. Open Measurement as a separate product
+
+Every consumer of `KontextKit` links `OMSDK_Kontextso.xcframework` (2.3 MB) and takes on the IAB OM licence, because
+the one target depends on the binary. The video SDK uses nine providers and nothing from `Sources/OMSDK/`; nothing
+outside that folder references OM either, so the split is clean.
+
+Make it two targets and two products: `KontextKit` (`Sources/KontextKit/`: DeviceInfo, Privacy, StoreKit, UI,
+Utilities, `PrivacyInfo.xcprivacy`) and `KontextKitOM` (`Sources/KontextKitOM/`: the OM sources and `omsdk-v1.js`,
+depending on `KontextKit` and the binary target). CocoaPods: subspecs `KontextKit/Core` (the default) and
+`KontextKit/OMSDK` (`vendored_frameworks`, `preserve_paths` for `OMLICENSE`). sdk-swift depends on both and writes
+`import KontextKitOM` where it uses `OMManager`; sdk-swift-video depends on `KontextKit` only, and adds the OM product
+on the day it implements Open Measurement (Google IMA Notes, decision 6).
+
+Meanwhile: nothing to do here; the video SDK's `Package.swift` and podspec stay as they are until KontextKit 0.2.
