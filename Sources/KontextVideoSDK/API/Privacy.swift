@@ -1,6 +1,7 @@
 import AdSupport
 import AppTrackingTransparency
 import Foundation
+import KontextKit
 
 /// The advertising identifier, as the request carries it. Sent only when the IDFA is real: with ATT
 /// `authorized` the OS gives the id, in every other state it gives all zeros. Zeros are not sent as an
@@ -62,24 +63,16 @@ struct TrackingInfo: Sendable {
 }
 
 /// The consent signals a consent management platform writes to `UserDefaults` under the IAB's shared
-/// keys (TCF v2, GPP, US Privacy). The CMP's values win: they are the live, authoritative consent, as
-/// AdMob and MAX read them with no override at all. What the publisher set on
-/// `KontextVideo.shared.regulatory` fills in what the CMP did not write (a publisher without an
-/// IAB-writing CMP passes consent by hand); `coppa` can only come from the publisher.
+/// keys (TCF v2, GPP, US Privacy), read by KontextKit's `ConsentDataProvider`. The CMP's values win:
+/// they are the live, authoritative consent, as AdMob and MAX read them with no override at all. What
+/// the publisher set on `KontextVideo.shared.regulatory` fills in what the CMP did not write (a
+/// publisher without an IAB-writing CMP passes consent by hand); `coppa` can only come from the publisher.
 enum ConsentStorage {
     @MainActor
     static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
-        let defaults = defaults ?? Environment.consentDefaults
-        let stored = KontextVideo.Regulatory(
-            gdpr: gdprApplies(defaults.object(forKey: "IABTCF_gdprApplies")),
-            gdprConsent: defaults.string(forKey: "IABTCF_TCString").nonEmpty,
-            coppa: nil,
-            gpp: defaults.string(forKey: "IABGPP_HDR_GppString").nonEmpty,
-            gppSid: gppSections(defaults.object(forKey: "IABGPP_GppSID")),
-            usPrivacy: defaults.string(forKey: "IABUSPrivacy_String").nonEmpty
-        )
+        let stored = ConsentDataProvider.collect(from: defaults ?? Environment.consentDefaults)
         let merged = KontextVideo.Regulatory(
-            gdpr: stored.gdpr ?? explicit?.gdpr,
+            gdpr: stored.gdpr.map { $0 == 1 } ?? explicit?.gdpr,
             gdprConsent: stored.gdprConsent ?? explicit?.gdprConsent,
             coppa: explicit?.coppa,
             gpp: stored.gpp ?? explicit?.gpp,
@@ -89,43 +82,4 @@ enum ConsentStorage {
         let isEmpty = merged.gdpr == nil && merged.gdprConsent == nil && merged.coppa == nil && merged.gpp == nil && merged.gppSid == nil && merged.usPrivacy == nil
         return isEmpty ? nil : merged
     }
-
-    /// `IABGPP_GppSID` is a string of section ids, `2_7` or `2,7` (the GPP in-app spec); a CMP that writes
-    /// one section as a number is read too.
-    private static func gppSections(_ raw: Any?) -> [Int]? {
-        if let number = raw as? NSNumber, let section = Int(exactly: number.doubleValue) {
-            return [section]
-        }
-        guard let string = raw as? String else { return nil }
-        return string.split(whereSeparator: { $0 == "_" || $0 == "," }).compactMap { Int($0) }.nonEmpty
-    }
-
-    /// `IABTCF_gdprApplies` as CMPs actually write it: a number, a boolean or a string. Exactly 0 or 1
-    /// (the TCF v2.2 values); anything else is unknown, never forwarded as junk.
-    private static func gdprApplies(_ raw: Any?) -> Bool? {
-        let value: Int?
-        if let number = raw as? NSNumber {
-            value = Int(exactly: number.doubleValue)
-        } else if let string = raw as? String {
-            value = Int(string.trimmingCharacters(in: .whitespaces))
-        } else {
-            value = nil
-        }
-        switch value {
-        case 1: return true
-        case 0: return false
-        default: return nil
-        }
-    }
-}
-
-private extension Optional where Wrapped == String {
-    var nonEmpty: String? {
-        guard let value = self, !value.isEmpty else { return nil }
-        return value
-    }
-}
-
-private extension Array where Element == Int {
-    var nonEmpty: [Int]? { isEmpty ? nil : self }
 }

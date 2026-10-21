@@ -126,13 +126,7 @@ struct AdsDevice: Encodable, Sendable {
         return AdsDevice(
             os: .current(),
             hardware: hardware,
-            // TODO: KontextKit reports the screen in physical pixels, the API wants points; see KontextKit-v2-updates.md, 4.
-            screen: Screen(
-                width: Int((Double(screen.width) / screen.dpr).rounded()),
-                height: Int((Double(screen.height) / screen.dpr).rounded()),
-                dpr: screen.dpr,
-                darkMode: screen.darkMode
-            ),
+            screen: Screen(width: screen.width, height: screen.height, dpr: screen.dpr, darkMode: screen.darkMode),
             power: Power(batteryLevel: battery.batteryLevel.map { Int($0.rounded()) }, batteryState: battery.batteryState, lowPowerMode: battery.lowPowerMode),
             audio: Audio(volume: audio.volume, muted: audio.muted),
             network: Network(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.version)")

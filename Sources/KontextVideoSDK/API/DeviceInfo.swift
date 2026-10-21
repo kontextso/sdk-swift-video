@@ -1,15 +1,9 @@
 import Foundation
 import KontextKit
-import UIKit
 
-/// The `os` object of a request.
+/// The `os` object of a request. KontextKit's names are the API's: `ios`, `ipados`, `tvos`.
 struct OSInfo: Encodable, Sendable {
-    enum Name: String, Encodable, Sendable {
-        case ios
-        case ipados
-    }
-
-    let name: Name
+    let name: OSInfoProvider.OSName
     let version: String
     /// BCP-47, for example "cs-CZ".
     let locale: String
@@ -19,40 +13,22 @@ struct OSInfo: Encodable, Sendable {
     @MainActor
     static func current() -> OSInfo {
         let info = OSInfoProvider.collect()
-        // TODO: KontextKit reports "ios" on iPad too; see KontextKit-v2-updates.md, 2.
-        return OSInfo(
-            name: UIDevice.current.userInterfaceIdiom == .pad ? .ipados : .ios,
-            version: info.version,
-            locale: info.locale,
-            timezone: info.timezone
-        )
+        return OSInfo(name: info.name, version: info.version, locale: info.locale, timezone: info.timezone)
     }
 }
 
-/// The `hardware` object of a request.
+/// The `hardware` object of a request. KontextKit's types are the API's OpenRTB-derived set (`phone`,
+/// `tablet`, `tv`, `desktop`, `other`; `settopbox` never applies to Apple hardware).
 struct HardwareInfo: Encodable, Sendable {
-    enum DeviceType: String, Encodable, Sendable {
-        case phone
-        case tablet
-        case other
-    }
-
     let brand: String
     /// The model identifier, for example "iPhone16,1".
     let model: String
-    let type: DeviceType
+    let type: HardwareInfoProvider.HardwareType
 
     @MainActor
     static func current() -> HardwareInfo {
         let info = HardwareInfoProvider.collect()
-        // TODO: KontextKit says "handset", the API says "phone"; see KontextKit-v2-updates.md, 3.
-        let type: DeviceType
-        switch info.type {
-        case "handset": type = .phone
-        case "tablet": type = .tablet
-        default: type = .other
-        }
-        return HardwareInfo(brand: info.brand, model: info.model, type: type)
+        return HardwareInfo(brand: info.brand, model: info.model, type: info.type)
     }
 }
 
@@ -76,8 +52,7 @@ struct AttributionIds: Encodable, Sendable {
     static func current() -> AttributionIds {
         AttributionIds(
             skan: SKAdNetworkIdsProvider.collect(),
-            // TODO: KontextKit has no AdAttributionKit provider yet; see KontextKit-v2-updates.md, 1.
-            aak: Bundle.main.infoDictionary?["AdNetworkIdentifiers"] as? [String] ?? []
+            aak: AdAttributionKitIdsProvider.collect()
         )
     }
 }

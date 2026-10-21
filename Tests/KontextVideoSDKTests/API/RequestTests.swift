@@ -145,7 +145,7 @@ struct RequestTests {
         #expect(os?["locale"] is String)
         #expect(os?["timezone"] is String)
         let hardware = device["hardware"] as? [String: Any]
-        #expect(["phone", "tablet", "tv", "other"].contains(hardware?["type"] as? String ?? ""))
+        #expect(["phone", "tablet", "tv", "desktop", "other"].contains(hardware?["type"] as? String ?? ""))
         let userAgent = (device["network"] as? [String: Any])?["userAgent"] as? String
         #expect(userAgent?.contains("KontextVideo/") == true)
     }

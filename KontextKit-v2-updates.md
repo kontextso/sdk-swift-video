@@ -1,8 +1,7 @@
 # KontextKit v2 updates
 
-Changes to make in [kontextkit-ios](https://github.com/kontextso/kontextkit-ios) for its next release, collected while
-building this SDK against KontextKit 0.1.0. Each note says what we do in the meantime, so the workaround can be removed
-once KontextKit ships it.
+Changes to make in [kontextkit-ios](https://github.com/kontextso/kontextkit-ios), collected while building this SDK
+against KontextKit 0.1.0. Items 1 to 5 shipped in 0.3.0 (kontextso/kontextkit-ios#7) and item 6 in 0.2.0 (#6); this SDK uses them all.
 
 ## 1. AdAttributionKit identifiers
 
@@ -13,7 +12,7 @@ AdAttributionKit has its own key, `AdNetworkIdentifiers`, a plain array of strin
 Add an `AdAttributionKitIdsProvider` (or a second method on the SKAN provider) that returns `AdNetworkIdentifiers`,
 an empty array when the key is missing or malformed, like the SKAN one.
 
-Meanwhile: `AttributionIds.current()` in `Sources/KontextVideoSDK/API/DeviceInfo.swift` reads the key itself.
+Done in 0.3.0: `AdAttributionKitIdsProvider.collect()`.
 
 ## 2. OS name on iPad
 
@@ -21,7 +20,7 @@ Meanwhile: `AttributionIds.current()` in `Sources/KontextVideoSDK/API/DeviceInfo
 
 Report `ipados` when `UIDevice.current.userInterfaceIdiom == .pad`, and `tvos` on tvOS once KontextKit builds for it.
 
-Meanwhile: `OSInfo.current()` in `DeviceInfo.swift` overrides the name from the idiom.
+Done in 0.3.0: `OSInfo.name` is the enum `OSName` (`ios`, `ipados`, `tvos`).
 
 ## 3. Hardware type vocabulary
 
@@ -30,7 +29,7 @@ set `phone`, `tablet`, `tv`, `settopbox`, `desktop`, `other`.
 
 Rename `handset` to `phone` (or add a typed enum with the v2 set) and report `tv` on tvOS.
 
-Meanwhile: `HardwareInfo.current()` in `DeviceInfo.swift` maps the strings.
+Done in 0.3.0: `HardwareInfo.type` is the enum `HardwareType` (`phone`, `tablet`, `tv`, `desktop`, `other`).
 
 ## 4. Screen size in points
 
@@ -39,7 +38,7 @@ Meanwhile: `HardwareInfo.current()` in `DeviceInfo.swift` maps the strings.
 
 Report points (`UIScreen.main.bounds`) and keep `dpr`, or add `pointWidth` and `pointHeight` next to the pixel values.
 
-Meanwhile: `AdsDevice.current()` in `Sources/KontextVideoSDK/API/AdsRequest.swift` divides by `dpr`.
+Done in 0.3.0: `width` / `height` are points, `nativeWidth` / `nativeHeight` the panel; `dpr` unchanged.
 
 ## 5. Consent beyond TCF
 
@@ -52,7 +51,7 @@ Add the three keys to the provider (a `ConsentData` with `gpp`, `gppSid`, `usPri
 the reading in one place; the merge with the publisher's own values stays in each SDK (the CMP wins, the publisher
 fills what it did not write).
 
-Meanwhile: `ConsentStorage.read` in `Sources/KontextVideoSDK/API/Privacy.swift` reads all five keys itself.
+Done in 0.3.0: `ConsentDataProvider.collect(from:)`; `ConsentStorage.read` keeps only the merge.
 
 ## 6. Open Measurement as a separate product
 
