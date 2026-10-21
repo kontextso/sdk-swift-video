@@ -29,4 +29,4 @@ The example (`Example/`, XcodeGen) talks to the mock server `sdk-video-mock-serv
   only terminal path.
 - The page never fires a beacon; `Tracker` does, each entry once.
 - Public API changes go to the Notion page first.
-- Workarounds for KontextKit are marked with a `TODO` pointing at `KontextKit-v2-updates.md`.
+- Facts about the device, consent and attribution come from KontextKit; what the SDK needs and KontextKit lacks goes into KontextKit, not into a workaround here.

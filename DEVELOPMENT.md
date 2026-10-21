@@ -30,8 +30,7 @@ sdk-swift-video/
 │   └── PrivacyInfo.xcprivacy
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
 ├── Package.swift            SPM manifest
-├── CHANGELOG.md, RELEASING.md
-└── KontextKit-v2-updates.md what the next KontextKit should change, and where this SDK works around it
+└── CHANGELOG.md, RELEASING.md
 ```
 
 The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `API/` is the wire, `Rendering/`

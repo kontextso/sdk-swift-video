@@ -10,8 +10,8 @@ Example                   an app with a real AVPlayer that links it (xcodegen ge
 
 Contributing: [DEVELOPMENT.md](DEVELOPMENT.md). Releases: [RELEASING.md](RELEASING.md), [CHANGELOG.md](CHANGELOG.md).
 
-The SDK builds on [KontextKit](https://github.com/kontextso/kontextkit-ios). What KontextKit should add in its next
-release, and where this SDK works around it for now, is in [KontextKit-v2-updates.md](KontextKit-v2-updates.md).
+The SDK builds on [KontextKit](https://github.com/kontextso/kontextkit-ios) for the device, privacy and StoreKit
+facts it sends.
 
 ## Requirements
 
