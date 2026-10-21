@@ -121,7 +121,7 @@ struct SDKHarness {
         server.on("/v2/init", .json(Fixtures.initEnabled()))
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
-        KontextVideo.initRetryDelay = 10_000_000
+        KontextVideo.initRetryDelay = 0.01
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
         Environment.isApplicationActive = { true }
         ViewabilityMeter.interval = 0.05
@@ -146,7 +146,7 @@ struct SDKHarness {
         KontextVideo.shared.resetForTesting()
         Environment.reset()
         StubServer.uninstall()
-        KontextVideo.initRetryDelay = 2_000_000_000
+        KontextVideo.initRetryDelay = 2
         FrameBridge.loadTimeout = 10
         ViewabilityMeter.interval = 0.25
         DebugReporter.interval = 0.1

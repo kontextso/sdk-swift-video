@@ -19,8 +19,10 @@ public final class KontextVideo {
         case failed
     }
 
+    /// The one instance. Every public call goes through it, as `GADMobileAds.sharedInstance()` or `ALSdk.shared()`.
     public static let shared = KontextVideo()
 
+    /// The SDK's version, the same string it sends with every request. For your logs and crash reports.
     public nonisolated static let version = SDKInfo.version
 
     /// Identifies this installation of the app. Created on first use and kept until the app is uninstalled.
@@ -30,6 +32,7 @@ public final class KontextVideo {
 
     /// The configuration the SDK was initialised with, or `nil` before `initialize(with:)`.
     public private(set) var configuration: Configuration?
+    /// Where `/init` got to. Readable at any time; `initialize(with:)`'s completion or `async` form delivers it too.
     public private(set) var state: State = .notInitialized
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
@@ -46,6 +49,7 @@ public final class KontextVideo {
         didSet { if variantId != oldValue { targetingChanged("variantId") } }
     }
 
+    /// Whether `initialize(with:)` was called; not whether `/init` succeeded, which is `state`.
     public var isInitialized: Bool {
         configuration != nil
     }
@@ -138,7 +142,7 @@ public final class KontextVideo {
 
     /// After a failed `/init`, every ads request tries it again first; a load is already an explicit
     /// request for an ad, and one `/init` per load is cheap.
-    func retryInit() {
+    private func retryInit() {
         guard state == .failed, let configuration else { return }
         Logger.info("Retrying /init")
         state = .initializing
@@ -190,18 +194,18 @@ public final class KontextVideo {
     }
 
     /// `/init`'s one retry: after a failure that may clear (no network, a 5xx, a 429), the same request
-    /// is sent again after `initRetryDelay`, with the same `requestId` so the server replays rather than
-    /// registers twice. A 4xx or a malformed answer is not retried. A constant in spirit; a variable so
-    /// the tests can shrink the wait (`nonisolated(unsafe)`: a global the test harness writes before
-    /// anything runs, the race is accepted, not fixed).
-    nonisolated(unsafe) static var initRetryDelay: UInt64 = 2_000_000_000
+    /// is sent again after `initRetryDelay` seconds, with the same `requestId` so the server replays
+    /// rather than registers twice. A 4xx or a malformed answer is not retried. A constant in spirit; a
+    /// variable so the tests can shrink the wait (`nonisolated(unsafe)`: a global the test harness writes
+    /// before anything runs, the race is accepted, not fixed).
+    nonisolated(unsafe) static var initRetryDelay: TimeInterval = 2
 
     static func sendInit(_ request: InitRequest, client: APIClient) async throws -> InitResponse {
         do {
             return try await client.post("init", body: request)
         } catch let error as APIError where error.isRetryable {
-            Logger.warning("/init failed (\(error)); retrying in \(initRetryDelay / 1_000_000) ms")
-            try await Task.sleep(nanoseconds: initRetryDelay)
+            Logger.warning("/init failed (\(error)); retrying in \(initRetryDelay) s")
+            try await Task.sleep(nanoseconds: UInt64(initRetryDelay * 1_000_000_000))
             return try await client.post("init", body: request)
         }
     }

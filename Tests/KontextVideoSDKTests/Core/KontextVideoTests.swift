@@ -169,7 +169,7 @@ struct KontextVideoTests {
             calls += 1
             return calls == 1 ? .failure(.timedOut) : .json(Fixtures.initEnabled(reportDebug: true))
         }
-        KontextVideo.initRetryDelay = 1_000_000
+        KontextVideo.initRetryDelay = 0.001
         let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
         let response = try await KontextVideo.sendInit(request, client: APIClient(baseURL: harness.server.baseURL))
         guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
@@ -188,7 +188,7 @@ struct KontextVideoTests {
 
     @Test func initGivesUpAfterTheSecondFailure() async {
         harness.server.on("/v2/init", .failure(.timedOut))
-        KontextVideo.initRetryDelay = 1_000_000
+        KontextVideo.initRetryDelay = 0.001
         let request = InitRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
         await #expect(throws: APIError.self) { try await KontextVideo.sendInit(request, client: APIClient(baseURL: harness.server.baseURL)) }
         #expect(harness.server.requests(to: "/v2/init").count == 2)
