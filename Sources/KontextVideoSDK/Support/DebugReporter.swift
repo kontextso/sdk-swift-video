@@ -11,8 +11,15 @@ final class DebugReporter {
         let createdAt: String
         let name: String
         let adId: String?
-        let level: String?
+        let level: Level?
         let state: [String: Value]?
+    }
+
+    /// Absent means `info`.
+    enum Level: String, Encodable, Sendable {
+        case info
+        case warning
+        case error
     }
 
     /// A string, a number or a boolean.
@@ -73,7 +80,7 @@ final class DebugReporter {
 
     /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
     /// device console, in the same shape, whether or not the server asked for it.
-    func event(_ name: String, adId: String? = nil, level: String? = nil, state: [String: Value]? = nil) {
+    func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: Value]? = nil) {
         Logger.debug(Self.line(name, adId: adId, state: state))
         guard isEnabled else { return }
         buffer.append(Event(createdAt: Self.timestamp.string(from: Date()), name: name, adId: adId, level: level, state: state))

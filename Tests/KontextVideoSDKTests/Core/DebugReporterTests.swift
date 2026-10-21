@@ -25,7 +25,7 @@ struct DebugReporterTests {
         harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         DebugReporter.shared.event("ads.request", state: ["placementId": "pause", "playhead": 1200, "filled": true])
-        DebugReporter.shared.event("ad.loaded", adId: "ad-1", level: "warning", state: ["durationMs": 842])
+        DebugReporter.shared.event("ad.loaded", adId: "ad-1", level: .warning, state: ["durationMs": 842])
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").count >= 1 })
         let body = try #require(harness.server.requests(to: "/v2/debug").last?.body)
         #expect(body["publisherToken"] as? String == "test-dev")

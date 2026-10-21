@@ -226,7 +226,7 @@ public final class VideoAds {
             try await videoAd.awaitLoaded()
         } catch {
             current[id] = nil
-            DebugReporter.shared.event("ad.loadFailed", adId: bid.id, level: "warning", state: ["reason": .string("\(error)")])
+            DebugReporter.shared.event("ad.loadFailed", adId: bid.id, level: .warning, state: ["reason": .string("\(error)")])
             throw error
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
