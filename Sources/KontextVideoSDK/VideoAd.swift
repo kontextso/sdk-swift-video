@@ -5,7 +5,7 @@ import UIKit
 /// and it is gone (the placement only holds it weakly). An ad is shown at most once.
 ///
 /// Read-only facts about the ad for the app's own decisions (an auction, a debug screen); times are
-/// seconds and `expirationDate` is a `Date`, whatever the wire sends.
+/// seconds, whatever the wire sends.
 @MainActor
 public final class VideoAd {
     public struct Price: Sendable, Equatable {
@@ -45,7 +45,7 @@ public final class VideoAd {
 
     /// Why a loaded ad can no longer be shown.
     public enum InvalidationReason: Sendable, Equatable {
-        /// `expirationDate` passed before the ad was shown.
+        /// The ad's lifetime ran out before it was shown.
         case expired
         /// `user`, `regulatory` or `variantId` changed; the next load carries the new values.
         case targetingChanged
@@ -62,10 +62,6 @@ public final class VideoAd {
     public var placementId: String { facts.placementId }
     public var format: AdFormat { facts.format }
     public var price: Price { facts.price }
-    /// When the ad stops being showable. The server sends a relative lifetime; this is it as a `Date`, for
-    /// the app's eyes. The SDK's own check runs on the monotonic clock, so a changed device clock cannot
-    /// expire an ad early or late.
-    public var expirationDate: Date { facts.expirationDate }
     /// `nil` for a linear ad.
     public var position: Position? { facts.position }
     /// `nil` for a linear ad and for a full-screen pause ad.

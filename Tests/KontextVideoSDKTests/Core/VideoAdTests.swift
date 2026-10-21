@@ -58,7 +58,6 @@ struct VideoAdTests {
 
     @Test func pauseAdExposesItsFacts() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p1", expires: 90_000))
-        let before = Date()   // after the harness warmed up: the ad was created a moment ago
         #expect(ad.id == "p1")
         #expect(ad.placementId == "pause")
         #expect(ad.format == .pause)
@@ -68,8 +67,8 @@ struct VideoAdTests {
         #expect(ad.duration == nil)
         #expect(ad.skipOffset == nil)
         #expect(ad.reward == nil)
-        let lifetime = ad.expirationDate.timeIntervalSince(before)
-        #expect(lifetime > 85 && lifetime <= 90, "expires (ms from receipt) as a Date")
+        let remaining = ad.facts.remainingLifetime
+        #expect(remaining > 85 && remaining <= 90, "expires (ms from receipt) in seconds, counted from the response")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
     }

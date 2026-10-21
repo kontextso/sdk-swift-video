@@ -161,7 +161,6 @@ let card = try await pause.load(PauseOptions(
     positions: [.top, .fullscreen]   // what you can render; default: top and bottom
 ))
 card.price.value                     // your own auction, if you run one
-card.expirationDate                  // a Date
 
 // A full-screen video at a moment you pick.
 let linear = try await midroll.load(LinearOptions(
@@ -175,7 +174,7 @@ let linear = try await midroll.load(LinearOptions(
 let ad = try await overlay.load()
 
 // Deciding before rendering (an app that runs its own auction): fetch the answer, load the winner
-let bid = try await pause.fetch()                   // price, expirationDate, size…; nothing rendered yet
+let bid = try await pause.fetch()                   // price, size…; nothing rendered yet
 guard myAuction.accepts(bid.price) else { return }  // dropping a bid costs nothing
 let ad = try await bid.load()                       // renders; the same VideoAd that load() returns
 

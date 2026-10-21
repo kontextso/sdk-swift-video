@@ -2,7 +2,7 @@ import Foundation
 
 extension VideoAd {
     /// The server's answer to a placement's `fetch()`, before anything is rendered: the facts of the ad
-    /// (`price`, `expirationDate`, `size`, ...) and nothing else. For an app that decides before paying
+    /// (`price`, `size`, `duration`, ...) and nothing else. For an app that decides before paying
     /// for a WebView, for example one that runs its own auction: drop a losing bid and it costs nothing;
     /// `load()` the winner and it renders into the same `VideoAd` that a placement's `load()` returns.
     /// A bid cannot be shown. The app owns it; the placement holds it weakly for its one-unshown-ad rule.
@@ -12,8 +12,6 @@ extension VideoAd {
         public var placementId: String { facts.placementId }
         public var format: AdFormat { facts.format }
         public var price: Price { facts.price }
-        /// When the ad stops being showable, counted from the response: rendering eats into it.
-        public var expirationDate: Date { facts.expirationDate }
         public var position: Position? { facts.position }
         public var size: Size? { facts.size }
         /// Every size the creative was built for, the default first; the SDK picks one at `show`.
@@ -42,7 +40,7 @@ extension VideoAd {
 
         /// Renders the creative and returns the ad, ready to show, exactly as a placement's `load()`
         /// would. Throws `creativeFailed(code:)` when the creative fails or times out,
-        /// `invalidated(.expired)` after `expirationDate`, `invalidated(.targetingChanged)` when
+        /// `invalidated(.expired)` once the lifetime ran out, `invalidated(.targetingChanged)` when
         /// targeting changed meanwhile, `destroyed`, or `CancellationError`.
         public func load() async throws -> VideoAd {
             if let ad { return ad }
@@ -78,20 +76,21 @@ extension VideoAd {
     }
 
     /// The read-only facts of an ad, built once from the wire object; `VideoAd` and `Bid` both expose
-    /// them. Times are seconds and the expiry is a `Date`, whatever the wire sends.
+    /// them. Times are seconds, whatever the wire sends.
     struct Facts {
         let id: String
         let placementId: String
         let format: AdFormat
         let price: Price
-        let expirationDate: Date
         let position: Position?
-        let size: Size?
         let sizes: [Size]
+        /// The default variant; `VideoAd` reports the one chosen at `show` instead.
+        var size: Size? { sizes.first }
         let duration: TimeInterval?
         let skipOffset: TimeInterval?
         let reward: Reward?
-        /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here.
+        /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here. Never a `Date`: the monotonic
+        /// clock cannot be set by the user, so a changed device clock cannot expire an ad early or late.
         let receivedAt: TimeInterval
         /// Seconds the ad lives from receipt.
         let lifetime: TimeInterval
@@ -102,19 +101,16 @@ extension VideoAd {
             id = ad.id
             placementId = ad.placementId
             format = ad.format
-            price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
-            expirationDate = Date().addingTimeInterval(lifetime - (ProcessInfo.processInfo.systemUptime - receivedAt))
+            price = Price(ad.price)
             switch ad.details {
             case .overlay(let position, let sizes, let duration):
                 self.position = position == .top ? .top : .bottom
-                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
-                self.size = self.sizes.first
+                self.sizes = sizes.map(Size.init)
                 self.duration = duration.map { TimeInterval($0) / 1000 }
                 skipOffset = nil
                 reward = nil
             case .pause(let position, let sizes):
-                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
-                self.size = self.sizes.first
+                self.sizes = sizes.map(Size.init)
                 switch position {
                 case .top: self.position = .top
                 case .bottom: self.position = .bottom
@@ -125,16 +121,13 @@ extension VideoAd {
                 reward = nil
             case .linear(let duration, let skipOffset, let reward):
                 position = nil
-                size = nil
                 sizes = []
                 self.duration = TimeInterval(duration) / 1000
                 self.skipOffset = skipOffset.map { TimeInterval($0) / 1000 }
-                self.reward = reward.map { Reward(label: $0.label, amount: $0.amount) }
+                self.reward = reward.map(Reward.init)
             }
         }
 
-        /// On the monotonic clock, as the SDK decides it: a changed device clock cannot expire an ad early
-        /// or late.
         var isExpired: Bool {
             ProcessInfo.processInfo.systemUptime - receivedAt >= lifetime
         }
@@ -143,5 +136,24 @@ extension VideoAd {
         var remainingLifetime: TimeInterval {
             max(0, lifetime - (ProcessInfo.processInfo.systemUptime - receivedAt))
         }
+    }
+}
+
+// The wire types never leak: each public fact has one converting initializer.
+private extension VideoAd.Price {
+    init(_ wire: AdPayload.Price) {
+        self.init(value: wire.value, currency: wire.currency, precision: wire.precision == .exact ? .exact : .estimated)
+    }
+}
+
+private extension VideoAd.Size {
+    init(_ wire: AdPayload.Size) {
+        self.init(width: wire.width, height: wire.height)
+    }
+}
+
+private extension VideoAd.Reward {
+    init(_ wire: AdPayload.Reward) {
+        self.init(label: wire.label, amount: wire.amount)
     }
 }
