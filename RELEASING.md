@@ -2,8 +2,9 @@
 
 How to cut a release of the **Kontext Video SDK**. Replace `0.1.0` with the version at hand.
 
-> Versions have no `v` prefix, so SPM and CocoaPods agree: `0.1.0`. While the SDK is pre-1.0, a breaking change
-> bumps the minor version (`0.2.0`); after 1.0 it bumps the major.
+> Versions have no `v` prefix: `0.1.0`. While the SDK is pre-1.0, a breaking change bumps the minor version
+> (`0.2.0`); after 1.0 it bumps the major. The SDK ships through Swift Package Manager only: CocoaPods trunk
+> stops accepting new versions on December 2, 2026.
 
 ## 1. Check main
 
@@ -29,7 +30,7 @@ Move the `## Unreleased` entries in `CHANGELOG.md` under a new `## 0.1.0` headin
 ## 3. Bump the version
 
 One place: `SDKInfo.version` in `Sources/KontextVideoSDK/API/SDKInfo.swift`. The SDK sends it with every request,
-the podspec reads it from that line, and CI refuses a release tag that does not match it. The README's
+and CI refuses a release tag that does not match it. The README's
 `from: "0.1.0"` means "that version or newer" and stays as it is.
 
 ```
@@ -48,19 +49,11 @@ git push origin main 0.1.0
 The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`. The push of the tag runs the
 `release-tag` CI job, which fails if the tag and `SDKInfo.version` differ.
 
-## 5. Publish to CocoaPods trunk
+## 5. Verify
 
-```bash
-pod spec lint KontextVideoSDK.podspec --allow-warnings
-pod trunk push KontextVideoSDK.podspec --allow-warnings
-```
-
-## 6. Verify
-
-1. The version appears on https://cocoapods.org/pods/KontextVideoSDK.
-2. A fresh project resolves `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")`,
+1. A fresh project resolves `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")`,
    builds, and runs the README's walkthrough against the production ad server with a `{publisher}-dev` token.
-3. Tell the publishers waiting for the release; the changelog entry is the release note.
+2. Tell the publishers waiting for the release; the changelog entry is the release note.
 
 ## Before the first App Store submission that includes the SDK
 

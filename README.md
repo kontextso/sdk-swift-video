@@ -26,12 +26,6 @@ Swift Package Manager, in Xcode (File → Add Package Dependencies) or in `Packa
 .package(url: "https://github.com/kontextso/sdk-swift-video.git", from: "0.1.0")
 ```
 
-CocoaPods:
-
-```ruby
-pod 'KontextVideoSDK', '~> 0.1'
-```
-
 The SDK ships a privacy manifest. If you let it show the App Tracking Transparency dialog
 (`requestTrackingAuthorization: true`), add `NSUserTrackingUsageDescription` to your Info.plist.
 

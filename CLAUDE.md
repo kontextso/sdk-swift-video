@@ -4,8 +4,8 @@ Guidance for Claude Code in this repository.
 
 ## Project
 
-Kontext Video SDK for iOS: overlay, pause and linear ads in video-first apps. Swift 5.9, iOS 14+, SPM and
-CocoaPods (`KontextVideoSDK`). The contract is the Notion document *Video Ads API & SDK v2* and its subpage
+Kontext Video SDK for iOS: overlay, pause and linear ads in video-first apps. Swift 5.9, iOS 14+, Swift Package
+Manager only (CocoaPods trunk is read-only from December 2026). The contract is the Notion document *Video Ads API & SDK v2* and its subpage
 *Video Ads SDK Public API*; the public API is frozen for manual-mode v1. Timed mode (windows, `nextRequestAt`, the playhead clock)
 is specified on the Notion pages but deliberately not in the SDK yet; the wire's timed-mode fields decode and are ignored.
 

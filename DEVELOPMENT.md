@@ -30,7 +30,6 @@ sdk-swift-video/
 │   └── PrivacyInfo.xcprivacy
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
 ├── Package.swift            SPM manifest
-├── KontextVideoSDK.podspec  CocoaPods manifest
 ├── CHANGELOG.md, RELEASING.md
 └── KontextKit-v2-updates.md what the next KontextKit should change, and where this SDK works around it
 ```
