@@ -1,5 +1,6 @@
 import Foundation
 import KontextKit
+import UIKit
 
 /// The `os` object of a request. KontextKit's names are the API's: `ios`, `ipados`, `tvos`.
 struct OSInfo: Encodable, Sendable {
@@ -54,5 +55,60 @@ struct AttributionIds: Encodable, Sendable {
             skan: SKAdNetworkIdsProvider.collect(),
             aak: AdAttributionKitIdsProvider.collect()
         )
+    }
+}
+
+/// The `screen` object of an ads request, in points; the server multiplies by `dpr` where OpenRTB wants
+/// physical pixels.
+struct ScreenInfo: Encodable, Sendable {
+    let width: Int
+    let height: Int
+    let dpr: Double
+    let darkMode: Bool
+
+    @MainActor
+    static func current() -> ScreenInfo {
+        let info = ScreenInfoProvider.collect()
+        return ScreenInfo(width: info.width, height: info.height, dpr: info.dpr, darkMode: info.darkMode)
+    }
+}
+
+/// The `power` object of an ads request.
+struct PowerInfo: Encodable, Sendable {
+    /// 0–100; `nil` when the device does not report it.
+    let batteryLevel: Int?
+    let batteryState: String
+    let lowPowerMode: Bool
+
+    @MainActor
+    static func current() -> PowerInfo {
+        let info = BatteryInfoProvider.collect()
+        return PowerInfo(batteryLevel: info.batteryLevel.map { Int($0.rounded()) }, batteryState: info.batteryState, lowPowerMode: info.lowPowerMode)
+    }
+}
+
+/// The `audio` object of an ads request.
+struct AudioInfo: Encodable, Sendable {
+    /// 0–100.
+    let volume: Int
+    let muted: Bool
+
+    @MainActor
+    static func current() -> AudioInfo {
+        let info = AudioInfoProvider.collect()
+        return AudioInfo(volume: info.volume, muted: info.muted)
+    }
+}
+
+/// The `network` object of an ads request: only the user agent the SDK builds, as a browser would
+/// (`bundleId/version (model; iOS version) KontextVideo/version`).
+struct NetworkInfo: Encodable, Sendable {
+    let userAgent: String
+
+    @MainActor
+    static func current() -> NetworkInfo {
+        let app = AppInfo.current()
+        let hardware = HardwareInfo.current()
+        return NetworkInfo(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.version)")
     }
 }

@@ -87,50 +87,16 @@ public enum FormatOptions: Encodable, Sendable, Equatable {
 
 /// The `device` object of an ads request: what `/init` sends, plus screen, power, audio and network.
 struct AdsDevice: Encodable, Sendable {
-    struct Screen: Encodable, Sendable {
-        let width: Int
-        let height: Int
-        let dpr: Double
-        let darkMode: Bool
-    }
-
-    struct Power: Encodable, Sendable {
-        let batteryLevel: Int?
-        let batteryState: String
-        let lowPowerMode: Bool
-    }
-
-    struct Audio: Encodable, Sendable {
-        let volume: Int
-        let muted: Bool
-    }
-
-    struct Network: Encodable, Sendable {
-        let userAgent: String
-    }
-
     let os: OSInfo
     let hardware: HardwareInfo
-    let screen: Screen
-    let power: Power
-    let audio: Audio
-    let network: Network
+    let screen: ScreenInfo
+    let power: PowerInfo
+    let audio: AudioInfo
+    let network: NetworkInfo
 
     @MainActor
     static func current() -> AdsDevice {
-        let screen = ScreenInfoProvider.collect()
-        let battery = BatteryInfoProvider.collect()
-        let audio = AudioInfoProvider.collect()
-        let app = AppInfo.current()
-        let hardware = HardwareInfo.current()
-        return AdsDevice(
-            os: .current(),
-            hardware: hardware,
-            screen: Screen(width: screen.width, height: screen.height, dpr: screen.dpr, darkMode: screen.darkMode),
-            power: Power(batteryLevel: battery.batteryLevel.map { Int($0.rounded()) }, batteryState: battery.batteryState, lowPowerMode: battery.lowPowerMode),
-            audio: Audio(volume: audio.volume, muted: audio.muted),
-            network: Network(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.version)")
-        )
+        AdsDevice(os: .current(), hardware: .current(), screen: .current(), power: .current(), audio: .current(), network: .current())
     }
 }
 
