@@ -24,8 +24,8 @@ sdk-swift-video/
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── Placement.swift                             Placement<Options>; the overlay / pause / linear aliases
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
-│   ├── API/          the wire: requests, responses, the ad payload, device info, privacy, SDKInfo, the client
-│   ├── Rendering/    the WebView bridge (frame protocol), the linear-ad controller, the tracker, the viewability meter
+│   ├── API/          the wire: requests, responses (incl. the error body), the ad payload, device info, privacy, SDKInfo, the client
+│   ├── Rendering/    the WebView bridge and its events (frame protocol), the render budget, the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      Logger, Environment (the test seams), the debug reporter
 │   └── PrivacyInfo.xcprivacy
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
