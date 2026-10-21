@@ -39,7 +39,7 @@ struct SupportTests {
     @Test func delegateMethodsAllHaveDefaults() async throws {
         final class Minimal: VideoAdDelegate {}
         let delegate = Minimal()
-        let ad = VideoAd(ad: try Fixtures.payload(Fixtures.ad(id: "d1")))
+        let ad = VideoAd(facts: try Fixtures.facts(Fixtures.ad(id: "d1")))
         delegate.videoAd(ad, didInvalidate: .expired)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: "creative"))
@@ -49,7 +49,7 @@ struct SupportTests {
     }
 
     @Test func delegateIsHeldWeakly() async throws {
-        let ad = VideoAd(ad: try Fixtures.payload(Fixtures.ad(id: "d2")))
+        let ad = VideoAd(facts: try Fixtures.facts(Fixtures.ad(id: "d2")))
         var delegate: RecordingDelegate? = RecordingDelegate()
         ad.delegate = delegate
         #expect(ad.delegate != nil)

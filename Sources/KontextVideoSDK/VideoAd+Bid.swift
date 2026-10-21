@@ -20,9 +20,8 @@ extension VideoAd {
         public var skipOffset: TimeInterval? { facts.skipOffset }
         public var reward: Reward? { facts.reward }
 
+        /// Everything the SDK knows about the ad; handed to the `VideoAd` at `load()`.
         let facts: Facts
-        /// The wire object, handed to the `VideoAd` at `load()`.
-        let payload: AdPayload
         /// The `VideoAds` that fetched it; renders it at `load()`.
         weak var owner: VideoAds?
         /// The ad `load()` produced, so a second `load()` returns the same one: a bid is not a factory.
@@ -33,7 +32,6 @@ extension VideoAd {
         private var isLoading = false
 
         init(payload: AdPayload, receivedAt: TimeInterval, owner: VideoAds) {
-            self.payload = payload
             facts = Facts(ad: payload, receivedAt: receivedAt)
             self.owner = owner
         }
@@ -75,8 +73,9 @@ extension VideoAd {
         }
     }
 
-    /// The read-only facts of an ad, built once from the wire object; `VideoAd` and `Bid` both expose
-    /// them. Times are seconds, whatever the wire sends.
+    /// The ad as the SDK knows it, built once from the wire object; the only place that reads `AdPayload`.
+    /// `Bid` and `VideoAd` both forward the public facts, in seconds whatever the wire sends; the rest is
+    /// what the renderer needs.
     struct Facts {
         let id: String
         let placementId: String
@@ -89,6 +88,12 @@ extension VideoAd {
         let duration: TimeInterval?
         let skipOffset: TimeInterval?
         let reward: Reward?
+        /// What the page renders; decides the viewability clock, the video events and the error codes.
+        let creative: AdPayload.Creative
+        /// The frame page to show in the WebView.
+        let frameURL: URL
+        /// The beacons; the SDK fires each once.
+        let tracking: [AdPayload.TrackingEvent]
         /// `ProcessInfo.systemUptime` at receipt: `expires` counts from here. Never a `Date`: the monotonic
         /// clock cannot be set by the user, so a changed device clock cannot expire an ad early or late.
         let receivedAt: TimeInterval
@@ -102,6 +107,11 @@ extension VideoAd {
             placementId = ad.placementId
             format = ad.format
             price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
+            creative = ad.creative
+            switch ad.rendering {
+            case .frame(let url): frameURL = url
+            }
+            tracking = ad.tracking
             switch ad.details {
             case .overlay(let position, let sizes, let duration):
                 switch position {

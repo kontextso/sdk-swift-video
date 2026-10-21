@@ -121,6 +121,11 @@ enum Fixtures {
         try JSONDecoder().decode(AdPayload.self, from: JSONSerialization.data(withJSONObject: ad))
     }
 
+    /// The ad as `VideoAd` takes it, received now.
+    static func facts(_ ad: [String: Any]) throws -> VideoAd.Facts {
+        VideoAd.Facts(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
+    }
+
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as! [String: Any]
     }
