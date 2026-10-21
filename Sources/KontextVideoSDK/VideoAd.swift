@@ -4,7 +4,7 @@ import UIKit
 /// One ad, returned by a placement's `load`. The app owns it: keep a reference until it is shown, drop it
 /// and it is gone (the placement only holds it weakly). An ad is shown at most once.
 ///
-/// Read-only facts about the ad for the app's own decisions (an auction, a debug screen); times are
+/// Read-only properties of the ad for the app's own decisions (an auction, a debug screen); times are
 /// seconds, whatever the wire sends.
 @MainActor
 public final class VideoAd {
@@ -58,27 +58,27 @@ public final class VideoAd {
         case containerTooSmall
     }
 
-    public var id: String { facts.id }
-    public var placementId: String { facts.placementId }
-    public var format: AdFormat { facts.format }
-    public var price: Price { facts.price }
+    public var id: String { info.id }
+    public var placementId: String { info.placementId }
+    public var format: AdFormat { info.format }
+    public var price: Price { info.price }
     /// `nil` for a linear ad.
-    public var position: Position? { facts.position }
+    public var position: Position? { info.position }
     /// `nil` for a linear ad and for a full-screen pause ad.
     /// Before `show`: the default variant. After `show`: the variant the SDK chose for the view.
-    public var size: Size? { chosenSize ?? facts.size }
+    public var size: Size? { chosenSize ?? info.size }
     /// Every size the creative was built for, the default first (`nil` for a linear ad and a
     /// full-screen pause ad). The SDK picks the best fit for the view at `show`: the largest that fits
     /// without scaling, else the one with the best scale still at or above 50 %.
-    public var sizes: [Size] { facts.sizes }
+    public var sizes: [Size] { info.sizes }
     private var chosenSize: Size?
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
-    public var duration: TimeInterval? { facts.duration }
+    public var duration: TimeInterval? { info.duration }
     /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
-    public var skipOffset: TimeInterval? { facts.skipOffset }
+    public var skipOffset: TimeInterval? { info.skipOffset }
     /// Set on a rewarded linear ad.
-    public var reward: Reward? { facts.reward }
+    public var reward: Reward? { info.reward }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -106,7 +106,7 @@ public final class VideoAd {
     static let minimumScale: CGFloat = 0.5
 
     /// The ad as the SDK knows it, shared with `Bid`; the expiry counts from the response.
-    let facts: Facts
+    let info: Info
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
     /// once, so `load` can return a ready ad.
     let bridge: FrameBridge
@@ -129,16 +129,16 @@ public final class VideoAd {
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private var durationTask: Task<Void, Never>?
 
-    /// `facts` are the bid's, so the expiry counts from the response, not from the moment the bid was
+    /// `info` is the bid's, so the expiry counts from the response, not from the moment the bid was
     /// loaded. The page starts loading at once.
-    init(facts: Facts) {
-        self.facts = facts
-        bridge = FrameBridge(adId: facts.id, url: facts.frameURL, isVideo: facts.creative == .video)
-        tracker = Tracker(adId: facts.id, entries: facts.tracking)
+    init(info: Info) {
+        self.info = info
+        bridge = FrameBridge(adId: info.id, url: info.frameURL, isVideo: info.creative == .video)
+        tracker = Tracker(adId: info.id, entries: info.tracking)
         tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
-        let remaining = facts.remainingLifetime
+        let remaining = info.remainingLifetime
         expiryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !wasShown else { return }
@@ -244,20 +244,20 @@ public final class VideoAd {
         if let owner, owner.isShowingAnAd { throw VideoAdError.anotherAdShowing }
         if isExpired { invalidate(.expired) }
         if let reason = invalidationReason { throw VideoAdError.invalidated(reason) }
-        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: facts.creative == .video ? 400 : 500)) }
+        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: info.creative == .video ? 400 : 500)) }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
     /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
     /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
-        guard position != .fullscreen, let defaultSize = facts.size else { return bounds }
+        guard position != .fullscreen, let defaultSize = info.size else { return bounds }
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
-        let unscaled = facts.sizes.filter { fit($0) >= 1 }
+        let unscaled = info.sizes.filter { fit($0) >= 1 }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
-            ?? facts.sizes.max { fit($0) < fit($1) }
+            ?? info.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
@@ -290,7 +290,7 @@ public final class VideoAd {
         // creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        if facts.creative == .image {
+        if info.creative == .image {
             recordImpression()
         }
         // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then
@@ -385,7 +385,7 @@ public final class VideoAd {
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
     private func startMeter() {
         guard !hasEnded, meter == nil else { return }
-        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: facts.creative == .video ? 2 : 1)
+        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: info.creative == .video ? 2 : 1)
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -550,7 +550,7 @@ public final class VideoAd {
 
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
-        facts.isExpired
+        info.isExpired
     }
 
     /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not

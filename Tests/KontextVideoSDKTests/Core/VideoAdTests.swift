@@ -29,7 +29,7 @@ struct VideoAdTests {
         _ = await harness.initialize()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         owners.all.append(ads)
-        let ad = VideoAd(facts: try Fixtures.facts(payload))
+        let ad = VideoAd(info: try Fixtures.info(payload))
         ad.owner = ads
         if loaded {
             ad.bridge.receive(message("ad.loaded", adId: ad.id), from: sender)
@@ -67,7 +67,7 @@ struct VideoAdTests {
         #expect(ad.duration == nil)
         #expect(ad.skipOffset == nil)
         #expect(ad.reward == nil)
-        let remaining = ad.facts.remainingLifetime
+        let remaining = ad.info.remainingLifetime
         #expect(remaining > 85 && remaining <= 90, "expires (ms from receipt) in seconds, counted from the response")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
@@ -194,7 +194,7 @@ struct VideoAdTests {
     @Test func showWhileAnotherAdOfTheVideoAdsIsOnScreenThrowsAnotherAdShowing() async throws {
         let (overlay, _, ads) = try await makeAd(Fixtures.overlayAd(id: "p9a"))
         try overlay.show(in: harness.player.view)
-        let pause = VideoAd(facts: try Fixtures.facts(Fixtures.ad(id: "p9b")))
+        let pause = VideoAd(info: try Fixtures.info(Fixtures.ad(id: "p9b")))
         pause.owner = ads
         pause.bridge.receive(message("ad.loaded", adId: pause.id), from: sender)
         do { try pause.show(in: harness.player.view) } catch VideoAdError.anotherAdShowing {} catch { Issue.record("expected anotherAdShowing, got \(error)") }
@@ -621,7 +621,7 @@ struct VideoAdTests {
         weak var weakAd: VideoAd?
         let delegate = RecordingDelegate()
         try autoreleasepool {
-            let ad = VideoAd(facts: try Fixtures.facts(Fixtures.ad(id: "p20")))
+            let ad = VideoAd(info: try Fixtures.info(Fixtures.ad(id: "p20")))
             ad.owner = ads
             ad.delegate = delegate
             send(ad, "ad.loaded")

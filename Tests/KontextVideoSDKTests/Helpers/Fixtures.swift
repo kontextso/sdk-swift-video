@@ -122,8 +122,8 @@ enum Fixtures {
     }
 
     /// The ad as `VideoAd` takes it, received now.
-    static func facts(_ ad: [String: Any]) throws -> VideoAd.Facts {
-        VideoAd.Facts(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
+    static func info(_ ad: [String: Any]) throws -> VideoAd.Info {
+        VideoAd.Info(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
     }
 
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {

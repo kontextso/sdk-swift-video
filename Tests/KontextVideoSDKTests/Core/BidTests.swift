@@ -48,7 +48,7 @@ struct BidTests {
         let ad = try await bid.load()
         #expect(ad.isReady)
         #expect(ad.id == bid.id)
-        #expect(ad.facts.receivedAt == bid.facts.receivedAt, "the expiry counts from the response, not from load()")
+        #expect(ad.info.receivedAt == bid.info.receivedAt, "the expiry counts from the response, not from load()")
         #expect(pages.served == ["img-b2"])
         #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("loaded") })
         #expect(bid.isPending == false)

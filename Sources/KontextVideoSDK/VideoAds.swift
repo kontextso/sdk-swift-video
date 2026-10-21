@@ -216,7 +216,7 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let id = bid.placementId
         try checkRenderBudget(placementId: id)
-        let videoAd = VideoAd(facts: bid.facts)
+        let videoAd = VideoAd(info: bid.info)
         RenderedAds.add(videoAd)
         videoAd.owner = self
         current[id] = WeakAd(videoAd)
