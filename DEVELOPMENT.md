@@ -19,7 +19,8 @@ sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
 │   ├── VideoAds.swift                              one video's ads: placements, loading, the playhead
-│   ├── VideoAd.swift, VideoAd+Bid.swift            one ad; the server's answer before rendering (fetch())
+│   ├── VideoAd.swift                               one ad: the lifecycle from load to didEnd
+│   ├── VideoAd+Info.swift, VideoAd+Bid.swift       the ad as the SDK knows it (wire → seconds); the unrendered answer to fetch()
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── Placement.swift                             Placement<Options>; the overlay / pause / linear aliases
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
