@@ -151,7 +151,7 @@ struct SDKHarness {
         KontextVideo.initRetryDelay = 2_000_000_000
         FrameBridge.loadTimeout = 10
         ViewabilityMeter.interval = 0.25
-        DebugReporter.interval = 1
+        DebugReporter.interval = 0.1
         DebugReporter.shared.isEnabled = false
     }
 }
