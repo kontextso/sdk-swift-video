@@ -149,12 +149,22 @@ public final class KontextVideo {
         initTask = Task { await runInit(configuration: configuration) }
     }
 
-    /// The ATT status is the fourth targeting input, and the only one the app does not set: re-read
-    /// whenever the app becomes active (the publisher's own prompt, the viewer in Settings) and after
-    /// the SDK's prompt (`noteTrackingAuthorization`); a change discards pending ads like the others.
+    /// The ATT status is the fourth targeting input, and the only one the app does not set. The last
+    /// value the SDK acted on; read when `shared` is first touched, which may be before the app's own
+    /// ATT prompt, and that is fine: the first comparison then sees the answer as a change.
     private var lastTrackingStatus = ATTrackingManager.trackingAuthorizationStatus
+    /// The `didBecomeActive` subscription. The token is the subscription: kept so a second call cannot
+    /// add a second observer, and so it could be removed; `shared` lives as long as the app, so it never is.
     private var activityObserver: (any NSObjectProtocol)?
 
+    /// Re-reads the ATT status whenever the app becomes active, because it can change while the app is
+    /// not: the viewer flips the switch in Settings > Privacy > Tracking (the app is in the background
+    /// for that), or an ATT prompt is answered (a system dialog, during which the app is not active),
+    /// whether the publisher's own or the SDK's. Nothing tells the SDK; `didBecomeActiveNotification`
+    /// is the moment to look. A changed status is a targeting change like `user`, `regulatory` and
+    /// `variantId`: the IFA may now be present or gone, so every prefetched ad was requested with stale
+    /// targeting and is discarded (`noteTrackingAuthorization`, which the SDK's own prompt path in
+    /// `VideoAds.fetch` also calls, so both routes end in one place).
     private func observeTrackingAuthorization() {
         guard activityObserver == nil else { return }
         activityObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
