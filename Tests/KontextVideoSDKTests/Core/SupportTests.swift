@@ -17,7 +17,6 @@ struct SupportTests {
             (.placementBusy, "the placement already has an ad loading, or loaded and not yet shown"),
             (.invalidPlacement(id: "nope", message: "unknown placementId \"nope\""), "placement \"nope\": unknown placementId \"nope\""),
             (.noFill(reason: "noAdMatch"), "no fill (noAdMatch)"),
-            (.tooManyLoadedAds, "3 rendered ads are waiting to be shown; show or drop one first"),
             (.anotherAdShowing, "another ad of this VideoAds is on screen; dismiss it first"),
             (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
             (.alreadyShown, "the ad was already shown"),

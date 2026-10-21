@@ -123,8 +123,6 @@ struct SDKHarness {
         server.on("/v2/debug", .empty())
         KontextVideo.initRetryDelay = 10_000_000
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
-        VideoAds.renderBudget = 3
-        RenderedAds.reset()
         Environment.isApplicationActive = { true }
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }

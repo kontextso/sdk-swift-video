@@ -24,11 +24,6 @@ public final class VideoAds {
     /// The bounds of the last view an ad of this `VideoAds` was shown in: the real box, used for every
     /// request after the first `show(in:)` instead of the creation-time hint.
     private var lastShownBox: CGSize?
-    /// The render budget: how many rendered, unshown ads may exist at a time across all `VideoAds` of
-    /// the app. A rendered ad is a live WebView with its media; a fetched bid is not rendered. A constant
-    /// in spirit; a variable so the tests can set it (`nonisolated(unsafe)`: written only by the test
-    /// harness before anything runs, read from `VideoAdError`'s description off the main actor).
-    nonisolated(unsafe) static var renderBudget = 3
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
 
@@ -146,17 +141,8 @@ public final class VideoAds {
     /// `fetch` then `load` on the bid, in one call: the ad, ready to show, or an error from either step.
     func load(_ format: FormatRequest) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
-        try checkRenderBudget(placementId: format.placementId)   // before the request: a load that cannot render asks for nothing
         let bid = try await fetch(format)
         return try await bid.load()
-    }
-
-    /// The render budget: at most `renderBudget` rendered, unshown ads across the app's `VideoAds`.
-    private func checkRenderBudget(placementId: String) throws {
-        guard RenderedAds.count < Self.renderBudget else {
-            Logger.warning("\(placementId) for \(content.id): \(Self.renderBudget) rendered ads are already waiting to be shown; load refused")
-            throw VideoAdError.tooManyLoadedAds
-        }
     }
 
     /// One request for one placement, run on the caller's task so cancelling that task cancels the request.
@@ -215,9 +201,7 @@ public final class VideoAds {
     func render(_ bid: VideoAd.Bid) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let id = bid.placementId
-        try checkRenderBudget(placementId: id)
         let videoAd = VideoAd(info: bid.info)
-        RenderedAds.add(videoAd)
         videoAd.owner = self
         current[id] = WeakAd(videoAd)
         bids[id] = nil

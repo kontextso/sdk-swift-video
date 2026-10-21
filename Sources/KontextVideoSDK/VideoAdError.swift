@@ -17,10 +17,6 @@ public enum VideoAdError: Error, Sendable {
     /// The placement already has an ad loading, or loaded but not shown. One unshown ad per placement at
     /// a time: show it or drop it, then load again. An ad on screen does not block the next load.
     case placementBusy
-    /// Three rendered, unshown ads already exist across the app's `VideoAds` (the render budget: a
-    /// rendered ad is a live WebView with its media; fetched bids do not count). Show or drop one first;
-    /// to prefetch several episodes, `fetch()` early and `bid.load()` near presentation.
-    case tooManyLoadedAds
     /// No placement with this id exists for the publisher token, or it has another format than the one
     /// requested. An integration bug: fix the id or the dashboard. `message` is the server's sentence.
     case invalidPlacement(id: String, message: String)
@@ -66,8 +62,6 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the SDK is disabled by the server (\(reason))"
         case .placementBusy:
             return "the placement already has an ad loading, or loaded and not yet shown"
-        case .tooManyLoadedAds:
-            return "\(VideoAds.renderBudget) rendered ads are waiting to be shown; show or drop one first"
         case .invalidPlacement(let id, let message):
             return "placement \"\(id)\": \(message)"
         case .noFill(let reason):

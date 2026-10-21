@@ -281,7 +281,6 @@ public final class VideoAd {
 
     private func begin(startMeter: Bool = true) {
         wasShown = true
-        RenderedAds.remove(self)
         expiryTask?.cancel()
         owner?.adDidBeginShowing(self, in: shownBox)
         bridge.show()
@@ -568,7 +567,6 @@ public final class VideoAd {
         }
         guard invalidationReason == nil else { return }
         invalidationReason = reason
-        RenderedAds.remove(self)
         expiryTask?.cancel()
         bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")

@@ -102,7 +102,8 @@ struct VideoAdsTests {
         #expect(players.map { $0["height"] as? Int } == [220, 390])
     }
 
-    @Test func renderBudgetRefusesAFourthUnshownAdAcrossVideoAds() async throws {
+    @Test func unshownAdsAcrossVideoAdsAreNotCounted() async throws {
+        // No app-wide render budget: one pending ad per placement is the only bound.
         let ads = await makeAds()
         let other = harness.player.ads(for: .init(id: "ep-next", language: "en"))
         harness.serve(Fixtures.ad(id: "img-b1"))
@@ -112,15 +113,9 @@ struct VideoAdsTests {
         harness.serve(Fixtures.ad(id: "img-b3"))
         let c = try await other.pausePlacement("pause").load()
         harness.serve(Fixtures.ad(id: "img-b4"))
-        let requests = harness.server.requests(to: "/v2/video/ads").count
-        let error = await loadError { try await other.overlayPlacement("overlay").load() }
-        guard case .tooManyLoadedAds = error else { Issue.record("expected tooManyLoadedAds, got \(String(describing: error))"); return }
-        #expect(harness.server.requests(to: "/v2/video/ads").count == requests, "refused before any request")
-        let bid = try await other.overlayPlacement("overlay").fetch()
-        #expect(bid.isPending, "fetch is not rendering and is not budgeted")
-        try a.show(in: harness.player.view)
-        _ = try await bid.load()
-        withExtendedLifetime((a, b, c)) {}
+        let d = try await other.overlayPlacement("overlay").load()
+        #expect(a.isReady && b.isReady && c.isReady && d.isReady)
+        withExtendedLifetime((a, b, c, d)) {}
         other.destroy()
     }
 
