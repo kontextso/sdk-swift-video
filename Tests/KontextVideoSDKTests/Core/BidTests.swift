@@ -161,6 +161,15 @@ struct BidTests {
             #expect(code == 502, "the page's own code")
         }
         #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("error") })
+        #expect(bid.invalidationReason == .creativeFailed(code: 502))
+        #expect(bid.isPending == false)
+        do {
+            _ = try await bid.load()
+            Issue.record("expected invalidated(.creativeFailed)")
+        } catch VideoAdError.invalidated(.creativeFailed(let code)) {
+            #expect(code == 502, "the bid is done; it is not rendered a second time")
+        }
+        #expect(pages.served == ["err-b13"], "one page load, not two")
         harness.serve(Fixtures.ad(id: "img-b14"))
         _ = try await ads.pausePlacement("pause").fetch()
     }

@@ -37,9 +37,10 @@ extension VideoAd {
         }
 
         /// Renders the creative and returns the ad, ready to show, exactly as a placement's `load()`
-        /// would. Throws `creativeFailed(code:)` when the creative fails or times out,
-        /// `invalidated(.expired)` once the lifetime ran out, `invalidated(.targetingChanged)` when
-        /// targeting changed meanwhile, `destroyed`, or `CancellationError`.
+        /// would. Throws `creativeFailed(code:)` when the creative fails or times out (the bid is then
+        /// done: a later `load()` throws `invalidated(.creativeFailed)`), `invalidated(.expired)` once the
+        /// lifetime ran out, `invalidated(.targetingChanged)` when targeting changed meanwhile,
+        /// `destroyed`, or `CancellationError`.
         public func load() async throws -> VideoAd {
             if let ad { return ad }
             guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
@@ -54,9 +55,14 @@ extension VideoAd {
             }
             isLoading = true
             defer { isLoading = false }
-            let ad = try await owner.render(self)
-            self.ad = ad
-            return ad
+            do {
+                let ad = try await owner.render(self)
+                self.ad = ad
+                return ad
+            } catch VideoAdError.creativeFailed(let code) {
+                invalidate(.creativeFailed(code: code))
+                throw VideoAdError.creativeFailed(code: code)
+            }
         }
 
         /// Whether the bid still counts for its placement's one-unshown-ad rule: not loaded yet, not
