@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         // Pre-1.0 KontextKit: pin exact, the same version sdk-swift uses.
-        .package(url: "https://github.com/kontextso/kontextkit-ios.git", exact: "0.1.0"),
+        .package(url: "https://github.com/kontextso/kontextkit-ios.git", exact: "0.2.0"),
     ],
     targets: [
         .target(
