@@ -101,16 +101,16 @@ extension VideoAd {
             id = ad.id
             placementId = ad.placementId
             format = ad.format
-            price = Price(ad.price)
+            price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
             switch ad.details {
             case .overlay(let position, let sizes, let duration):
                 self.position = position == .top ? .top : .bottom
-                self.sizes = sizes.map(Size.init)
+                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 self.duration = duration.map { TimeInterval($0) / 1000 }
                 skipOffset = nil
                 reward = nil
             case .pause(let position, let sizes):
-                self.sizes = sizes.map(Size.init)
+                self.sizes = sizes.map { Size(width: $0.width, height: $0.height) }
                 switch position {
                 case .top: self.position = .top
                 case .bottom: self.position = .bottom
@@ -124,7 +124,7 @@ extension VideoAd {
                 sizes = []
                 self.duration = TimeInterval(duration) / 1000
                 self.skipOffset = skipOffset.map { TimeInterval($0) / 1000 }
-                self.reward = reward.map(Reward.init)
+                self.reward = reward.map { Reward(label: $0.label, amount: $0.amount) }
             }
         }
 
@@ -136,24 +136,5 @@ extension VideoAd {
         var remainingLifetime: TimeInterval {
             max(0, lifetime - (ProcessInfo.processInfo.systemUptime - receivedAt))
         }
-    }
-}
-
-// The wire types never leak: each public fact has one converting initializer.
-private extension VideoAd.Price {
-    init(_ wire: AdPayload.Price) {
-        self.init(value: wire.value, currency: wire.currency, precision: wire.precision == .exact ? .exact : .estimated)
-    }
-}
-
-private extension VideoAd.Size {
-    init(_ wire: AdPayload.Size) {
-        self.init(width: wire.width, height: wire.height)
-    }
-}
-
-private extension VideoAd.Reward {
-    init(_ wire: AdPayload.Reward) {
-        self.init(label: wire.label, amount: wire.amount)
     }
 }
