@@ -5,7 +5,7 @@ enum APIError: Error, CustomStringConvertible {
     /// The request never got an answer: no network, timeout, DNS.
     case transport(URLError)
     /// The server answered with an error status; `errors` is its error body, when it sent one.
-    case http(status: Int, errors: [APIErrorResponse.Item])
+    case http(status: Int, errors: [ErrorResponse.Item])
     /// The answer was not the JSON we expected.
     case decoding(Error)
 

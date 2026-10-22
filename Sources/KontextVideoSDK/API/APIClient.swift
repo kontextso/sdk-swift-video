@@ -35,7 +35,7 @@ struct APIClient: Sendable {
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            let errors = (try? JSONDecoder().decode(APIErrorResponse.self, from: data))?.errors ?? []
+            let errors = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.errors ?? []
             throw APIError.http(status: status, errors: errors)
         }
         if data.isEmpty, let empty = EmptyResponse() as? Response {
