@@ -12,6 +12,11 @@ struct APIErrorResponse: Decodable, Sendable {
         let title: String?
         let detail: String?
 
+        /// The item as one log phrase; `nil` when the server sent none of the three.
+        var summary: String? {
+            title ?? detail ?? code
+        }
+
         private enum CodingKeys: String, CodingKey {
             case status, code, title, detail
         }
@@ -26,11 +31,4 @@ struct APIErrorResponse: Decodable, Sendable {
     }
 
     let errors: [Item]
-}
-
-extension APIErrorResponse.Item {
-    /// The item as one log phrase; `nil` when the server sent none of the three.
-    var summary: String? {
-        title ?? detail ?? code
-    }
 }
