@@ -34,7 +34,12 @@ final class AdLoader<Options: AdOptions> {
             }
             answer = try await ads.fetch(slot: slot, request: wanted)
         }
-        return VideoAd.Bid(answer: answer, slot: slot, ads: ads)
+        // One `Bid` per answer: every call that gets this answer gets this object, so `load()` on any of
+        // them returns the same ad and the answer is never rendered twice.
+        if let bid = slot.heldBid, bid.answer.info.id == answer.info.id { return bid }
+        let bid = VideoAd.Bid(answer: answer, slot: slot, ads: ads)
+        slot.heldBid = bid
+        return bid
     }
 }
 
@@ -79,6 +84,8 @@ final class AdSlot {
     private(set) var held: VideoAd.Answer?
     /// What `held` was asked for with: an `options:` equal to it gets `held`, different ones a new request.
     private(set) var heldRequest: FormatRequest?
+    /// The `Bid` handed out for `held`, so a second call gets the same object, not a second wrapper.
+    var heldBid: VideoAd.Bid?
     /// A no-fill from a request the loader did not make itself (creation, a refetch), thrown once.
     var noFillReason: String?
     /// The ad handed out last, while the app keeps it. An ad on screen does not count.
@@ -100,6 +107,7 @@ final class AdSlot {
     func hold(_ answer: VideoAd.Answer, requestedWith request: FormatRequest) {
         held = answer
         heldRequest = request
+        heldBid = nil
         noFillReason = nil
     }
 
@@ -112,13 +120,14 @@ final class AdSlot {
     func dropHeld() {
         held = nil
         heldRequest = nil
+        heldBid = nil
         noFillReason = nil
     }
 
     /// The answer being rendered is spent; a newer held answer (a fetch replaced it) stays.
     func didStartRendering(_ ad: VideoAd) {
         pendingAd = ad
-        if held?.info.id == ad.id { held = nil; heldRequest = nil }
+        if held?.info.id == ad.id { held = nil; heldRequest = nil; heldBid = nil }
     }
 
     func didFailRendering() { pendingAd = nil }
@@ -139,6 +148,7 @@ final class AdSlot {
         pendingAd = nil
         held = nil
         heldRequest = nil
+        heldBid = nil
         noFillReason = nil
     }
 }

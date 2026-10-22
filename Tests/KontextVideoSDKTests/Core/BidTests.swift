@@ -51,6 +51,18 @@ struct BidTests {
         #expect(pages.served == ["img-p15"])
     }
 
+    @Test func everyCallForTheSameAnswerGetsTheSameBidSoItIsRenderedOnce() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p16"))
+        let pause = try await ads.format(.pause)            // look at the price first
+        let ad = try await ads.format(.pause).load()        // then load through a second call
+        try ad.show(in: harness.player.view)
+        let again = try await pause.load()                  // the first handle, after the ad was shown
+        #expect(again === ad, "the same answer is the same ad, not a second render")
+        #expect(pages.served == ["img-p16"], "one page load")
+        ad.dismiss()
+    }
+
     @Test func linearFactsAreInSeconds() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.linearAd(id: "vid-l1", duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
