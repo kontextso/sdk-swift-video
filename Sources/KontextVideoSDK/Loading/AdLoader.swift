@@ -20,24 +20,24 @@ final class AdLoader<Options: AdOptions> {
         await slot.inFlight?.value
         guard !ads.isDestroyed else { throw VideoAdError.destroyed }
         let wanted = options?.request ?? slot.declared ?? Options.default.request
-        let answer: VideoAd.Answer
+        let received: VideoAd.ReceivedAd
         if options != nil, slot.held != nil, slot.heldRequest != wanted {
             // Asked for other options than the held answer was: it does not answer this; ask anew.
             slot.dropHeld()
-            answer = try await ads.fetch(slot: slot, request: wanted)
+            received = try await ads.fetch(slot: slot, request: wanted)
         } else if let held = slot.held, !held.isExpired {
-            answer = held
+            received = held
         } else {
             if slot.held != nil { slot.dropHeld() }
             if options == nil || wanted == slot.declared, let reason = slot.takeNoFillReason() {
                 throw VideoAdError.noFill(reason: reason)
             }
-            answer = try await ads.fetch(slot: slot, request: wanted)
+            received = try await ads.fetch(slot: slot, request: wanted)
         }
         // One `Bid` per answer: every call that gets this answer gets this object, so `load()` on any of
         // them returns the same ad and the answer is never rendered twice.
-        if let bid = slot.heldBid, bid.answer.info.id == answer.info.id { return bid }
-        let bid = VideoAd.Bid(answer: answer, slot: slot, ads: ads)
+        if let bid = slot.heldBid, bid.received.info.id == received.info.id { return bid }
+        let bid = VideoAd.Bid(received: received, slot: slot, ads: ads)
         slot.heldBid = bid
         return bid
     }

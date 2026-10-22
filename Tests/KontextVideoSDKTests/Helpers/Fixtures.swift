@@ -135,8 +135,8 @@ enum Fixtures {
 
     /// The ad as `VideoAd` takes it, received now.
     /// The answer as `VideoAd` takes it, received now.
-    static func answer(_ ad: [String: Any]) throws -> VideoAd.Answer {
-        VideoAd.Answer(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
+    static func received(_ ad: [String: Any]) throws -> VideoAd.ReceivedAd {
+        VideoAd.ReceivedAd(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
     }
 
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {

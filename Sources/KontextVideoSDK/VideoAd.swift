@@ -59,7 +59,7 @@ public final class VideoAd {
     }
 
     /// The facts, as a loader's `info` gave them before rendering; `size` may differ after `show`.
-    public var info: Info { answer.info }
+    public var info: Info { received.info }
     public var id: String { info.id }
     public var format: AdFormat { info.format }
     public var price: Price { info.price }
@@ -107,7 +107,7 @@ public final class VideoAd {
     static let minimumScale: CGFloat = 0.5
 
     /// The server's answer this ad renders; the expiry counts from the response.
-    let answer: Answer
+    let received: ReceivedAd
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
     /// once, so `load` can return a ready ad.
     let bridge: FrameBridge
@@ -131,14 +131,14 @@ public final class VideoAd {
     private var durationTask: Task<Void, Never>?
 
     /// The expiry counts from the response, not from this moment. The page starts loading at once.
-    init(answer: Answer) {
-        self.answer = answer
-        bridge = FrameBridge(adId: answer.info.id, url: answer.frameURL, isVideo: answer.creative == .video)
-        tracker = Tracker(adId: answer.info.id, entries: answer.tracking)
+    init(received: ReceivedAd) {
+        self.received = received
+        bridge = FrameBridge(adId: received.info.id, url: received.frameURL, isVideo: received.creative == .video)
+        tracker = Tracker(adId: received.info.id, entries: received.tracking)
         tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
-        let remaining = answer.remainingLifetime
+        let remaining = received.remainingLifetime
         expiryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !wasShown else { return }
@@ -244,7 +244,7 @@ public final class VideoAd {
         if let owner, owner.isShowingAnAd { throw VideoAdError.anotherAdShowing }
         if isExpired { invalidate(.expired) }
         if let reason = invalidationReason { throw VideoAdError.invalidated(reason) }
-        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: answer.creative == .video ? 400 : 500)) }
+        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: received.creative == .video ? 400 : 500)) }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
@@ -289,7 +289,7 @@ public final class VideoAd {
         // creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        if answer.creative == .image {
+        if received.creative == .image {
             recordImpression()
         }
         // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then
@@ -384,7 +384,7 @@ public final class VideoAd {
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
     private func startMeter() {
         guard !hasEnded, meter == nil else { return }
-        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: answer.creative == .video ? 2 : 1)
+        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: received.creative == .video ? 2 : 1)
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -549,7 +549,7 @@ public final class VideoAd {
 
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
-        answer.isExpired
+        received.isExpired
     }
 
     /// Whether this ad still counts for its loader's one-unshown-ad rule: loading, or loaded and not

@@ -10,7 +10,7 @@ final class AdSlot {
     /// A request that will fill this slot (the creation-time one, a refetch), while it runs; the loader waits for it.
     var inFlight: Task<Void, Never>?
     /// The server's answer waiting to be rendered: the SDK's, nobody else has it.
-    private(set) var held: VideoAd.Answer?
+    private(set) var held: VideoAd.ReceivedAd?
     /// What `held` was asked for with: an `options:` equal to it gets `held`, different ones a new request.
     private(set) var heldRequest: FormatRequest?
     /// The `Bid` handed out for `held`, so a second call gets the same object, not a second wrapper.
@@ -33,8 +33,8 @@ final class AdSlot {
         isLoading || pendingAd?.isPendingUnshown == true
     }
 
-    func hold(_ answer: VideoAd.Answer, requestedWith request: FormatRequest) {
-        held = answer
+    func hold(_ received: VideoAd.ReceivedAd, requestedWith request: FormatRequest) {
+        held = received
         heldRequest = request
         heldBid = nil
         noFillReason = nil

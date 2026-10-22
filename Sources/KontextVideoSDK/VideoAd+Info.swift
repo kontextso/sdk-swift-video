@@ -1,7 +1,7 @@
 import Foundation
 
 extension VideoAd {
-    /// The facts of an ad, as the app sees them before and after rendering: what a loader's `info` gives
+    /// The facts of an ad, as the app sees them before and after rendering: what a `Bid` gives
     /// and what the `VideoAd` reports. Times are seconds, whatever the wire sends.
     public struct Info: Sendable, Equatable {
         public let id: String
@@ -22,9 +22,9 @@ extension VideoAd {
         public let reward: Reward?
     }
 
-    /// The server's answer for one format, as the SDK keeps it: the public `info`, what the renderer
+    /// An ad as the server sent it, before rendering, as the SDK keeps it: the public `info`, what the renderer
     /// needs, and the clocks. Built once from the wire object; the only place that reads `AdPayload`.
-    struct Answer {
+    struct ReceivedAd {
         let info: Info
         /// What the page renders; decides the viewability clock, the video events and the error codes.
         let creative: AdPayload.Creative

@@ -97,7 +97,7 @@ public final class VideoAds {
             for slot in slots {
                 guard let asked = formats.first(where: { $0.format == slot.format }) else { continue }
                 do {
-                    slot.hold(try answer(from: response, for: slot.format), requestedWith: asked)
+                    slot.hold(try receivedAd(from: response, for: slot.format), requestedWith: asked)
                 } catch VideoAdError.noFill(let reason) {
                     slot.noFillReason = reason
                 } catch {
@@ -179,7 +179,7 @@ public final class VideoAds {
     /// One request for one format, run on the caller's task so cancelling that task cancels the request.
     /// Returns the server's answer, held by the slot, nothing rendered, or throws: no fill, a failed
     /// request, a busy loader, an SDK that is not ready. Waits for `/config` when that is still in flight.
-    func fetch(slot: AdSlot, request formatRequest: FormatRequest) async throws -> VideoAd.Answer {
+    func fetch(slot: AdSlot, request formatRequest: FormatRequest) async throws -> VideoAd.ReceivedAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let format = slot.format
@@ -190,9 +190,9 @@ public final class VideoAds {
         slot.isLoading = true
         defer { slot.isLoading = false }
         let response = try await request([formatRequest])
-        let answer = try answer(from: response, for: format)
-        slot.hold(answer, requestedWith: formatRequest)
-        return answer
+        let received = try receivedAd(from: response, for: format)
+        slot.hold(received, requestedWith: formatRequest)
+        return received
     }
 
     /// The request pipeline every fetch shares: wait for `/config`, read the ATT status, build and send.
@@ -225,7 +225,7 @@ public final class VideoAds {
     }
 
     /// One format's answer, or its no-fill thrown.
-    private func answer(from response: AdsResponse, for format: AdFormat) throws -> VideoAd.Answer {
+    private func receivedAd(from response: AdsResponse, for format: AdFormat) throws -> VideoAd.ReceivedAd {
         guard let result = response.result(for: format) else {
             Logger.error("\(format) for \(content.id): the server answered for other formats, not this one")
             throw VideoAdError.request(APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no formats entry for \(format)"))))
@@ -237,7 +237,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            return VideoAd.Answer(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
+            return VideoAd.ReceivedAd(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
         }
         let reason = result.noFillReason ?? AdsResponse.unknownReason
         // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
@@ -253,13 +253,13 @@ public final class VideoAds {
     /// The second half of a load: the page starts loading now, and the ad is returned only when it
     /// reported `ad.loaded`. Called by the loader's `load()`, on the caller's task; the slot's held answer
     /// is consumed.
-    func render(slot: AdSlot, answer: VideoAd.Answer) async throws -> VideoAd {
+    func render(slot: AdSlot, received: VideoAd.ReceivedAd) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         if slot.isBusy {
             Logger.warning("\(slot.format) for \(content.id): load refused, the loader has an ad loading, or loaded and not yet shown")
             throw VideoAdError.formatBusy
         }
-        let videoAd = VideoAd(answer: answer)
+        let videoAd = VideoAd(received: received)
         videoAd.owner = self
         slot.didStartRendering(videoAd)
         let started = ProcessInfo.processInfo.systemUptime

@@ -23,15 +23,15 @@ extension VideoAd {
         public var skipOffset: TimeInterval? { info.skipOffset }
         public var reward: Reward? { info.reward }
 
-        let answer: Answer
+        let received: ReceivedAd
         private let slot: AdSlot
         private weak var ads: VideoAds?
         /// The ad `load()` produced, so a second `load()` returns the same one: a bid is not a factory.
         private var ad: VideoAd?
 
-        init(answer: Answer, slot: AdSlot, ads: VideoAds) {
-            self.answer = answer
-            info = answer.info
+        init(received: ReceivedAd, slot: AdSlot, ads: VideoAds) {
+            self.received = received
+            info = received.info
             self.slot = slot
             self.ads = ads
         }
@@ -43,11 +43,11 @@ extension VideoAd {
         public func load() async throws -> VideoAd {
             if let ad { return ad }
             guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
-            if answer.isExpired {
+            if received.isExpired {
                 if slot.held?.info.id == id { slot.dropHeld() }
                 throw VideoAdError.invalidated(.expired)
             }
-            let ad = try await ads.render(slot: slot, answer: answer)
+            let ad = try await ads.render(slot: slot, received: received)
             self.ad = ad
             return ad
         }
