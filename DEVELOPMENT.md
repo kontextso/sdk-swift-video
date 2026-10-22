@@ -18,13 +18,15 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
-│   ├── VideoAds.swift                              one video's ads: the three loaders, loading, the playhead
+│   ├── VideoAds.swift                              one video's ads: format(_:options:), the creation-time request, the playhead
 │   ├── VideoAd.swift                               one ad: the lifecycle from load to didEnd
-│   ├── VideoAd+Info.swift, VideoAd+Bid.swift       the ad as the SDK knows it (wire → seconds); the unrendered answer to fetch()
+│   ├── VideoAd+Info.swift, VideoAd+Bid.swift       the ad's facts (Info) and the server's answer before rendering (Bid)
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
-│   ├── AdLoader.swift                              AdLoader<Options>, one per format; the overlay / pause / linear aliases
-│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
-│   ├── API/          the wire: requests, responses (incl. the error body), the ad payload, device info, privacy, SDKInfo, the client
+│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options (+ FormatRequest), FormatKey
+│   ├── Loading/      how an answer becomes an ad (internal): AdLoader, AdSlot
+│   ├── Network/      talking to the server, any route: APIClient, APIError, ErrorResponse
+│   ├── Payloads/     the bodies of each route, named as in the spec: Config and Ads requests and responses, AdPayload, SDKInfo
+│   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      Logger, Environment (the test seams), the debug reporter
 │   └── PrivacyInfo.xcprivacy
@@ -33,7 +35,7 @@ sdk-swift-video/
 └── CHANGELOG.md, RELEASING.md
 ```
 
-The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `API/` is the wire, `Rendering/`
+The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `Loading/` turns answers into ads, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Rendering/`
 is what happens on screen (the Notion hub's "Rendering" section), `Support/` is plumbing.
 
 ## Building
@@ -103,11 +105,12 @@ Layout, one suite per source file plus the whole flows:
 
 ```
 Tests/KontextVideoSDKTests/
-├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (wire payloads),
+├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (payloads),
 │                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
-├── API/          decoding, requests, the client, privacy
+├── Network/      the client: transport, status codes, the error body
+├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included)
 ├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
 ├── Core/         KontextVideo, VideoAds, VideoAd, bids, support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
