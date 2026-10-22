@@ -10,9 +10,10 @@ enum APIError: Error, CustomStringConvertible {
     case decoding(Error)
 
     /// Transport failures and server-side errors may succeed on a retry; client errors (4xx) will not.
+    /// A cancelled request is not a failure: whoever cancelled it does not want it sent again.
     var isRetryable: Bool {
         switch self {
-        case .transport: return true
+        case .transport(let error): return error.code != .cancelled
         case .http(let status, _): return status >= 500 || status == 429
         case .decoding: return false
         }

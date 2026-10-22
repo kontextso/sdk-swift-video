@@ -135,6 +135,7 @@ struct APIClientTests {
             Issue.record("expected a throw")
         } catch let error as APIError {
             guard case .transport(let urlError) = error, urlError.code == .cancelled else { Issue.record("expected cancelled, got \(error)"); return }
+            #expect(error.isRetryable == false, "whoever cancelled it does not want it sent again")
         } catch {
             Issue.record("unexpected \(error)")
         }
