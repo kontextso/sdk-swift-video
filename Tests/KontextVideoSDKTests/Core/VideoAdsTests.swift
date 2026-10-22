@@ -132,6 +132,60 @@ struct VideoAdsTests {
         #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
     }
 
+    // MARK: refetch after end
+
+    @Test func aPauseAdThatEndedIsRefetchedSoTheNextLoadRendersAtOnce() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "p1"))
+        let ad = try await ads.format(.pause).load()
+        try ad.show(in: harness.player.view)
+        harness.serve(Fixtures.ad(id: "p2"))
+        ad.dismiss()
+        #expect(await waitUntil { self.harness.server.requests(to: "/v2/video/ads").count == 2 }, "one request after the end, by itself")
+        let next = try await ads.format(.pause).load()
+        #expect(next.id == "p2")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "load() rendered the held answer, no third request")
+        let formats = harness.server.requests(to: "/v2/video/ads").last?.body?["formats"] as? [[String: Any]]
+        #expect(formats?.map { $0["format"] as? String } == ["pause"])
+    }
+
+    @Test func aLinearAdThatEndedIsNotRefetchedByDefault() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.linearAd(id: "l1"))
+        let ad = try await ads.format(.linear).load()
+        let window = TestWindow()
+        try ad.show(from: window.root)
+        ads.destroy()   // the one way an app ends a linear ad; didEnd(.destroyed) runs the same hook
+        await sleepMs(100)
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
+        withExtendedLifetime(window) {}
+    }
+
+    @Test func theRefetchPolicyIsPerFormatInTheConfiguration() async throws {
+        _ = await harness.initialize(formats: [.pause: .init(refetch: .never)])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"))
+        harness.serve(Fixtures.ad(id: "p3"))
+        let ad = try await ads.format(.pause).load()
+        try ad.show(in: harness.player.view)
+        ad.dismiss()
+        await sleepMs(100)
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "never: the next load() fetches")
+        #expect(KontextVideo.shared.configuration?.formats[.overlay]?.refetch == .afterEnd, "the other formats keep their defaults")
+    }
+
+    @Test func aRefetchedNoFillIsThrownOnceByTheNextLoad() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "p4"))
+        let ad = try await ads.format(.pause).load()
+        try ad.show(in: harness.player.view)
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
+        ad.dismiss()
+        #expect(await waitUntil { self.harness.server.requests(to: "/v2/video/ads").count == 2 })
+        let error = await loadError { try await ads.format(.pause).load() }
+        guard case .noFill(let reason) = error else { Issue.record("expected the refetched no fill"); return }
+        #expect(reason == "frequencyCap")
+    }
+
     // MARK: load: the happy path
 
     @Test func loadReturnsAReadyAdWithTheRequestsFormatAndOptions() async throws {

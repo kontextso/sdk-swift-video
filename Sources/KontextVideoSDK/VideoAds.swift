@@ -140,7 +140,32 @@ public final class VideoAds {
     }
 
     func adDidEnd(_ ad: VideoAd) {
-        slots[ad.format]?.didEnd(ad)
+        guard let slot = slots[ad.format] else { return }
+        slot.didEnd(ad)
+        refetchIfConfigured(slot)
+    }
+
+    /// The format's `RefetchPolicy.afterEnd`: one request for the next ad, with the declared options, held
+    /// like the creation-time answer so the next `load()` renders at once. Not while the loader is busy
+    /// (the app already loaded the next one) and never after `destroy()`.
+    private func refetchIfConfigured(_ slot: AdSlot) {
+        guard !isDestroyed, KontextVideo.shared.configuration?.formats[slot.format]?.refetch == .afterEnd else { return }
+        guard !slot.isBusy, slot.prefetched == nil else { return }
+        let request = slot.declared ?? Self.defaultRequest(for: slot.format)
+        Logger.debug("\(slot.format) for \(content.id): fetching the next ad after the last one ended")
+        slot.isLoading = true
+        slot.inFlight = Task { [weak self] in
+            guard let self else { return }
+            await self.prefetch([request], into: [slot])
+        }
+    }
+
+    private static func defaultRequest(for format: AdFormat) -> FormatRequest {
+        switch format {
+        case .overlay: return .overlay()
+        case .pause: return .pause()
+        case .linear: return .linear()
+        }
     }
 
     /// One request for one format, run on the caller's task so cancelling that task cancels the request.
