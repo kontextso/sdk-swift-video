@@ -126,38 +126,32 @@ let ads = VideoAds(content: .init(
 ads.trackPlayhead(of: avPlayer)  // when the episode starts playing
 ```
 
-### 4. Placements and loading the ads
+### 4. Loading the ads
 
-A placement is a piece of your inventory, created in the Kontext dashboard with a format and an id you chose
-(`episode-midroll`, `fullscreen-pause`); demand, floors, frequency caps and reporting are configured there. Every
-publisher starts with one per format: `overlay`, `pause`, `linear`.
+Every `VideoAds` has one loader per format: `ads.overlay`, `ads.pause` and `ads.linear`. Which configuration a
+format uses (demand, floors, frequency caps, reporting) is decided in the Kontext dashboard; you name nothing.
 
-Get the placement object once from `ads` and keep it; the format in the call must match the dashboard. `load` is
-`async` and returns the ad, or throws: no fill, a failed request, a busy placement, an SDK that is not ready. You own
-the ad you get; keep a reference until it is shown, drop it and it is gone. One *unshown* ad per placement at a
-time: a second `load` while one is loading or waiting to be shown throws `.placementBusy`, but a `load` while the
+`load` is `async` and returns the ad, or throws: no fill, a failed request, a busy loader, an SDK that is not ready.
+You own the ad you get; keep a reference until it is shown, drop it and it is gone. One *unshown* ad per format at a
+time: a second `load` while one is loading or waiting to be shown throws `.formatBusy`, but a `load` while the
 previous ad is on screen is fine, so the next one is ready the moment the current one ends. Loads started while the
 SDK is still initialising wait for it; after a failed `/config`, every `load` retries it first.
 
 ```swift
-let overlay = ads.overlayPlacement("overlay")
-let pause = ads.pausePlacement("pause")
-let midroll = ads.linearPlacement("linear")
-
 // A strip across the player while the content plays; the SDK removes it after its duration.
-let strip = try await overlay.load(OverlayOptions(
+let strip = try await ads.overlay.load(OverlayOptions(
     positions: [.bottom],            // where you can render it; default: top and bottom
     maxDuration: 10                  // seconds on screen at most; the server picks a creative that fits
 ))
 
 // A card, or the full player, while the content is paused.
-let card = try await pause.load(PauseOptions(
+let card = try await ads.pause.load(PauseOptions(
     positions: [.top, .fullscreen]   // what you can render; default: top and bottom
 ))
 card.price.value                     // your own auction, if you run one
 
 // A full-screen video at a moment you pick.
-let linear = try await midroll.load(LinearOptions(
+let linear = try await ads.linear.load(LinearOptions(
     timing: .preroll,                // where you will show it; default: .midroll
     maxDuration: 30,                 // seconds
     muted: false,                    // start with the sound off; default: false
@@ -165,22 +159,20 @@ let linear = try await midroll.load(LinearOptions(
 ))
 
 // Every option is optional
-let ad = try await overlay.load()
+let ad = try await ads.overlay.load()
 
 // Deciding before rendering (an app that runs its own auction): fetch the answer, load the winner
-let bid = try await pause.fetch()                   // price, size…; nothing rendered yet
+let bid = try await ads.pause.fetch()               // price, size…; nothing rendered yet
 guard myAuction.accepts(bid.price) else { return }  // dropping a bid costs nothing
 let ad = try await bid.load()                       // renders; the same VideoAd that load() returns
 
 // No fill and failures are errors
 do {
-    let ad = try await pause.load()
+    let ad = try await ads.pause.load()
 } catch VideoAdError.noFill(let reason) {
-    // nothing to show; reason: noAdMatch, frequencyCap, …
-} catch VideoAdError.invalidPlacement(let id, let message) {
-    // an integration bug: unknown id or wrong format; fix the id or the dashboard
+    // nothing to show; reason: noAdMatch, frequencyCap, formatNotEnabled (no configuration for this format), …
 } catch {
-    // .placementBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,
+    // .formatBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,
     // .creativeFailed(code:), .request(error), CancellationError
 }
 ```

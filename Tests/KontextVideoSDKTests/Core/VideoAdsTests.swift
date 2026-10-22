@@ -35,42 +35,28 @@ struct VideoAdsTests {
         }
     }
 
-    // MARK: Placements
+    // MARK: Loaders
 
-    @Test func sameTypedLookupReturnsTheSameObject() async {
+    @Test func theThreeLoadersAreCreatedWithTheVideoAds() async {
         let ads = await makeAds()
-        #expect(ads.pausePlacement("x") === ads.pausePlacement("x"))
-        #expect(ads.overlayPlacement("x") === ads.overlayPlacement("x"))
-        #expect(ads.linearPlacement("x") === ads.linearPlacement("x"))
-        #expect(ads.pausePlacement("x") !== ads.pausePlacement("y"))
-        #expect(ads.pausePlacement("x").id == "x")
-    }
-
-    @Test func differentTypesForOneIdAreDifferentObjectsSharingTheState() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-1", placementId: "x"))), delay: 0.3) }
-        let pause = ads.pausePlacement("x")
-        let linear = ads.linearPlacement("x")
-        let first = Task { try await pause.load() }
-        await sleepMs(50)
-        let error = await loadError { try await linear.load() }
-        guard case .placementBusy = error else { Issue.record("expected placementBusy, got \(String(describing: error))"); return }
-        _ = try? await first.value
+        #expect(ads.overlay === ads.overlay)
+        #expect(ads.pause.slot.format == .pause)
+        #expect(ads.linear.slot.format == .linear)
+        #expect(ads.overlay.slot.format == .overlay)
     }
 
     // MARK: load: the happy path
 
     @Test func loadReturnsAReadyAdWithTheRequestsFormatAndOptions() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-1", placementId: "pause"))
-        let ad = try await ads.pausePlacement("pause").load(PauseOptions(positions: [.top, .fullscreen]))
+        harness.serve(Fixtures.ad(id: "img-1"))
+        let ad = try await ads.pause.load(PauseOptions(positions: [.top, .fullscreen]))
         #expect(ad.isReady)
         #expect(ad.id == "img-1")
-        #expect(ad.placementId == "pause")
         #expect(ad.format == .pause)
         let request = harness.server.requests(to: "/v2/video/ads").first?.body
         #expect(request?["format"] as? String == "pause")
-        #expect(request?["placementId"] as? String == "pause")
+        #expect(request?["placementId"] == nil, "no placement ids on the wire")
         #expect((request?["options"] as? [String: Any])?["positions"] as? [String] == ["top", "fullscreen"])
         #expect((request?["video"] as? [String: Any])?["id"] as? String == "ep-1")
         #expect((request?["player"] as? [String: Any])?["playhead"] as? Int == 0, "the playhead read at request time")
@@ -83,7 +69,7 @@ struct VideoAdsTests {
         KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         harness.serve(Fixtures.ad(id: "img-2"))
-        let ad = try await ads.pausePlacement("pause").load()
+        let ad = try await ads.pause.load()
         #expect(ad.isReady)
         #expect(KontextVideo.shared.state == .enabled)
     }
@@ -92,11 +78,11 @@ struct VideoAdsTests {
         _ = await harness.initialize()
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), playerSize: CGSize(width: 390, height: 220))
         harness.serve(Fixtures.ad(id: "img-3a"))
-        let first = try await ads.pausePlacement("pause").load()
+        let first = try await ads.pause.load()
         harness.player.view.frame = CGRect(x: 0, y: 0, width: 844, height: 390)   // the real box turned out different
         try first.show(in: harness.player.view)
         harness.serve(Fixtures.ad(id: "img-3b"))
-        _ = try await ads.overlayPlacement("overlay").load()
+        _ = try await ads.overlay.load()
         let players = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["player"] as? [String: Any] }
         #expect(players.map { $0["width"] as? Int } == [390, 844], "the hint for the first request, the shown view's box after")
         #expect(players.map { $0["height"] as? Int } == [220, 390])
@@ -107,13 +93,13 @@ struct VideoAdsTests {
         let ads = await makeAds()
         let other = harness.player.ads(for: .init(id: "ep-next", language: "en"))
         harness.serve(Fixtures.ad(id: "img-b1"))
-        let a = try await ads.pausePlacement("pause").load()
+        let a = try await ads.pause.load()
         harness.serve(Fixtures.ad(id: "img-b2"))
-        let b = try await ads.overlayPlacement("overlay").load()
+        let b = try await ads.overlay.load()
         harness.serve(Fixtures.ad(id: "img-b3"))
-        let c = try await other.pausePlacement("pause").load()
+        let c = try await other.pause.load()
         harness.serve(Fixtures.ad(id: "img-b4"))
-        let d = try await other.overlayPlacement("overlay").load()
+        let d = try await other.overlay.load()
         #expect(a.isReady && b.isReady && c.isReady && d.isReady)
         withExtendedLifetime((a, b, c, d)) {}
         other.destroy()
@@ -123,7 +109,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.player.playhead = 12.5
         harness.serve(Fixtures.ad(id: "img-3"))
-        _ = try await ads.pausePlacement("pause").load()
+        _ = try await ads.pause.load()
         let player = harness.server.requests(to: "/v2/video/ads").first?.body?["player"] as? [String: Any]
         #expect(player?["playhead"] as? Int == 12_500)
     }
@@ -132,7 +118,7 @@ struct VideoAdsTests {
         Environment.consentDefaults.set("TC-STR", forKey: "IABTCF_TCString")
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-4"))
-        _ = try await ads.pausePlacement("pause").load()
+        _ = try await ads.pause.load()
         let regulatory = harness.server.requests(to: "/v2/video/ads").first?.body?["regulatory"] as? [String: Any]
         #expect(regulatory?["gdprConsent"] as? String == "TC-STR")
     }
@@ -142,7 +128,7 @@ struct VideoAdsTests {
     @Test func loadBeforeInitializeThrowsNotInitialized() async {
         Environment.assertionFailure = { _ in }
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .notInitialized = error else { Issue.record("expected notInitialized, got \(String(describing: error))"); return }
         #expect(harness.server.requests(to: "/v2/video/ads").isEmpty)
     }
@@ -150,25 +136,25 @@ struct VideoAdsTests {
     @Test func loadWhenInitFailedThrowsInitializationFailed() async {
         harness.server.on("/v2/config", .failure(.timedOut))
         let ads = await makeAds()
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .initializationFailed = error else { Issue.record("expected initializationFailed, got \(String(describing: error))"); return }
     }
 
     @Test func loadWhenDisabledThrowsDisabled() async {
         harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
         let ads = await makeAds()
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .disabled(let reason) = error else { Issue.record("expected disabled"); return }
         #expect(reason == "publisherDisabled")
     }
 
-    @Test func loadAfterDestroyThrowsDestroyedEvenOnAKeptPlacement() async {
+    @Test func loadAfterDestroyThrowsDestroyedEvenOnAKeptLoader() async {
         let ads = await makeAds()
-        let placement = ads.pausePlacement("pause")
+        let loader = ads.pause
         ads.destroy()
-        let kept = await loadError { try await placement.load() }
+        let kept = await loadError { try await loader.load() }
         guard case .destroyed = kept else { Issue.record("expected destroyed"); return }
-        let fresh = await loadError { try await ads.overlayPlacement("overlay").load() }
+        let fresh = await loadError { try await ads.overlay.load() }
         guard case .destroyed = fresh else { Issue.record("expected destroyed"); return }
         #expect(ads.isDestroyed)
     }
@@ -178,31 +164,31 @@ struct VideoAdsTests {
     @Test func loadWhileLoadingIsBusy() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-7"))), delay: 0.3) }
-        let placement = ads.pausePlacement("pause")
-        let first = Task { try await placement.load() }
+        let loader = ads.pause
+        let first = Task { try await loader.load() }
         await sleepMs(50)
-        let error = await loadError { try await placement.load() }
-        guard case .placementBusy = error else { Issue.record("expected placementBusy"); return }
+        let error = await loadError { try await loader.load() }
+        guard case .formatBusy = error else { Issue.record("expected formatBusy"); return }
         _ = try await first.value
     }
 
     @Test func loadWhileLoadedButUnshownIsBusy() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-8"))
-        let ad = try await ads.pausePlacement("pause").load()
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .placementBusy = error else { Issue.record("expected placementBusy"); return }
+        let ad = try await ads.pause.load()
+        let error = await loadError { try await ads.pause.load() }
+        guard case .formatBusy = error else { Issue.record("expected formatBusy"); return }
         withExtendedLifetime(ad) {}
     }
 
-    @Test func droppingTheAdFreesThePlacement() async throws {
+    @Test func droppingTheAdFreesTheLoader() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-9"))
-        var ad: VideoAd? = try await ads.pausePlacement("pause").load()
+        var ad: VideoAd? = try await ads.pause.load()
         #expect(ad?.isReady == true)
         ad = nil
         harness.serve(Fixtures.ad(id: "img-10"))
-        let next = try await ads.pausePlacement("pause").load()
+        let next = try await ads.pause.load()
         #expect(next.id == "img-10")
     }
 
@@ -212,14 +198,14 @@ struct VideoAdsTests {
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-11"))
-        let ad = try await ads.pausePlacement("pause").load()
+        let ad = try await ads.pause.load()
         try ad.show(in: harness.player.view)
         harness.serve(Fixtures.ad(id: "img-12"))
-        let next = try await ads.pausePlacement("pause").load()
+        let next = try await ads.pause.load()
         #expect(next.id == "img-12", "the next ad loads while the current one shows")
         #expect(ad.hasEnded == false, "the showing ad is untouched")
-        let busy = await loadError { try await ads.pausePlacement("pause").load() }
-        guard case .placementBusy = busy else { Issue.record("expected placementBusy: one unshown ad at a time"); return }
+        let busy = await loadError { try await ads.pause.load() }
+        guard case .formatBusy = busy else { Issue.record("expected formatBusy: one unshown ad at a time"); return }
         ad.dismiss()
         #expect(next.isReady)
         try next.show(in: harness.player.view)
@@ -231,7 +217,7 @@ struct VideoAdsTests {
     @Test func noFillIsThrownWithTheReason() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .noFill(let reason) = error else { Issue.record("expected noFill"); return }
         #expect(reason == "frequencyCap")
         #expect(error?.description == "no fill (frequencyCap)")
@@ -240,7 +226,7 @@ struct VideoAdsTests {
     @Test func aTemporaryErrorIsANoFillLikeAnyOtherNeverRetried() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError")))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .noFill("temporaryError") = error else { Issue.record("expected noFill"); return }
         #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "the SDK never retries an ads request")
     }
@@ -248,42 +234,31 @@ struct VideoAdsTests {
     @Test func disabledResponseSwitchesTheSDKOff() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.disabled("appVersionDisabled")))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .disabled(let reason) = error else { Issue.record("expected disabled"); return }
         #expect(reason == "appVersionDisabled")
         #expect(KontextVideo.shared.state == .disabled(reason: "appVersionDisabled"))
     }
 
-    @Test func unknownPlacementIsAnInvalidPlacementWithTheServersSentence() async {
+    @Test func aFormatWithoutAConfigurationIsANoFill() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("unknownPlacement", title: "unknown placementId \"nope\""), status: 400))
-        let error = await loadError { try await ads.pausePlacement("nope").load() }
-        guard case .invalidPlacement(let id, let message) = error else { Issue.record("expected invalidPlacement, got \(String(describing: error))"); return }
-        #expect(id == "nope")
-        #expect(message == "unknown placementId \"nope\"")
-        #expect(error?.description == "placement \"nope\": unknown placementId \"nope\"")
-    }
-
-    @Test func formatMismatchIsAnInvalidPlacementWithTheServersDetail() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("placementFormatMismatch", title: "format mismatch", detail: "expected overlay, got linear"), status: 400))
-        let error = await loadError { try await ads.linearPlacement("episode-overlay").load() }
-        guard case .invalidPlacement(let id, let message) = error else { Issue.record("expected invalidPlacement"); return }
-        #expect(id == "episode-overlay")
-        #expect(message == "expected overlay, got linear", "detail when the server gives one, else title, else the code")
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled")))
+        let error = await loadError { try await ads.linear.load() }
+        guard case .noFill(let reason) = error else { Issue.record("expected noFill, got \(String(describing: error))"); return }
+        #expect(reason == "formatNotEnabled")
     }
 
     @Test func otherClientErrorsAreRequestErrors() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.errors("invalidRequest"), status: 400))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .request(let underlying) = error, let apiError = underlying as? APIError, case .http(400, _) = apiError else { Issue.record("expected request(http 400)"); return }
     }
 
     @Test func transportFailureIsARequestErrorWithoutARetry() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .failure(.timedOut))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .request = error else { Issue.record("expected request"); return }
         #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "ads requests are never retried by the SDK")
     }
@@ -292,7 +267,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         FrameBridge.loadTimeout = 0.5   // the page is served in-process; the generous CI default would add 8 s
         harness.serve(Fixtures.ad(id: "dead-1"))
-        let error = await loadError { try await ads.pausePlacement("pause").load() }
+        let error = await loadError { try await ads.pause.load() }
         guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed, got \(String(describing: error))"); return }
         #expect(code == 500, "NonLinear: 500")
         #expect(await waitUntil { self.harness.server.beacons.map(\.event) == ["error"] })
@@ -302,20 +277,20 @@ struct VideoAdsTests {
     @Test func creativeThatReportsAnErrorThrowsItsCode() async {
         let ads = await makeAds()
         harness.serve(Fixtures.linearAd(id: "err-1"))
-        let error = await loadError { try await ads.linearPlacement("linear").load() }
+        let error = await loadError { try await ads.linear.load() }
         guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed"); return }
         #expect(code == 502)
         harness.serve(Fixtures.linearAd(id: "vid-1"))
-        _ = try? await ads.linearPlacement("linear").load()
+        _ = try? await ads.linear.load()
         #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "the placement was free again")
     }
 
     // MARK: Cancellation
 
-    @Test func cancellingDuringTheRequestThrowsCancellationErrorAndFreesThePlacement() async throws {
+    @Test func cancellingDuringTheRequestThrowsCancellationErrorAndFreesTheLoader() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-14"))), delay: 0.5) }
-        let placement = ads.pausePlacement("pause")
+        let placement = ads.pause
         let task = Task { try await placement.load() }
         await sleepMs(50)
         task.cancel()
@@ -334,7 +309,7 @@ struct VideoAdsTests {
     @Test func cancellingDuringThePageLoadStopsThePage() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "dead-2"))
-        let placement = ads.pausePlacement("pause")
+        let placement = ads.pause
         let task = Task { try await placement.load() }
         #expect(await waitUntil { self.pages.served.contains("dead-2") })
         task.cancel()
@@ -352,7 +327,7 @@ struct VideoAdsTests {
     @Test func destroyDuringThePageLoadFailsTheLoad() async {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "dead-3"))
-        let placement = ads.pausePlacement("pause")
+        let placement = ads.pause
         let task = Task { try await placement.load() }
         #expect(await waitUntil { self.pages.served.contains("dead-3") })
         ads.destroy()
@@ -401,7 +376,7 @@ struct VideoAdsTests {
     @Test func targetingChangeInvalidatesUnshownAds() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-17"))
-        let ad = try await ads.pausePlacement("pause").load()
+        let ad = try await ads.pause.load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         KontextVideo.shared.user = KontextVideo.User(id: "someone-else")
@@ -411,13 +386,13 @@ struct VideoAdsTests {
         KontextVideo.shared.user = KontextVideo.User(id: "someone-else")
         #expect(delegate.invalidations.count == 1, "the same value again changes nothing")
         harness.serve(Fixtures.ad(id: "img-18"))
-        _ = try await ads.pausePlacement("pause").load()
+        _ = try await ads.pause.load()
     }
 
     @Test func anATTStatusChangeIsATargetingChange() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-17a"))
-        let ad = try await ads.pausePlacement("pause").load()   // the request noted the device's real status
+        let ad = try await ads.pause.load()   // the request noted the device's real status
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         let real = ATTrackingManager.trackingAuthorizationStatus
@@ -433,7 +408,7 @@ struct VideoAdsTests {
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-19"))
-        let ad = try await ads.pausePlacement("pause").load()
+        let ad = try await ads.pause.load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
@@ -449,9 +424,9 @@ struct VideoAdsTests {
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-20"))
-        let loaded = try await ads.pausePlacement("pause").load()
+        let loaded = try await ads.pause.load()
         harness.serve(Fixtures.overlayAd(id: "img-21"))
-        let showing = try await ads.overlayPlacement("overlay").load()
+        let showing = try await ads.overlay.load()
         let loadedDelegate = RecordingDelegate()
         let showingDelegate = RecordingDelegate()
         loaded.delegate = loadedDelegate
@@ -470,7 +445,7 @@ struct VideoAdsTests {
     @Test func deallocationDoesWhatDestroyDoes() async throws {
         var ads: VideoAds? = await makeAds()
         harness.serve(Fixtures.ad(id: "img-22"))
-        let ad = try await ads!.pausePlacement("pause").load()
+        let ad = try await ads!.pause.load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         ads = nil

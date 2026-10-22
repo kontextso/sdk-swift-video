@@ -1,8 +1,8 @@
 import Foundation
 import UIKit
 
-/// One ad, returned by a placement's `load`. The app owns it: keep a reference until it is shown, drop it
-/// and it is gone (the placement only holds it weakly). An ad is shown at most once.
+/// One ad, returned by a loader's `load`. The app owns it: keep a reference until it is shown, drop it
+/// and it is gone (its loader only holds it weakly). An ad is shown at most once.
 ///
 /// Read-only properties of the ad for the app's own decisions (an auction, a debug screen); times are
 /// seconds, whatever the wire sends.
@@ -59,7 +59,6 @@ public final class VideoAd {
     }
 
     public var id: String { info.id }
-    public var placementId: String { info.placementId }
     public var format: AdFormat { info.format }
     public var price: Price { info.price }
     /// `nil` for a linear ad.
@@ -552,7 +551,7 @@ public final class VideoAd {
         info.isExpired
     }
 
-    /// Whether this ad still counts for its placement's one-unshown-ad rule: loading, or loaded and not
+    /// Whether this ad still counts for its loader's one-unshown-ad rule: loading, or loaded and not
     /// yet shown. An ad on screen does not block the next load.
     var isPendingUnshown: Bool {
         !wasShown && invalidationReason == nil && !isExpired

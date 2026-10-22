@@ -21,15 +21,15 @@ struct AdsRequest: Encodable, Sendable {
     let player: PlayerSnapshot
     let video: KontextVideo.Content
     let format: AdFormat
-    let placementId: String
-    let options: FormatOptions?
+    /// The format's options, encoded as they are; the format decides the shape.
+    let options: AnyOptions
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, format, placementId, options
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, format, options
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, format: FormatRequest) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, format: AdFormat, options: some Encodable) -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -47,41 +47,22 @@ struct AdsRequest: Encodable, Sendable {
             device: .current(),
             player: player,
             video: content,
-            format: format.format,
-            placementId: format.placementId,
-            options: format.options
+            format: format,
+            options: AnyOptions(options)
         )
     }
 }
 
-/// Which placement to ask for, with the options of its format.
-struct FormatRequest: Sendable, Equatable {
-    let placementId: String
-    let options: FormatOptions
+/// The `options` object of a request: one format's options, whichever type, encoded as they are.
+struct AnyOptions: Encodable, Sendable {
+    private let encodeBody: @Sendable (Encoder) throws -> Void
 
-    var format: AdFormat {
-        switch options {
-        case .overlay: return .overlay
-        case .pause: return .pause
-        case .linear: return .linear
-        }
+    init(_ options: some Encodable & Sendable) {
+        encodeBody = { try options.encode(to: $0) }
     }
-}
 
-/// The `options` object of a request, tagged with its format. Public only because `PlacementOptions`
-/// names it; an app never builds one.
-public enum FormatOptions: Encodable, Sendable, Equatable {
-    case overlay(OverlayOptions)
-    case pause(PauseOptions)
-    case linear(LinearOptions)
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .overlay(let options): try container.encode(options)
-        case .pause(let options): try container.encode(options)
-        case .linear(let options): try container.encode(options)
-        }
+    func encode(to encoder: Encoder) throws {
+        try encodeBody(encoder)
     }
 }
 

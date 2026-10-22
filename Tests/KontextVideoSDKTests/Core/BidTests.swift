@@ -22,10 +22,9 @@ struct BidTests {
 
     @Test func fetchReturnsTheFactsAndRendersNothing() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.overlayAd(id: "img-b1", placementId: "overlay", duration: 6000, position: "top"))
-        let bid = try await ads.overlayPlacement("overlay").fetch(OverlayOptions(positions: [.top]))
+        harness.serve(Fixtures.overlayAd(id: "img-b1", duration: 6000, position: "top"))
+        let bid = try await ads.overlay.fetch(OverlayOptions(positions: [.top]))
         #expect(bid.id == "img-b1")
-        #expect(bid.placementId == "overlay")
         #expect(bid.format == .overlay)
         #expect(bid.price.value > 0)
         #expect(bid.position == .top)
@@ -44,7 +43,7 @@ struct BidTests {
     @Test func loadOnTheBidRendersAndReturnsAReadyAdWithTheSameFacts() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b2"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         let ad = try await bid.load()
         #expect(ad.isReady)
         #expect(ad.id == bid.id)
@@ -58,48 +57,48 @@ struct BidTests {
     @Test func aSecondLoadReturnsTheSameAd() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b3"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         let first = try await bid.load()
         let second = try await bid.load()
         #expect(first === second)
         #expect(pages.served == ["img-b3"], "rendered once")
     }
 
-    @Test func aPendingBidMakesThePlacementBusyAndDroppingItFreesIt() async throws {
+    @Test func aPendingBidMakesTheLoaderBusyAndDroppingItFreesIt() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b4"))
-        var bid: VideoAd.Bid? = try await ads.pausePlacement("pause").fetch()
+        var bid: VideoAd.Bid? = try await ads.pause.fetch()
         do {
-            _ = try await ads.pausePlacement("pause").fetch()
-            Issue.record("expected placementBusy")
-        } catch VideoAdError.placementBusy {}
+            _ = try await ads.pause.fetch()
+            Issue.record("expected formatBusy")
+        } catch VideoAdError.formatBusy {}
         do {
-            _ = try await ads.pausePlacement("pause").load()
-            Issue.record("expected placementBusy")
-        } catch VideoAdError.placementBusy {}
+            _ = try await ads.pause.load()
+            Issue.record("expected formatBusy")
+        } catch VideoAdError.formatBusy {}
         bid = nil
         harness.serve(Fixtures.ad(id: "img-b5"))
-        let next = try await ads.pausePlacement("pause").fetch()
+        let next = try await ads.pause.fetch()
         #expect(next.id == "img-b5", "a dropped bid costs nothing and frees the placement")
         withExtendedLifetime(bid) {}
     }
 
-    @Test func aLoadedBidsAdKeepsThePlacementBusyUntilShown() async throws {
+    @Test func aLoadedBidsAdKeepsTheLoaderBusyUntilShown() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b6"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         let ad = try await bid.load()
         do {
-            _ = try await ads.pausePlacement("pause").fetch()
-            Issue.record("expected placementBusy")
-        } catch VideoAdError.placementBusy {}
+            _ = try await ads.pause.fetch()
+            Issue.record("expected formatBusy")
+        } catch VideoAdError.formatBusy {}
         withExtendedLifetime(ad) {}
     }
 
     @Test func loadAfterExpiryThrowsInvalidatedExpired() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b7", expires: 100))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         await sleepMs(150)
         #expect(bid.isPending == false)
         do {
@@ -109,13 +108,13 @@ struct BidTests {
         #expect(bid.invalidationReason == .expired)
         #expect(pages.served.isEmpty)
         harness.serve(Fixtures.ad(id: "img-b8"))
-        _ = try await ads.pausePlacement("pause").fetch()
+        _ = try await ads.pause.fetch()
     }
 
     @Test func aTargetingChangeDiscardsAPendingBid() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b9"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         KontextVideo.shared.variantId = "b"
         #expect(bid.invalidationReason == .targetingChanged)
         do {
@@ -123,13 +122,13 @@ struct BidTests {
             Issue.record("expected invalidated(.targetingChanged)")
         } catch VideoAdError.invalidated(.targetingChanged) {}
         harness.serve(Fixtures.ad(id: "img-b10"))
-        _ = try await ads.pausePlacement("pause").fetch()
+        _ = try await ads.pause.fetch()
     }
 
     @Test func destroyDiscardsAPendingBid() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b11"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         ads.destroy()
         #expect(bid.invalidationReason == .destroyed)
         do {
@@ -141,7 +140,7 @@ struct BidTests {
     @Test func deallocatingTheVideoAdsDiscardsAPendingBid() async throws {
         var ads: VideoAds? = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b12"))
-        let bid = try await ads!.pausePlacement("pause").fetch()
+        let bid = try await ads!.pause.fetch()
         ads = nil
         #expect(bid.invalidationReason == .destroyed)
         do {
@@ -153,7 +152,7 @@ struct BidTests {
     @Test func aCreativeFailureSurfacesAtLoadNotAtFetch() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "err-b13"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         do {
             _ = try await bid.load()
             Issue.record("expected creativeFailed")
@@ -171,21 +170,21 @@ struct BidTests {
         }
         #expect(pages.served == ["err-b13"], "one page load, not two")
         harness.serve(Fixtures.ad(id: "img-b14"))
-        _ = try await ads.pausePlacement("pause").fetch()
+        _ = try await ads.pause.fetch()
     }
 
     @Test func fetchThrowsTheRequestSideErrors() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("noAdMatch")))
         do {
-            _ = try await ads.overlayPlacement("overlay").fetch()
+            _ = try await ads.overlay.fetch()
             Issue.record("expected noFill")
         } catch VideoAdError.noFill(let reason) {
             #expect(reason == "noAdMatch")
         }
         ads.destroy()
         do {
-            _ = try await ads.overlayPlacement("overlay").fetch()
+            _ = try await ads.overlay.fetch()
             Issue.record("expected destroyed")
         } catch VideoAdError.destroyed {}
     }
@@ -195,13 +194,13 @@ struct BidTests {
         Environment.assertionFailure = { messages.append($0) }
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-b15"))
-        let bid = try await ads.pausePlacement("pause").fetch()
+        let bid = try await ads.pause.fetch()
         let first = Task { try await bid.load() }
         await sleepMs(20)
         do {
             _ = try await bid.load()
-            Issue.record("expected placementBusy")
-        } catch VideoAdError.placementBusy {}
+            Issue.record("expected formatBusy")
+        } catch VideoAdError.formatBusy {}
         #expect(messages.count == 1)
         _ = try await first.value
     }

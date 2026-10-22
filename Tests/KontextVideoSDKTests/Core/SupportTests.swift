@@ -14,8 +14,7 @@ struct SupportTests {
             (.initializationFailed, "/config failed, and retrying it failed too; no ads until it succeeds"),
             (.destroyed, "the VideoAds was destroyed"),
             (.disabled(reason: "publisherDisabled"), "the SDK is disabled by the server (publisherDisabled)"),
-            (.placementBusy, "the placement already has an ad loading, or loaded and not yet shown"),
-            (.invalidPlacement(id: "nope", message: "unknown placementId \"nope\""), "placement \"nope\": unknown placementId \"nope\""),
+            (.formatBusy, "this format already has an ad loading, or loaded and not yet shown"),
             (.noFill(reason: "noAdMatch"), "no fill (noAdMatch)"),
             (.anotherAdShowing, "another ad of this VideoAds is on screen; dismiss it first"),
             (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
@@ -65,23 +64,20 @@ struct SupportTests {
         #expect(VideoAd.InvalidationReason.creativeFailed(code: 1) != .creativeFailed(code: 2))
     }
 
-    // MARK: Placements
+    // MARK: Loaders
 
-    @Test func placementsForwardTheirIdAndFormat() async {
+    @Test func loadersForwardToTheirVideoAds() async {
         SDKHarness.reset()
         Environment.assertionFailure = { _ in }
         let ads = TestPlayer().ads(for: .init(id: "v", language: "en"))
-        #expect(ads.overlayPlacement("a").id == "a")
-        #expect(ads.pausePlacement("b").id == "b")
-        #expect(ads.linearPlacement("c").id == "c")
         // Not initialized: every load and fetch throws before any request, which proves the forwarding reaches VideoAds.
         for work in [
-            { _ = try await ads.overlayPlacement("a").load() },
-            { _ = try await ads.pausePlacement("b").load() },
-            { _ = try await ads.linearPlacement("c").load() },
-            { _ = try await ads.overlayPlacement("a").fetch() },
-            { _ = try await ads.pausePlacement("b").fetch() },
-            { _ = try await ads.linearPlacement("c").fetch() },
+            { _ = try await ads.overlay.load() },
+            { _ = try await ads.pause.load() },
+            { _ = try await ads.linear.load() },
+            { _ = try await ads.overlay.fetch() },
+            { _ = try await ads.pause.fetch() },
+            { _ = try await ads.linear.fetch() },
         ] as [() async throws -> Void] {
             do {
                 try await work()

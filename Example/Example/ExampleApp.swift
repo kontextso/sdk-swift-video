@@ -75,7 +75,7 @@ final class Demo: ObservableObject {
             // Something outside the SDK dismisses the presentation: didEnd(.interrupted)
             Self.topViewController?.presentingViewController?.dismiss(animated: true)
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            // An ad loaded and dropped without being shown: released, placement free again
+            // An ad loaded and dropped without being shown: released, the loader free again
             await loadPauseAdAndWait()
             pauseAd = nil
             note("pause ad dropped without showing")
@@ -90,7 +90,7 @@ final class Demo: ObservableObject {
 
     private func loadLinearAndWait() async {
         do {
-            let ad = try await ads!.linearPlacement("linear").load(LinearOptions(timing: .midroll))
+            let ad = try await ads!.linear.load(LinearOptions(timing: .midroll))
             ad.delegate = self
             linear = ad
             note("linear ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
@@ -129,7 +129,7 @@ final class Demo: ObservableObject {
 
     private func loadPauseAdAndWait() async {
         do {
-            let ad = try await ads!.pausePlacement("pause").load(PauseOptions(positions: [.top, .bottom]))
+            let ad = try await ads!.pause.load(PauseOptions(positions: [.top, .bottom]))
             ad.delegate = self
             pauseAd = ad
             note("pause ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
@@ -140,7 +140,7 @@ final class Demo: ObservableObject {
 
     private func loadOverlayAndWait() async {
         do {
-            let ad = try await ads!.overlayPlacement("overlay").load(OverlayOptions(positions: [.bottom]))
+            let ad = try await ads!.overlay.load(OverlayOptions(positions: [.bottom]))
             ad.delegate = self
             overlayAd = ad
             note("overlay \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")

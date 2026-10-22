@@ -4,6 +4,8 @@ enum AdsResponse: Decodable, Sendable {
     /// Stands in for a `noFillReason` or `disabledReason` the server left out or sent malformed; the
     /// answer itself is still understood.
     static let unknownReason = "unknown"
+    /// The no-fill reason for a format with no configuration in the dashboard: the integration, not the moment.
+    static let formatNotEnabled = "formatNotEnabled"
 
     case ad(AdPayload)
     case noFill(reason: String)

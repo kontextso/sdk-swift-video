@@ -104,7 +104,7 @@ struct KontextVideoTests {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled()))
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         harness.serve(Fixtures.ad(id: "img-retry"))
-        _ = try? await ads.pausePlacement("pause").load()
+        _ = try? await ads.pause.load()
         #expect(sdk.state == .enabled)
     }
 

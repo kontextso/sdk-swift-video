@@ -16,7 +16,7 @@ struct DebugReporterTests {
 
     @Test func nothingIsSentWhileDisabled() async {
         _ = await harness.initialize()
-        DebugReporter.shared.event("ads.request", state: ["placementId": "x"])
+        DebugReporter.shared.event("ads.request", state: ["format": "pause"])
         await sleepMs(150)
         #expect(harness.server.requests(to: "/v2/debug").isEmpty)
     }
@@ -24,7 +24,7 @@ struct DebugReporterTests {
     @Test func enabledByInitEventsAreBatchedWithTheBodyShape() async throws {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        DebugReporter.shared.event("ads.request", state: ["placementId": "pause", "playhead": 1200, "filled": true])
+        DebugReporter.shared.event("ads.request", state: ["format": "pause", "playhead": 1200, "filled": true])
         DebugReporter.shared.event("ad.loaded", adId: "ad-1", level: .warning, state: ["durationMs": 842])
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").count >= 1 })
         let body = try #require(harness.server.requests(to: "/v2/debug").last?.body)
@@ -40,7 +40,7 @@ struct DebugReporterTests {
         #expect(createdAt.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#, options: .regularExpression) != nil, "ISO 8601 with milliseconds, UTC: \(createdAt)")
         #expect(request["adId"] == nil)
         let state = request["state"] as? [String: Any]
-        #expect(state?["placementId"] as? String == "pause")
+        #expect(state?["format"] as? String == "pause")
         #expect(state?["playhead"] as? Double == 1200)
         #expect(state?["filled"] as? Bool == true)
         let loaded = try #require(events.first { $0["name"] as? String == "ad.loaded" })
@@ -92,7 +92,7 @@ struct DebugReporterTests {
         _ = await harness.initialize()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         harness.serve(Fixtures.ad(id: "img-dbg"))
-        _ = try await ads.pausePlacement("pause").load()
+        _ = try await ads.pause.load()
         #expect(await waitUntil { self.allNames().contains("ad.loaded") })
         let names = allNames()
         #expect(names.contains("ads.request"))

@@ -71,7 +71,6 @@ struct DecodingTests {
     @Test func pauseAdWithSize() throws {
         let ad = try Fixtures.payload(Fixtures.ad())
         #expect(ad.id == "ad-1")
-        #expect(ad.placementId == "pause")
         #expect(ad.format == .pause)
         #expect(ad.creative == .image)
         #expect(ad.expires == 3_600_000)
@@ -146,10 +145,10 @@ struct DecodingTests {
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(extra: ["rendering": ["kind": "native", "url": "x"]])) }
     }
 
-    @Test func missingPlacementIdIsRejected() {
+    @Test func aPlacementIdOnTheWireIsIgnored() throws {
         var ad = Fixtures.ad()
-        ad["placementId"] = nil
-        #expect(throws: DecodingError.self) { try Fixtures.payload(ad) }
+        ad["placementId"] = "legacy"
+        #expect(try Fixtures.payload(ad).id == "ad-1", "an older server's field; the SDK never reads it")
     }
 
     @Test func unknownFormatIsRejected() {
@@ -159,10 +158,10 @@ struct DecodingTests {
     // MARK: APIErrorResponse
 
     @Test func errorResponseNeedsOnlyTheCode() throws {
-        let response = try decode(APIErrorResponse.self, ["errors": [["code": "unknownPlacement"]]])
-        #expect(response.errors.first?.code == "unknownPlacement")
+        let response = try decode(APIErrorResponse.self, ["errors": [["code": "invalidRequest"]]])
+        #expect(response.errors.first?.code == "invalidRequest")
         #expect(response.errors.first?.title == nil)
-        #expect(APIError.http(status: 400, errors: response.errors).description == "HTTP 400: unknownPlacement", "the code stands in for a missing title")
+        #expect(APIError.http(status: 400, errors: response.errors).description == "HTTP 400: invalidRequest", "the code stands in for a missing title")
     }
 
     @Test func errorResponseSurvivesAnItemWithoutACodeOrWithWrongTypes() throws {

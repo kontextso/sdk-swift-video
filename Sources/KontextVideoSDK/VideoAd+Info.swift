@@ -6,7 +6,6 @@ extension VideoAd {
     /// what the renderer needs.
     struct Info {
         let id: String
-        let placementId: String
         let format: AdFormat
         let price: Price
         let position: Position?
@@ -32,7 +31,6 @@ extension VideoAd {
             self.receivedAt = receivedAt
             lifetime = TimeInterval(ad.expires) / 1000
             id = ad.id
-            placementId = ad.placementId
             format = ad.format
             price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
             creative = ad.creative

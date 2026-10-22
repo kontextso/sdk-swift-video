@@ -1,16 +1,14 @@
 import Foundation
 
 /// The ad server's error body (JSON:API-shaped, see the API's Common page). Decoded leniently: every
-/// field is optional and `code`, the one field the SDK acts on (`unknownPlacement`,
-/// `placementFormatMismatch`), reads `unknown` when absent, so a server that sends less than the
-/// contract still gets its message into the log and never makes the SDK drop the whole body.
+/// field is optional and `code` reads `unknown` when absent, so a server that sends less than the
+/// contract still gets its message into the log and never makes the SDK drop the whole body. The SDK
+/// acts on no code today; `title` and `detail` go to the log.
 struct APIErrorResponse: Decodable, Sendable {
     /// The codes the SDK knows. An open set: the server may add codes, which reach the log as they are.
     enum Code {
         /// The SDK's own stand-in for a missing or malformed `code`.
         static let unknown = "unknown"
-        static let unknownPlacement = "unknownPlacement"
-        static let placementFormatMismatch = "placementFormatMismatch"
     }
 
     struct Item: Decodable, Sendable {

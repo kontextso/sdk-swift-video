@@ -59,7 +59,6 @@ struct VideoAdTests {
     @Test func pauseAdExposesItsFacts() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p1", expires: 90_000))
         #expect(ad.id == "p1")
-        #expect(ad.placementId == "pause")
         #expect(ad.format == .pause)
         #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
         #expect(ad.position == .top)

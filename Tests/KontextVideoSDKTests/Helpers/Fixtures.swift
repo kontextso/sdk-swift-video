@@ -48,7 +48,6 @@ enum Fixtures {
 
     static func ad(
         id: String = "ad-1",
-        placementId: String = "pause",
         format: String = "pause",
         creative: String = "image",
         expires: Int = 3_600_000,
@@ -64,7 +63,6 @@ enum Fixtures {
     ) -> [String: Any] {
         var ad: [String: Any] = [
             "id": id,
-            "placementId": placementId,
             "format": format,
             "creative": creative,
             "trigger": trigger,
@@ -83,12 +81,12 @@ enum Fixtures {
         return ad
     }
 
-    static func overlayAd(id: String = "ad-o", placementId: String = "overlay", duration: Int = 6000, position: String = "bottom") -> [String: Any] {
-        ad(id: id, placementId: placementId, format: "overlay", position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
+    static func overlayAd(id: String = "ad-o", duration: Int = 6000, position: String = "bottom") -> [String: Any] {
+        ad(id: id, format: "overlay", position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
-    static func linearAd(id: String = "ad-i", placementId: String = "linear", duration: Int = 10_000, skipOffset: Int? = 5000, reward: [String: Any]? = nil) -> [String: Any] {
-        ad(id: id, placementId: placementId, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
+    static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000, reward: [String: Any]? = nil) -> [String: Any] {
+        ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
     }
 
     static func adsResponse(_ ad: [String: Any], nextRequestAt: Int? = nil) -> [String: Any] {

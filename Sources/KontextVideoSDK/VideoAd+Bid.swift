@@ -1,15 +1,14 @@
 import Foundation
 
 extension VideoAd {
-    /// The server's answer to a placement's `fetch()`, before anything is rendered: the ad's `price`,
+    /// The server's answer to a loader's `fetch()`, before anything is rendered: the ad's `price`,
     /// `size`, `duration`, ... and nothing else. For an app that decides before paying
     /// for a WebView, for example one that runs its own auction: drop a losing bid and it costs nothing;
-    /// `load()` the winner and it renders into the same `VideoAd` that a placement's `load()` returns.
-    /// A bid cannot be shown. The app owns it; the placement holds it weakly for its one-unshown-ad rule.
+    /// `load()` the winner and it renders into the same `VideoAd` that a loader's `load()` returns.
+    /// A bid cannot be shown. The app owns it; its loader holds it weakly for its one-unshown-ad rule.
     @MainActor
     public final class Bid {
         public var id: String { info.id }
-        public var placementId: String { info.placementId }
         public var format: AdFormat { info.format }
         public var price: Price { info.price }
         public var position: Position? { info.position }
@@ -36,7 +35,7 @@ extension VideoAd {
             self.owner = owner
         }
 
-        /// Renders the creative and returns the ad, ready to show, exactly as a placement's `load()`
+        /// Renders the creative and returns the ad, ready to show, exactly as a loader's `load()`
         /// would. Throws `creativeFailed(code:)` when the creative fails or times out (the bid is then
         /// done: a later `load()` throws `invalidated(.creativeFailed)`), `invalidated(.expired)` once the
         /// lifetime ran out, `invalidated(.targetingChanged)` when targeting changed meanwhile,
@@ -51,7 +50,7 @@ extension VideoAd {
             }
             guard !isLoading else {
                 Environment.assertionFailure("KontextVideo: bid \(id.prefix(8)) is already loading")
-                throw VideoAdError.placementBusy
+                throw VideoAdError.formatBusy
             }
             isLoading = true
             defer { isLoading = false }
@@ -65,7 +64,7 @@ extension VideoAd {
             }
         }
 
-        /// Whether the bid still counts for its placement's one-unshown-ad rule: not loaded yet, not
+        /// Whether the bid still counts for its loader's one-unshown-ad rule: not loaded yet, not
         /// discarded, not expired.
         var isPending: Bool {
             ad == nil && invalidationReason == nil && !info.isExpired

@@ -51,7 +51,7 @@ struct RequestTests {
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
             player: .make(playerSize: CGSize(width: 390, height: 220), playheadMs: Int((playhead * 1000).rounded())),
-            format: FormatRequest(placementId: "fullscreen-pause", options: .pause(PauseOptions(positions: [.fullscreen])))
+            format: .pause, options: PauseOptions(positions: [.fullscreen])
         )
     }
 
@@ -68,7 +68,7 @@ struct RequestTests {
         #expect(json["idfv"] is String)
         #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == false)
         #expect(json["format"] as? String == "pause")
-        #expect(json["placementId"] as? String == "fullscreen-pause")
+        #expect(json["placementId"] == nil, "no placement ids on the wire")
         #expect((json["options"] as? [String: Any])?["positions"] as? [String] == ["fullscreen"])
         #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
         let player = json["player"] as? [String: Any]
@@ -88,7 +88,7 @@ struct RequestTests {
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, status: .denied),
             content: KontextVideo.Content(id: "v", language: "en"), player: .make(playerSize: nil, playheadMs: 0),
-            format: FormatRequest(placementId: "overlay", options: .overlay(OverlayOptions()))
+            format: .overlay, options: OverlayOptions()
         )
         let json = try Fixtures.encode(request)
         #expect(json["ifa"] == nil)
@@ -96,10 +96,10 @@ struct RequestTests {
         #expect((json["options"] as? [String: Any])?.isEmpty == true, "no option set: an empty object")
     }
 
-    @Test func formatRequestKnowsItsFormat() {
-        #expect(FormatRequest(placementId: "x", options: .overlay(OverlayOptions())).format == .overlay)
-        #expect(FormatRequest(placementId: "x", options: .pause(PauseOptions())).format == .pause)
-        #expect(FormatRequest(placementId: "x", options: .linear(LinearOptions())).format == .linear)
+    @Test func eachOptionsTypeKnowsItsFormat() {
+        #expect(OverlayOptions.format == .overlay)
+        #expect(PauseOptions.format == .pause)
+        #expect(LinearOptions.format == .linear)
     }
 
     // MARK: PlayerSnapshot

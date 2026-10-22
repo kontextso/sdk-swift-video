@@ -14,15 +14,13 @@ public enum VideoAdError: Error, Sendable {
     case destroyed
     /// The server switched the SDK off for this app launch (`/config` or an ads response said so).
     case disabled(reason: String)
-    /// The placement already has an ad loading, or loaded but not shown. One unshown ad per placement at
-    /// a time: show it or drop it, then load again. An ad on screen does not block the next load.
-    case placementBusy
-    /// No placement with this id exists for the publisher token, or it has another format than the one
-    /// requested. An integration bug: fix the id or the dashboard. `message` is the server's sentence.
-    case invalidPlacement(id: String, message: String)
+    /// The loader already has an ad loading, fetched but not loaded, or loaded but not shown. One unshown
+    /// ad per format at a time: show it or drop it, then load again. An ad on screen does not block the
+    /// next load.
+    case formatBusy
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
-    /// `contentUnsafe`, `placementDisabled`, `temporaryError`, ... Not a failure, and never retried by
-    /// the SDK; the app decides when to ask again.
+    /// `contentUnsafe`, `formatNotEnabled` (no configuration for this format in the Kontext dashboard),
+    /// `temporaryError`, ... Not a failure, and never retried by the SDK; the app decides when to ask again.
     case noFill(reason: String)
     /// The request failed: no network, a timeout, a server error, an unexpected answer.
     case request(Error)
@@ -60,10 +58,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the VideoAds was destroyed"
         case .disabled(let reason):
             return "the SDK is disabled by the server (\(reason))"
-        case .placementBusy:
-            return "the placement already has an ad loading, or loaded and not yet shown"
-        case .invalidPlacement(let id, let message):
-            return "placement \"\(id)\": \(message)"
+        case .formatBusy:
+            return "this format already has an ad loading, or loaded and not yet shown"
         case .noFill(let reason):
             return "no fill (\(reason))"
         case .request(let error):

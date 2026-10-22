@@ -18,11 +18,11 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
-│   ├── VideoAds.swift                              one video's ads: placements, loading, the playhead
+│   ├── VideoAds.swift                              one video's ads: the three loaders, loading, the playhead
 │   ├── VideoAd.swift                               one ad: the lifecycle from load to didEnd
 │   ├── VideoAd+Info.swift, VideoAd+Bid.swift       the ad as the SDK knows it (wire → seconds); the unrendered answer to fetch()
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
-│   ├── Placement.swift                             Placement<Options>; the overlay / pause / linear aliases
+│   ├── AdLoader.swift                              AdLoader<Options>, one per format; the overlay / pause / linear aliases
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options
 │   ├── API/          the wire: requests, responses (incl. the error body), the ad payload, device info, privacy, SDKInfo, the client
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
@@ -74,7 +74,7 @@ What to read afterwards:
   ```
 
 The mock's README lists the switches a request can flip: a token ending in `-disabled` or `-debug`, a video id
-starting with `nofill`, a placement id ending in `-disabled`, and so on.
+starting with `nofill`, and so on.
 
 ## Where things are decided
 
