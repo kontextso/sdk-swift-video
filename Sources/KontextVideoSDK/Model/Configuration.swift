@@ -24,10 +24,10 @@ extension KontextVideo {
 
         /// When a format's loader asks the server for the next ad by itself.
         public enum RefetchPolicy: Sendable, Equatable {
-            /// Never: the next `load()` fetches, or the app calls `fetch()`.
+            /// Never: the next `ads.format(_:)` or `load()` fetches when the SDK holds nothing.
             case never
             /// After an ad of the format ended (`didEnd`): the loader fetches the next one with the options
-            /// declared at `VideoAds` creation, so the next `load()` renders at once. One request per
+            /// declared at `VideoAds` creation, so the next `ads.format(_:)` / `load()` renders at once. One request per
             /// ended ad, never a loop.
             case afterEnd
         }
