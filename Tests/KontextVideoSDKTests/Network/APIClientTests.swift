@@ -49,6 +49,31 @@ struct APIClientTests {
         }
     }
 
+    /// Whatever the server puts in an error body, the client throws `APIError.http` with the status: a
+    /// body it cannot read becomes no items, never a different error.
+    @Test func anErrorBodyTheClientCannotReadStillGivesTheStatus() async {
+        let bodies: [(String, Int, StubServer.Response, String)] = [
+            ("{}", 400, .json([String: Any](), status: 400), "HTTP 400"),
+            ("errors of the wrong type", 400, .json(["errors": "nope"], status: 400), "HTTP 400"),
+            ("an item with nothing in it", 400, .json(["errors": [[String: Any]()]], status: 400), "HTTP 400"),
+            ("an HTML gateway page", 502, StubServer.Response(status: 502, body: Data("<html><body>Bad Gateway</body></html>".utf8)), "HTTP 502"),
+        ]
+        for (name, status, response, description) in bodies {
+            server.on("/v2/ping", response)
+            do {
+                let _: Reply = try await client.post("ping", body: Body(hello: "x"))
+                Issue.record("expected a throw for \(name)")
+            } catch let error as APIError {
+                guard case .http(let got, _) = error else { Issue.record("expected http for \(name), got \(error)"); continue }
+                #expect(got == status, "\(name)")
+                #expect(error.description == description, "\(name)")
+                #expect(error.isRetryable == (status >= 500), "\(name)")
+            } catch {
+                Issue.record("unexpected \(error) for \(name)")
+            }
+        }
+    }
+
     @Test func serverErrorsAndRateLimitsAreRetryable() async {
         for status in [500, 503, 429] {
             server.on("/v2/ping", .empty(status))
