@@ -78,7 +78,7 @@ struct AdPayload: Decodable, Sendable {
         /// `sizes`: every variant the creative carries
         /// assets for, at least one, the first built for the request's player; the SDK picks the best fit
         /// for the real box at show.
-        case overlay(position: AdPosition, sizes: [Size], duration: Int?)
+        case overlay(position: OverlayOptions.Position, sizes: [Size], duration: Int?)
         /// `sizes` is empty for the fullscreen variant.
         case pause(position: PauseOptions.Position, sizes: [Size])
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
@@ -140,7 +140,7 @@ struct AdPayload: Decodable, Sendable {
         switch format {
         case .overlay:
             details = .overlay(
-                position: try container.decode(AdPosition.self, forKey: .position),
+                position: try container.decode(OverlayOptions.Position.self, forKey: .position),
                 sizes: try Self.sizes(from: container),
                 duration: try container.decodeIfPresent(Int.self, forKey: .duration)
             )

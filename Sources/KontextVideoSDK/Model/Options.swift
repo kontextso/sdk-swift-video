@@ -9,11 +9,6 @@ public enum AdFormat: String, Codable, Sendable {
     case linear
 }
 
-public enum AdPosition: String, Codable, Sendable {
-    case top
-    case bottom
-}
-
 public struct PauseOptions: AdOptions, Equatable {
     public enum Position: String, Codable, Sendable {
         case top
@@ -34,13 +29,19 @@ public struct PauseOptions: AdOptions, Equatable {
 }
 
 public struct OverlayOptions: AdOptions, Equatable {
+    /// Where an overlay can sit; never full screen.
+    public enum Position: String, Codable, Sendable {
+        case top
+        case bottom
+    }
+
     /// Where the app can render it; the default is top and bottom.
-    public let positions: [AdPosition]?
+    public let positions: [Position]?
     /// Seconds on screen at most; the server picks a creative whose `duration` fits. The SDK removes the
     /// overlay itself when its `duration` elapses.
     public let maxDuration: TimeInterval?
 
-    public init(positions: [AdPosition]? = nil, maxDuration: TimeInterval? = nil) {
+    public init(positions: [Position]? = nil, maxDuration: TimeInterval? = nil) {
         self.positions = positions
         self.maxDuration = maxDuration
     }
