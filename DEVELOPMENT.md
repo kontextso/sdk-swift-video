@@ -24,8 +24,8 @@ sdk-swift-video/
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options (+ FormatRequest), FormatKey
 │   ├── Loading/      how an answer becomes an ad (internal): AdLoader, AdSlot
-│   ├── Network/      talking to the server, any route: APIClient, APIError, ErrorResponse
-│   ├── Payloads/     the bodies of each route, named as in the spec: Config and Ads requests and responses, AdPayload, SDKInfo
+│   ├── Network/      talking to the server, any route: APIClient, APIError
+│   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      Logger, Environment (the test seams), the debug reporter
