@@ -58,6 +58,8 @@ public final class VideoAd {
         case containerTooSmall
     }
 
+    /// The facts, as a loader's `info` gave them before rendering; `size` may differ after `show`.
+    public var info: Info { answer.info }
     public var id: String { info.id }
     public var format: AdFormat { info.format }
     public var price: Price { info.price }
@@ -104,8 +106,8 @@ public final class VideoAd {
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
 
-    /// The ad as the SDK knows it, shared with `Bid`; the expiry counts from the response.
-    let info: Info
+    /// The server's answer this ad renders; the expiry counts from the response.
+    let answer: Answer
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
     /// once, so `load` can return a ready ad.
     let bridge: FrameBridge
@@ -128,16 +130,15 @@ public final class VideoAd {
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private var durationTask: Task<Void, Never>?
 
-    /// `info` is the bid's, so the expiry counts from the response, not from the moment the bid was
-    /// loaded. The page starts loading at once.
-    init(info: Info) {
-        self.info = info
-        bridge = FrameBridge(adId: info.id, url: info.frameURL, isVideo: info.creative == .video)
-        tracker = Tracker(adId: info.id, entries: info.tracking)
+    /// The expiry counts from the response, not from this moment. The page starts loading at once.
+    init(answer: Answer) {
+        self.answer = answer
+        bridge = FrameBridge(adId: answer.info.id, url: answer.frameURL, isVideo: answer.creative == .video)
+        tracker = Tracker(adId: answer.info.id, entries: answer.tracking)
         tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
-        let remaining = info.remainingLifetime
+        let remaining = answer.remainingLifetime
         expiryTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !wasShown else { return }
@@ -243,7 +244,7 @@ public final class VideoAd {
         if let owner, owner.isShowingAnAd { throw VideoAdError.anotherAdShowing }
         if isExpired { invalidate(.expired) }
         if let reason = invalidationReason { throw VideoAdError.invalidated(reason) }
-        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: info.creative == .video ? 400 : 500)) }
+        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: answer.creative == .video ? 400 : 500)) }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
@@ -288,7 +289,7 @@ public final class VideoAd {
         // creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        if info.creative == .image {
+        if answer.creative == .image {
             recordImpression()
         }
         // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then
@@ -383,7 +384,7 @@ public final class VideoAd {
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
     private func startMeter() {
         guard !hasEnded, meter == nil else { return }
-        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: info.creative == .video ? 2 : 1)
+        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: answer.creative == .video ? 2 : 1)
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -548,7 +549,7 @@ public final class VideoAd {
 
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
-        info.isExpired
+        answer.isExpired
     }
 
     /// Whether this ad still counts for its loader's one-unshown-ad rule: loading, or loaded and not

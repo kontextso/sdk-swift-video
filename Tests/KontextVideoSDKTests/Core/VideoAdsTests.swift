@@ -39,10 +39,10 @@ struct VideoAdsTests {
 
     @Test func theThreeLoadersAreCreatedWithTheVideoAds() async {
         let ads = await makeAds()
-        #expect(ads.format(.overlay) === ads.format(.overlay), "the same loader every time")
-        #expect(ads.format(.pause).slot.format == .pause)
-        #expect(ads.format(.linear).slot.format == .linear)
-        #expect(ads.format(.overlay).slot.format == .overlay)
+        #expect(ads.loader(.overlay) === ads.loader(.overlay), "the same loader every time")
+        #expect(ads.loader(.pause).slot.format == .pause)
+        #expect(ads.loader(.linear).slot.format == .linear)
+        #expect(ads.loader(.overlay).slot.format == .overlay)
     }
 
     // MARK: the creation-time request
@@ -54,8 +54,8 @@ struct VideoAdsTests {
             "pause": Fixtures.filledEntry(Fixtures.ad(id: "p1")),
         ])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear(LinearOptions(timing: .preroll)), .pause()])
-        let bid = try await ads.format(.pause).bid
-        #expect(bid.id == "p1")
+        let info = try await ads.format(.pause).info
+        #expect(info.id == "p1")
         let preroll = try await ads.format(.linear).load()
         #expect(preroll.id == "l1")
         let requests = harness.server.requests(to: "/v2/video/ads")
@@ -63,8 +63,7 @@ struct VideoAdsTests {
         let formats = requests.first?.body?["formats"] as? [[String: Any]]
         #expect(formats?.map { $0["format"] as? String } == ["linear", "pause"])
         #expect((formats?.first?["options"] as? [String: Any])?["timing"] as? String == "preroll")
-        #expect(pages.served == ["l1"], "the pause bid is not rendered until load")
-        withExtendedLifetime(bid) {}
+        #expect(pages.served == ["l1"], "the pause ad is not rendered until load")
     }
 
     @Test func aFormatsNoFillFromCreationIsThrownOnceThenAskedAgain() async throws {
@@ -87,7 +86,7 @@ struct VideoAdsTests {
         _ = await harness.initialize()
         harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p3"))])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
-        _ = try await ads.format(.pause).bid
+        _ = try await ads.format(.pause).info
         harness.serve(Fixtures.overlayAd(id: "o3"))
         let overlay = try await ads.format(.overlay).load()
         #expect(overlay.id == "o3")
@@ -111,10 +110,11 @@ struct VideoAdsTests {
         harness.serve(formats: ["linear": Fixtures.filledEntry(Fixtures.linearAd(id: "l5"))])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear()])
         harness.serve(Fixtures.linearAd(id: "l6"))
-        let fresh = try await ads.format(.linear).fetch(LinearOptions(timing: .postroll))
+        let fresh = try await ads.format(.linear, options: LinearOptions(timing: .postroll))
         #expect(fresh.id == "l6")
-        let held = try await ads.format(.linear).bid
-        #expect(held === fresh, "bid is what fetch brought")
+        let held = try await ads.format(.linear).info
+        #expect(held == fresh.info, "the next call gives what the fresh request brought")
+        #expect(try await ads.format(.linear).load().id == "l6", "and load renders it")
         let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["formats"] as? [[String: Any]] }
         #expect((bodies.last?.first?["options"] as? [String: Any])?["timing"] as? String == "postroll")
     }
@@ -125,7 +125,7 @@ struct VideoAdsTests {
         _ = await harness.initialize()
         harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p7"))])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause(PauseOptions(positions: [.top])), .pause(PauseOptions(positions: [.fullscreen]))])
-        _ = try await ads.format(.pause).bid
+        _ = try await ads.format(.pause).info
         #expect(messages.count == 1)
         let formats = harness.server.requests(to: "/v2/video/ads").first?.body?["formats"] as? [[String: Any]]
         #expect(formats?.count == 1)
@@ -191,7 +191,7 @@ struct VideoAdsTests {
     @Test func loadReturnsAReadyAdWithTheRequestsFormatAndOptions() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-1"))
-        let ad = try await ads.format(.pause).load(PauseOptions(positions: [.top, .fullscreen]))
+        let ad = try await ads.format(.pause, options: PauseOptions(positions: [.top, .fullscreen])).load()
         #expect(ad.isReady)
         #expect(ad.id == "img-1")
         #expect(ad.format == .pause)
@@ -293,9 +293,9 @@ struct VideoAdsTests {
 
     @Test func loadAfterDestroyThrowsDestroyedEvenOnAKeptLoader() async {
         let ads = await makeAds()
-        let loader = ads.format(.pause)
+        let loader = { try await ads.format(.pause) }
         ads.destroy()
-        let kept = await loadError { try await loader.load() }
+        let kept = await loadError { try await loader().load() }
         guard case .destroyed = kept else { Issue.record("expected destroyed"); return }
         let fresh = await loadError { try await ads.format(.overlay).load() }
         guard case .destroyed = fresh else { Issue.record("expected destroyed"); return }
@@ -307,10 +307,10 @@ struct VideoAdsTests {
     @Test func loadWhileLoadingIsBusy() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-7"))), delay: 0.3) }
-        let loader = ads.format(.pause)
-        let first = Task { try await loader.load() }
+        let loader = { try await ads.format(.pause) }
+        let first = Task { try await loader().load() }
         await sleepMs(50)
-        let error = await loadError { try await loader.load() }
+        let error = await loadError { try await loader().load() }
         guard case .formatBusy = error else { Issue.record("expected formatBusy"); return }
         _ = try await first.value
     }
@@ -433,8 +433,8 @@ struct VideoAdsTests {
     @Test func cancellingDuringTheRequestThrowsCancellationErrorAndFreesTheLoader() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-14"))), delay: 0.5) }
-        let placement = ads.format(.pause)
-        let task = Task { try await placement.load() }
+        let placement = { try await ads.format(.pause) }
+        let task = Task { try await placement().load() }
         await sleepMs(50)
         task.cancel()
         do {
@@ -445,15 +445,15 @@ struct VideoAdsTests {
             Issue.record("expected CancellationError, got \(error)")
         }
         harness.serve(Fixtures.ad(id: "img-15"))
-        let next = try await placement.load()
+        let next = try await placement().load()
         #expect(next.id == "img-15")
     }
 
     @Test func cancellingDuringThePageLoadStopsThePage() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "dead-2"))
-        let placement = ads.format(.pause)
-        let task = Task { try await placement.load() }
+        let placement = { try await ads.format(.pause) }
+        let task = Task { try await placement().load() }
         #expect(await waitUntil { self.pages.served.contains("dead-2") })
         task.cancel()
         do {
@@ -464,14 +464,14 @@ struct VideoAdsTests {
             Issue.record("expected CancellationError, got \(error)")
         }
         harness.serve(Fixtures.ad(id: "img-16"))
-        _ = try await placement.load()
+        _ = try await placement().load()
     }
 
     @Test func destroyDuringThePageLoadFailsTheLoad() async {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "dead-3"))
-        let placement = ads.format(.pause)
-        let task = Task { try await placement.load() }
+        let placement = { try await ads.format(.pause) }
+        let task = Task { try await placement().load() }
         #expect(await waitUntil { self.pages.served.contains("dead-3") })
         ads.destroy()
         do {

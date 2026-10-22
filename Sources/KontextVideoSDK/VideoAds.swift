@@ -26,17 +26,24 @@ public final class VideoAds {
     /// The `AVPlayer` whose `currentTime()` is the playhead; held weakly.
     private weak var trackedPlayer: AVPlayer?
 
-    private let overlay = OverlayLoader()
-    private let pause = PauseLoader()
-    private let linear = LinearLoader()
+    private let overlay = AdLoader<OverlayOptions>()
+    private let pause = AdLoader<PauseOptions>()
+    private let linear = AdLoader<LinearOptions>()
     /// The loaders' state, by format, for the rules that touch all of them.
     private var slots: [AdFormat: AdSlot] { [.overlay: overlay.slot, .pause: pause.slot, .linear: linear.slot] }
 
-    /// The loader of one format: `ads.format(.pause).load()`, `ads.format(.overlay).bid.price`. The same
-    /// object every time; it holds the format's answer and its one-unshown-ad-at-a-time state. The key
-    /// is typed, so `load` and `fetch` take the format's own options.
-    public func format<Options: AdOptions>(_ key: FormatKey<Options>) -> AdLoader<Options> {
-        // The three are the only `AdLoader`s with these `Options`; the cast cannot fail.
+    /// The server's answer for one format, nothing rendered yet: `try await ads.format(.pause)`, then its
+    /// `price` and other facts, then `load()`. Without options: the answer the creation-time request (or
+    /// a refetch) brought, waiting for it while it is in flight, else one fetched now with the options
+    /// declared at creation; a no-fill is thrown once, and the next call asks again. With options: a fresh
+    /// request with them, always. Throws `.formatBusy` while an ad of this format is loading or loaded and
+    /// not yet shown, and the request-side errors (`noFill`, `request`, the initialisation cases).
+    public func format<Options: AdOptions>(_ key: FormatKey<Options>, options: Options? = nil) async throws -> VideoAd.Bid {
+        try await loader(key).bid(options: options)
+    }
+
+    /// The three are the only `AdLoader`s with these `Options`; the cast cannot fail.
+    func loader<Options: AdOptions>(_ key: FormatKey<Options>) -> AdLoader<Options> {
         switch key.format {
         case .overlay: return overlay as! AdLoader<Options>
         case .pause: return pause as! AdLoader<Options>
@@ -89,7 +96,7 @@ public final class VideoAds {
             let response = try await request(formats)
             for slot in slots {
                 do {
-                    slot.didPrefetch(try bid(from: response, for: slot.format))
+                    slot.hold(try answer(from: response, for: slot.format))
                 } catch VideoAdError.noFill(let reason) {
                     slot.noFillReason = reason
                 } catch {
@@ -150,7 +157,7 @@ public final class VideoAds {
     /// (the app already loaded the next one) and never after `destroy()`.
     private func refetchIfConfigured(_ slot: AdSlot) {
         guard !isDestroyed, KontextVideo.shared.configuration?.formats[slot.format]?.refetch == .afterEnd else { return }
-        guard !slot.isBusy, slot.prefetched == nil else { return }
+        guard !slot.isBusy, slot.held == nil else { return }
         let request = slot.declared ?? Self.defaultRequest(for: slot.format)
         Logger.debug("\(slot.format) for \(content.id): fetching the next ad after the last one ended")
         slot.isLoading = true
@@ -169,9 +176,9 @@ public final class VideoAds {
     }
 
     /// One request for one format, run on the caller's task so cancelling that task cancels the request.
-    /// Returns the server's answer as a bid, nothing rendered, or throws: no fill, a failed request, a busy
-    /// loader, an SDK that is not ready. Waits for `/config` when that is still in flight.
-    func fetch(slot: AdSlot, request formatRequest: FormatRequest) async throws -> VideoAd.Bid {
+    /// Returns the server's answer, held by the slot, nothing rendered, or throws: no fill, a failed
+    /// request, a busy loader, an SDK that is not ready. Waits for `/config` when that is still in flight.
+    func fetch(slot: AdSlot, request formatRequest: FormatRequest) async throws -> VideoAd.Answer {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let format = slot.format
@@ -182,9 +189,9 @@ public final class VideoAds {
         slot.isLoading = true
         defer { slot.isLoading = false }
         let response = try await request([formatRequest])
-        let bid = try bid(from: response, for: format)
-        slot.didFetch(bid)
-        return bid
+        let answer = try answer(from: response, for: format)
+        slot.hold(answer)
+        return answer
     }
 
     /// The request pipeline every fetch shares: wait for `/config`, read the ATT status, build and send.
@@ -216,8 +223,8 @@ public final class VideoAds {
         return response
     }
 
-    /// One format's answer as a bid, or its no-fill thrown.
-    private func bid(from response: AdsResponse, for format: AdFormat) throws -> VideoAd.Bid {
+    /// One format's answer, or its no-fill thrown.
+    private func answer(from response: AdsResponse, for format: AdFormat) throws -> VideoAd.Answer {
         guard let result = response.result(for: format) else {
             Logger.error("\(format) for \(content.id): the server answered for other formats, not this one")
             throw VideoAdError.request(APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no formats entry for \(format)"))))
@@ -229,7 +236,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            return VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
+            return VideoAd.Answer(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime)
         }
         let reason = result.noFillReason ?? AdsResponse.unknownReason
         // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
@@ -243,10 +250,15 @@ public final class VideoAds {
     }
 
     /// The second half of a load: the page starts loading now, and the ad is returned only when it
-    /// reported `ad.loaded`. Called by `Bid.load()`, on the caller's task.
-    func render(_ bid: VideoAd.Bid) async throws -> VideoAd {
-        guard !isDestroyed, let slot = slots[bid.format] else { throw VideoAdError.destroyed }
-        let videoAd = VideoAd(info: bid.info)
+    /// reported `ad.loaded`. Called by the loader's `load()`, on the caller's task; the slot's held answer
+    /// is consumed.
+    func render(slot: AdSlot, answer: VideoAd.Answer) async throws -> VideoAd {
+        guard !isDestroyed else { throw VideoAdError.destroyed }
+        if slot.isBusy {
+            Logger.warning("\(slot.format) for \(content.id): load refused, the loader has an ad loading, or loaded and not yet shown")
+            throw VideoAdError.formatBusy
+        }
+        let videoAd = VideoAd(answer: answer)
         videoAd.owner = self
         slot.didStartRendering(videoAd)
         let started = ProcessInfo.processInfo.systemUptime
@@ -254,13 +266,13 @@ public final class VideoAds {
             try await videoAd.awaitLoaded()
         } catch {
             slot.didFailRendering()
-            DebugReporter.shared.event("ad.loadFailed", adId: bid.id, level: .warning, state: ["reason": .string("\(error)")])
+            DebugReporter.shared.event("ad.loadFailed", adId: videoAd.id, level: .warning, state: ["reason": .string("\(error)")])
             throw error
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let durationMs = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
-        Logger.info("\(bid.format) for \(content.id): ad \(bid.id.prefix(8)) ready in \(durationMs) ms")
-        DebugReporter.shared.event("ad.loaded", adId: bid.id, state: ["durationMs": .number(Double(durationMs))])
+        Logger.info("\(slot.format) for \(content.id): ad \(videoAd.id.prefix(8)) ready in \(durationMs) ms")
+        DebugReporter.shared.event("ad.loaded", adId: videoAd.id, state: ["durationMs": .number(Double(durationMs))])
         return videoAd
     }
 
@@ -279,20 +291,20 @@ public final class VideoAds {
         }
     }
 
-    /// Every ad and bid the loaders handed out that the app still holds and that are not yet gone.
-    private var live: (ads: [VideoAd], bids: [VideoAd.Bid]) {
-        let live = slots.values.map(\.live)
-        return (live.compactMap(\.ad), live.compactMap(\.bid))
+    /// The loaded, unshown ads the app still holds.
+    private var liveAds: [VideoAd] {
+        slots.values.compactMap(\.liveAd)
     }
 
-    /// The spec's rule: when the viewer's data or consent changes, loaded ads that were not shown, and
-    /// bids not loaded yet, are dropped so the next request carries the new values.
+    /// The spec's rule: when the viewer's data or consent changes, loaded ads that were not shown are
+    /// discarded, and answers held but not rendered are dropped, so the next request carries the new values.
     func discardLoadedAds(reason: String) {
-        let (ads, pending) = live
-        guard !ads.isEmpty || !pending.isEmpty else { return }
-        Logger.debug("\(content.id): discarding \(ads.count) loaded ad(s) and \(pending.count) bid(s), \(reason)")
+        let ads = liveAds
+        let held = slots.values.filter { $0.held != nil }
+        guard !ads.isEmpty || !held.isEmpty else { return }
+        Logger.debug("\(content.id): discarding \(ads.count) loaded ad(s) and \(held.count) held answer(s), \(reason)")
         ads.forEach { $0.invalidate(.targetingChanged) }
-        pending.forEach { $0.invalidate(.targetingChanged) }
+        held.forEach { $0.dropHeld() }
     }
 
     /// Deallocation does what `destroy()` does. Loads in flight hold `self` for their duration, so none
@@ -303,7 +315,6 @@ public final class VideoAds {
         let teardown: @MainActor () -> Void = {
             for slot in slots {
                 slot.pendingAd?.invalidate(.destroyed)
-                (slot.pendingBid ?? slot.prefetched)?.invalidate(.destroyed)
                 slot.showing?.invalidate(.destroyed)
             }
         }
@@ -321,9 +332,7 @@ public final class VideoAds {
         guard !isDestroyed else { return }
         isDestroyed = true
         prefetch?.cancel()
-        let (ads, pending) = live
-        ads.forEach { $0.invalidate(.destroyed) }
-        pending.forEach { $0.invalidate(.destroyed) }
+        liveAds.forEach { $0.invalidate(.destroyed) }
         slots.values.forEach { slot in
             slot.showing?.invalidate(.destroyed)
             slot.clear()

@@ -1,13 +1,17 @@
 import Foundation
 
 extension VideoAd {
-    /// The server's answer to a loader's `fetch()`, before anything is rendered: the ad's `price`,
-    /// `size`, `duration`, ... and nothing else. For an app that decides before paying
-    /// for a WebView, for example one that runs its own auction: drop a losing bid and it costs nothing;
-    /// `load()` the winner and it renders into the same `VideoAd` that a loader's `load()` returns.
-    /// A bid cannot be shown. The app owns it; its loader holds it weakly for its one-unshown-ad rule.
+    /// The server's answer for one format, before anything is rendered: what `VideoAds.format(_:options:)`
+    /// returns. Look at its facts (`price`, `size`, `duration`, ...), then `load()` to render it, or drop it.
+    ///
+    /// ```swift
+    /// let pause = try await ads.format(.pause)
+    /// if pause.price.value > floor { let ad = try await pause.load() }
+    /// ```
     @MainActor
     public final class Bid {
+        /// The facts, as the `VideoAd` will report them (`size` may change at `show`).
+        public let info: Info
         public var id: String { info.id }
         public var format: AdFormat { info.format }
         public var price: Price { info.price }
@@ -19,62 +23,33 @@ extension VideoAd {
         public var skipOffset: TimeInterval? { info.skipOffset }
         public var reward: Reward? { info.reward }
 
-        /// Everything the SDK knows about the ad; handed to the `VideoAd` at `load()`.
-        let info: Info
-        /// The `VideoAds` that fetched it; renders it at `load()`.
-        weak var owner: VideoAds?
+        let answer: Answer
+        private let slot: AdSlot
+        private weak var ads: VideoAds?
         /// The ad `load()` produced, so a second `load()` returns the same one: a bid is not a factory.
-        private(set) var ad: VideoAd?
-        /// Set when the bid was discarded before `load()` (targeting changed, `destroy()`), or by `load()`
-        /// finding it expired; `load()` throws it.
-        private(set) var invalidationReason: InvalidationReason?
-        private var isLoading = false
+        private var ad: VideoAd?
 
-        init(payload: AdPayload, receivedAt: TimeInterval, owner: VideoAds) {
-            info = Info(ad: payload, receivedAt: receivedAt)
-            self.owner = owner
+        init(answer: Answer, slot: AdSlot, ads: VideoAds) {
+            self.answer = answer
+            info = answer.info
+            self.slot = slot
+            self.ads = ads
         }
 
-        /// Renders the creative and returns the ad, ready to show, exactly as a loader's `load()`
-        /// would. Throws `creativeFailed(code:)` when the creative fails or times out (the bid is then
-        /// done: a later `load()` throws `invalidated(.creativeFailed)`), `invalidated(.expired)` once the
-        /// lifetime ran out, `invalidated(.targetingChanged)` when targeting changed meanwhile,
-        /// `destroyed`, or `CancellationError`.
+        /// Renders the creative and returns the ad, ready to show. Throws `creativeFailed(code:)` when the
+        /// creative fails or times out, `invalidated(.expired)` once the answer's lifetime ran out,
+        /// `formatBusy` while another ad of this format is loading or loaded and not yet shown,
+        /// `destroyed`, or `CancellationError`. A second call returns the same ad.
         public func load() async throws -> VideoAd {
             if let ad { return ad }
-            guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
-            if info.isExpired { invalidate(.expired) }
-            if let reason = invalidationReason {
-                if reason == .destroyed { throw VideoAdError.destroyed }
-                throw VideoAdError.invalidated(reason)
+            guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
+            if answer.isExpired {
+                if slot.held?.info.id == id { slot.dropHeld() }
+                throw VideoAdError.invalidated(.expired)
             }
-            guard !isLoading else {
-                Environment.assertionFailure("KontextVideo: bid \(id.prefix(8)) is already loading")
-                throw VideoAdError.formatBusy
-            }
-            isLoading = true
-            defer { isLoading = false }
-            do {
-                let ad = try await owner.render(self)
-                self.ad = ad
-                return ad
-            } catch VideoAdError.creativeFailed(let code) {
-                invalidate(.creativeFailed(code: code))
-                throw VideoAdError.creativeFailed(code: code)
-            }
-        }
-
-        /// Whether the bid still counts for its loader's one-unshown-ad rule: not loaded yet, not
-        /// discarded, not expired.
-        var isPending: Bool {
-            ad == nil && invalidationReason == nil && !info.isExpired
-        }
-
-        /// Discarded before `load()`; the app learns it when `load()` throws.
-        func invalidate(_ reason: InvalidationReason) {
-            guard ad == nil, invalidationReason == nil else { return }
-            invalidationReason = reason
-            Logger.debug("bid \(id.prefix(8)) invalidated: \(reason)")
+            let ad = try await ads.render(slot: slot, answer: answer)
+            self.ad = ad
+            return ad
         }
     }
 }

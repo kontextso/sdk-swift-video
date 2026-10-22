@@ -41,7 +41,7 @@ struct IntegrationTests {
         harness.serve(Fixtures.ad(id: "img-pause"))
         let delegate = RecordingDelegate()
 
-        let ad = try await ads.format(.pause).load(PauseOptions(positions: [.top, .bottom]))
+        let ad = try await ads.format(.pause, options: PauseOptions(positions: [.top, .bottom])).load()
         ad.delegate = delegate
         #expect(ad.isReady)
         #expect(await waitUntil { self.events(for: "img-pause") == ["loaded"] })
@@ -126,7 +126,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
         let delegate = RecordingDelegate()
-        let ad = try await ads.format(.linear).load(LinearOptions(rewarded: true))
+        let ad = try await ads.format(.linear, options: LinearOptions(rewarded: true)).load()
         ad.delegate = delegate
         #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
@@ -213,7 +213,7 @@ struct IntegrationTests {
 
     @Test func expiredAdCannotBeShown() async throws {
         let ads = await start()
-        harness.serve(Fixtures.ad(id: "img-exp", expires: 700))   // enough for the page to load first
+        harness.serve(Fixtures.ad(id: "img-exp", expires: 1500))  // enough for the page to load first
         let delegate = RecordingDelegate()
         let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
