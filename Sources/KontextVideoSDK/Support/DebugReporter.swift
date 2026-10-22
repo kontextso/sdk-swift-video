@@ -1,6 +1,6 @@
 import Foundation
 
-/// Sends the SDK's debug events to `POST /debug`, only when `/init` asked for it (`reportDebug`).
+/// Sends the SDK's debug events to `POST /debug`, only when `/config` asked for it (`reportDebug`).
 /// Events are buffered and sent in batches, at most one request per 100 ms. The body carries small
 /// facts only: names, ad ids, levels, and short string/number/boolean state. Never the IFA, the IDFV,
 /// the email, the user id, consent strings, request or response bodies.
@@ -68,7 +68,7 @@ final class DebugReporter {
     /// At most one request per interval. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 0.1
 
-    /// Set from the `/init` response; nothing is sent while `false`.
+    /// Set from the `/config` response; nothing is sent while `false`.
     var isEnabled = false {
         didSet { if !isEnabled { buffer.removeAll() } }
     }

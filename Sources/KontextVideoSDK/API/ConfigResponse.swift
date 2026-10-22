@@ -1,5 +1,5 @@
-/// The answer to `POST /init`.
-enum InitResponse: Decodable, Sendable {
+/// The answer to `POST /config`.
+enum ConfigResponse: Decodable, Sendable {
     /// `reportDebug`: when true the SDK sends its debug log to `/debug`.
     case enabled(reportDebug: Bool)
     /// The server switched the SDK off. The list of reasons may grow, so it stays a string.

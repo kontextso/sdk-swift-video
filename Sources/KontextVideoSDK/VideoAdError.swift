@@ -7,12 +7,12 @@ public enum VideoAdError: Error, Sendable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion when the
     /// `VideoAds` was created; a release build gets this error instead, and works once `initialize` runs.
     case notInitialized
-    /// `/init` failed, and the retry this `load` made failed too. Every `load` retries it; no ads until
+    /// `/config` failed, and the retry this `load` made failed too. Every `load` retries it; no ads until
     /// it succeeds.
     case initializationFailed
     /// The `VideoAds` was destroyed. It is terminal: create a new one for the next content.
     case destroyed
-    /// The server switched the SDK off for this app launch (`/init` or an ads response said so).
+    /// The server switched the SDK off for this app launch (`/config` or an ads response said so).
     case disabled(reason: String)
     /// The placement already has an ad loading, or loaded but not shown. One unshown ad per placement at
     /// a time: show it or drop it, then load again. An ad on screen does not block the next load.
@@ -55,7 +55,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .notInitialized:
             return "KontextVideo.shared.initialize(with:) was not called"
         case .initializationFailed:
-            return "/init failed, and retrying it failed too; no ads until it succeeds"
+            return "/config failed, and retrying it failed too; no ads until it succeeds"
         case .destroyed:
             return "the VideoAds was destroyed"
         case .disabled(let reason):

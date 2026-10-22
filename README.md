@@ -137,7 +137,7 @@ Get the placement object once from `ads` and keep it; the format in the call mus
 the ad you get; keep a reference until it is shown, drop it and it is gone. One *unshown* ad per placement at a
 time: a second `load` while one is loading or waiting to be shown throws `.placementBusy`, but a `load` while the
 previous ad is on screen is fine, so the next one is ready the moment the current one ends. Loads started while the
-SDK is still initialising wait for it; after a failed `/init`, every `load` retries it first.
+SDK is still initialising wait for it; after a failed `/config`, every `load` retries it first.
 
 ```swift
 let overlay = ads.overlayPlacement("overlay")

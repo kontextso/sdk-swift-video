@@ -1,7 +1,7 @@
 import Foundation
 
-/// The body of `POST /init`.
-struct InitRequest: Encodable, Sendable {
+/// The body of `POST /config`.
+struct ConfigRequest: Encodable, Sendable {
     struct Device: Encodable, Sendable {
         let os: OSInfo
         let hardware: HardwareInfo
@@ -17,8 +17,8 @@ struct InitRequest: Encodable, Sendable {
     let attribution: AttributionIds
 
     @MainActor
-    static func make(configuration: KontextVideo.Configuration, installId: String) -> InitRequest {
-        InitRequest(
+    static func make(configuration: KontextVideo.Configuration, installId: String) -> ConfigRequest {
+        ConfigRequest(
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: installId,

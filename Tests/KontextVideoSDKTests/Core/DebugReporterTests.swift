@@ -2,7 +2,7 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// `/debug` reporting: off until `/init` asks, batched once per interval, the body's shape, and never
+/// `/debug` reporting: off until `/config` asks, batched once per interval, the body's shape, and never
 /// anything the spec forbids.
 extension SerialSuites {
 @Suite
@@ -22,7 +22,7 @@ struct DebugReporterTests {
     }
 
     @Test func enabledByInitEventsAreBatchedWithTheBodyShape() async throws {
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         DebugReporter.shared.event("ads.request", state: ["placementId": "pause", "playhead": 1200, "filled": true])
         DebugReporter.shared.event("ad.loaded", adId: "ad-1", level: .warning, state: ["durationMs": 842])
@@ -33,7 +33,7 @@ struct DebugReporterTests {
         #expect((body["sdk"] as? [String: Any])?["name"] as? String == "sdk-swift-video")
         let events = try #require(body["events"] as? [[String: Any]])
         let names = events.map { $0["name"] as? String }
-        #expect(names.contains("init.response"))
+        #expect(names.contains("config.response"))
         #expect(names.contains("ads.request") && names.contains("ad.loaded"))
         let request = try #require(events.first { $0["name"] as? String == "ads.request" })
         let createdAt = try #require(request["createdAt"] as? String)
@@ -49,7 +49,7 @@ struct DebugReporterTests {
     }
 
     @Test func eventsAreCoalescedIntoOneRequestPerInterval() async {
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         await sleepMs(120)
         let before = harness.server.requests(to: "/v2/debug").count
@@ -63,7 +63,7 @@ struct DebugReporterTests {
     }
 
     @Test func disablingDropsTheBuffer() async {
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         await sleepMs(120)
         let before = harness.server.requests(to: "/v2/debug").count
@@ -74,7 +74,7 @@ struct DebugReporterTests {
     }
 
     @Test func aFailedBatchIsLostQuietly() async {
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         harness.server.on("/v2/debug", .failure(.notConnectedToInternet))
         _ = await harness.initialize()
         DebugReporter.shared.event("tick")
@@ -86,7 +86,7 @@ struct DebugReporterTests {
     }
 
     @Test func theLoadFlowReportsItsEvents() async throws {
-        harness.server.on("/v2/init", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         let pages = FramePageServer()
         pages.install()
         _ = await harness.initialize()
@@ -106,7 +106,7 @@ struct DebugReporterTests {
 
     @Test func anEventReadsAsOneConsoleLine() {
         #expect(DebugReporter.line("ad.loaded", adId: "f1a2b3c4-5d6e", state: ["durationMs": 842, "format": "pause", "filled": true]) == "ad.loaded ad=f1a2b3c4 durationMs=842 filled=true format=pause")
-        #expect(DebugReporter.line("init.response", adId: nil, state: nil) == "init.response")
+        #expect(DebugReporter.line("config.response", adId: nil, state: nil) == "config.response")
     }
 
     private func allNames() -> [String] {

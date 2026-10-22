@@ -2,32 +2,32 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// Every branch of the wire's answers: `/init`, `/video/ads`, the ad payload for each format.
+/// Every branch of the wire's answers: `/config`, `/video/ads`, the ad payload for each format.
 struct DecodingTests {
     private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
         try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
-    // MARK: InitResponse
+    // MARK: ConfigResponse
 
-    @Test func initEnabledWithReportDebug() throws {
-        let response = try decode(InitResponse.self, ["enabled": true, "reportDebug": true])
+    @Test func configEnabledWithReportDebug() throws {
+        let response = try decode(ConfigResponse.self, ["enabled": true, "reportDebug": true])
         guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
         #expect(reportDebug == true)
     }
 
-    @Test func initEnabledDefaultsReportDebugToFalse() throws {
-        guard case .enabled(let reportDebug) = try decode(InitResponse.self, ["enabled": true]) else { Issue.record("expected enabled"); return }
+    @Test func configEnabledDefaultsReportDebugToFalse() throws {
+        guard case .enabled(let reportDebug) = try decode(ConfigResponse.self, ["enabled": true]) else { Issue.record("expected enabled"); return }
         #expect(reportDebug == false)
     }
 
-    @Test func initDisabledCarriesTheReason() throws {
-        guard case .disabled(let reason) = try decode(InitResponse.self, Fixtures.disabled("appVersionDisabled")) else { Issue.record("expected disabled"); return }
+    @Test func configDisabledCarriesTheReason() throws {
+        guard case .disabled(let reason) = try decode(ConfigResponse.self, Fixtures.disabled("appVersionDisabled")) else { Issue.record("expected disabled"); return }
         #expect(reason == "appVersionDisabled")
     }
 
-    @Test func initDisabledWithoutReasonIsUnknown() throws {
-        guard case .disabled(let reason) = try decode(InitResponse.self, ["enabled": false]) else { Issue.record("expected disabled"); return }
+    @Test func configDisabledWithoutReasonIsUnknown() throws {
+        guard case .disabled(let reason) = try decode(ConfigResponse.self, ["enabled": false]) else { Issue.record("expected disabled"); return }
         #expect(reason == "unknown")
     }
 

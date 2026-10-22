@@ -85,7 +85,7 @@ public enum FormatOptions: Encodable, Sendable, Equatable {
     }
 }
 
-/// The `device` object of an ads request: what `/init` sends, plus screen, power, audio and network.
+/// The `device` object of an ads request: what `/config` sends, plus screen, power, audio and network.
 struct AdsDevice: Encodable, Sendable {
     let os: OSInfo
     let hardware: HardwareInfo

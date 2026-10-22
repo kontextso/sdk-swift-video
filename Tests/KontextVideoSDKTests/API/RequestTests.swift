@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import UIKit
 
-/// What the SDK sends: the `/init` and `/video/ads` bodies, the player snapshot, device facts, privacy.
+/// What the SDK sends: the `/config` and `/video/ads` bodies, the player snapshot, device facts, privacy.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -14,10 +14,10 @@ struct RequestTests {
         KontextVideo.Configuration(publisherToken: "pub-dev", adServerURL: URL(string: "https://ads.test")!)
     }
 
-    // MARK: InitRequest
+    // MARK: ConfigRequest
 
-    @Test func initRequestCarriesIdentityAndAttribution() throws {
-        let request = InitRequest.make(configuration: configuration, installId: "install-1")
+    @Test func configRequestCarriesIdentityAndAttribution() throws {
+        let request = ConfigRequest.make(configuration: configuration, installId: "install-1")
         let json = try Fixtures.encode(request)
         #expect(UUID(uuidString: request.requestId) != nil)
         #expect(request.requestId == request.requestId.lowercased())
@@ -33,9 +33,9 @@ struct RequestTests {
         #expect(attribution?["aak"] is [String])
     }
 
-    @Test func eachInitRequestHasItsOwnId() {
-        let a = InitRequest.make(configuration: configuration, installId: "i")
-        let b = InitRequest.make(configuration: configuration, installId: "i")
+    @Test func eachConfigRequestHasItsOwnId() {
+        let a = ConfigRequest.make(configuration: configuration, installId: "i")
+        let b = ConfigRequest.make(configuration: configuration, installId: "i")
         #expect(a.requestId != b.requestId)
     }
 

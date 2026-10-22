@@ -54,7 +54,7 @@ public final class VideoAds {
 
     /// `content` describes the video; `playerSize` is the player's size in points, which lets the server
     /// pick creatives that fit, `nil` (the default) meaning full screen. Needs `initialize(with:)` to have
-    /// been called; `/init` itself may still be in flight, loads wait for it.
+    /// been called; `/config` itself may still be in flight, loads wait for it.
     public init(content: KontextVideo.Content, playerSize: CGSize? = nil) {
         self.content = content
         self.playerSize = playerSize
@@ -147,7 +147,7 @@ public final class VideoAds {
 
     /// One request for one placement, run on the caller's task so cancelling that task cancels the request.
     /// Returns the server's answer as a bid, nothing rendered, or throws: no fill, a failed request, a busy
-    /// placement, an SDK that is not ready. Waits for `/init` when that is still in flight.
+    /// placement, an SDK that is not ready. Waits for `/config` when that is still in flight.
     func fetch(_ format: FormatRequest) async throws -> VideoAd.Bid {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }

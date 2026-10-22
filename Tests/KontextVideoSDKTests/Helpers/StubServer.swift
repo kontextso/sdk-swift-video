@@ -37,7 +37,7 @@ final class StubServer: @unchecked Sendable {
 
     let baseURL = URL(string: "https://ads.test")!
 
-    /// Answers requests whose path starts with `path` (`/v2/init`, `/events/`, ...). Later routes win.
+    /// Answers requests whose path starts with `path` (`/v2/config`, `/events/`, ...). Later routes win.
     func on(_ path: String, _ respond: @escaping (Recorded) -> Response) {
         lock.lock(); defer { lock.unlock() }
         routes.append(({ $0.url?.path.hasPrefix(path) == true }, respond))

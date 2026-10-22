@@ -79,7 +79,7 @@ struct VideoAdsTests {
     }
 
     @Test func loadWaitsForInitInFlight() async throws {
-        harness.server.on("/v2/init") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.initEnabled()), delay: 0.2) }
+        harness.server.on("/v2/config") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.initEnabled()), delay: 0.2) }
         KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         harness.serve(Fixtures.ad(id: "img-2"))
@@ -148,14 +148,14 @@ struct VideoAdsTests {
     }
 
     @Test func loadWhenInitFailedThrowsInitializationFailed() async {
-        harness.server.on("/v2/init", .failure(.timedOut))
+        harness.server.on("/v2/config", .failure(.timedOut))
         let ads = await makeAds()
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .initializationFailed = error else { Issue.record("expected initializationFailed, got \(String(describing: error))"); return }
     }
 
     @Test func loadWhenDisabledThrowsDisabled() async {
-        harness.server.on("/v2/init", .json(Fixtures.disabled("publisherDisabled")))
+        harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
         let ads = await makeAds()
         let error = await loadError { try await ads.pausePlacement("pause").load() }
         guard case .disabled(let reason) = error else { Issue.record("expected disabled"); return }
