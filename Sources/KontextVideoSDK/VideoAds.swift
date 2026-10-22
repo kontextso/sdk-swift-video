@@ -287,7 +287,7 @@ public final class VideoAds {
             // Swift's convention for a cancelled task is `CancellationError`; URLSession says `.cancelled`.
             if case .transport(let urlError) = error, urlError.code == .cancelled { throw CancellationError() }
             if Task.isCancelled { throw CancellationError() }
-            Logger.error("\(request.formats.map(\.format)) for \(content.id): request failed, \(error)")
+            Logger.error("\(request.formats.map(\.request.format)) for \(content.id): request failed, \(error)")
             throw VideoAdError.request(error)
         }
     }

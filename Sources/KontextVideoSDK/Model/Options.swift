@@ -116,12 +116,4 @@ public enum FormatRequest: Sendable, Equatable {
         case .linear: return .linear
         }
     }
-
-    var options: AnyOptions {
-        switch self {
-        case .overlay(let options): return AnyOptions(options)
-        case .pause(let options): return AnyOptions(options)
-        case .linear(let options): return AnyOptions(options)
-        }
-    }
 }

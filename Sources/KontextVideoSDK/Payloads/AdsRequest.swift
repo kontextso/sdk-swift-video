@@ -4,11 +4,23 @@ import UIKit
 
 /// The body of `POST /video/ads`: the formats asked for, each with its options, for one video.
 struct AdsRequest: Encodable, Sendable {
-    /// One entry of `formats`.
-    struct Format: Encodable, Sendable {
-        let format: AdFormat
-        /// The format's options, encoded as they are; the format decides the shape.
-        let options: AnyOptions
+    /// One entry of `formats`: `{ format, options }`, the options in the shape of their format.
+    struct Format: Encodable, Sendable, Equatable {
+        let request: FormatRequest
+
+        private enum CodingKeys: String, CodingKey {
+            case format, options
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(request.format, forKey: .format)
+            switch request {
+            case .overlay(let options): try container.encode(options, forKey: .options)
+            case .pause(let options): try container.encode(options, forKey: .options)
+            case .linear(let options): try container.encode(options, forKey: .options)
+            }
+        }
     }
 
     /// Where to send it; not part of the body.
@@ -53,21 +65,8 @@ struct AdsRequest: Encodable, Sendable {
             device: .current(),
             player: player,
             video: content,
-            formats: formats.map { Format(format: $0.format, options: $0.options) }
+            formats: formats.map(Format.init)
         )
-    }
-}
-
-/// The `options` object of a request: one format's options, whichever type, encoded as they are.
-struct AnyOptions: Encodable, Sendable {
-    private let encodeBody: @Sendable (Encoder) throws -> Void
-
-    init(_ options: some Encodable & Sendable) {
-        encodeBody = { try options.encode(to: $0) }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        try encodeBody(encoder)
     }
 }
 
