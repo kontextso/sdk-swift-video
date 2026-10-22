@@ -29,7 +29,7 @@ public final class AdLoader<Options: AdOptions> {
     /// Requests an ad and returns the server's answer without rendering it; `bid.load()` renders.
     public func fetch(_ options: Options = .default) async throws -> VideoAd.Bid {
         guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
-        return try await ads.fetch(slot: slot, options: options)
+        return try await ads.fetch(slot: slot, request: options.request)
     }
 }
 
@@ -46,6 +46,8 @@ public protocol AdOptions: Encodable, Sendable {
     static var format: AdFormat { get }
     /// Every option left to its default.
     static var `default`: Self { get }
+    /// These options as a request for their format.
+    var request: FormatRequest { get }
 }
 
 /// The one-unshown-ad-at-a-time state of one format of one `VideoAds`, held by its loader and reached

@@ -37,7 +37,8 @@ struct BidTests {
         #expect(pages.served.isEmpty, "no page was loaded")
         #expect(harness.server.beacons.isEmpty, "no beacon fired")
         let request = harness.server.requests(to: "/v2/video/ads").first?.body
-        #expect((request?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
+        let formats = request?["formats"] as? [[String: Any]]
+        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
     }
 
     @Test func loadOnTheBidRendersAndReturnsAReadyAdWithTheSameFacts() async throws {
@@ -175,7 +176,7 @@ struct BidTests {
 
     @Test func fetchThrowsTheRequestSideErrors() async throws {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("noAdMatch")))
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("noAdMatch", format: "overlay")))
         do {
             _ = try await ads.overlay.fetch()
             Issue.record("expected noFill")

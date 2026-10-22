@@ -89,16 +89,30 @@ enum Fixtures {
         ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
     }
 
+    /// A filled answer for the ad's format: `formats: [{ format, ads: [ad] }]`.
     static func adsResponse(_ ad: [String: Any], nextRequestAt: Int? = nil) -> [String: Any] {
-        var response: [String: Any] = ["enabled": true, "ad": ad]
-        if let nextRequestAt { response["nextRequestAt"] = nextRequestAt }
-        return response
+        var entry: [String: Any] = ["format": ad["format"] as? String ?? "pause", "ads": [ad]]
+        if let nextRequestAt { entry["nextRequestAt"] = nextRequestAt }
+        return ["enabled": true, "formats": [entry]]
     }
 
-    static func noFill(_ reason: String = "noAdMatch", nextRequestAt: Int? = nil) -> [String: Any] {
-        var response: [String: Any] = ["enabled": true, "noFillReason": reason]
-        if let nextRequestAt { response["nextRequestAt"] = nextRequestAt }
-        return response
+    /// Several formats in one answer: each entry a filled ad or a no-fill reason.
+    static func adsResponse(formats: [[String: Any]]) -> [String: Any] {
+        ["enabled": true, "formats": formats]
+    }
+
+    static func noFill(_ reason: String = "noAdMatch", format: String = "pause", nextRequestAt: Int? = nil) -> [String: Any] {
+        ["enabled": true, "formats": [noFillEntry(reason, format: format, nextRequestAt: nextRequestAt)]]
+    }
+
+    static func noFillEntry(_ reason: String = "noAdMatch", format: String = "pause", nextRequestAt: Int? = nil) -> [String: Any] {
+        var entry: [String: Any] = ["format": format, "ads": [], "noFillReason": reason]
+        if let nextRequestAt { entry["nextRequestAt"] = nextRequestAt }
+        return entry
+    }
+
+    static func filledEntry(_ ad: [String: Any]) -> [String: Any] {
+        ["format": ad["format"] as? String ?? "pause", "ads": [ad]]
     }
 
     static func initEnabled(reportDebug: Bool = false) -> [String: Any] {

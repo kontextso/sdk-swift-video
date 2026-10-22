@@ -30,6 +30,7 @@ public struct PauseOptions: AdOptions, Equatable {
 
     public static let format = AdFormat.pause
     public static let `default` = PauseOptions()
+    public var request: FormatRequest { .pause(self) }
 }
 
 public struct OverlayOptions: AdOptions, Equatable {
@@ -46,6 +47,7 @@ public struct OverlayOptions: AdOptions, Equatable {
 
     public static let format = AdFormat.overlay
     public static let `default` = OverlayOptions()
+    public var request: FormatRequest { .overlay(self) }
 
     private enum CodingKeys: String, CodingKey {
         case positions, maxDuration
@@ -85,6 +87,7 @@ public struct LinearOptions: AdOptions, Equatable {
 
     public static let format = AdFormat.linear
     public static let `default` = LinearOptions()
+    public var request: FormatRequest { .linear(self) }
 
     private enum CodingKeys: String, CodingKey {
         case timing, maxDuration, muted, rewarded
@@ -96,5 +99,29 @@ public struct LinearOptions: AdOptions, Equatable {
         try container.encodeIfPresent(maxDuration.map { Int(($0 * 1000).rounded()) }, forKey: .maxDuration)
         try container.encodeIfPresent(muted, forKey: .muted)
         try container.encodeIfPresent(rewarded, forKey: .rewarded)
+    }
+}
+
+/// A format to ask for, with its options: what `VideoAds(content:formats:)` takes, each format at most
+/// once. Every option is optional; `.pause()` asks with the defaults.
+public enum FormatRequest: Sendable, Equatable {
+    case overlay(OverlayOptions = .default)
+    case pause(PauseOptions = .default)
+    case linear(LinearOptions = .default)
+
+    public var format: AdFormat {
+        switch self {
+        case .overlay: return .overlay
+        case .pause: return .pause
+        case .linear: return .linear
+        }
+    }
+
+    var options: AnyOptions {
+        switch self {
+        case .overlay(let options): return AnyOptions(options)
+        case .pause(let options): return AnyOptions(options)
+        case .linear(let options): return AnyOptions(options)
+        }
     }
 }

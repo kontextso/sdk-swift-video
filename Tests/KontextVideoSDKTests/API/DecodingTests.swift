@@ -35,26 +35,50 @@ struct DecodingTests {
 
     @Test func adsResponseWithAdIgnoresTimedModeFields() throws {
         let response = try decode(AdsResponse.self, Fixtures.adsResponse(Fixtures.ad(), nextRequestAt: 25_000))
-        guard case .ad(let ad) = response else { Issue.record("expected ad"); return }
-        #expect(ad.id == "ad-1")
+        let result = try #require(response.result(for: .pause))
+        #expect(result.ads.first?.id == "ad-1")
+        #expect(result.noFillReason == nil)
+    }
+
+    @Test func adsResponseAnswersPerFormat() throws {
+        let response = try decode(AdsResponse.self, Fixtures.adsResponse(formats: [
+            Fixtures.filledEntry(Fixtures.linearAd(id: "l1")),
+            Fixtures.noFillEntry("frequencyCap", format: "overlay"),
+            Fixtures.filledEntry(Fixtures.ad(id: "p1")),
+        ]))
+        #expect(response.result(for: .linear)?.ads.map(\.id) == ["l1"])
+        #expect(response.result(for: .overlay)?.ads.isEmpty == true)
+        #expect(response.result(for: .overlay)?.noFillReason == "frequencyCap")
+        #expect(response.result(for: .pause)?.ads.map(\.id) == ["p1"])
+        #expect(response.result(for: .overlay)?.format == .overlay)
     }
 
     @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
         let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", nextRequestAt: 38_000))
-        guard case .noFill(let reason) = response else { Issue.record("expected noFill"); return }
-        #expect(reason == "temporaryError")
+        #expect(response.result(for: .pause)?.noFillReason == "temporaryError")
     }
 
     @Test func adsResponseNoFillDefaults() throws {
-        guard case .noFill(let reason) = try decode(AdsResponse.self, ["enabled": true]) else { Issue.record("expected noFill"); return }
-        #expect(reason == "unknown")
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": []]]])
+        #expect(response.result(for: .pause)?.noFillReason == "unknown")
     }
 
     @Test func adsResponseReasonsOfTheWrongTypeReadUnknown() throws {
-        guard case .noFill(let reason) = try decode(AdsResponse.self, ["enabled": true, "noFillReason": 7]) else { Issue.record("expected noFill"); return }
-        #expect(reason == AdsResponse.unknownReason, "the answer is understood, the reason is not")
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [], "noFillReason": 7]]])
+        #expect(response.result(for: .pause)?.noFillReason == AdsResponse.unknownReason, "the answer is understood, the reason is not")
         guard case .disabled(let disabled) = try decode(AdsResponse.self, ["enabled": false, "disabledReason": ["x"]]) else { Issue.record("expected disabled"); return }
         #expect(disabled == AdsResponse.unknownReason)
+    }
+
+    @Test func adsResponseWithoutFormatsOrWithAnUnknownFormatIsRejected() {
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "banner", "ads": []]]]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause"]]]) }
+    }
+
+    @Test func aResponseForOtherFormatsHasNoEntryForThisOne() throws {
+        let response = try decode(AdsResponse.self, Fixtures.adsResponse(Fixtures.linearAd()))
+        #expect(response.result(for: .pause) == nil)
     }
 
     @Test func adsResponseDisabled() throws {

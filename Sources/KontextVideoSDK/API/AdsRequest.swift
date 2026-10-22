@@ -2,8 +2,15 @@ import Foundation
 import KontextKit
 import UIKit
 
-/// The body of `POST /video/ads`: one ad of one format for one video.
+/// The body of `POST /video/ads`: the formats asked for, each with its options, for one video.
 struct AdsRequest: Encodable, Sendable {
+    /// One entry of `formats`.
+    struct Format: Encodable, Sendable {
+        let format: AdFormat
+        /// The format's options, encoded as they are; the format decides the shape.
+        let options: AnyOptions
+    }
+
     /// Where to send it; not part of the body.
     let adServerURL: URL
     let requestId: String
@@ -20,16 +27,15 @@ struct AdsRequest: Encodable, Sendable {
     let device: AdsDevice
     let player: PlayerSnapshot
     let video: KontextVideo.Content
-    let format: AdFormat
-    /// The format's options, encoded as they are; the format decides the shape.
-    let options: AnyOptions
+    /// Each format at most once.
+    let formats: [Format]
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, format, options
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, formats
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, format: AdFormat, options: some Encodable) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, formats: [FormatRequest]) -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -47,8 +53,7 @@ struct AdsRequest: Encodable, Sendable {
             device: .current(),
             player: player,
             video: content,
-            format: format,
-            options: AnyOptions(options)
+            formats: formats.map { Format(format: $0.format, options: $0.options) }
         )
     }
 }

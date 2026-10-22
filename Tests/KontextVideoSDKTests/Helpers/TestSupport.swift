@@ -137,9 +137,18 @@ struct SDKHarness {
         return await KontextVideo.shared.initialize(with: configuration)
     }
 
-    /// Serves `ad` for the next ads request.
+    /// Serves `ad` for the next ads request, as the answer for the format it asks for. A pause fixture
+    /// asked for as an overlay (or the reverse) is relabelled: the two share a shape, and most tests care
+    /// about the flow, not the format.
     func serve(_ ad: [String: Any]) {
-        server.on("/v2/video/ads", .json(Fixtures.adsResponse(ad)))
+        server.on("/v2/video/ads") { request in
+            var ad = ad
+            let asked = (request.body?["formats"] as? [[String: Any]])?.first?["format"] as? String
+            if let asked, ["overlay", "pause"].contains(asked), ["overlay", "pause"].contains(ad["format"] as? String ?? "") {
+                ad["format"] = asked
+            }
+            return .json(Fixtures.adsResponse(ad))
+        }
     }
 
     static func reset() {

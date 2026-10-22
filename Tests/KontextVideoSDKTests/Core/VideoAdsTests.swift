@@ -55,9 +55,11 @@ struct VideoAdsTests {
         #expect(ad.id == "img-1")
         #expect(ad.format == .pause)
         let request = harness.server.requests(to: "/v2/video/ads").first?.body
-        #expect(request?["format"] as? String == "pause")
+        let formats = request?["formats"] as? [[String: Any]]
+        #expect(formats?.count == 1, "a loader asks for its one format")
+        #expect(formats?.first?["format"] as? String == "pause")
         #expect(request?["placementId"] == nil, "no placement ids on the wire")
-        #expect((request?["options"] as? [String: Any])?["positions"] as? [String] == ["top", "fullscreen"])
+        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top", "fullscreen"])
         #expect((request?["video"] as? [String: Any])?["id"] as? String == "ep-1")
         #expect((request?["player"] as? [String: Any])?["playhead"] as? Int == 0, "the playhead read at request time")
         #expect(pages.served == ["img-1"], "the page loaded")
@@ -242,7 +244,7 @@ struct VideoAdsTests {
 
     @Test func aFormatWithoutAConfigurationIsANoFill() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled")))
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled", format: "linear")))
         let error = await loadError { try await ads.linear.load() }
         guard case .noFill(let reason) = error else { Issue.record("expected noFill, got \(String(describing: error))"); return }
         #expect(reason == "formatNotEnabled")

@@ -93,7 +93,7 @@ public final class VideoAds {
     /// One request for one format, run on the caller's task so cancelling that task cancels the request.
     /// Returns the server's answer as a bid, nothing rendered, or throws: no fill, a failed request, a busy
     /// loader, an SDK that is not ready. Waits for `/config` when that is still in flight.
-    func fetch<Options: AdOptions>(slot: AdSlot, options: Options) async throws -> VideoAd.Bid {
+    func fetch(slot: AdSlot, request formatRequest: FormatRequest) async throws -> VideoAd.Bid {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("load()") else { throw VideoAdError.notInitialized }
         let format = slot.format
@@ -117,21 +117,29 @@ public final class VideoAds {
         KontextVideo.shared.noteTrackingAuthorization(tracking.status)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), format: format, options: options)
+                                      player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), formats: [formatRequest])
         Logger.debug("\(format) for \(content.id): requesting at playhead \(request.player.playhead) ms")
         DebugReporter.shared.event("ads.request", state: ["format": .string(format.rawValue), "playhead": .number(Double(request.player.playhead))])
 
         let response = try await send(request)
         guard !isDestroyed else { throw VideoAdError.destroyed }
 
-        switch response {
-        case .ad(let ad):
+        if case .disabled(let reason) = response {
+            KontextVideo.shared.disable(reason: reason)
+            throw VideoAdError.disabled(reason: reason)
+        }
+        guard let result = response.result(for: format) else {
+            Logger.error("\(format) for \(content.id): the server answered for other formats, not this one")
+            throw VideoAdError.request(APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no formats entry for \(format)"))))
+        }
+        if let ad = result.ads.first {
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
             let bid = VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
             slot.didFetch(bid)
             return bid
-        case .noFill(let reason):
+        } else {
+            let reason = result.noFillReason ?? AdsResponse.unknownReason
             // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
             if reason == AdsResponse.formatNotEnabled {
                 Logger.error("\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))")
@@ -140,9 +148,6 @@ public final class VideoAds {
             }
             DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason)])
             throw VideoAdError.noFill(reason: reason)
-        case .disabled(let reason):
-            KontextVideo.shared.disable(reason: reason)
-            throw VideoAdError.disabled(reason: reason)
         }
     }
 
@@ -178,7 +183,7 @@ public final class VideoAds {
             // Swift's convention for a cancelled task is `CancellationError`; URLSession says `.cancelled`.
             if case .transport(let urlError) = error, urlError.code == .cancelled { throw CancellationError() }
             if Task.isCancelled { throw CancellationError() }
-            Logger.error("\(request.format) for \(content.id): request failed, \(error)")
+            Logger.error("\(request.formats.map(\.format)) for \(content.id): request failed, \(error)")
             throw VideoAdError.request(error)
         }
     }
