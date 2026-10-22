@@ -35,8 +35,8 @@ public final class VideoAds {
     /// The server's answer for one format, nothing rendered yet: `try await ads.format(.pause)`, then its
     /// `price` and other facts, then `load()`. Without options: the answer the creation-time request (or
     /// a refetch) brought, waiting for it while it is in flight, else one fetched now with the options
-    /// declared at creation; a no-fill is thrown once, and the next call asks again. With options: a fresh
-    /// request with them, always. Throws `.formatBusy` while an ad of this format is loading or loaded and
+    /// declared at creation; a no-fill is thrown once, and the next call asks again. With options: the
+    /// held answer when it was asked with the same options, else a fresh request with them. Throws `.formatBusy` while an ad of this format is loading or loaded and
     /// not yet shown, and the request-side errors (`noFill`, `request`, the initialisation cases).
     public func format<Options: AdOptions>(_ key: FormatKey<Options>, options: Options? = nil) async throws -> VideoAd.Bid {
         try await loader(key).bid(options: options)
@@ -95,8 +95,9 @@ public final class VideoAds {
         do {
             let response = try await request(formats)
             for slot in slots {
+                guard let asked = formats.first(where: { $0.format == slot.format }) else { continue }
                 do {
-                    slot.hold(try answer(from: response, for: slot.format))
+                    slot.hold(try answer(from: response, for: slot.format), requestedWith: asked)
                 } catch VideoAdError.noFill(let reason) {
                     slot.noFillReason = reason
                 } catch {
@@ -190,7 +191,7 @@ public final class VideoAds {
         defer { slot.isLoading = false }
         let response = try await request([formatRequest])
         let answer = try answer(from: response, for: format)
-        slot.hold(answer)
+        slot.hold(answer, requestedWith: formatRequest)
         return answer
     }
 

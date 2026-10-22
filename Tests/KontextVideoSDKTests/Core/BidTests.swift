@@ -92,13 +92,17 @@ struct BidTests {
         ad.dismiss()
     }
 
-    @Test func fetchReplacesAHeldAnswer() async throws {
+    @Test func theSameOptionsGetTheHeldAnswerOtherOptionsANewOne() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p5"))
         _ = try await ads.format(.pause).info
+        let same = try await ads.format(.pause, options: .default)
+        #expect(same.id == "img-p5", "asked with the declared options: the held answer, no request")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
         harness.serve(Fixtures.ad(id: "img-p6"))
-        let fresh = try await ads.format(.pause, options: .default)
-        #expect(fresh.id == "img-p6")
+        let fresh = try await ads.format(.pause, options: PauseOptions(positions: [.fullscreen]))
+        #expect(fresh.id == "img-p6", "other options: a new request")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
         #expect(try await ads.format(.pause).load().id == "img-p6", "the fresh answer is the held one now")
         #expect(pages.served == ["img-p6"], "the replaced answer was never rendered")
     }

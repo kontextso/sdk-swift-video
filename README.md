@@ -176,7 +176,7 @@ if overlay.price.value > myFloor {                  // price, size, duration…
     let ad = try await overlay.load()               // renders exactly this answer
 }
 
-// A fresh answer with other options: always goes to the server for this one format
+// Other options than the held answer was asked with: a new request for this one format (the same options: the held one)
 let postroll = try await ads.format(.linear, options: LinearOptions(timing: .postroll)).load()
 
 // No fill and failures are errors, thrown by format() and load() (a no-fill once; the next call asks again)
