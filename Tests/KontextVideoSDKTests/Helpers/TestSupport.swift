@@ -116,9 +116,9 @@ struct SDKHarness {
     }
 
     /// Initializes with per-format defaults on top of the harness configuration.
-    func initialize(formats: [AdFormat: KontextVideo.Configuration.FormatDefaults]) async -> KontextVideo.State {
+    func initialize(formatDefaults: [AdFormat: KontextVideo.Configuration.FormatDefaults]) async -> KontextVideo.State {
         await WebKitWarmup.ensure()
-        let configuration = KontextVideo.Configuration(publisherToken: "test-dev", logLevel: .none, adServerURL: server.baseURL, formats: formats)
+        let configuration = KontextVideo.Configuration(publisherToken: "test-dev", logLevel: .none, adServerURL: server.baseURL, formatDefaults: formatDefaults)
         return await KontextVideo.shared.initialize(with: configuration)
     }
 

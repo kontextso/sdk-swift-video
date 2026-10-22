@@ -43,7 +43,7 @@ extension KontextVideo {
 
         /// The defaults of every format: overlay and pause ads recur within a video, so they refetch after
         /// each ended ad; a linear ad's `timing` names one moment, so it does not.
-        public static let defaultFormats: [AdFormat: FormatDefaults] = [
+        public static let standardFormatDefaults: [AdFormat: FormatDefaults] = [
             .overlay: FormatDefaults(refetch: .afterEnd),
             .pause: FormatDefaults(refetch: .afterEnd),
             .linear: FormatDefaults(refetch: .never),
@@ -63,23 +63,23 @@ extension KontextVideo {
         /// The ad server base URL, by default the production server.
         /// Override it only for testing against a staging or mock server.
         public let adServerURL: URL
-        /// Per-format defaults; every format has an entry (`defaultFormats`, with the given ones on top).
-        public let formats: [AdFormat: FormatDefaults]
+        /// Per-format defaults; every format has an entry (`standardFormatDefaults`, with the given ones on top).
+        public let formatDefaults: [AdFormat: FormatDefaults]
 
-        /// `formats` overrides the defaults per format: `[.linear: .init(refetch: .afterEnd)]` changes linear
+        /// `formatDefaults` overrides the standard ones per format: `[.linear: .init(refetch: .afterEnd)]` changes linear
         /// and leaves overlay and pause as they are.
         public init(
             publisherToken: String,
             requestTrackingAuthorization: Bool = false,
             logLevel: LogLevel = .warning,
             adServerURL: URL = Configuration.defaultAdServerURL,
-            formats: [AdFormat: FormatDefaults] = [:]
+            formatDefaults: [AdFormat: FormatDefaults] = [:]
         ) {
             self.publisherToken = publisherToken
             self.requestTrackingAuthorization = requestTrackingAuthorization
             self.logLevel = logLevel
             self.adServerURL = adServerURL
-            self.formats = Configuration.defaultFormats.merging(formats) { _, given in given }
+            self.formatDefaults = Configuration.standardFormatDefaults.merging(formatDefaults) { _, given in given }
         }
     }
 }

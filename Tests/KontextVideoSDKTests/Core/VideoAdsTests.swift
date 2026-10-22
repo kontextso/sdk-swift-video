@@ -162,7 +162,7 @@ struct VideoAdsTests {
     }
 
     @Test func theRefetchPolicyIsPerFormatInTheConfiguration() async throws {
-        _ = await harness.initialize(formats: [.pause: .init(refetch: .never)])
+        _ = await harness.initialize(formatDefaults: [.pause: .init(refetch: .never)])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"))
         harness.serve(Fixtures.ad(id: "p3"))
         let ad = try await ads.format(.pause).load()
@@ -170,7 +170,7 @@ struct VideoAdsTests {
         ad.dismiss()
         await sleepMs(100)
         #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "never: the next load() fetches")
-        #expect(KontextVideo.shared.configuration?.formats[.overlay]?.refetch == .afterEnd, "the other formats keep their defaults")
+        #expect(KontextVideo.shared.configuration?.formatDefaults[.overlay]?.refetch == .afterEnd, "the other formats keep their defaults")
     }
 
     @Test func aRefetchedNoFillIsThrownOnceByTheNextLoad() async throws {

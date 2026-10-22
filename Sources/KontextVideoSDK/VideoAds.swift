@@ -157,7 +157,7 @@ public final class VideoAds {
     /// like the creation-time answer so the next `load()` renders at once. Not while the loader is busy
     /// (the app already loaded the next one) and never after `destroy()`.
     private func refetchIfConfigured(_ slot: AdSlot) {
-        guard !isDestroyed, KontextVideo.shared.configuration?.formats[slot.format]?.refetch == .afterEnd else { return }
+        guard !isDestroyed, KontextVideo.shared.configuration?.formatDefaults[slot.format]?.refetch == .afterEnd else { return }
         guard !slot.isBusy, slot.held == nil else { return }
         let request = slot.declared ?? Self.defaultRequest(for: slot.format)
         Logger.debug("\(slot.format) for \(content.id): fetching the next ad after the last one ended")

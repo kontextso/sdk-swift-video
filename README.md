@@ -62,7 +62,7 @@ KontextVideo.Configuration(
                                                // (needs NSUserTrackingUsageDescription in your Info.plist)
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
     adServerURL: KontextVideo.Configuration.defaultAdServerURL,  // override only for a staging or mock server
-    formats: [.linear: .init(refetch: .afterEnd)]   // per-format defaults, on top of the SDK's (see 4)
+    formatDefaults: [.linear: .init(refetch: .afterEnd)]   // per-format defaults, on top of the SDK's (see 4)
 )
 ```
 
@@ -138,7 +138,7 @@ Every declared format is an auction, so declare what the video will show, not ev
 request brought and returns it ready to show, or throws: the format's no-fill, a failed request, a busy loader, an SDK
 that is not ready. When a loader holds nothing (the format was not declared, its ad was shown, expired or discarded)
 `load()` fetches one first, with the declared options. And once an overlay or pause ad has ended, its loader asks for
-the next one by itself, so the following `load()` renders at once: `Configuration.formats[format].refetch` is
+the next one by itself, so the following `load()` renders at once: `Configuration.formatDefaults[format].refetch` is
 `.afterEnd` for overlay and pause and `.never` for linear, whose `timing` names one moment; override per format at
 `initialize`. You own the ad you get; keep a reference until it is shown,
 drop it and it is gone. One *unshown* ad per format at a time: a second `load` while one is loading or waiting to be
