@@ -54,8 +54,8 @@ struct VideoAdsTests {
             "pause": Fixtures.filledEntry(Fixtures.ad(id: "p1")),
         ])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear(LinearOptions(timing: .preroll)), .pause()])
-        let info = try await ads.format(.pause).info
-        #expect(info.id == "p1")
+        let bid = try await ads.format(.pause)
+        #expect(bid.id == "p1")
         let preroll = try await ads.format(.linear).load()
         #expect(preroll.id == "l1")
         let requests = harness.server.requests(to: "/v2/video/ads")
@@ -86,7 +86,7 @@ struct VideoAdsTests {
         _ = await harness.initialize()
         harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p3"))])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
-        _ = try await ads.format(.pause).info
+        _ = try await ads.format(.pause)
         harness.serve(Fixtures.overlayAd(id: "o3"))
         let overlay = try await ads.format(.overlay).load()
         #expect(overlay.id == "o3")
@@ -112,8 +112,8 @@ struct VideoAdsTests {
         harness.serve(Fixtures.linearAd(id: "l6"))
         let fresh = try await ads.format(.linear, options: LinearOptions(timing: .postroll))
         #expect(fresh.id == "l6")
-        let held = try await ads.format(.linear).info
-        #expect(held == fresh.info, "the next call gives what the fresh request brought")
+        let held = try await ads.format(.linear)
+        #expect(held === fresh, "the next call gives what the fresh request brought")
         #expect(try await ads.format(.linear).load().id == "l6", "and load renders it")
         let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["formats"] as? [[String: Any]] }
         #expect((bodies.last?.first?["options"] as? [String: Any])?["timing"] as? String == "postroll")
@@ -125,7 +125,7 @@ struct VideoAdsTests {
         _ = await harness.initialize()
         harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p7"))])
         let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause(PauseOptions(positions: [.top])), .pause(PauseOptions(positions: [.fullscreen]))])
-        _ = try await ads.format(.pause).info
+        _ = try await ads.format(.pause)
         #expect(messages.count == 1)
         let formats = harness.server.requests(to: "/v2/video/ads").first?.body?["formats"] as? [[String: Any]]
         #expect(formats?.count == 1)

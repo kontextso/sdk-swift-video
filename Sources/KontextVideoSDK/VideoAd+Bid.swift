@@ -11,17 +11,16 @@ extension VideoAd {
     @MainActor
     public final class Bid {
         /// The facts, as the `VideoAd` will report them (`size` may change at `show`).
-        public let info: Info
-        public var id: String { info.id }
-        public var format: AdFormat { info.format }
-        public var price: Price { info.price }
-        public var position: Position? { info.position }
-        public var size: Size? { info.size }
+        public var id: String { received.id }
+        public var format: AdFormat { received.format }
+        public var price: Price { received.price }
+        public var position: Position? { received.position }
+        public var size: Size? { received.size }
         /// Every size the creative was built for, the default first; the SDK picks one at `show`.
-        public var sizes: [Size] { info.sizes }
-        public var duration: TimeInterval? { info.duration }
-        public var skipOffset: TimeInterval? { info.skipOffset }
-        public var reward: Reward? { info.reward }
+        public var sizes: [Size] { received.sizes }
+        public var duration: TimeInterval? { received.duration }
+        public var skipOffset: TimeInterval? { received.skipOffset }
+        public var reward: Reward? { received.reward }
 
         let received: ReceivedAd
         private let slot: AdSlot
@@ -31,7 +30,6 @@ extension VideoAd {
 
         init(received: ReceivedAd, slot: AdSlot, ads: VideoAds) {
             self.received = received
-            info = received.info
             self.slot = slot
             self.ads = ads
         }
@@ -44,7 +42,7 @@ extension VideoAd {
             if let ad { return ad }
             guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
             if received.isExpired {
-                if slot.held?.info.id == id { slot.dropHeld() }
+                if slot.held?.id == id { slot.dropHeld() }
                 throw VideoAdError.invalidated(.expired)
             }
             let ad = try await ads.render(slot: slot, received: received)

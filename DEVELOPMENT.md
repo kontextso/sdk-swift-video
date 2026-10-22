@@ -20,10 +20,10 @@ sdk-swift-video/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
 │   ├── VideoAds.swift                              one video's ads: format(_:options:), the creation-time request, the playhead
 │   ├── VideoAd.swift                               one ad: the lifecycle from load to didEnd
-│   ├── VideoAd+Info.swift, VideoAd+Bid.swift       the ad's facts (Info) and the server's answer before rendering (Bid)
+│   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts and load()
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options (+ FormatRequest), FormatKey
-│   ├── Loading/      how an answer becomes an ad (internal): AdLoader, AdSlot
+│   ├── Loading/      how an answer becomes an ad (internal): AdLoader, AdSlot, ReceivedAd
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)

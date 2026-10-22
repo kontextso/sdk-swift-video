@@ -56,7 +56,7 @@ final class AdSlot {
     /// The answer being rendered is spent; a newer held answer (a fetch replaced it) stays.
     func didStartRendering(_ ad: VideoAd) {
         pendingAd = ad
-        if held?.info.id == ad.id { held = nil; heldRequest = nil; heldBid = nil }
+        if held?.id == ad.id { held = nil; heldRequest = nil; heldBid = nil }
     }
 
     func didFailRendering() { pendingAd = nil }

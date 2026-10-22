@@ -58,28 +58,27 @@ public final class VideoAd {
         case containerTooSmall
     }
 
-    /// The facts, as a loader's `info` gave them before rendering; `size` may differ after `show`.
-    public var info: Info { received.info }
-    public var id: String { info.id }
-    public var format: AdFormat { info.format }
-    public var price: Price { info.price }
+    /// The facts, as the `Bid` gave them before rendering; `size` may differ after `show`.
+    public var id: String { received.id }
+    public var format: AdFormat { received.format }
+    public var price: Price { received.price }
     /// `nil` for a linear ad.
-    public var position: Position? { info.position }
+    public var position: Position? { received.position }
     /// `nil` for a linear ad and for a full-screen pause ad.
     /// Before `show`: the default variant. After `show`: the variant the SDK chose for the view.
-    public var size: Size? { chosenSize ?? info.size }
+    public var size: Size? { chosenSize ?? received.size }
     /// Every size the creative was built for, the default first (`nil` for a linear ad and a
     /// full-screen pause ad). The SDK picks the best fit for the view at `show`: the largest that fits
     /// without scaling, else the one with the best scale still at or above 50 %.
-    public var sizes: [Size] { info.sizes }
+    public var sizes: [Size] { received.sizes }
     private var chosenSize: Size?
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
-    public var duration: TimeInterval? { info.duration }
+    public var duration: TimeInterval? { received.duration }
     /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
-    public var skipOffset: TimeInterval? { info.skipOffset }
+    public var skipOffset: TimeInterval? { received.skipOffset }
     /// Set on a rewarded linear ad.
-    public var reward: Reward? { info.reward }
+    public var reward: Reward? { received.reward }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -133,8 +132,8 @@ public final class VideoAd {
     /// The expiry counts from the response, not from this moment. The page starts loading at once.
     init(received: ReceivedAd) {
         self.received = received
-        bridge = FrameBridge(adId: received.info.id, url: received.frameURL, isVideo: received.creative == .video)
-        tracker = Tracker(adId: received.info.id, entries: received.tracking)
+        bridge = FrameBridge(adId: received.id, url: received.frameURL, isVideo: received.creative == .video)
+        tracker = Tracker(adId: received.id, entries: received.tracking)
         tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
@@ -251,13 +250,13 @@ public final class VideoAd {
     /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
     /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
-        guard position != .fullscreen, let defaultSize = info.size else { return bounds }
+        guard position != .fullscreen, let defaultSize = received.size else { return bounds }
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
-        let unscaled = info.sizes.filter { fit($0) >= 1 }
+        let unscaled = received.sizes.filter { fit($0) >= 1 }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
-            ?? info.sizes.max { fit($0) < fit($1) }
+            ?? received.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }

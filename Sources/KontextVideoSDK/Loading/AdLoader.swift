@@ -36,7 +36,7 @@ final class AdLoader<Options: AdOptions> {
         }
         // One `Bid` per answer: every call that gets this answer gets this object, so `load()` on any of
         // them returns the same ad and the answer is never rendered twice.
-        if let bid = slot.heldBid, bid.received.info.id == received.info.id { return bid }
+        if let bid = slot.heldBid, bid.received.id == received.id { return bid }
         let bid = VideoAd.Bid(received: received, slot: slot, ads: ads)
         slot.heldBid = bid
         return bid

@@ -1,31 +1,27 @@
 import Foundation
 
 extension VideoAd {
-    /// The facts of an ad, as the app sees them before and after rendering: what a `Bid` gives
-    /// and what the `VideoAd` reports. Times are seconds, whatever the wire sends.
-    public struct Info: Sendable, Equatable {
-        public let id: String
-        public let format: AdFormat
-        public let price: Price
+    /// An ad as the server sent it, before rendering, as the SDK keeps it: the facts `Bid` and `VideoAd`
+    /// report (times in seconds, whatever the wire sends), what the renderer needs, and the clocks. Built
+    /// once from the wire object; the only place that reads `AdPayload`.
+    struct ReceivedAd {
+        let id: String
+        let format: AdFormat
+        let price: Price
         /// `nil` for a linear ad.
-        public let position: Position?
+        let position: Position?
         /// Every size the creative was built for, the default first; the SDK picks one at `show`.
-        public let sizes: [Size]
-        /// The default variant; `VideoAd.size` reports the one chosen at `show` instead.
-        public var size: Size? { sizes.first }
+        let sizes: [Size]
+        /// The default variant.
+        var size: Size? { sizes.first }
         /// A linear ad's video length, or how long an overlay stays on screen; `nil` for a pause ad and
         /// for an overlay that stays until the app ends it.
-        public let duration: TimeInterval?
+        let duration: TimeInterval?
         /// When a linear ad's Close may appear; `nil` means not before the end.
-        public let skipOffset: TimeInterval?
+        let skipOffset: TimeInterval?
         /// On a rewarded linear ad.
-        public let reward: Reward?
-    }
+        let reward: Reward?
 
-    /// An ad as the server sent it, before rendering, as the SDK keeps it: the public `info`, what the renderer
-    /// needs, and the clocks. Built once from the wire object; the only place that reads `AdPayload`.
-    struct ReceivedAd {
-        let info: Info
         /// What the page renders; decides the viewability clock, the video events and the error codes.
         let creative: AdPayload.Creative
         /// The frame page to show in the WebView.
@@ -39,6 +35,9 @@ extension VideoAd {
         let lifetime: TimeInterval
 
         init(ad: AdPayload, receivedAt: TimeInterval) {
+            id = ad.id
+            format = ad.format
+            price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
             self.receivedAt = receivedAt
             lifetime = TimeInterval(ad.expires) / 1000
             creative = ad.creative
@@ -46,12 +45,6 @@ extension VideoAd {
             case .frame(let url): frameURL = url
             }
             tracking = ad.tracking
-            let price = Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
-            let position: Position?
-            let sizes: [Size]
-            let duration: TimeInterval?
-            let skipOffset: TimeInterval?
-            let reward: Reward?
             switch ad.details {
             case .overlay(let wirePosition, let wireSizes, let wireDuration):
                 switch wirePosition {
@@ -79,7 +72,6 @@ extension VideoAd {
                 skipOffset = wireSkipOffset.map { TimeInterval($0) / 1000 }
                 reward = wireReward.map { Reward(label: $0.label, amount: $0.amount) }
             }
-            info = Info(id: ad.id, format: ad.format, price: price, position: position, sizes: sizes, duration: duration, skipOffset: skipOffset, reward: reward)
         }
 
         var isExpired: Bool {
