@@ -14,9 +14,8 @@ public enum VideoAdError: Error, Sendable {
     case destroyed
     /// The server switched the SDK off for this app launch (`/config` or an ads response said so).
     case disabled(reason: String)
-    /// The loader already has an ad loading, fetched but not loaded, or loaded but not shown. One unshown
-    /// ad per format at a time: show it or drop it, then load again. An ad on screen does not block the
-    /// next load.
+    /// The format already has an ad loading, or loaded and not yet shown. One unshown ad per format at a
+    /// time: show it or drop it, then load again. An ad on screen does not block the next load.
     case formatBusy
     /// The request succeeded and the server had nothing to show: `noAdMatch`, `frequencyCap`,
     /// `contentUnsafe`, `formatNotEnabled` (no configuration for this format in the Kontext dashboard),
