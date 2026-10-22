@@ -35,10 +35,17 @@ public final class VideoAds {
     /// The loaders' state, by format, for the rules that touch all of them.
     private var slots: [AdFormat: AdSlot] { [.overlay: overlay.slot, .pause: pause.slot, .linear: linear.slot] }
 
+    /// The request for the declared formats, sent at creation; the loaders wait for it.
+    private var prefetch: Task<Void, Never>?
+
     /// `content` describes the video; `playerSize` is the player's size in points, which lets the server
-    /// pick creatives that fit, `nil` (the default) meaning full screen. Needs `initialize(with:)` to have
-    /// been called; `/config` itself may still be in flight, loads wait for it.
-    public init(content: KontextVideo.Content, playerSize: CGSize? = nil) {
+    /// pick creatives that fit, `nil` (the default) meaning full screen. `formats` are the formats this
+    /// video will show, each with its options and each at most once: one `/video/ads` request for all of
+    /// them is sent now, with the playhead the object reports (0 before playback), and each format's
+    /// answer waits in its loader. Empty (the default): nothing is requested until a loader is used. Every
+    /// declared format is an auction the server runs, so declare what the video will show. Needs
+    /// `initialize(with:)` to have been called; `/config` itself may still be in flight, requests wait for it.
+    public init(content: KontextVideo.Content, playerSize: CGSize? = nil, formats: [FormatRequest] = []) {
         self.content = content
         self.playerSize = playerSize
         overlay.ads = self
@@ -46,6 +53,43 @@ public final class VideoAds {
         linear.ads = self
         KontextVideo.shared.register(self)
         Logger.debug("VideoAds created for video \(content.id)")
+        var declared: [FormatRequest] = []
+        for request in formats where !declared.contains(where: { $0.format == request.format }) {
+            declared.append(request)
+        }
+        if declared.count != formats.count {
+            // Each format at most once: a bug in the app. Debug build: assertion. Release: the first entry counts.
+            Environment.assertionFailure("KontextVideo: VideoAds(formats:) lists a format twice; each format at most once")
+            Logger.error("\(content.id): VideoAds(formats:) lists a format twice; the first entry counts")
+        }
+        for request in declared { slots[request.format]?.declared = request }
+        guard !declared.isEmpty else { return }
+        let involved = declared.compactMap { slots[$0.format] }
+        involved.forEach { $0.isLoading = true }
+        prefetch = Task { [weak self] in
+            await self?.prefetch(declared, into: involved)
+        }
+        involved.forEach { $0.inFlight = prefetch }
+    }
+
+    /// The creation-time request: every declared format at once. A no-fill is kept in the format's slot
+    /// and thrown by its loader once; a failed request is logged and the loaders fetch on first use.
+    private func prefetch(_ formats: [FormatRequest], into slots: [AdSlot]) async {
+        defer { slots.forEach { $0.isLoading = false; $0.inFlight = nil } }
+        do {
+            let response = try await request(formats)
+            for slot in slots {
+                do {
+                    slot.didPrefetch(try bid(from: response, for: slot.format))
+                } catch VideoAdError.noFill(let reason) {
+                    slot.noFillReason = reason
+                } catch {
+                    Logger.warning("\(slot.format) for \(content.id): no answer in the creation-time request (\(error))")
+                }
+            }
+        } catch {
+            Logger.warning("\(content.id): the creation-time request failed, the loaders fetch on first use: \(error)")
+        }
     }
 
     /// Reads the content playhead from this `AVPlayer` whenever the SDK needs one; the player is held
@@ -103,9 +147,17 @@ public final class VideoAds {
         }
         slot.isLoading = true
         defer { slot.isLoading = false }
+        let response = try await request([formatRequest])
+        let bid = try bid(from: response, for: format)
+        slot.didFetch(bid)
+        return bid
+    }
 
+    /// The request pipeline every fetch shares: wait for `/config`, read the ATT status, build and send.
+    private func request(_ formats: [FormatRequest]) async throws -> AdsResponse {
+        let names = formats.map(\.format)
         guard await KontextVideo.shared.waitUntilEnabled() else {
-            Logger.warning("\(format) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
+            Logger.warning("\(names) for \(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
             if case .disabled(let reason) = KontextVideo.shared.state { throw VideoAdError.disabled(reason: reason) }
             throw VideoAdError.initializationFailed
         }
@@ -117,38 +169,43 @@ public final class VideoAds {
         KontextVideo.shared.noteTrackingAuthorization(tracking.status)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), formats: [formatRequest])
-        Logger.debug("\(format) for \(content.id): requesting at playhead \(request.player.playhead) ms")
-        DebugReporter.shared.event("ads.request", state: ["format": .string(format.rawValue), "playhead": .number(Double(request.player.playhead))])
+                                      player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), formats: formats)
+        Logger.debug("\(names) for \(content.id): requesting at playhead \(request.player.playhead) ms")
+        DebugReporter.shared.event("ads.request", state: ["formats": .string(names.map(\.rawValue).joined(separator: ",")), "playhead": .number(Double(request.player.playhead))])
 
         let response = try await send(request)
         guard !isDestroyed else { throw VideoAdError.destroyed }
-
         if case .disabled(let reason) = response {
             KontextVideo.shared.disable(reason: reason)
             throw VideoAdError.disabled(reason: reason)
         }
+        return response
+    }
+
+    /// One format's answer as a bid, or its no-fill thrown.
+    private func bid(from response: AdsResponse, for format: AdFormat) throws -> VideoAd.Bid {
         guard let result = response.result(for: format) else {
             Logger.error("\(format) for \(content.id): the server answered for other formats, not this one")
             throw VideoAdError.request(APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no formats entry for \(format)"))))
         }
         if let ad = result.ads.first {
+            if result.ads.count > 1 {
+                // `ads` is a sequence; the SDK shows one per load today and takes the first.
+                Logger.debug("\(format) for \(content.id): \(result.ads.count) ads in the answer, taking the first")
+            }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            let bid = VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
-            slot.didFetch(bid)
-            return bid
-        } else {
-            let reason = result.noFillReason ?? AdsResponse.unknownReason
-            // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
-            if reason == AdsResponse.formatNotEnabled {
-                Logger.error("\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))")
-            } else {
-                Logger.info("\(format) for \(content.id): no fill (\(reason))")
-            }
-            DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason)])
-            throw VideoAdError.noFill(reason: reason)
+            return VideoAd.Bid(payload: ad, receivedAt: ProcessInfo.processInfo.systemUptime, owner: self)
         }
+        let reason = result.noFillReason ?? AdsResponse.unknownReason
+        // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
+        if reason == AdsResponse.formatNotEnabled {
+            Logger.error("\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))")
+        } else {
+            Logger.info("\(format) for \(content.id): no fill (\(reason))")
+        }
+        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason)])
+        throw VideoAdError.noFill(reason: reason)
     }
 
     /// The second half of a load: the page starts loading now, and the ad is returned only when it
@@ -207,15 +264,14 @@ public final class VideoAds {
     /// Deallocation does what `destroy()` does. Loads in flight hold `self` for their duration, so none
     /// is running here; ads on screen are retained by `showing` and end with `.destroyed`.
     deinit {
+        prefetch?.cancel()
         let slots = [overlay.slot, pause.slot, linear.slot]
-        let showing = slots.compactMap(\.showing)
-        let loaded = slots.compactMap(\.pendingAd)
-        let pending = slots.compactMap(\.pendingBid)
-        guard !showing.isEmpty || !loaded.isEmpty || !pending.isEmpty else { return }
         let teardown: @MainActor () -> Void = {
-            loaded.forEach { $0.invalidate(.destroyed) }
-            pending.forEach { $0.invalidate(.destroyed) }
-            showing.forEach { $0.invalidate(.destroyed) }
+            for slot in slots {
+                slot.pendingAd?.invalidate(.destroyed)
+                (slot.pendingBid ?? slot.prefetched)?.invalidate(.destroyed)
+                slot.showing?.invalidate(.destroyed)
+            }
         }
         if Thread.isMainThread {
             MainActor.assumeIsolated { teardown() }
@@ -230,6 +286,7 @@ public final class VideoAds {
     public func destroy() {
         guard !isDestroyed else { return }
         isDestroyed = true
+        prefetch?.cancel()
         let (ads, pending) = live
         ads.forEach { $0.invalidate(.destroyed) }
         pending.forEach { $0.invalidate(.destroyed) }

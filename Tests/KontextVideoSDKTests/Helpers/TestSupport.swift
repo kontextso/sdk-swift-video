@@ -14,8 +14,8 @@ final class TestPlayer {
         view = UIView(frame: CGRect(origin: .zero, size: size))
     }
 
-    func ads(for content: KontextVideo.Content, playerSize: CGSize? = nil) -> VideoAds {
-        let ads = VideoAds(content: content, playerSize: playerSize ?? view.bounds.size)
+    func ads(for content: KontextVideo.Content, playerSize: CGSize? = nil, formats: [FormatRequest] = []) -> VideoAds {
+        let ads = VideoAds(content: content, playerSize: playerSize ?? view.bounds.size, formats: formats)
         ads.playheadProvider = { [unowned self] in playhead }
         return ads
     }
@@ -148,6 +148,14 @@ struct SDKHarness {
                 ad["format"] = asked
             }
             return .json(Fixtures.adsResponse(ad))
+        }
+    }
+
+    /// Answers a multi-format request: one entry per requested format, from `entries` by format name.
+    func serve(formats entries: [String: [String: Any]]) {
+        server.on("/v2/video/ads") { request in
+            let asked = (request.body?["formats"] as? [[String: Any]])?.compactMap { $0["format"] as? String } ?? []
+            return .json(Fixtures.adsResponse(formats: asked.compactMap { entries[$0] }))
         }
     }
 

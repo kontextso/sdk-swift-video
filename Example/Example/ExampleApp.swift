@@ -48,7 +48,12 @@ final class Demo: ObservableObject {
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
         // The player fills the screen in this example, so no playerSize; a smaller player would pass its size.
-        let ads = VideoAds(content: content)
+        // The three formats this screen shows, asked for in one request now; the loaders hold the answers.
+        let ads = VideoAds(content: content, formats: [
+            .linear(LinearOptions(timing: .midroll)),
+            .pause(PauseOptions(positions: [.top, .bottom])),
+            .overlay(OverlayOptions(positions: [.bottom])),
+        ])
         self.ads = ads
         contentPlayer.play()
         ads.trackPlayhead(of: contentPlayer)   // the episode is playing in this player: the SDK reads its time
@@ -90,7 +95,7 @@ final class Demo: ObservableObject {
 
     private func loadLinearAndWait() async {
         do {
-            let ad = try await ads!.linear.load(LinearOptions(timing: .midroll))
+            let ad = try await ads!.linear.load()
             ad.delegate = self
             linear = ad
             note("linear ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
@@ -129,7 +134,7 @@ final class Demo: ObservableObject {
 
     private func loadPauseAdAndWait() async {
         do {
-            let ad = try await ads!.pause.load(PauseOptions(positions: [.top, .bottom]))
+            let ad = try await ads!.pause.load()
             ad.delegate = self
             pauseAd = ad
             note("pause ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
@@ -140,7 +145,7 @@ final class Demo: ObservableObject {
 
     private func loadOverlayAndWait() async {
         do {
-            let ad = try await ads!.overlay.load(OverlayOptions(positions: [.bottom]))
+            let ad = try await ads!.overlay.load()
             ad.delegate = self
             overlayAd = ad
             note("overlay \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")

@@ -74,14 +74,23 @@ struct BidTests {
             Issue.record("expected formatBusy")
         } catch VideoAdError.formatBusy {}
         do {
-            _ = try await ads.pause.load()
-            Issue.record("expected formatBusy")
-        } catch VideoAdError.formatBusy {}
+            let held = try await ads.pause.bid
+            #expect(held === bid, "the loader's answer is the bid the app holds")
+        }
         bid = nil
         harness.serve(Fixtures.ad(id: "img-b5"))
         let next = try await ads.pause.fetch()
-        #expect(next.id == "img-b5", "a dropped bid costs nothing and frees the placement")
+        #expect(next.id == "img-b5", "a dropped bid costs nothing and frees the loader")
         withExtendedLifetime(bid) {}
+    }
+
+    @Test func loadRendersTheBidTheAppHolds() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-b4b"))
+        let bid = try await ads.pause.fetch()
+        let ad = try await ads.pause.load()
+        #expect(ad.id == bid.id)
+        #expect(bid.ad === ad, "one render; the bid now carries the ad")
     }
 
     @Test func aLoadedBidsAdKeepsTheLoaderBusyUntilShown() async throws {

@@ -20,16 +20,39 @@ public final class AdLoader<Options: AdOptions> {
 
     init() {}
 
-    /// Requests an ad and renders it: ready to show, or throws. See the options type for what can be asked.
-    public func load(_ options: Options = .default) async throws -> VideoAd {
-        let bid = try await fetch(options)
+    /// The server's answer for this format: the one the creation-time request brought (waiting for that
+    /// request while it is in flight), else a fresh fetch with the options declared at creation
+    /// (`.default` for a format that was not declared). Throws the format's no-fill once, then asks
+    /// again on the next access; `.formatBusy` while an ad of this format is loading or loaded and not
+    /// yet shown. Nothing is rendered: `bid.load()` renders, `load()` is the two in one.
+    public var bid: VideoAd.Bid {
+        get async throws {
+            guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
+            await slot.inFlight?.value
+            if let bid = slot.takeHeldBid() { return bid }
+            if let reason = slot.takeNoFillReason() { throw VideoAdError.noFill(reason: reason) }
+            return try await ads.fetch(slot: slot, request: declaredRequest)
+        }
+    }
+
+    /// Asks the server for this one format, with these options, now: a fresh answer, which `bid` then
+    /// holds. An answer the app never took is replaced; one it holds makes the loader `.formatBusy`
+    /// until loaded or dropped. See the options type for what can be asked.
+    public func fetch(_ options: Options = .default) async throws -> VideoAd.Bid {
+        guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
+        await slot.inFlight?.value
+        slot.dropHeld()
+        return try await ads.fetch(slot: slot, request: options.request)
+    }
+
+    /// The bid, rendered: ready to show, or throws. With options, a fresh fetch with them first.
+    public func load(_ options: Options? = nil) async throws -> VideoAd {
+        let bid = if let options { try await fetch(options) } else { try await bid }
         return try await bid.load()
     }
 
-    /// Requests an ad and returns the server's answer without rendering it; `bid.load()` renders.
-    public func fetch(_ options: Options = .default) async throws -> VideoAd.Bid {
-        guard let ads, !ads.isDestroyed else { throw VideoAdError.destroyed }
-        return try await ads.fetch(slot: slot, request: options.request)
+    private var declaredRequest: FormatRequest {
+        slot.declared ?? Options.default.request
     }
 }
 
@@ -55,6 +78,15 @@ public protocol AdOptions: Encodable, Sendable {
 @MainActor
 final class AdSlot {
     let format: AdFormat
+    /// The format's options as declared at creation; what `bid` fetches with when it holds nothing.
+    var declared: FormatRequest?
+    /// The creation-time request, while it runs; `bid` and `fetch` wait for it.
+    var inFlight: Task<Void, Never>?
+    /// The creation-time answer the app has not taken yet: held strongly, nobody else has it. Handed out
+    /// once by `takeHeldBid`, after which `pendingBid` knows it weakly like any bid.
+    private(set) var prefetched: VideoAd.Bid?
+    /// The creation-time no-fill, thrown once by the loader.
+    var noFillReason: String?
     /// The ad handed out last, while the app keeps it. An ad on screen does not count.
     private(set) weak var pendingAd: VideoAd?
     /// The bid handed out last and not loaded yet; counts like an unshown ad.
@@ -75,6 +107,34 @@ final class AdSlot {
 
     func didFetch(_ bid: VideoAd.Bid) { pendingBid = bid }
 
+    func didPrefetch(_ bid: VideoAd.Bid) {
+        prefetched = bid
+        noFillReason = nil
+    }
+
+    /// The creation-time answer, once; a pending bid the app holds, as long as it is pending.
+    func takeHeldBid() -> VideoAd.Bid? {
+        if let bid = prefetched {
+            prefetched = nil
+            if bid.isPending { pendingBid = bid; return bid }
+            return nil
+        }
+        if let bid = pendingBid, bid.isPending { return bid }
+        return nil
+    }
+
+    func takeNoFillReason() -> String? {
+        defer { noFillReason = nil }
+        return noFillReason
+    }
+
+    /// Forgets an answer the app never took, so a fresh fetch replaces it.
+    func dropHeld() {
+        prefetched?.invalidate(.targetingChanged)
+        prefetched = nil
+        noFillReason = nil
+    }
+
     func didStartRendering(_ ad: VideoAd) {
         pendingAd = ad
         pendingBid = nil
@@ -88,14 +148,17 @@ final class AdSlot {
         if showing === ad { showing = nil }
     }
 
-    /// The ad and the bid the app still holds and that are not yet gone.
+    /// The ad and the bid still around and not yet gone: the app's, or the creation-time answer not taken.
     var live: (ad: VideoAd?, bid: VideoAd.Bid?) {
-        (pendingAd?.isPendingUnshown == true ? pendingAd : nil, pendingBid?.isPending == true ? pendingBid : nil)
+        let bid = prefetched ?? pendingBid
+        return (pendingAd?.isPendingUnshown == true ? pendingAd : nil, bid?.isPending == true ? bid : nil)
     }
 
     func clear() {
         showing = nil
         pendingAd = nil
         pendingBid = nil
+        prefetched = nil
+        noFillReason = nil
     }
 }

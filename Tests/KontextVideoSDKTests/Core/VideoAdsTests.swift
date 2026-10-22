@@ -45,6 +45,93 @@ struct VideoAdsTests {
         #expect(ads.overlay.slot.format == .overlay)
     }
 
+    // MARK: the creation-time request
+
+    @Test func declaredFormatsAreRequestedOnceAtCreationAndTheirAdsWaitInTheLoaders() async throws {
+        _ = await harness.initialize()
+        harness.serve(formats: [
+            "linear": Fixtures.filledEntry(Fixtures.linearAd(id: "l1")),
+            "pause": Fixtures.filledEntry(Fixtures.ad(id: "p1")),
+        ])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear(LinearOptions(timing: .preroll)), .pause()])
+        let bid = try await ads.pause.bid
+        #expect(bid.id == "p1")
+        let preroll = try await ads.linear.load()
+        #expect(preroll.id == "l1")
+        let requests = harness.server.requests(to: "/v2/video/ads")
+        #expect(requests.count == 1, "one request for both formats")
+        let formats = requests.first?.body?["formats"] as? [[String: Any]]
+        #expect(formats?.map { $0["format"] as? String } == ["linear", "pause"])
+        #expect((formats?.first?["options"] as? [String: Any])?["timing"] as? String == "preroll")
+        #expect(pages.served == ["l1"], "the pause bid is not rendered until load")
+        withExtendedLifetime(bid) {}
+    }
+
+    @Test func aFormatsNoFillFromCreationIsThrownOnceThenAskedAgain() async throws {
+        _ = await harness.initialize()
+        harness.serve(formats: [
+            "overlay": Fixtures.noFillEntry("frequencyCap", format: "overlay"),
+            "pause": Fixtures.filledEntry(Fixtures.ad(id: "p2")),
+        ])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.overlay(), .pause()])
+        let error = await loadError { try await ads.overlay.load() }
+        guard case .noFill(let reason) = error else { Issue.record("expected the creation-time no fill"); return }
+        #expect(reason == "frequencyCap")
+        harness.serve(Fixtures.overlayAd(id: "o2"))
+        let overlay = try await ads.overlay.load()
+        #expect(overlay.id == "o2", "the next access asks again")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
+    }
+
+    @Test func anUndeclaredFormatFetchesOnFirstUse() async throws {
+        _ = await harness.initialize()
+        harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p3"))])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
+        _ = try await ads.pause.bid
+        harness.serve(Fixtures.overlayAd(id: "o3"))
+        let overlay = try await ads.overlay.load()
+        #expect(overlay.id == "o3")
+        let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { ($0.body?["formats"] as? [[String: Any]])?.map { $0["format"] as? String } }
+        #expect(bodies.count == 2 && bodies.last == ["overlay"], "one format, with the default options")
+    }
+
+    @Test func aFailedCreationTimeRequestLeavesTheLoadersToFetch() async throws {
+        _ = await harness.initialize()
+        harness.server.on("/v2/video/ads", .json(["errors": [["code": "invalidRequest"]]], status: 500))
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
+        await sleepMs(100)
+        harness.serve(Fixtures.ad(id: "p4"))
+        let ad = try await ads.pause.load()
+        #expect(ad.id == "p4")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
+    }
+
+    @Test func fetchReplacesAnAnswerTheAppNeverTook() async throws {
+        _ = await harness.initialize()
+        harness.serve(formats: ["linear": Fixtures.filledEntry(Fixtures.linearAd(id: "l5"))])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear()])
+        harness.serve(Fixtures.linearAd(id: "l6"))
+        let fresh = try await ads.linear.fetch(LinearOptions(timing: .postroll))
+        #expect(fresh.id == "l6")
+        let held = try await ads.linear.bid
+        #expect(held === fresh, "bid is what fetch brought")
+        let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["formats"] as? [[String: Any]] }
+        #expect((bodies.last?.first?["options"] as? [String: Any])?["timing"] as? String == "postroll")
+    }
+
+    @Test func aFormatListedTwiceIsAProgrammerErrorAndTheFirstCounts() async throws {
+        var messages: [String] = []
+        Environment.assertionFailure = { messages.append($0) }
+        _ = await harness.initialize()
+        harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p7"))])
+        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause(PauseOptions(positions: [.top])), .pause(PauseOptions(positions: [.fullscreen]))])
+        _ = try await ads.pause.bid
+        #expect(messages.count == 1)
+        let formats = harness.server.requests(to: "/v2/video/ads").first?.body?["formats"] as? [[String: Any]]
+        #expect(formats?.count == 1)
+        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
+    }
+
     // MARK: load: the happy path
 
     @Test func loadReturnsAReadyAdWithTheRequestsFormatAndOptions() async throws {

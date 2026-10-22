@@ -87,8 +87,8 @@ closure. The view the ad goes into is passed at `show(in:)`. This is Google IMA'
 `IMAAVPlayerContentPlayhead`), without the protocol.
 
 ```swift
-let ads = VideoAds(content: content)                                        // full screen
-let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220))   // or the size in points
+let ads = VideoAds(content: content, formats: [.pause(), .linear()])        // full screen; one request for the declared formats, now
+let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220), formats: [.overlay()])   // or the size in points
 
 ads.trackPlayhead(of: avPlayer)                   // AVPlayer: the SDK reads currentTime() itself, holds the player weakly
 ads.playheadProvider = { myPlayer.currentTime }   // any other player: seconds
@@ -121,52 +121,61 @@ let ads = VideoAds(content: .init(
     genre: "romance",
     mediaRating: .safe,          // optional; unset = unknown
     series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
-))
+), formats: [.overlay(), .pause(), .linear(LinearOptions(timing: .preroll))])
 
 ads.trackPlayhead(of: avPlayer)  // when the episode starts playing
 ```
 
 ### 4. Loading the ads
 
-Every `VideoAds` has one loader per format: `ads.overlay`, `ads.pause` and `ads.linear`. Which configuration a
-format uses (demand, floors, frequency caps, reporting) is decided in the Kontext dashboard; you name nothing.
+Declare the formats a video will show when you create its `VideoAds`, each with its options; the SDK sends one
+`/video/ads` request for all of them right away, so every ad is in hand before the episode starts. Which configuration
+a format uses (demand, floors, frequency caps, reporting) is decided in the Kontext dashboard; you name nothing.
+Every declared format is an auction, so declare what the video will show, not everything.
 
-`load` is `async` and returns the ad, or throws: no fill, a failed request, a busy loader, an SDK that is not ready.
-You own the ad you get; keep a reference until it is shown, drop it and it is gone. One *unshown* ad per format at a
-time: a second `load` while one is loading or waiting to be shown throws `.formatBusy`, but a `load` while the
-previous ad is on screen is fine, so the next one is ready the moment the current one ends. Loads started while the
-SDK is still initialising wait for it; after a failed `/config`, every `load` retries it first.
+Every `VideoAds` has one loader per format: `ads.overlay`, `ads.pause` and `ads.linear`. `load()` renders the ad the
+request brought and returns it ready to show, or throws: the format's no-fill, a failed request, a busy loader, an SDK
+that is not ready. When a loader holds nothing (the format was not declared, its ad was shown, expired or discarded)
+`load()` fetches one first, with the declared options. You own the ad you get; keep a reference until it is shown,
+drop it and it is gone. One *unshown* ad per format at a time: a second `load` while one is loading or waiting to be
+shown throws `.formatBusy`, but a `load` while the previous ad is on screen is fine, so the next one is ready the
+moment the current one ends. Requests made while the SDK is still initialising wait for it; after a failed
+`/config`, every request retries it first.
 
 ```swift
-// A strip across the player while the content plays; the SDK removes it after its duration.
-let strip = try await ads.overlay.load(OverlayOptions(
-    positions: [.bottom],            // where you can render it; default: top and bottom
-    maxDuration: 10                  // seconds on screen at most; the server picks a creative that fits
-))
+let ads = VideoAds(content: content, formats: [
+    // A strip across the player while the content plays; the SDK removes it after its duration.
+    .overlay(OverlayOptions(
+        positions: [.bottom],            // where you can render it; default: top and bottom
+        maxDuration: 10                  // seconds on screen at most; the server picks a creative that fits
+    )),
+    // A card, or the full player, while the content is paused.
+    .pause(PauseOptions(
+        positions: [.top, .fullscreen]   // what you can render; default: top and bottom
+    )),
+    // A full-screen video at a moment you pick.
+    .linear(LinearOptions(
+        timing: .preroll,                // where you will show it; default: .midroll
+        maxDuration: 30,                 // seconds
+        muted: false,                    // start with the sound off; default: false
+        rewarded: false                  // non-skippable, with a reward granted when the video completes
+    )),
+])
 
-// A card, or the full player, while the content is paused.
-let card = try await ads.pause.load(PauseOptions(
-    positions: [.top, .fullscreen]   // what you can render; default: top and bottom
-))
-card.price.value                     // your own auction, if you run one
+let preroll = try await ads.linear.load()   // renders the ad the request brought; ready, or throws
+let card = try await ads.pause.load()
+card.price.value                             // your own auction, if you run one
 
-// A full-screen video at a moment you pick.
-let linear = try await ads.linear.load(LinearOptions(
-    timing: .preroll,                // where you will show it; default: .midroll
-    maxDuration: 30,                 // seconds
-    muted: false,                    // start with the sound off; default: false
-    rewarded: false                  // non-skippable, with a reward granted when the video completes
-))
-
-// Every option is optional
-let ad = try await ads.overlay.load()
-
-// Deciding before rendering (an app that runs its own auction): fetch the answer, load the winner
-let bid = try await ads.pause.fetch()               // price, size…; nothing rendered yet
+// Looking before rendering: the bid is the server's answer, nothing rendered yet
+let bid = try await ads.overlay.bid                 // price, size…; waits for the request if it is in flight
 guard myAuction.accepts(bid.price) else { return }  // dropping a bid costs nothing
 let ad = try await bid.load()                       // renders; the same VideoAd that load() returns
 
-// No fill and failures are errors
+// A fresh answer with other options: fetch() always goes to the server for this one format
+let postroll = try await ads.linear.fetch(LinearOptions(timing: .postroll))
+let ad = try await ads.linear.load(LinearOptions(timing: .postroll))   // the same, rendered
+
+// No fill and failures are errors, thrown by bid and load (once; the next access asks again)
 do {
     let ad = try await ads.pause.load()
 } catch VideoAdError.noFill(let reason) {
@@ -193,7 +202,7 @@ including your own `dismiss()` and `destroy()` (delivered synchronously, from in
 `didEnd`, and only there.
 
 ```swift
-let ad = try await pause.load()
+let ad = try await ads.pause.load()
 ad.delegate = self
 
 func viewerPaused() {
@@ -224,7 +233,7 @@ controller can present right now (yours is off screen or already presenting; wit
 controller mid-transition); the ad stays ready, try again later or pass the right controller.
 
 ```swift
-let linear = try await midroll.load()
+let linear = try await ads.linear.load()
 linear.delegate = self
 contentPlayer.pause()
 do {
