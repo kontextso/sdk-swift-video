@@ -26,14 +26,23 @@ public final class VideoAds {
     /// The `AVPlayer` whose `currentTime()` is the playhead; held weakly.
     private weak var trackedPlayer: AVPlayer?
 
-    /// Loads overlays: a strip across the player while the content plays.
-    public let overlay = OverlayLoader()
-    /// Loads pause ads: a card, or the full player, while the content is paused.
-    public let pause = PauseLoader()
-    /// Loads linear ads: a full-screen video at a moment the app picks.
-    public let linear = LinearLoader()
+    private let overlay = OverlayLoader()
+    private let pause = PauseLoader()
+    private let linear = LinearLoader()
     /// The loaders' state, by format, for the rules that touch all of them.
     private var slots: [AdFormat: AdSlot] { [.overlay: overlay.slot, .pause: pause.slot, .linear: linear.slot] }
+
+    /// The loader of one format: `ads.format(.pause).load()`, `ads.format(.overlay).bid.price`. The same
+    /// object every time; it holds the format's answer and its one-unshown-ad-at-a-time state. The key
+    /// is typed, so `load` and `fetch` take the format's own options.
+    public func format<Options: AdOptions>(_ key: FormatKey<Options>) -> AdLoader<Options> {
+        // The three are the only `AdLoader`s with these `Options`; the cast cannot fail.
+        switch key.format {
+        case .overlay: return overlay as! AdLoader<Options>
+        case .pause: return pause as! AdLoader<Options>
+        case .linear: return linear as! AdLoader<Options>
+        }
+    }
 
     /// The request for the declared formats, sent at creation; the loaders wait for it.
     private var prefetch: Task<Void, Never>?

@@ -72,12 +72,12 @@ struct SupportTests {
         let ads = TestPlayer().ads(for: .init(id: "v", language: "en"))
         // Not initialized: every load and fetch throws before any request, which proves the forwarding reaches VideoAds.
         for work in [
-            { _ = try await ads.overlay.load() },
-            { _ = try await ads.pause.load() },
-            { _ = try await ads.linear.load() },
-            { _ = try await ads.overlay.fetch() },
-            { _ = try await ads.pause.fetch() },
-            { _ = try await ads.linear.fetch() },
+            { _ = try await ads.format(.overlay).load() },
+            { _ = try await ads.format(.pause).load() },
+            { _ = try await ads.format(.linear).load() },
+            { _ = try await ads.format(.overlay).fetch() },
+            { _ = try await ads.format(.pause).fetch() },
+            { _ = try await ads.format(.linear).fetch() },
         ] as [() async throws -> Void] {
             do {
                 try await work()

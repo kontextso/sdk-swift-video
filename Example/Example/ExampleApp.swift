@@ -95,7 +95,7 @@ final class Demo: ObservableObject {
 
     private func loadLinearAndWait() async {
         do {
-            let ad = try await ads!.linear.load()
+            let ad = try await ads!.format(.linear).load()
             ad.delegate = self
             linear = ad
             note("linear ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
@@ -134,7 +134,7 @@ final class Demo: ObservableObject {
 
     private func loadPauseAdAndWait() async {
         do {
-            let ad = try await ads!.pause.load()
+            let ad = try await ads!.format(.pause).load()
             ad.delegate = self
             pauseAd = ad
             note("pause ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
@@ -145,7 +145,7 @@ final class Demo: ObservableObject {
 
     private func loadOverlayAndWait() async {
         do {
-            let ad = try await ads!.overlay.load()
+            let ad = try await ads!.format(.overlay).load()
             ad.delegate = self
             overlayAd = ad
             note("overlay \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")

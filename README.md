@@ -133,7 +133,7 @@ Declare the formats a video will show when you create its `VideoAds`, each with 
 a format uses (demand, floors, frequency caps, reporting) is decided in the Kontext dashboard; you name nothing.
 Every declared format is an auction, so declare what the video will show, not everything.
 
-Every `VideoAds` has one loader per format: `ads.overlay`, `ads.pause` and `ads.linear`. `load()` renders the ad the
+Every `VideoAds` has one loader per format, `ads.format(.overlay)`, `ads.format(.pause)`, `ads.format(.linear)`. `load()` renders the ad the
 request brought and returns it ready to show, or throws: the format's no-fill, a failed request, a busy loader, an SDK
 that is not ready. When a loader holds nothing (the format was not declared, its ad was shown, expired or discarded)
 `load()` fetches one first, with the declared options. You own the ad you get; keep a reference until it is shown,
@@ -162,22 +162,22 @@ let ads = VideoAds(content: content, formats: [
     )),
 ])
 
-let preroll = try await ads.linear.load()   // renders the ad the request brought; ready, or throws
-let card = try await ads.pause.load()
+let preroll = try await ads.format(.linear).load()   // renders the ad the request brought; ready, or throws
+let card = try await ads.format(.pause).load()
 card.price.value                             // your own auction, if you run one
 
 // Looking before rendering: the bid is the server's answer, nothing rendered yet
-let bid = try await ads.overlay.bid                 // price, size…; waits for the request if it is in flight
+let bid = try await ads.format(.overlay).bid                 // price, size…; waits for the request if it is in flight
 guard myAuction.accepts(bid.price) else { return }  // dropping a bid costs nothing
 let ad = try await bid.load()                       // renders; the same VideoAd that load() returns
 
 // A fresh answer with other options: fetch() always goes to the server for this one format
-let postroll = try await ads.linear.fetch(LinearOptions(timing: .postroll))
-let ad = try await ads.linear.load(LinearOptions(timing: .postroll))   // the same, rendered
+let postroll = try await ads.format(.linear).fetch(LinearOptions(timing: .postroll))
+let ad = try await ads.format(.linear).load(LinearOptions(timing: .postroll))   // the same, rendered
 
 // No fill and failures are errors, thrown by bid and load (once; the next access asks again)
 do {
-    let ad = try await ads.pause.load()
+    let ad = try await ads.format(.pause).load()
 } catch VideoAdError.noFill(let reason) {
     // nothing to show; reason: noAdMatch, frequencyCap, formatNotEnabled (no configuration for this format), …
 } catch {
@@ -202,7 +202,7 @@ including your own `dismiss()` and `destroy()` (delivered synchronously, from in
 `didEnd`, and only there.
 
 ```swift
-let ad = try await ads.pause.load()
+let ad = try await ads.format(.pause).load()
 ad.delegate = self
 
 func viewerPaused() {
@@ -233,7 +233,7 @@ controller can present right now (yours is off screen or already presenting; wit
 controller mid-transition); the ad stays ready, try again later or pass the right controller.
 
 ```swift
-let linear = try await ads.linear.load()
+let linear = try await ads.format(.linear).load()
 linear.delegate = self
 contentPlayer.pause()
 do {

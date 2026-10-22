@@ -92,7 +92,7 @@ struct DebugReporterTests {
         _ = await harness.initialize()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         harness.serve(Fixtures.ad(id: "img-dbg"))
-        _ = try await ads.pause.load()
+        _ = try await ads.format(.pause).load()
         #expect(await waitUntil { self.allNames().contains("ad.loaded") })
         let names = allNames()
         #expect(names.contains("ads.request"))

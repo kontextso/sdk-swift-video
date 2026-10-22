@@ -41,7 +41,7 @@ struct IntegrationTests {
         harness.serve(Fixtures.ad(id: "img-pause"))
         let delegate = RecordingDelegate()
 
-        let ad = try await ads.pause.load(PauseOptions(positions: [.top, .bottom]))
+        let ad = try await ads.format(.pause).load(PauseOptions(positions: [.top, .bottom]))
         ad.delegate = delegate
         #expect(ad.isReady)
         #expect(await waitUntil { self.events(for: "img-pause") == ["loaded"] })
@@ -68,7 +68,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.ad(id: "img-close"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.pause.load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
         await inPage(ad, "window.close('close')")
@@ -82,7 +82,7 @@ struct IntegrationTests {
         var opened: [URL] = []
         Environment.openURL = { url, completion in opened.append(url); completion(true) }
         let delegate = RecordingDelegate()
-        let ad = try await ads.pause.load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
         await inPage(ad, "window.click('https://brand.test/offer', 'creative')")
@@ -102,7 +102,7 @@ struct IntegrationTests {
         var opened: [URL] = []
         Environment.openURL = { url, completion in opened.append(url); completion(true) }
         let delegate = RecordingDelegate()
-        let ad = try await ads.pause.load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
         // A forced redirect: no touch, so the navigation is cancelled and nothing opens.
@@ -126,7 +126,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
         let delegate = RecordingDelegate()
-        let ad = try await ads.linear.load(LinearOptions(rewarded: true))
+        let ad = try await ads.format(.linear).load(LinearOptions(rewarded: true))
         ad.delegate = delegate
         #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
@@ -151,7 +151,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-skip"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.linear.load()
+        let ad = try await ads.format(.linear).load()
         ad.delegate = delegate
         try ad.show(from: window.root)
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
@@ -166,7 +166,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-fail"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.linear.load()
+        let ad = try await ads.format(.linear).load()
         ad.delegate = delegate
         try ad.show(from: window.root)
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
@@ -183,13 +183,13 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.ad(id: "img-t1"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.pause.load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         KontextVideo.shared.user = KontextVideo.User(id: "u2")
         #expect(delegate.invalidations == [.targetingChanged])
         #expect(ad.isReady == false)
         harness.serve(Fixtures.ad(id: "img-t2"))
-        let next = try await ads.pause.load()
+        let next = try await ads.format(.pause).load()
         #expect(next.id == "img-t2")
         #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["user"] as? [String: Any])?["id"] as? String == "u2")
     }
@@ -198,7 +198,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.overlayAd(id: "img-ov"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.overlay.load()
+        let ad = try await ads.format(.overlay).load()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
         ads.destroy()
@@ -206,7 +206,7 @@ struct IntegrationTests {
         #expect(harness.player.view.subviews.isEmpty)
         #expect(await waitUntil { self.events(for: "img-ov").contains("overlayViewDuration") })
         do {
-            _ = try await ads.overlay.load()
+            _ = try await ads.format(.overlay).load()
             Issue.record("expected destroyed")
         } catch VideoAdError.destroyed {}
     }
@@ -215,20 +215,20 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.ad(id: "img-exp", expires: 700))   // enough for the page to load first
         let delegate = RecordingDelegate()
-        let ad = try await ads.pause.load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         #expect(ad.isReady)
         #expect(await waitUntil(3) { delegate.invalidations == [.expired] })
         do { try ad.show(in: harness.player.view) } catch VideoAdError.invalidated(.expired) {} catch { Issue.record("expected expired") }
         harness.serve(Fixtures.ad(id: "img-exp2"))
-        _ = try await ads.pause.load()
+        _ = try await ads.format(.pause).load()
     }
 
     @Test func movingOnToTheNextEpisodeDestroysThePreviousAdsOnScreen() async throws {
         let ads = await start()
         harness.serve(Fixtures.overlayAd(id: "img-ep1"))
         let delegate = RecordingDelegate()
-        let ad = try await ads.overlay.load()
+        let ad = try await ads.format(.overlay).load()
         ad.delegate = delegate
         try ad.show(in: harness.player.view)
         let next = harness.player.ads(for: .init(id: "100001-7", language: "en"))
@@ -244,7 +244,7 @@ struct IntegrationTests {
         // The next episode's VideoAds has no playhead source yet: the player's time belongs to episode 6.
         let next = VideoAds(content: .init(id: "100001-7", language: "en"), playerSize: harness.player.view.bounds.size)
         harness.serve(Fixtures.linearAd(id: "vid-next"))
-        _ = try await next.linear.load()
+        _ = try await next.format(.linear).load()
         let player = harness.server.requests(to: "/v2/video/ads").last?.body?["player"] as? [String: Any]
         #expect(player?["playhead"] as? Int == 0, "the player's 80 s belong to the current episode")
         #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["video"] as? [String: Any])?["id"] as? String == "100001-7")
@@ -256,7 +256,7 @@ struct IntegrationTests {
         harness.serve(Fixtures.ad(id: "img-rel"))
         weak var bridge: FrameBridge?
         try await {
-            let ad = try await ads.pause.load()
+            let ad = try await ads.format(.pause).load()
             bridge = ad.bridge
             #expect(bridge != nil)
         }()

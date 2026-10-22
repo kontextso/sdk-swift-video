@@ -1,8 +1,8 @@
 import Foundation
 
-/// Loads ads of one format for one video. Every `VideoAds` has three, created with it: `ads.overlay`
-/// (`OverlayLoader`), `ads.pause` (`PauseLoader`) and `ads.linear` (`LinearLoader`), each with the
-/// format's options type. Which configuration the format uses (demand, floors, frequency caps) is
+/// Loads ads of one format for one video. Every `VideoAds` has three, created with it and reached by
+/// format: `ads.format(.overlay)` (`OverlayLoader`), `ads.format(.pause)` (`PauseLoader`),
+/// `ads.format(.linear)` (`LinearLoader`), each with the format's options type. Which configuration the format uses (demand, floors, frequency caps) is
 /// decided in the Kontext dashboard, per publisher; the app names nothing.
 ///
 /// One unshown ad per loader at a time: `load` returns the ad, ready to show, or throws a `VideoAdError`
@@ -62,6 +62,24 @@ public typealias OverlayLoader = AdLoader<OverlayOptions>
 public typealias PauseLoader = AdLoader<PauseOptions>
 /// A full-screen video at a moment the app picks: before, during or after the content.
 public typealias LinearLoader = AdLoader<LinearOptions>
+
+/// The key `VideoAds.format(_:)` takes: a format, carrying its options type so the loader it returns is
+/// typed. `.overlay`, `.pause`, `.linear`; a named ad unit of a format can be added here later.
+public struct FormatKey<Options: AdOptions>: Sendable {
+    let format: AdFormat
+}
+
+public extension FormatKey where Options == OverlayOptions {
+    static var overlay: FormatKey { FormatKey(format: .overlay) }
+}
+
+public extension FormatKey where Options == PauseOptions {
+    static var pause: FormatKey { FormatKey(format: .pause) }
+}
+
+public extension FormatKey where Options == LinearOptions {
+    static var linear: FormatKey { FormatKey(format: .linear) }
+}
 
 /// The options of one format, as its loader's `load` and `fetch` take them.
 public protocol AdOptions: Encodable, Sendable {
