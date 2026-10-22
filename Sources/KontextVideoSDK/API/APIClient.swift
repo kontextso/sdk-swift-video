@@ -21,7 +21,9 @@ enum APIError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .transport(let error): return "transport error: \(error.localizedDescription)"
-        case .http(let status, let errors): return "HTTP \(status)" + (errors.isEmpty ? "" : ": " + errors.map { $0.title ?? $0.code }.joined(separator: "; "))
+        case .http(let status, let errors):
+            let summaries = errors.compactMap(\.summary)
+            return "HTTP \(status)" + (summaries.isEmpty ? "" : ": " + summaries.joined(separator: "; "))
         case .decoding(let error): return "decoding error: \(error)"
         }
     }

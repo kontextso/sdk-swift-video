@@ -190,8 +190,9 @@ struct DecodingTests {
 
     @Test func errorResponseSurvivesAnItemWithoutACodeOrWithWrongTypes() throws {
         let response = try decode(APIErrorResponse.self, ["errors": [["title": "Something broke"], ["code": 42, "title": ["not", "a", "string"]], ["code": "rateLimited"]]])
-        #expect(response.errors.map(\.code) == ["unknown", "unknown", "rateLimited"], "nothing is dropped, the unknown is named")
-        #expect(APIError.http(status: 500, errors: response.errors).description == "HTTP 500: Something broke; unknown; rateLimited")
+        #expect(response.errors.map(\.code) == [nil, nil, "rateLimited"], "nothing is dropped; a missing or malformed code is nil")
+        #expect(APIError.http(status: 500, errors: response.errors).description == "HTTP 500: Something broke; rateLimited", "an item with nothing to say is left out of the line")
+        #expect(APIError.http(status: 500, errors: [response.errors[1]]).description == "HTTP 500")
     }
 
     @Test func errorResponseDecodes() throws {
