@@ -60,7 +60,6 @@ KontextVideo.Configuration(
     publisherToken: "yourpublisher-dev",
     requestTrackingAuthorization: false,       // let the SDK show the ATT dialog before the first ads request
                                                // (needs NSUserTrackingUsageDescription in your Info.plist)
-    coppa: false,                              // child-directed under COPPA; fixed for the launch
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
     adServerURL: KontextVideo.Configuration.defaultAdServerURL,  // override only for a staging or mock server
     formatDefaults: [.linear: .init(refetch: .afterEnd)]   // per-format defaults, on top of the SDK's (see 4)
@@ -73,9 +72,9 @@ them; ads already loaded or fetched keep the values they were requested with. `n
 
 ```swift
 KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com")
-KontextVideo.shared.regulatory = .init(gdpr: true, gdprConsent: "…")   // only without a CMP: the SDK reads your CMP's
-                                                            // storage (IABTCF_*, IABGPP_*, IABUSPrivacy_String); its values
-                                                            // win, yours fill in what it did not write
+KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
+                                                            // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); the CMP's values win,
+                                                            // yours fill in what it did not write
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 

@@ -11,7 +11,7 @@ struct RequestTests {
     init() { SDKHarness.reset() }
 
     private var configuration: KontextVideo.Configuration {
-        KontextVideo.Configuration(publisherToken: "pub-dev", coppa: false, adServerURL: URL(string: "https://ads.test")!)
+        KontextVideo.Configuration(publisherToken: "pub-dev", adServerURL: URL(string: "https://ads.test")!)
     }
 
     // MARK: ConfigRequest
@@ -44,6 +44,7 @@ struct RequestTests {
     private func makeAdsRequest(playhead: TimeInterval = 12.345) -> AdsRequest {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
         KontextVideo.shared.variantId = "exp-b"
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
         return AdsRequest.make(
             sdk: KontextVideo.shared,
             configuration: configuration,
@@ -65,7 +66,7 @@ struct RequestTests {
         #expect((json["ifa"] as? [String: Any])?["limitAdTracking"] as? Bool == false)
         #expect(json["attStatus"] as? String == "authorized")
         #expect(json["idfv"] is String)
-        #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == false, "from the configuration")
+        #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == false)
         let formats = try #require(json["formats"] as? [[String: Any]])
         #expect(formats.count == 1)
         #expect(formats.first?["format"] as? String == "pause")
@@ -177,7 +178,7 @@ struct RequestTests {
         #expect(regulatory?.gpp == "GPP-STRING")
         #expect(regulatory?.gppSid == [2, 7])
         #expect(regulatory?.usPrivacy == "1YNN")
-        #expect(regulatory?.coppa == nil, "coppa is never read from the device")
+        #expect(regulatory?.coppa == nil, "coppa can only come from the publisher")
     }
 
     @Test func consentStorageTheCMPWinsAndThePublisherFillsTheRest() {
@@ -185,11 +186,11 @@ struct RequestTests {
         defaults.removePersistentDomain(forName: "consent-test-2")
         defaults.set(0, forKey: "IABTCF_gdprApplies")
         defaults.set("STORED", forKey: "IABTCF_TCString")
-        let regulatory = ConsentStorage.read(merging: KontextVideo.Regulatory(gdpr: true, gdprConsent: "MINE", usPrivacy: "1YNN"), coppa: true, defaults: defaults)
+        let regulatory = ConsentStorage.read(merging: KontextVideo.Regulatory(gdpr: true, gdprConsent: "MINE", coppa: true, usPrivacy: "1YNN"), defaults: defaults)
         #expect(regulatory?.gdpr == false, "the CMP's live value wins")
         #expect(regulatory?.gdprConsent == "STORED")
         #expect(regulatory?.usPrivacy == "1YNN", "what the CMP did not write comes from the publisher")
-        #expect(regulatory?.coppa == true, "coppa comes from the configuration")
+        #expect(regulatory?.coppa == true, "coppa only ever comes from the publisher")
     }
 
     @Test func consentStorageReadsGdprAppliesAsCMPsWriteIt() {

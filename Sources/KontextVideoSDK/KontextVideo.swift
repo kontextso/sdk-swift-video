@@ -37,8 +37,8 @@ public final class KontextVideo {
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
     public var user: User?
-    /// Consent signals, for an app without a consent platform that writes the IAB keys; the platform's
-    /// values win per field. The next ads request carries them; ads already loaded stay.
+    /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
+    /// The next ads request carries them; ads already loaded stay.
     public var regulatory: Regulatory?
     /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
     public var variantId: String?

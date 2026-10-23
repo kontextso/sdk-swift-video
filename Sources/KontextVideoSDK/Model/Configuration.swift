@@ -58,9 +58,6 @@ extension KontextVideo {
         /// Whether the SDK shows the App Tracking Transparency dialog itself, before the first ads request.
         /// Off by default, so the app decides when the dialog appears.
         public let requestTrackingAuthorization: Bool
-        /// Whether the app is directed to children under COPPA. Set once: it never changes during a launch, and
-        /// it cannot be read from the device. `nil` sends nothing.
-        public let coppa: Bool?
         /// How much the SDK prints to the device console.
         public let logLevel: LogLevel
         /// The ad server base URL, by default the production server.
@@ -74,14 +71,12 @@ extension KontextVideo {
         public init(
             publisherToken: String,
             requestTrackingAuthorization: Bool = false,
-            coppa: Bool? = nil,
             logLevel: LogLevel = .warning,
             adServerURL: URL = Configuration.defaultAdServerURL,
             formatDefaults: [AdFormat: FormatDefaults] = [:]
         ) {
             self.publisherToken = publisherToken
             self.requestTrackingAuthorization = requestTrackingAuthorization
-            self.coppa = coppa
             self.logLevel = logLevel
             self.adServerURL = adServerURL
             self.formatDefaults = Configuration.standardFormatDefaults.merging(formatDefaults) { _, given in given }

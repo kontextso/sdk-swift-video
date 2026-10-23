@@ -59,18 +59,19 @@ struct ModelEncodingTests {
     }
 
     @Test func regulatoryEncodesEveryField() throws {
-        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", gpp: "GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", coppa: false, gpp: "GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
         #expect(json["gdpr"] as? Bool == true)
         #expect(json["gdprConsent"] as? String == "TC")
+        #expect(json["coppa"] as? Bool == false)
         #expect(json["gpp"] as? String == "GPP")
         #expect(json["gppSid"] as? [Int] == [2, 7])
         #expect(json["usPrivacy"] as? String == "1YNN")
     }
 
     @Test func regulatoryOmitsNilFields() throws {
-        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true))
+        let json = try Fixtures.encode(KontextVideo.Regulatory(coppa: true))
         #expect(json.count == 1)
-        #expect(json["gdpr"] as? Bool == true)
+        #expect(json["coppa"] as? Bool == true)
     }
 
     // MARK: Options

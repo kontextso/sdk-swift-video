@@ -63,15 +63,15 @@ struct TrackingInfo: Sendable {
 /// keys (TCF v2, GPP, US Privacy), read by KontextKit's `ConsentDataProvider`. The CMP's values win:
 /// they are the live, authoritative consent, as AdMob and MAX read them with no override at all. What
 /// the publisher set on `KontextVideo.shared.regulatory` fills in what the CMP did not write (a
-/// publisher without an IAB-writing CMP passes consent by hand); `coppa` comes from `Configuration.coppa`.
+/// publisher without an IAB-writing CMP passes consent by hand); `coppa` can only come from the publisher.
 enum ConsentStorage {
     @MainActor
-    static func read(merging explicit: KontextVideo.Regulatory?, coppa: Bool? = nil, defaults: UserDefaults? = nil) -> AdsRequest.Regulatory? {
+    static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
         let stored = ConsentDataProvider.collect(from: defaults ?? Environment.consentDefaults)
-        let merged = AdsRequest.Regulatory(
+        let merged = KontextVideo.Regulatory(
             gdpr: stored.gdpr.map { $0 == 1 } ?? explicit?.gdpr,
             gdprConsent: stored.gdprConsent ?? explicit?.gdprConsent,
-            coppa: coppa,
+            coppa: explicit?.coppa,
             gpp: stored.gpp ?? explicit?.gpp,
             gppSid: stored.gppSid ?? explicit?.gppSid,
             usPrivacy: stored.usPrivacy ?? explicit?.usPrivacy
