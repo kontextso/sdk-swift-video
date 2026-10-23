@@ -179,21 +179,6 @@ struct IntegrationTests {
 
     // MARK: Invalidation and destruction
 
-    @Test func targetingChangeDiscardsALoadedAdAndTheNextLoadCarriesTheNewValues() async throws {
-        let ads = await start()
-        harness.serve(Fixtures.ad(id: "img-t1"))
-        let delegate = RecordingDelegate()
-        let ad = try await ads.format(.pause).load()
-        ad.delegate = delegate
-        KontextVideo.shared.user = KontextVideo.User(id: "u2")
-        #expect(delegate.invalidations == [.targetingChanged])
-        #expect(ad.isReady == false)
-        harness.serve(Fixtures.ad(id: "img-t2"))
-        let next = try await ads.format(.pause).load()
-        #expect(next.id == "img-t2")
-        #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["user"] as? [String: Any])?["id"] as? String == "u2")
-    }
-
     @Test func destroyWithAnAdOnScreenEndsItAndFreesEverything() async throws {
         let ads = await start()
         harness.serve(Fixtures.overlayAd(id: "img-ov"))

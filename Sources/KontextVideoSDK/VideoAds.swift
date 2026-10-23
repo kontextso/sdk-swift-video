@@ -67,7 +67,7 @@ public final class VideoAds {
         overlay.ads = self
         pause.ads = self
         linear.ads = self
-        KontextVideo.shared.register(self)
+        KontextVideo.shared.requireInitialized("VideoAds(content:playerSize:formats:)")
         Logger.debug("VideoAds created for video \(content.id)")
         var declared: [FormatRequest] = []
         for request in formats where !declared.contains(where: { $0.format == request.format }) {
@@ -205,10 +205,8 @@ public final class VideoAds {
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
-        // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request; a
-        // status that changed since the last request discards the other loaders' pending ads.
+        // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
-        KontextVideo.shared.noteTrackingAuthorization(tracking.status)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
                                       player: .make(playerSize: lastShownBox ?? playerSize, playheadMs: playheadMs), formats: formats)
@@ -295,17 +293,6 @@ public final class VideoAds {
     /// The loaded, unshown ads the app still holds.
     private var liveAds: [VideoAd] {
         slots.values.compactMap(\.liveAd)
-    }
-
-    /// The spec's rule: when the viewer's data or consent changes, loaded ads that were not shown are
-    /// discarded, and answers held but not rendered are dropped, so the next request carries the new values.
-    func discardLoadedAds(reason: String) {
-        let ads = liveAds
-        let held = slots.values.filter { $0.held != nil }
-        guard !ads.isEmpty || !held.isEmpty else { return }
-        Logger.debug("\(content.id): discarding \(ads.count) loaded ad(s) and \(held.count) held answer(s), \(reason)")
-        ads.forEach { $0.invalidate(.targetingChanged) }
-        held.forEach { $0.dropHeld() }
     }
 
     /// Deallocation does what `destroy()` does. Loads in flight hold `self` for their duration, so none

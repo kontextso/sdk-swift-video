@@ -1,4 +1,3 @@
-import AppTrackingTransparency
 import Foundation
 import KontextKit
 import UIKit
@@ -36,18 +35,13 @@ public final class KontextVideo {
     public private(set) var state: State = .notInitialized
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
-    /// the next ads request carries it. Ads already loaded but not shown are discarded on a change.
-    public var user: User? {
-        didSet { if user != oldValue { targetingChanged("user") } }
-    }
-    /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
-    public var regulatory: Regulatory? {
-        didSet { if regulatory != oldValue { targetingChanged("regulatory") } }
-    }
+    /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
+    public var user: User?
+    /// Consent signals, for an app without a consent platform that writes the IAB keys; the platform's
+    /// values win per field. The next ads request carries them; ads already loaded stay.
+    public var regulatory: Regulatory?
     /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
-    public var variantId: String? {
-        didSet { if variantId != oldValue { targetingChanged("variantId") } }
-    }
+    public var variantId: String?
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
     public var isInitialized: Bool {
@@ -72,7 +66,6 @@ public final class KontextVideo {
         Logger.level = configuration.logLevel
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
-        observeTrackingAuthorization()
         initTask = Task {
             await fetchConfig(configuration: configuration)
             completion?(state)
@@ -86,22 +79,6 @@ public final class KontextVideo {
         initialize(with: configuration, completion: nil)
         await initTask?.value
         return state
-    }
-
-    /// Every `VideoAds` registers itself here from its initializer, so the rules that touch all of them
-    /// (a targeting change discards every unshown ad) can reach it.
-    func register(_ ads: VideoAds) {
-        requireInitialized("VideoAds(content:playerSize:)")
-        liveVideoAds.append(WeakVideoAds(ads))
-        liveVideoAds.removeAll { $0.value == nil }
-    }
-
-    /// Every `VideoAds` still alive, for the rules that touch all of them.
-    private var liveVideoAds: [WeakVideoAds] = []
-
-    private struct WeakVideoAds {
-        weak var value: VideoAds?
-        init(_ value: VideoAds) { self.value = value }
     }
 
     /// Whether ads may be requested now: waits while `/config` is in flight, retries it first after a
@@ -149,45 +126,6 @@ public final class KontextVideo {
         initTask = Task { await fetchConfig(configuration: configuration) }
     }
 
-    /// The ATT status is the fourth targeting input, and the only one the app does not set. The last
-    /// value the SDK acted on; read when `shared` is first touched, which may be before the app's own
-    /// ATT prompt, and that is fine: the first comparison then sees the answer as a change.
-    private var lastTrackingStatus = ATTrackingManager.trackingAuthorizationStatus
-    /// The `didBecomeActive` subscription. The token is the subscription: kept so a second call cannot
-    /// add a second observer, and so it could be removed; `shared` lives as long as the app, so it never is.
-    private var activityObserver: (any NSObjectProtocol)?
-
-    /// Re-reads the ATT status whenever the app becomes active, because it can change while the app is
-    /// not: the viewer flips the switch in Settings > Privacy > Tracking (the app is in the background
-    /// for that), or an ATT prompt is answered (a system dialog, during which the app is not active),
-    /// whether the publisher's own or the SDK's. Nothing tells the SDK; `didBecomeActiveNotification`
-    /// is the moment to look. A changed status is a targeting change like `user`, `regulatory` and
-    /// `variantId`: the IFA may now be present or gone, so every prefetched ad was requested with stale
-    /// targeting and is discarded (`noteTrackingAuthorization`, which the SDK's own prompt path in
-    /// `VideoAds.fetch` also calls, so both routes end in one place).
-    private func observeTrackingAuthorization() {
-        guard activityObserver == nil else { return }
-        activityObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.noteTrackingAuthorization(ATTrackingManager.trackingAuthorizationStatus) }
-        }
-    }
-
-    /// Called with a freshly read status; discards pending ads when it differs from the last one seen.
-    func noteTrackingAuthorization(_ status: ATTrackingManager.AuthorizationStatus) {
-        guard status != lastTrackingStatus else { return }
-        lastTrackingStatus = status
-        targetingChanged("ATT status")
-    }
-
-    /// The spec's rule: when `user`, `regulatory`, `variantId` or the ATT status changes, every loaded
-    /// ad that was not shown yet is discarded, and the next request for each format carries the new values.
-    private func targetingChanged(_ what: String) {
-        Logger.debug("\(what) changed")
-        for entry in liveVideoAds {
-            entry.value?.discardLoadedAds(reason: "\(what) changed")
-        }
-    }
-
     /// Back to the state before `initialize(with:)`. Tests only: the shared instance is process-wide.
     func resetForTesting() {
         initTask?.cancel()
@@ -198,7 +136,6 @@ public final class KontextVideo {
         regulatory = nil
         variantId = nil
         reportDebug = false
-        liveVideoAds.removeAll()
         DebugReporter.shared.isEnabled = false
         Logger.level = .warning
     }

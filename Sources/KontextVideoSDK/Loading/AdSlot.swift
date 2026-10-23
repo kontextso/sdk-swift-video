@@ -45,7 +45,7 @@ final class AdSlot {
         return noFillReason
     }
 
-    /// Forgets the held answer (expired, replaced, targeting changed); nothing fires, nothing was rendered.
+    /// Forgets the held answer (expired, replaced); nothing fires, nothing was rendered.
     func dropHeld() {
         held = nil
         heldRequest = nil

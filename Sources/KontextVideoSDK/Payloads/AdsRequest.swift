@@ -33,7 +33,7 @@ struct AdsRequest: Encodable, Sendable {
     let ifa: IFA?
     let idfv: String?
     let attStatus: String
-    let regulatory: KontextVideo.Regulatory?
+    let regulatory: Regulatory?
     let sdk: SDKInfo
     let app: AppInfo
     let device: AdsDevice
@@ -58,8 +58,8 @@ struct AdsRequest: Encodable, Sendable {
             ifa: tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
             attStatus: tracking.attStatus,
-            // What the publisher set wins per field; the rest comes from the CMP's shared storage.
-            regulatory: ConsentStorage.read(merging: sdk.regulatory),
+            // The CMP's shared storage wins per field; what the publisher set fills the rest; coppa from the configuration.
+            regulatory: ConsentStorage.read(merging: sdk.regulatory, coppa: configuration.coppa),
             sdk: SDKInfo(),
             app: .current(),
             device: .current(),
@@ -67,6 +67,16 @@ struct AdsRequest: Encodable, Sendable {
             video: content,
             formats: formats.map(Format.init)
         )
+    }
+
+    /// The `regulatory` object: the consent signals plus `coppa`, which the app sets once in the configuration.
+    struct Regulatory: Encodable, Sendable, Equatable {
+        var gdpr: Bool?
+        var gdprConsent: String?
+        var coppa: Bool?
+        var gpp: String?
+        var gppSid: [Int]?
+        var usPrivacy: String?
     }
 }
 

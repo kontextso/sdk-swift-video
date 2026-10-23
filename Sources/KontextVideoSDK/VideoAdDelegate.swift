@@ -13,7 +13,7 @@ import Foundation
 public protocol VideoAdDelegate: AnyObject {
     // Before presentation
 
-    /// A loaded ad can no longer be shown: it expired, targeting changed, its `VideoAds` was destroyed, or
+    /// A loaded ad can no longer be shown: it expired, its `VideoAds` was destroyed, or
     /// the creative died while waiting. `isReady` is `false`; `show` throws `.invalidated(reason)`.
     func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason)
 

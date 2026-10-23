@@ -1,10 +1,9 @@
-import AppTrackingTransparency
 import AVFoundation
 import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// `VideoAds`: placements, every way `load` answers, the busy rule, `start()`, targeting changes,
+/// `VideoAds`: placements, every way `load` answers, the busy rule, `start()`,
 /// `destroy()` and deallocation. Pages are real: the in-process frame server answers the WebView.
 extension SerialSuites {
 @Suite
@@ -516,49 +515,24 @@ struct VideoAdsTests {
         #expect(ads.playheadMs == 0)
     }
 
-    @Test func targetingChangeInvalidatesUnshownAds() async throws {
+    @Test func aTargetingChangeKeepsALoadedAdAndTheNextRequestCarriesIt() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-17"))
         let ad = try await ads.format(.pause).load()
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         KontextVideo.shared.user = KontextVideo.User(id: "someone-else")
-        #expect(ad.isReady == false)
-        #expect(ad.invalidationReason == .targetingChanged)
-        #expect(delegate.invalidations == [.targetingChanged])
-        KontextVideo.shared.user = KontextVideo.User(id: "someone-else")
-        #expect(delegate.invalidations.count == 1, "the same value again changes nothing")
+        KontextVideo.shared.variantId = "b"
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(gdpr: true)
+        #expect(ad.isReady, "loaded with the targeting of its request; it stays")
+        #expect(delegate.invalidations.isEmpty)
+        try ad.show(in: harness.player.view)
+        ad.dismiss()
         harness.serve(Fixtures.ad(id: "img-18"))
         _ = try await ads.format(.pause).load()
-    }
-
-    @Test func anATTStatusChangeIsATargetingChange() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-17a"))
-        let ad = try await ads.format(.pause).load()   // the request noted the device's real status
-        let delegate = RecordingDelegate()
-        ad.delegate = delegate
-        let real = ATTrackingManager.trackingAuthorizationStatus
-        KontextVideo.shared.noteTrackingAuthorization(real)
-        #expect(delegate.invalidations.isEmpty, "the same status again changes nothing")
-        KontextVideo.shared.noteTrackingAuthorization(real == .denied ? .authorized : .denied)
-        #expect(delegate.invalidations == [.targetingChanged], "the viewer changed their mind in Settings")
-    }
-
-    @Test func targetingChangeLeavesAnAdOnScreenAlone() async throws {
-        let window = TestWindow()
-        defer { window.tearDown() }
-        window.add(harness.player.view)
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-19"))
-        let ad = try await ads.format(.pause).load()
-        let delegate = RecordingDelegate()
-        ad.delegate = delegate
-        try ad.show(in: harness.player.view)
-        KontextVideo.shared.variantId = "b"
-        #expect(delegate.invalidations.isEmpty)
-        #expect(delegate.endReasons.isEmpty)
-        ad.dismiss()
+        let body = harness.server.requests(to: "/v2/video/ads").last?.body
+        #expect((body?["user"] as? [String: Any])?["id"] as? String == "someone-else")
+        #expect(body?["variantId"] as? String == "b")
     }
 
     @Test func destroyInvalidatesLoadedAdsAndEndsShowingOnes() async throws {

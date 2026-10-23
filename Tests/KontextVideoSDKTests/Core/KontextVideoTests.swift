@@ -145,10 +145,10 @@ struct KontextVideoTests {
     @Test func targetingSettersAreStoredAndCompared() async {
         _ = await harness.initialize()
         sdk.user = KontextVideo.User(id: "u1")
-        sdk.regulatory = KontextVideo.Regulatory(coppa: true)
+        sdk.regulatory = KontextVideo.Regulatory(gdpr: true)
         sdk.variantId = "b"
         #expect(sdk.user?.id == "u1")
-        #expect(sdk.regulatory?.coppa == true)
+        #expect(sdk.regulatory?.gdpr == true)
         #expect(sdk.variantId == "b")
         sdk.user = nil
         #expect(sdk.user == nil)

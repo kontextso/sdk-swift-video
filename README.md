@@ -60,6 +60,7 @@ KontextVideo.Configuration(
     publisherToken: "yourpublisher-dev",
     requestTrackingAuthorization: false,       // let the SDK show the ATT dialog before the first ads request
                                                // (needs NSUserTrackingUsageDescription in your Info.plist)
+    coppa: false,                              // child-directed under COPPA; fixed for the launch
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
     adServerURL: KontextVideo.Configuration.defaultAdServerURL,  // override only for a staging or mock server
     formatDefaults: [.linear: .init(refetch: .afterEnd)]   // per-format defaults, on top of the SDK's (see 4)
@@ -68,13 +69,13 @@ KontextVideo.Configuration(
 
 What you know about the viewer usually arrives later: the user after login, consent when your consent platform
 has it. Set these on the shared instance whenever you learn them, from anywhere; the next ads request carries
-them, and ads already loaded but not shown are discarded. `nil` clears a value.
+them; ads already loaded or fetched keep the values they were requested with. `nil` clears a value.
 
 ```swift
 KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com")
-KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read from your CMP's storage
-                                                            // (IABTCF_*, IABGPP_*, IABUSPrivacy_String); the CMP's values win,
-                                                            // yours fill in what it did not write
+KontextVideo.shared.regulatory = .init(gdpr: true, gdprConsent: "…")   // only without a CMP: the SDK reads your CMP's
+                                                            // storage (IABTCF_*, IABGPP_*, IABUSPrivacy_String); its values
+                                                            // win, yours fill in what it did not write
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 

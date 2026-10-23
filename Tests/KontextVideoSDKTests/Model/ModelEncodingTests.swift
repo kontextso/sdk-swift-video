@@ -53,25 +53,24 @@ struct ModelEncodingTests {
         #expect(json.count == 3, "no demographics: yob and gender are deprecated in OpenRTB 2.6")
     }
 
-    @Test func userEqualityDrivesTargetingChanges() {
+    @Test func userEquality() {
         #expect(KontextVideo.User(id: "u1") == KontextVideo.User(id: "u1"))
         #expect(KontextVideo.User(id: "u1") != KontextVideo.User(id: "u2"))
     }
 
     @Test func regulatoryEncodesEveryField() throws {
-        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", coppa: false, gpp: "GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", gpp: "GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
         #expect(json["gdpr"] as? Bool == true)
         #expect(json["gdprConsent"] as? String == "TC")
-        #expect(json["coppa"] as? Bool == false)
         #expect(json["gpp"] as? String == "GPP")
         #expect(json["gppSid"] as? [Int] == [2, 7])
         #expect(json["usPrivacy"] as? String == "1YNN")
     }
 
     @Test func regulatoryOmitsNilFields() throws {
-        let json = try Fixtures.encode(KontextVideo.Regulatory(coppa: true))
+        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true))
         #expect(json.count == 1)
-        #expect(json["coppa"] as? Bool == true)
+        #expect(json["gdpr"] as? Bool == true)
     }
 
     // MARK: Options

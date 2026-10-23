@@ -47,8 +47,6 @@ public final class VideoAd {
     public enum InvalidationReason: Sendable, Equatable {
         /// The ad's lifetime ran out before it was shown.
         case expired
-        /// `user`, `regulatory` or `variantId` changed; the next load carries the new values.
-        case targetingChanged
         /// The `VideoAds` was destroyed.
         case destroyed
         /// The creative died while the ad waited to be shown (for example the web content process was

@@ -637,7 +637,6 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p21"))
         try ad.show(in: harness.player.view)
         ad.invalidate(.expired)
-        ad.invalidate(.targetingChanged)
         #expect(delegate.endReasons.isEmpty)
         ad.invalidate(.destroyed)
         #expect(delegate.endReasons == [.destroyed])

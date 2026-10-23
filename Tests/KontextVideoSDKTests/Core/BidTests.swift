@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 /// `ads.format(_:options:)` and `VideoAd.Bid`: the answer it holds, nothing rendered until `load()`, the
-/// busy rule, expiry, and what a targeting change or `destroy()` does to a held answer.
+/// busy rule, expiry, and what `destroy()` does to a held answer.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -130,16 +130,14 @@ struct BidTests {
         #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
     }
 
-    @Test func aTargetingChangeDropsAHeldAnswer() async throws {
+    @Test func aTargetingChangeKeepsAHeldAnswer() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p9"))
         _ = try await ads.format(.pause)
         KontextVideo.shared.variantId = "b"
-        harness.serve(Fixtures.ad(id: "img-p10"))
         let ad = try await ads.format(.pause).load()
-        #expect(ad.id == "img-p10", "the next request carries the new targeting")
-        let last = harness.server.requests(to: "/v2/video/ads").last?.body
-        #expect(last?["variantId"] as? String == "b")
+        #expect(ad.id == "img-p9", "the held answer stays; the next request carries the new targeting")
+        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
     }
 
     @Test func destroyMakesTheLoaderThrowDestroyed() async throws {
