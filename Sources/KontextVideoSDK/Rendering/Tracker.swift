@@ -22,10 +22,10 @@ final class Tracker {
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
-    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`.
-    /// Returns the occurrence's fire id, for a click-through that must carry the same one.
+    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[REASON]` and
+    /// `[WINNINGPRICE]`. Returns the occurrence's fire id, for a click-through that must carry the same one.
     @discardableResult
-    func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil) -> String {
+    func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil, notUsed: NotUsed? = nil) -> String {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
         // (adId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
         let fireId = UUID().uuidString.lowercased()
@@ -33,7 +33,7 @@ final class Tracker {
             guard entry.event == event, entry.part == part else { continue }
             if let offset, entry.offset != offset { continue }
             fired.insert(index)
-            guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs)) else {
+            guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
                 Logger.warning("ad \(adId.prefix(8)): \(event) beacon has an invalid URL")
                 continue
             }
@@ -45,10 +45,32 @@ final class Tracker {
     /// The click-through with the beacon macros substituted, `[FIREID]` with the click's own fire id:
     /// a redirect URL and the `click` beacon then arrive as one occurrence.
     func clickThrough(_ url: URL, fireId: String) -> URL {
-        URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil)) ?? url
+        URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil, notUsed: nil)) ?? url
     }
 
-    private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?) -> String {
+    /// Why the SDK did not use a bid, for the `notUsed` beacon: the server closes the bid with this reason.
+    struct NotUsed: Equatable {
+        /// `notUsed` or `outbid` (the app's `reject`), `destroyed` (`VideoAds.destroy()`).
+        let reason: String
+        /// What won the publisher's own auction, when the app said so.
+        let winningPrice: Double?
+
+        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil)
+
+        init(reason: String, winningPrice: Double?) {
+            self.reason = reason
+            self.winningPrice = winningPrice
+        }
+
+        init(_ rejection: VideoAd.RejectReason) {
+            switch rejection {
+            case .notUsed: self.init(reason: "notUsed", winningPrice: nil)
+            case .outbid(let price): self.init(reason: "outbid", winningPrice: price)
+            }
+        }
+    }
+
+    private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
         template
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[FIREID]", with: fireId)
@@ -57,6 +79,8 @@ final class Tracker {
             .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
             .replacingOccurrences(of: "[ADPLAYHEAD]", with: Self.encode(Self.playhead(seconds: TimeInterval(adPlayhead) / 1000)))
             .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
+            .replacingOccurrences(of: "[REASON]", with: notUsed?.reason ?? "")
+            .replacingOccurrences(of: "[WINNINGPRICE]", with: notUsed?.winningPrice.map { String($0) } ?? "")
     }
 
     private func send(_ url: URL, event: String, part: String?) {

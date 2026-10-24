@@ -2,27 +2,8 @@ import Foundation
 import KontextKit
 import UIKit
 
-/// The body of `POST /video/ads`: the formats asked for, each with its options, for one video.
+/// The body of `POST /video/ads`: every format, for one video, for one `VideoAds` session.
 struct AdsRequest: Encodable, Sendable {
-    /// One entry of `formats`: `{ format, options }`, the options in the shape of their format.
-    struct Format: Encodable, Sendable, Equatable {
-        let request: FormatRequest
-
-        private enum CodingKeys: String, CodingKey {
-            case format, options
-        }
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(request.format, forKey: .format)
-            switch request {
-            case .overlay(let options): try container.encode(options, forKey: .options)
-            case .pause(let options): try container.encode(options, forKey: .options)
-            case .linear(let options): try container.encode(options, forKey: .options)
-            }
-        }
-    }
-
     /// Where to send it; not part of the body.
     let adServerURL: URL
     let requestId: String
@@ -39,15 +20,18 @@ struct AdsRequest: Encodable, Sendable {
     let device: AdsDevice
     let player: PlayerSnapshot
     let video: KontextVideo.Content
-    /// Each format at most once.
-    let formats: [Format]
+    /// One per `VideoAds`: the server keeps the bids it gave out per session.
+    let sessionId: String
+    /// Ids of the unshown bids the SDK holds: the server re-serves them, anything else it gave this session
+    /// is spent.
+    let held: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, formats
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, sessionId, held
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, formats: [FormatRequest]) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, sessionId: String, held: [String]) -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -65,7 +49,8 @@ struct AdsRequest: Encodable, Sendable {
             device: .current(),
             player: player,
             video: content,
-            formats: formats.map(Format.init)
+            sessionId: sessionId,
+            held: held
         )
     }
 }
@@ -85,8 +70,8 @@ struct AdsDevice: Encodable, Sendable {
     }
 }
 
-/// What an ads request says about the player: the size the app gave its `VideoAds`, or the screen's
-/// when it gave none, and the playhead read at request time.
+/// What an ads request says about the player: the SDK assumes a full-screen player, so the screen in its
+/// current orientation, and the playhead read at request time. `show` fits the ad into the real view.
 struct PlayerSnapshot: Encodable, Sendable, Equatable {
     let width: Int
     let height: Int
@@ -94,17 +79,10 @@ struct PlayerSnapshot: Encodable, Sendable, Equatable {
     /// Milliseconds in content time; 0 before the episode plays.
     let playhead: Int
 
-    /// `playerSize` in points, `nil` for a full-screen player. A given size is sent as is, `fullscreen`
-    /// when it matches the screen.
+    /// The key window's size, or the screen's, in points: width < height is portrait.
     @MainActor
-    static func make(playerSize: CGSize?, playheadMs: Int) -> PlayerSnapshot {
+    static func make(playheadMs: Int) -> PlayerSnapshot {
         let screen = (Environment.keyWindow()?.bounds ?? UIScreen.main.bounds).size
-        let size = playerSize ?? screen
-        return PlayerSnapshot(
-            width: Int(size.width.rounded()),
-            height: Int(size.height.rounded()),
-            fullscreen: size.width >= screen.width - 1 && size.height >= screen.height - 1,
-            playhead: playheadMs
-        )
+        return PlayerSnapshot(width: Int(screen.width.rounded()), height: Int(screen.height.rounded()), fullscreen: true, playhead: playheadMs)
     }
 }

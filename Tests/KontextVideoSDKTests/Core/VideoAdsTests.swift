@@ -3,7 +3,8 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// `VideoAds`: placements, every way `load` answers, the busy rule, `start()`,
+/// `VideoAds`: every way `format(_:)` answers, the request it sends (all formats, the session, `held`),
+/// following the server (re-serve, replace, no-fill), the shared request and its races, the kill switch,
 /// `destroy()` and deallocation. Pages are real: the in-process frame server answers the WebView.
 extension SerialSuites {
 @Suite
@@ -16,12 +17,12 @@ struct VideoAdsTests {
         pages.install()
     }
 
-    private func makeAds(content: String = "ep-1", player: TestPlayer? = nil) async -> VideoAds {
+    private func makeAds(content: String = "ep-1") async -> VideoAds {
         _ = await harness.initialize()
-        return (player ?? harness.player).ads(for: .init(id: content, language: "en"))
+        return harness.player.ads(for: .init(id: content, language: "en"))
     }
 
-    private func loadError(_ work: () async throws -> VideoAd) async -> VideoAdError? {
+    private func error(_ work: () async throws -> Any) async -> VideoAdError? {
         do {
             _ = try await work()
             Issue.record("expected a throw")
@@ -34,459 +35,382 @@ struct VideoAdsTests {
         }
     }
 
-    // MARK: Loaders
+    private func notUsedBeacons() async -> [(adId: String, reason: String?)] {
+        await sleepMs(80)
+        return harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.adId, $0.query["reason"]) }
+    }
 
-    @Test func theThreeLoadersAreCreatedWithTheVideoAds() async {
+    // MARK: The request
+
+    @Test func creatingAVideoAdsSendsNothing() async {
+        _ = await makeAds()
+        await sleepMs(50)
+        #expect(harness.adsRequests.isEmpty)
+    }
+
+    @Test func formatAsksForAllFormatsWithTheSessionAndWhatItHolds() async throws {
         let ads = await makeAds()
-        #expect(ads.loader(.overlay) === ads.loader(.overlay), "the same loader every time")
-        #expect(ads.loader(.pause).slot.format == .pause)
-        #expect(ads.loader(.linear).slot.format == .linear)
-        #expect(ads.loader(.overlay).slot.format == .overlay)
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p1"), "linear": Fixtures.linearAd(id: "vid-l1")])
+        let pause = try await ads.format(.pause)
+        #expect(pause.id == "img-p1")
+        let first = harness.adsRequests[0].body
+        #expect(first?["formats"] == nil, "no formats: every request is for all of them")
+        #expect(first?["held"] as? [String] == [])
+        let session = first?["sessionId"] as? String
+        #expect(session?.isEmpty == false)
+
+        _ = try await ads.format(.linear)
+        let second = harness.adsRequests[1].body
+        #expect(second?["sessionId"] as? String == session, "one session per VideoAds")
+        #expect(Set(second?["held"] as? [String] ?? []) == ["img-p1", "vid-l1"], "both unshown bids are listed")
     }
 
-    // MARK: the creation-time request
-
-    @Test func declaredFormatsAreRequestedOnceAtCreationAndTheirAdsWaitInTheLoaders() async throws {
-        _ = await harness.initialize()
-        harness.serve(formats: [
-            "linear": Fixtures.filledEntry(Fixtures.linearAd(id: "l1")),
-            "pause": Fixtures.filledEntry(Fixtures.ad(id: "p1")),
-        ])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear(LinearOptions(timing: .preroll)), .pause()])
-        let bid = try await ads.format(.pause)
-        #expect(bid.id == "p1")
-        let preroll = try await ads.format(.linear).load()
-        #expect(preroll.id == "l1")
-        let requests = harness.server.requests(to: "/v2/video/ads")
-        #expect(requests.count == 1, "one request for both formats")
-        let formats = requests.first?.body?["formats"] as? [[String: Any]]
-        #expect(formats?.map { $0["format"] as? String } == ["linear", "pause"])
-        #expect((formats?.first?["options"] as? [String: Any])?["timing"] as? String == "preroll")
-        #expect(pages.served == ["l1"], "the pause ad is not rendered until load")
+    @Test func everyVideoAdsHasItsOwnSession() async throws {
+        let first = await makeAds(content: "a")
+        let second = harness.player.ads(for: .init(id: "b", language: "en"))
+        #expect(first.sessionId != second.sessionId)
     }
 
-    @Test func aFormatsNoFillFromCreationIsThrownOnceThenAskedAgain() async throws {
-        _ = await harness.initialize()
-        harness.serve(formats: [
-            "overlay": Fixtures.noFillEntry("frequencyCap", format: "overlay"),
-            "pause": Fixtures.filledEntry(Fixtures.ad(id: "p2")),
-        ])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.overlay(), .pause()])
-        let error = await loadError { try await ads.format(.overlay).load() }
-        guard case .noFill(let reason) = error else { Issue.record("expected the creation-time no fill"); return }
-        #expect(reason == "frequencyCap")
-        harness.serve(Fixtures.overlayAd(id: "o2"))
-        let overlay = try await ads.format(.overlay).load()
-        #expect(overlay.id == "o2", "the next access asks again")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
-    }
-
-    @Test func anUndeclaredFormatFetchesOnFirstUse() async throws {
-        _ = await harness.initialize()
-        harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p3"))])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
-        _ = try await ads.format(.pause)
-        harness.serve(Fixtures.overlayAd(id: "o3"))
-        let overlay = try await ads.format(.overlay).load()
-        #expect(overlay.id == "o3")
-        let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { ($0.body?["formats"] as? [[String: Any]])?.map { $0["format"] as? String } }
-        #expect(bodies.count == 2 && bodies.last == ["overlay"], "one format, with the default options")
-    }
-
-    @Test func aFailedCreationTimeRequestLeavesTheLoadersToFetch() async throws {
-        _ = await harness.initialize()
-        harness.server.on("/v2/video/ads", .json(["errors": [["code": "invalidRequest"]]], status: 500))
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause()])
-        await sleepMs(100)
-        harness.serve(Fixtures.ad(id: "p4"))
-        let ad = try await ads.format(.pause).load()
-        #expect(ad.id == "p4")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
-    }
-
-    @Test func fetchReplacesAnAnswerTheAppNeverTook() async throws {
-        _ = await harness.initialize()
-        harness.serve(formats: ["linear": Fixtures.filledEntry(Fixtures.linearAd(id: "l5"))])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.linear()])
-        harness.serve(Fixtures.linearAd(id: "l6"))
-        let fresh = try await ads.format(.linear, options: LinearOptions(timing: .postroll))
-        #expect(fresh.id == "l6")
-        let held = try await ads.format(.linear)
-        #expect(held === fresh, "the next call gives what the fresh request brought")
-        #expect(try await ads.format(.linear).load().id == "l6", "and load renders it")
-        let bodies = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["formats"] as? [[String: Any]] }
-        #expect((bodies.last?.first?["options"] as? [String: Any])?["timing"] as? String == "postroll")
-    }
-
-    @Test func aFormatListedTwiceIsAProgrammerErrorAndTheFirstCounts() async throws {
-        var messages: [String] = []
-        Environment.assertionFailure = { messages.append($0) }
-        _ = await harness.initialize()
-        harness.serve(formats: ["pause": Fixtures.filledEntry(Fixtures.ad(id: "p7"))])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), formats: [.pause(PauseOptions(positions: [.top])), .pause(PauseOptions(positions: [.fullscreen]))])
-        _ = try await ads.format(.pause)
-        #expect(messages.count == 1)
-        let formats = harness.server.requests(to: "/v2/video/ads").first?.body?["formats"] as? [[String: Any]]
-        #expect(formats?.count == 1)
-        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
-    }
-
-    // MARK: refetch after end
-
-    @Test func aPauseAdThatEndedIsRefetchedSoTheNextLoadRendersAtOnce() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "p1"))
-        let ad = try await ads.format(.pause).load()
-        try ad.show(in: harness.player.view)
-        harness.serve(Fixtures.ad(id: "p2"))
-        ad.dismiss()
-        #expect(await waitUntil { self.harness.server.requests(to: "/v2/video/ads").count == 2 }, "one request after the end, by itself")
-        let next = try await ads.format(.pause).load()
-        #expect(next.id == "p2")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "load() rendered the held answer, no third request")
-        let formats = harness.server.requests(to: "/v2/video/ads").last?.body?["formats"] as? [[String: Any]]
-        #expect(formats?.map { $0["format"] as? String } == ["pause"])
-    }
-
-    @Test func aLinearAdThatEndedIsNotRefetchedByDefault() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.linearAd(id: "l1"))
-        let ad = try await ads.format(.linear).load()
-        let window = TestWindow()
-        try ad.show(from: window.root)
-        ads.destroy()   // the one way an app ends a linear ad; didEnd(.destroyed) runs the same hook
-        await sleepMs(100)
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
-        withExtendedLifetime(window) {}
-    }
-
-    @Test func theRefetchPolicyIsPerFormatInTheConfiguration() async throws {
-        _ = await harness.initialize(formatDefaults: [.pause: .init(refetch: .never)])
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"))
-        harness.serve(Fixtures.ad(id: "p3"))
-        let ad = try await ads.format(.pause).load()
-        try ad.show(in: harness.player.view)
-        ad.dismiss()
-        await sleepMs(100)
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "never: the next load() fetches")
-        #expect(KontextVideo.shared.configuration?.formatDefaults[.overlay]?.refetch == .afterEnd, "the other formats keep their defaults")
-    }
-
-    @Test func aRefetchedNoFillIsThrownOnceByTheNextLoad() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "p4"))
-        let ad = try await ads.format(.pause).load()
-        try ad.show(in: harness.player.view)
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
-        ad.dismiss()
-        #expect(await waitUntil { self.harness.server.requests(to: "/v2/video/ads").count == 2 })
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .noFill(let reason) = error else { Issue.record("expected the refetched no fill"); return }
-        #expect(reason == "frequencyCap")
-    }
-
-    // MARK: load: the happy path
-
-    @Test func loadReturnsAReadyAdWithTheRequestsFormatAndOptions() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-1"))
-        let ad = try await ads.format(.pause, options: PauseOptions(positions: [.top, .fullscreen])).load()
-        #expect(ad.isReady)
-        #expect(ad.id == "img-1")
-        #expect(ad.format == .pause)
-        let request = harness.server.requests(to: "/v2/video/ads").first?.body
-        let formats = request?["formats"] as? [[String: Any]]
-        #expect(formats?.count == 1, "a loader asks for its one format")
-        #expect(formats?.first?["format"] as? String == "pause")
-        #expect(request?["placementId"] == nil, "no placement ids on the wire")
-        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top", "fullscreen"])
-        #expect((request?["video"] as? [String: Any])?["id"] as? String == "ep-1")
-        #expect((request?["player"] as? [String: Any])?["playhead"] as? Int == 0, "the playhead read at request time")
-        #expect(pages.served == ["img-1"], "the page loaded")
-        #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("loaded") }, "the loaded beacon fires at ad.loaded")
-    }
-
-    @Test func loadWaitsForInitInFlight() async throws {
-        harness.server.on("/v2/config") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.initEnabled()), delay: 0.2) }
-        KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
-        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
-        harness.serve(Fixtures.ad(id: "img-2"))
-        let ad = try await ads.format(.pause).load()
-        #expect(ad.isReady)
-        #expect(KontextVideo.shared.state == .enabled)
-    }
-
-    @Test func requestsAfterTheFirstShowCarryTheShownViewsBox() async throws {
-        _ = await harness.initialize()
-        let ads = harness.player.ads(for: .init(id: "ep-1", language: "en"), playerSize: CGSize(width: 390, height: 220))
-        harness.serve(Fixtures.ad(id: "img-3a"))
-        let first = try await ads.format(.pause).load()
-        harness.player.view.frame = CGRect(x: 0, y: 0, width: 844, height: 390)   // the real box turned out different
-        try first.show(in: harness.player.view)
-        harness.serve(Fixtures.ad(id: "img-3b"))
-        _ = try await ads.format(.overlay).load()
-        let players = harness.server.requests(to: "/v2/video/ads").compactMap { $0.body?["player"] as? [String: Any] }
-        #expect(players.map { $0["width"] as? Int } == [390, 844], "the hint for the first request, the shown view's box after")
-        #expect(players.map { $0["height"] as? Int } == [220, 390])
-    }
-
-    @Test func unshownAdsAcrossVideoAdsAreNotCounted() async throws {
-        // No app-wide render budget: one pending ad per placement is the only bound.
-        let ads = await makeAds()
-        let other = harness.player.ads(for: .init(id: "ep-next", language: "en"))
-        harness.serve(Fixtures.ad(id: "img-b1"))
-        let a = try await ads.format(.pause).load()
-        harness.serve(Fixtures.ad(id: "img-b2"))
-        let b = try await ads.format(.overlay).load()
-        harness.serve(Fixtures.ad(id: "img-b3"))
-        let c = try await other.format(.pause).load()
-        harness.serve(Fixtures.ad(id: "img-b4"))
-        let d = try await other.format(.overlay).load()
-        #expect(a.isReady && b.isReady && c.isReady && d.isReady)
-        withExtendedLifetime((a, b, c, d)) {}
-        other.destroy()
-    }
-
-    @Test func loadCarriesThePlayheadReadAtRequestTime() async throws {
+    @Test func thePlayerIsTheScreenInItsOrientationAndThePlayheadIsReadAtRequestTime() async throws {
+        let window = TestWindow(size: CGSize(width: 844, height: 390))
+        defer { window.tearDown() }
+        Environment.keyWindow = { window.window }
         let ads = await makeAds()
         harness.player.playhead = 12.5
-        harness.serve(Fixtures.ad(id: "img-3"))
-        _ = try await ads.format(.pause).load()
-        let player = harness.server.requests(to: "/v2/video/ads").first?.body?["player"] as? [String: Any]
+        harness.serve(Fixtures.ad(id: "img-p2"))
+        _ = try await ads.format(.pause)
+        let player = harness.adsRequests.first?.body?["player"] as? [String: Any]
+        #expect(player?["width"] as? Int == 844)
+        #expect(player?["height"] as? Int == 390, "landscape: the screen as it is now")
+        #expect(player?["fullscreen"] as? Bool == true)
         #expect(player?["playhead"] as? Int == 12_500)
     }
 
-    @Test func loadSendsConsentFromTheCMPStorage() async throws {
+    @Test func theRequestCarriesConsentFromTheCMPStorageAndTheCurrentTargeting() async throws {
         Environment.consentDefaults.set("TC-STR", forKey: "IABTCF_TCString")
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-4"))
-        _ = try await ads.format(.pause).load()
-        let regulatory = harness.server.requests(to: "/v2/video/ads").first?.body?["regulatory"] as? [String: Any]
-        #expect(regulatory?["gdprConsent"] as? String == "TC-STR")
+        KontextVideo.shared.user = KontextVideo.User(id: "someone")
+        KontextVideo.shared.variantId = "b"
+        harness.serve(Fixtures.ad(id: "img-p3"))
+        _ = try await ads.format(.pause)
+        let body = harness.adsRequests.first?.body
+        #expect((body?["regulatory"] as? [String: Any])?["gdprConsent"] as? String == "TC-STR")
+        #expect((body?["user"] as? [String: Any])?["id"] as? String == "someone")
+        #expect(body?["variantId"] as? String == "b")
     }
 
-    // MARK: load: refusals before a request
+    // MARK: Following the server
 
-    @Test func loadBeforeInitializeThrowsNotInitialized() async {
-        Environment.assertionFailure = { _ in }
-        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .notInitialized = error else { Issue.record("expected notInitialized, got \(String(describing: error))"); return }
-        #expect(harness.server.requests(to: "/v2/video/ads").isEmpty)
-    }
-
-    @Test func loadWhenInitFailedThrowsInitializationFailed() async {
-        harness.server.on("/v2/config", .failure(.timedOut))
+    @Test func aReServedBidIsTheSameObjectWithItsLoadedAd() async throws {
         let ads = await makeAds()
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .initializationFailed = error else { Issue.record("expected initializationFailed, got \(String(describing: error))"); return }
+        harness.serve(Fixtures.ad(id: "img-p4"))
+        let first = try await ads.format(.pause)
+        let ad = try await first.load()
+        let second = try await ads.format(.pause)
+        #expect(second === first, "same id: the same Bid")
+        #expect(try await second.load() === ad, "and its loaded ad, nothing rendered again")
+        #expect(pages.served.filter { $0 == "img-p4" }.count == 1)
     }
 
-    @Test func loadWhenDisabledThrowsDisabled() async {
-        harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
+    @Test func aReServedPayloadIsIgnored() async throws {
         let ads = await makeAds()
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .disabled(let reason) = error else { Issue.record("expected disabled"); return }
-        #expect(reason == "publisherDisabled")
+        harness.serve(Fixtures.ad(id: "img-p5", expires: 3_600_000))
+        let bid = try await ads.format(.pause)
+        var changed = Fixtures.ad(id: "img-p5", expires: 1)
+        changed["price"] = ["model": "cpm", "value": 99, "currency": "USD", "precision": "exact"]
+        harness.serve(changed)
+        let again = try await ads.format(.pause)
+        #expect(again === bid)
+        #expect(again.price.value == 7.5, "the same id holds the same payload")
+        #expect(again.received.isExpired == false, "and keeps its original deadline")
     }
 
-    @Test func loadAfterDestroyThrowsDestroyedEvenOnAKeptLoader() async {
+    @Test func otherFormatsWaitForTheirOwnCall() async throws {
         let ads = await makeAds()
-        let loader = { try await ads.format(.pause) }
-        ads.destroy()
-        let kept = await loadError { try await loader().load() }
-        guard case .destroyed = kept else { Issue.record("expected destroyed"); return }
-        let fresh = await loadError { try await ads.format(.overlay).load() }
-        guard case .destroyed = fresh else { Issue.record("expected destroyed"); return }
-        #expect(ads.isDestroyed)
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p6"), "overlay": Fixtures.overlayAd(id: "img-o6")])
+        _ = try await ads.format(.pause)
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p6"), "overlay": Fixtures.overlayAd(id: "img-o6")])
+        let overlay = try await ads.format(.overlay)
+        #expect(overlay.id == "img-o6")
+        #expect(Set(harness.adsRequests[1].body?["held"] as? [String] ?? []) == ["img-p6", "img-o6"])
     }
 
-    // MARK: load: the busy rule
-
-    @Test func loadWhileLoadingIsBusy() async throws {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-7"))), delay: 0.3) }
-        let loader = { try await ads.format(.pause) }
-        let first = Task { try await loader().load() }
-        await sleepMs(50)
-        let error = await loadError { try await loader().load() }
-        guard case .formatBusy = error else { Issue.record("expected formatBusy"); return }
-        _ = try await first.value
-    }
-
-    @Test func loadWhileLoadedButUnshownIsBusy() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-8"))
-        let ad = try await ads.format(.pause).load()
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .formatBusy = error else { Issue.record("expected formatBusy"); return }
-        withExtendedLifetime(ad) {}
-    }
-
-    @Test func droppingTheAdFreesTheLoader() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-9"))
-        var ad: VideoAd? = try await ads.format(.pause).load()
-        #expect(ad?.isReady == true)
-        ad = nil
-        harness.serve(Fixtures.ad(id: "img-10"))
-        let next = try await ads.format(.pause).load()
-        #expect(next.id == "img-10")
-    }
-
-    @Test func loadWhileTheAdIsOnScreenIsAllowed() async throws {
+    @Test func aNewIdReplacesTheHeldBidWhateverTheSDKsClockSays() async throws {
         let window = TestWindow()
         defer { window.tearDown() }
         window.add(harness.player.view)
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-11"))
-        let ad = try await ads.format(.pause).load()
-        try ad.show(in: harness.player.view)
-        harness.serve(Fixtures.ad(id: "img-12"))
-        let next = try await ads.format(.pause).load()
-        #expect(next.id == "img-12", "the next ad loads while the current one shows")
-        #expect(ad.hasEnded == false, "the showing ad is untouched")
-        let busy = await loadError { try await ads.format(.pause).load() }
-        guard case .formatBusy = busy else { Issue.record("expected formatBusy: one unshown ad at a time"); return }
-        ad.dismiss()
-        #expect(next.isReady)
-        try next.show(in: harness.player.view)
-        next.dismiss()
+        harness.serve(Fixtures.ad(id: "img-p7"))
+        let old = try await ads.format(.pause)
+        let oldAd = try await old.load()
+        harness.serve(Fixtures.ad(id: "img-p8"))
+        let new = try await ads.format(.pause)
+        #expect(new.id == "img-p8")
+        #expect(old.invalidationReason == .expired, "the server replaces a bid only once it expired")
+        #expect(throws: VideoAdError.self) { try oldAd.show(in: harness.player.view) }
+        let loadError = await error { try await old.load() }
+        guard case .invalidated(.expired) = loadError else { Issue.record("expected invalidated(.expired), got \(String(describing: loadError))"); return }
+        #expect(await notUsedBeacons().isEmpty, "no notice: the server replaced it, it knows")
     }
 
-    // MARK: load: what the server answers
-
-    @Test func noFillIsThrownWithTheReason() async {
+    @Test func aNoFillDropsTheHeldBidAndIsThrownWithTheReason() async throws {
         let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p9"))
+        let held = try await ads.format(.pause)
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .noFill(let reason) = error else { Issue.record("expected noFill"); return }
+        let noFill = await error { try await ads.format(.pause) }
+        guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
         #expect(reason == "frequencyCap")
-        #expect(error?.description == "no fill (frequencyCap)")
-    }
-
-    @Test func aTemporaryErrorIsANoFillLikeAnyOtherNeverRetried() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("temporaryError")))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .noFill("temporaryError") = error else { Issue.record("expected noFill"); return }
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "the SDK never retries an ads request")
-    }
-
-    @Test func disabledResponseSwitchesTheSDKOff() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("appVersionDisabled")))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .disabled(let reason) = error else { Issue.record("expected disabled"); return }
-        #expect(reason == "appVersionDisabled")
-        #expect(KontextVideo.shared.state == .disabled(reason: "appVersionDisabled"))
+        #expect(held.invalidationReason == .expired)
+        harness.serve(Fixtures.ad(id: "img-p10"))
+        #expect(try await ads.format(.pause).id == "img-p10", "the next call asks again")
+        #expect(harness.adsRequests[2].body?["held"] as? [String] == [])
     }
 
     @Test func aFormatWithoutAConfigurationIsANoFill() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled", format: "linear")))
-        let error = await loadError { try await ads.format(.linear).load() }
-        guard case .noFill(let reason) = error else { Issue.record("expected noFill, got \(String(describing: error))"); return }
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled")))
+        let noFill = await error { try await ads.format(.linear) }
+        guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
         #expect(reason == "formatNotEnabled")
     }
 
-    @Test func otherClientErrorsAreRequestErrors() async {
+    @Test func anExpiredBidIsDroppedSilentlyBeforeTheNextRequest() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p11", expires: 50))
+        let bid = try await ads.format(.pause)
+        await sleepMs(80)
+        harness.serve(Fixtures.ad(id: "img-p12"))
+        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests[1].body?["held"] as? [String] == [], "an expired bid is not listed")
+        #expect(bid.invalidationReason == .expired)
+        #expect(await notUsedBeacons().isEmpty, "no expiry notice: the server knows expires")
+    }
+
+    @Test func aReServedIdThatExpiredDuringTheRequestNeverComesBack() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p13", expires: 150))
+        let bid = try await ads.format(.pause)
+        harness.serve(Fixtures.ad(id: "img-p13"), delay: 0.3)
+        let late = await error { try await ads.format(.pause) }
+        guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
+        #expect(reason == VideoAds.alreadyUsed)
+        #expect(bid.invalidationReason == .expired)
+    }
+
+    // MARK: Failures
+
+    @Test func aFailedRequestReturnsTheHeldBidWhileItIsValid() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p14"))
+        let held = try await ads.format(.pause)
+        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        #expect(try await ads.format(.pause) === held)
+        let nothing = await error { try await ads.format(.linear) }
+        guard case .request = nothing else { Issue.record("expected request, got \(String(describing: nothing))"); return }
+    }
+
+    @Test func serverErrorsAreRequestErrorsNeverRetried() async {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.errors("invalidRequest"), status: 400))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .request(let underlying) = error, let apiError = underlying as? APIError, case .http(400, _) = apiError else { Issue.record("expected request(http 400)"); return }
+        let failure = await error { try await ads.format(.pause) }
+        guard case .request = failure else { Issue.record("expected request, got \(String(describing: failure))"); return }
+        #expect(harness.adsRequests.count == 1)
     }
 
-    @Test func transportFailureIsARequestErrorWithoutARetry() async {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .failure(.timedOut))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .request = error else { Issue.record("expected request"); return }
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "ads requests are never retried by the SDK")
+    @Test func beforeInitializeFormatThrowsNotInitialized() async {
+        Environment.assertionFailure = { _ in }
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
+        let failure = await error { try await ads.format(.pause) }
+        guard case .notInitialized = failure else { Issue.record("expected notInitialized, got \(String(describing: failure))"); return }
+        #expect(harness.adsRequests.isEmpty)
     }
 
-    @Test func creativeThatNeverLoadsThrowsCreativeFailedWithTheGeneralCode() async {
+    @Test func aFailedInitIsRetriedByFormatAndThrowsWhenTheRetryFails() async {
+        harness.server.on("/v2/config", .failure(.timedOut))
         let ads = await makeAds()
-        FrameBridge.loadTimeout = 0.5   // the page is served in-process; the generous CI default would add 8 s
-        harness.serve(Fixtures.ad(id: "dead-1"))
-        let error = await loadError { try await ads.format(.pause).load() }
-        guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed, got \(String(describing: error))"); return }
-        #expect(code == 500, "NonLinear: 500")
-        #expect(await waitUntil { self.harness.server.beacons.map(\.event) == ["error"] })
-        #expect(harness.server.beacons.first?.query["code"] == "500")
+        let configs = harness.server.requests(to: "/v2/config").count
+        let failure = await error { try await ads.format(.pause) }
+        guard case .initializationFailed = failure else { Issue.record("expected initializationFailed, got \(String(describing: failure))"); return }
+        #expect(harness.server.requests(to: "/v2/config").count > configs, "format() retried /config")
     }
 
-    @Test func creativeThatReportsAnErrorThrowsItsCode() async {
-        let ads = await makeAds()
-        harness.serve(Fixtures.linearAd(id: "err-1"))
-        let error = await loadError { try await ads.format(.linear).load() }
-        guard case .creativeFailed(let code) = error else { Issue.record("expected creativeFailed"); return }
-        #expect(code == 502)
-        harness.serve(Fixtures.linearAd(id: "vid-1"))
-        _ = try? await ads.format(.linear).load()
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2, "the placement was free again")
+    @Test func formatWaitsForInitInFlight() async throws {
+        await WebKitWarmup.ensure()
+        var config = StubServer.Response.json(Fixtures.initEnabled())
+        config.delay = 0.2
+        harness.server.on("/v2/config", config)
+        KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-p15"))
+        #expect(try await ads.format(.pause).id == "img-p15")
     }
 
-    // MARK: Cancellation
+    // MARK: The kill switch
 
-    @Test func cancellingDuringTheRequestThrowsCancellationErrorAndFreesTheLoader() async throws {
+    @Test func aDisabledResponseSwitchesTheSDKOffAndDropsEveryBidWithoutNotices() async throws {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.adsResponse(Fixtures.ad(id: "img-14"))), delay: 0.5) }
-        let placement = { try await ads.format(.pause) }
-        let task = Task { try await placement().load() }
+        let other = harness.player.ads(for: .init(id: "other", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-p16"))
+        let loaded = try await other.format(.pause).load()
+        let held = try await ads.format(.pause)
+        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        let off = await error { try await ads.format(.linear) }
+        guard case .disabled(let reason) = off else { Issue.record("expected disabled"); return }
+        #expect(reason == "publisherDisabled")
+        #expect(KontextVideo.shared.state == .disabled(reason: "publisherDisabled"))
+        let heldLoad = await error { try await held.load() }
+        guard case .disabled = heldLoad else { Issue.record("expected disabled, got \(String(describing: heldLoad))"); return }
+        #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
+        let otherFormat = await error { try await other.format(.overlay) }
+        guard case .disabled = otherFormat else { Issue.record("expected disabled"); return }
+        #expect(await notUsedBeacons().isEmpty, "no notices: the server switched the SDK off, it knows")
+    }
+
+    @Test func aDisabledConfigThrowsDisabled() async {
+        harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
+        let ads = await makeAds()
+        let failure = await error { try await ads.format(.pause) }
+        guard case .disabled(let reason) = failure else { Issue.record("expected disabled"); return }
+        #expect(reason == "publisherDisabled")
+    }
+
+    // MARK: The shared request and its races
+
+    @Test func callsMadeWhileARequestRunsShareIt() async throws {
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p17"), "linear": Fixtures.linearAd(id: "vid-l17")], delay: 0.15)
+        async let pause = ads.format(.pause)
+        async let linear = ads.format(.linear)
+        let (p, l) = try await (pause, linear)
+        #expect(p.id == "img-p17")
+        #expect(l.id == "vid-l17")
+        #expect(harness.adsRequests.count == 1, "one request for both")
+    }
+
+    @Test func sequentialCallsEachSendTheirOwnRequest() async throws {
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p18"), "linear": Fixtures.linearAd(id: "vid-l18")])
+        _ = try await ads.format(.pause)
+        _ = try await ads.format(.linear)
+        #expect(harness.adsRequests.count == 2)
+    }
+
+    @Test func cancellingACallStopsOnlyItsWaitingTheRequestContinuesForTheOthers() async throws {
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p19"), "linear": Fixtures.linearAd(id: "vid-l19")], delay: 0.3)
+        let pause = Task { try await ads.format(.pause) }
+        let linear = Task { try await ads.format(.linear) }
         await sleepMs(50)
-        task.cancel()
+        let cancelledAt = Date()
+        pause.cancel()
         do {
-            _ = try await task.value
-            Issue.record("expected a throw")
+            _ = try await pause.value
+            Issue.record("expected CancellationError")
         } catch is CancellationError {
-        } catch {
-            Issue.record("expected CancellationError, got \(error)")
+            #expect(Date().timeIntervalSince(cancelledAt) < 0.2, "the cancelled call stops waiting at once")
         }
-        harness.serve(Fixtures.ad(id: "img-15"))
-        let next = try await placement().load()
-        #expect(next.id == "img-15")
+        #expect(try await linear.value.id == "vid-l19", "the other call still gets its bid")
+        #expect(harness.adsRequests.count == 1)
+        #expect(try await ads.format(.pause).id == "img-p19", "the cancelled call's bid was kept")
     }
 
-    @Test func cancellingDuringThePageLoadStopsThePage() async throws {
+    @Test func aBidRejectedWhileARequestRunsIsIgnoredWhenTheResponseReServesIt() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "dead-2"))
-        let placement = { try await ads.format(.pause) }
-        let task = Task { try await placement().load() }
-        #expect(await waitUntil { self.pages.served.contains("dead-2") })
-        task.cancel()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")])
+        let bid = try await ads.format(.pause)
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")], delay: 0.2)
+        let pause = Task { try await ads.format(.pause) }
+        let linear = Task { try await ads.format(.linear) }
+        await sleepMs(50)
+        #expect(Set(harness.adsRequests.last?.body?["held"] as? [String] ?? []) == ["img-p20", "vid-l20"], "the request listed it before the reject")
+        try bid.reject()
         do {
-            _ = try await task.value
-            Issue.record("expected a throw")
-        } catch is CancellationError {
-        } catch {
-            Issue.record("expected CancellationError, got \(error)")
+            _ = try await pause.value
+            Issue.record("expected noFill")
+        } catch VideoAdError.noFill(let reason) {
+            #expect(reason == VideoAds.alreadyUsed, "a spent id is never accepted again")
         }
-        harness.serve(Fixtures.ad(id: "img-16"))
-        _ = try await placement().load()
+        #expect(try await linear.value.id == "vid-l20", "other formats get their bids normally")
+        #expect(await notUsedBeacons().map(\.adId) == ["img-p20"], "one notice, from the reject")
     }
 
-    @Test func destroyDuringThePageLoadFailsTheLoad() async {
+    @Test func aBidShownWhileARequestRunsIsIgnoredWhenTheResponseReServesIt() async throws {
+        let window = TestWindow()
+        defer { window.tearDown() }
+        window.add(harness.player.view)
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "dead-3"))
-        let placement = { try await ads.format(.pause) }
-        let task = Task { try await placement().load() }
-        #expect(await waitUntil { self.pages.served.contains("dead-3") })
+        harness.serve(Fixtures.ad(id: "img-p21"))
+        let ad = try await ads.format(.pause).load()
+        harness.serve(Fixtures.ad(id: "img-p21"), delay: 0.2)
+        let again = Task { try await ads.format(.pause) }
+        await sleepMs(50)
+        try ad.show(in: harness.player.view)
+        do {
+            _ = try await again.value
+            Issue.record("expected noFill")
+        } catch VideoAdError.noFill(let reason) {
+            #expect(reason == VideoAds.alreadyUsed)
+        }
+        #expect(ad.wasShown && !ad.hasEnded, "the ad on screen is untouched")
+    }
+
+    // MARK: Destroying
+
+    @Test func destroyEndsEverythingWithOneNoticePerHeldBid() async throws {
+        let window = TestWindow()
+        defer { window.tearDown() }
+        window.add(harness.player.view)
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p22"), "overlay": Fixtures.overlayAd(id: "img-o22"), "linear": Fixtures.linearAd(id: "vid-l22")])
+        let loaded = try await ads.format(.pause).load()
+        let unloaded = try await ads.format(.linear)
+        let showing = try await ads.format(.overlay).load()
+        let delegate = RecordingDelegate()
+        showing.delegate = delegate
+        try showing.show(in: harness.player.view)
+
+        ads.destroy()
+        #expect(delegate.endReasons == [.destroyed])
+        #expect(Set(await notUsedBeacons().map(\.adId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
+        #expect(await notUsedBeacons().allSatisfy { $0.reason == "destroyed" })
+        #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
+        let unloadedLoad = await error { try await unloaded.load() }
+        guard case .destroyed = unloadedLoad else { Issue.record("expected destroyed"); return }
+        let after = await error { try await ads.format(.pause) }
+        guard case .destroyed = after else { Issue.record("expected destroyed"); return }
+
+        ads.destroy()
+        #expect(delegate.endReasons.count == 1, "destroy twice does nothing more")
+        #expect(await notUsedBeacons().count == 2)
+    }
+
+    @Test func destroyDuringARequestThrowsDestroyedAndIgnoresTheLateResponse() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p23"), delay: 0.3)
+        let pending = Task { try await ads.format(.pause) }
+        await sleepMs(50)
         ads.destroy()
         do {
-            _ = try await task.value
-            Issue.record("expected a throw")
-        } catch let error as VideoAdError {
-            switch error {
-            case .destroyed, .invalidated(.destroyed): break
-            default: Issue.record("expected destroyed, got \(error)")
-            }
-        } catch {
-            Issue.record("unexpected \(error)")
-        }
+            _ = try await pending.value
+            Issue.record("expected destroyed")
+        } catch VideoAdError.destroyed {}
+        await sleepMs(350)
+        #expect(await notUsedBeacons().isEmpty, "the late bids were never held; the server closes them at expiry")
     }
 
-    // MARK: the playhead, targeting, destroy
+    @Test func releasingTheVideoAdsDoesWhatDestroyDoes() async throws {
+        var ads: VideoAds? = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p24"))
+        let bid = try await ads!.format(.pause)
+        let ad = try await bid.load()
+        ads = nil
+        #expect(bid.invalidationReason == .destroyed)
+        #expect(ad.isReady == false)
+        #expect(await notUsedBeacons().map(\.reason) == ["destroyed"])
+    }
+
+    // MARK: Playhead
 
     @Test func playheadComesFromTheProviderOrTheTrackedPlayerOrIsZero() async {
         let ads = await makeAds()
@@ -504,7 +428,6 @@ struct VideoAdsTests {
         #expect(ads.playheadMs == 5_000, "a provider replaces the tracked player")
         let bare = VideoAds(content: .init(id: "bare", language: "en"))
         #expect(bare.playheadMs == 0, "nothing set: the start of the video, what a prefetch sends")
-        #expect(bare.playerSize == nil, "full screen by default")
     }
 
     @Test func aTrackedPlayerIsHeldWeakly() async {
@@ -513,61 +436,6 @@ struct VideoAdsTests {
         ads.trackPlayhead(of: player!)
         player = nil
         #expect(ads.playheadMs == 0)
-    }
-
-    @Test func aTargetingChangeKeepsALoadedAdAndTheNextRequestCarriesIt() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-17"))
-        let ad = try await ads.format(.pause).load()
-        let delegate = RecordingDelegate()
-        ad.delegate = delegate
-        KontextVideo.shared.user = KontextVideo.User(id: "someone-else")
-        KontextVideo.shared.variantId = "b"
-        KontextVideo.shared.regulatory = KontextVideo.Regulatory(gdpr: true)
-        #expect(ad.isReady, "loaded with the targeting of its request; it stays")
-        #expect(delegate.invalidations.isEmpty)
-        try ad.show(in: harness.player.view)
-        ad.dismiss()
-        harness.serve(Fixtures.ad(id: "img-18"))
-        _ = try await ads.format(.pause).load()
-        let body = harness.server.requests(to: "/v2/video/ads").last?.body
-        #expect((body?["user"] as? [String: Any])?["id"] as? String == "someone-else")
-        #expect(body?["variantId"] as? String == "b")
-    }
-
-    @Test func destroyInvalidatesLoadedAdsAndEndsShowingOnes() async throws {
-        let window = TestWindow()
-        defer { window.tearDown() }
-        window.add(harness.player.view)
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-20"))
-        let loaded = try await ads.format(.pause).load()
-        harness.serve(Fixtures.overlayAd(id: "img-21"))
-        let showing = try await ads.format(.overlay).load()
-        let loadedDelegate = RecordingDelegate()
-        let showingDelegate = RecordingDelegate()
-        loaded.delegate = loadedDelegate
-        showing.delegate = showingDelegate
-        try showing.show(in: harness.player.view)
-        ads.destroy()
-        #expect(loadedDelegate.invalidations == [.destroyed])
-        #expect(showingDelegate.endReasons == [.destroyed])
-        #expect(loaded.isReady == false)
-        #expect(showing.hasEnded)
-        ads.destroy()
-        #expect(showingDelegate.endReasons.count == 1, "destroy twice does nothing more")
-        #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
-    }
-
-    @Test func deallocationDoesWhatDestroyDoes() async throws {
-        var ads: VideoAds? = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-22"))
-        let ad = try await ads!.format(.pause).load()
-        let delegate = RecordingDelegate()
-        ad.delegate = delegate
-        ads = nil
-        #expect(delegate.invalidations == [.destroyed])
-        #expect(ad.isReady == false)
     }
 }
 }

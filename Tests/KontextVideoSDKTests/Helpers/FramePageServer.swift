@@ -13,6 +13,7 @@ import WebKit
 ///   `video.progress` 5000, `video.complete`, every `step` ms (default 60), then waits for the end card
 ///   to be closed by the test (`closeEndCard()`), sending `ad.close`.
 /// - `dead-…`: never sends `ad.loaded`.
+/// - `slow-…`: sends `ad.loaded` after `step` ms (`?step=`, default 60), for what happens while a load runs.
 /// - `err-…`: sends `ad.error` with code 502 instead of `ad.loaded`.
 @MainActor
 final class FramePageServer: NSObject, WKURLSchemeHandler {
@@ -81,6 +82,7 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
         window.open = function (url, purpose) { send('ad.open', { url: url, purpose: purpose || 'adChoices' }); };
         window.fail = function (code) { send('ad.error', { code: code || 405 }); };
         if (kind === 'dead') { /* never ready */ }
+        else if (kind === 'slow') { setTimeout(function () { send('ad.loaded'); }, step); }
         else if (kind === 'err') { send('ad.error', { code: 502 }); }
         else { send('ad.loaded'); }
         </script></body></html>

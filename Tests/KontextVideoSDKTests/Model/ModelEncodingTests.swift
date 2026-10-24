@@ -74,33 +74,11 @@ struct ModelEncodingTests {
         #expect(json["coppa"] as? Bool == true)
     }
 
-    // MARK: Options
-
-    @Test func overlayOptionsEncodePositions() throws {
-        let json = try Fixtures.encode(OverlayOptions(positions: [.bottom]))
-        #expect(json["positions"] as? [String] == ["bottom"])
-        #expect(try Fixtures.encode(OverlayOptions()).isEmpty, "every option is optional")
-        #expect(try Fixtures.encode(OverlayOptions(maxDuration: 10))["maxDuration"] as? Int == 10_000, "seconds in Swift, ms on the wire")
-    }
-
-    @Test func pauseOptionsEncodePositionsIncludingFullscreen() throws {
-        let json = try Fixtures.encode(PauseOptions(positions: [.top, .fullscreen]))
-        #expect(json["positions"] as? [String] == ["top", "fullscreen"])
-    }
-
-    @Test func linearOptionsEncodeMaxDurationInMilliseconds() throws {
-        let json = try Fixtures.encode(LinearOptions(timing: .preroll, maxDuration: 30, muted: true, rewarded: false))
-        #expect(json["timing"] as? String == "preroll")
-        #expect(json["maxDuration"] as? Int == 30_000)
-        #expect(json["muted"] as? Bool == true)
-        #expect(json["rewarded"] as? Bool == false)
-        #expect(try Fixtures.encode(LinearOptions()).isEmpty)
-    }
-
     @Test func adFormatRawValuesMatchTheWire() {
         #expect(AdFormat.overlay.rawValue == "overlay")
         #expect(AdFormat.pause.rawValue == "pause")
         #expect(AdFormat.linear.rawValue == "linear")
+        #expect(AdFormat.allCases == [.overlay, .pause, .linear], "the order a response lists them")
     }
 
     // MARK: Configuration

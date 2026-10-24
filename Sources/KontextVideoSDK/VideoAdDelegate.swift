@@ -1,39 +1,34 @@
 import Foundation
 
-/// The moments of an ad's life after `load` returned it, delivered on the main actor. Every method has an
-/// empty default, so implement the ones you need. The delegate is held weakly, as every Apple delegate.
+/// The moments of an ad on screen, delivered on the main actor. Every method has an empty default, so
+/// implement the ones you need. The delegate is held weakly, as every Apple delegate.
 ///
-/// The guarantee: `load` returns a ready ad; `show` either throws or presentation begins; then the
-/// impression and zero or more interaction callbacks; then exactly one terminal `videoAd(_:didEnd:)`,
+/// Nothing is delivered before `show`: a bid or a loaded ad that can no longer be shown says so when
+/// `load()` or `show` throws. The guarantee: `show` either throws or the ad is on screen; then the
+/// impression (at most once, maybe never) and any interactions; then exactly one terminal `videoAd(_:didEnd:)`,
 /// whoever ended it (the viewer, the creative, the system, or the app with `dismiss()` or `destroy()`).
 /// Resume your content in `didEnd`, whatever the reason. There is no "did show" callback: `show`
 /// returning is that signal, and `didEnd` is delivered once, synchronously, even from inside your own
 /// `dismiss()` or `destroy()` call, so the resume logic lives in `didEnd` alone.
 @MainActor
 public protocol VideoAdDelegate: AnyObject {
-    // Before presentation
-
-    /// A loaded ad can no longer be shown: it expired, its `VideoAds` was destroyed, or
-    /// the creative died while waiting. `isReady` is `false`; `show` throws `.invalidated(reason)`.
-    func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason)
-
-    // After a successful show, in order: the impression, then interactions, then exactly one didEnd
+    // After a successful show: the impression and interactions, in no guaranteed order; didEnd last
 
     /// The impression was counted: at `show` for an image, at the first frame of the ad video for a video
     /// (usually under a second after `show` returned; if it never comes, `didFail` then `didEnd(.failed)`).
     func videoAdDidRecordImpression(_ ad: VideoAd)
     /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where (`creative`, `endCard`, ...).
+    /// Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// A rewarded linear ad completed: grant the reward.
     func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward)
-    /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows.
+    /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows right away.
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
     /// Presentation is over. Exactly once per successful `show`.
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason)
 }
 
 public extension VideoAdDelegate {
-    func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {}
     func videoAdDidRecordImpression(_ ad: VideoAd) {}
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {}
     func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {}

@@ -22,6 +22,7 @@ enum Fixtures {
             ["event": "error", "url": url("error", "code=[ERRORCODE]&aph=[ADPLAYHEAD]")],
             ["event": "iconView", "url": url("iconView", "")],
             ["event": "iconClick", "url": url("iconClick", "")],
+            ["event": "notUsed", "url": url("notUsed", "reason=[REASON]&wp=[WINNINGPRICE]")],
         ]
         if video {
             entries += [
@@ -89,20 +90,24 @@ enum Fixtures {
         ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
     }
 
-    /// A filled answer for the ad's format: `formats: [{ format, ads: [ad] }]`.
-    static func adsResponse(_ ad: [String: Any], nextRequestAt: Int? = nil) -> [String: Any] {
-        var entry: [String: Any] = ["format": ad["format"] as? String ?? "pause", "ads": [ad]]
-        if let nextRequestAt { entry["nextRequestAt"] = nextRequestAt }
-        return ["enabled": true, "formats": [entry]]
+    /// Every format answered: `ad` for its own format, a no-fill for the others.
+    static func adsResponse(_ ad: [String: Any]) -> [String: Any] {
+        adsResponse(formats: [ad["format"] as? String ?? "pause": ad])
     }
 
-    /// Several formats in one answer: each entry a filled ad or a no-fill reason.
-    static func adsResponse(formats: [[String: Any]]) -> [String: Any] {
-        ["enabled": true, "formats": formats]
+    /// Every format answered, in the server's order: an ad (or a no-fill entry) from `entries` by format
+    /// name, `noAdMatch` for the rest. An entry is an ad (it has an `id`) or a whole entry (`noFillEntry`).
+    static func adsResponse(formats entries: [String: [String: Any]]) -> [String: Any] {
+        let formats = ["overlay", "pause", "linear"].map { format -> [String: Any] in
+            guard let entry = entries[format] else { return noFillEntry(format: format) }
+            return entry["id"] == nil ? entry : ["format": format, "ads": [entry]]
+        }
+        return ["enabled": true, "formats": formats]
     }
 
-    static func noFill(_ reason: String = "noAdMatch", format: String = "pause", nextRequestAt: Int? = nil) -> [String: Any] {
-        ["enabled": true, "formats": [noFillEntry(reason, format: format, nextRequestAt: nextRequestAt)]]
+    /// Every format a no-fill with `reason`.
+    static func noFill(_ reason: String = "noAdMatch") -> [String: Any] {
+        ["enabled": true, "formats": ["overlay", "pause", "linear"].map { noFillEntry(reason, format: $0) }]
     }
 
     static func noFillEntry(_ reason: String = "noAdMatch", format: String = "pause", nextRequestAt: Int? = nil) -> [String: Any] {
@@ -133,8 +138,7 @@ enum Fixtures {
         try JSONDecoder().decode(AdPayload.self, from: JSONSerialization.data(withJSONObject: ad))
     }
 
-    /// The ad as `VideoAd` takes it, received now.
-    /// The answer as `VideoAd` takes it, received now.
+    /// The answer as a bid takes it, received now.
     static func received(_ ad: [String: Any]) throws -> VideoAd.ReceivedAd {
         VideoAd.ReceivedAd(ad: try payload(ad), receivedAt: ProcessInfo.processInfo.systemUptime)
     }

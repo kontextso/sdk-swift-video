@@ -72,15 +72,25 @@ struct AdPayload: Decodable, Sendable {
         let amount: Double
     }
 
+    /// Where an overlay sits; never full screen.
+    enum OverlayPosition: String, Decodable, Sendable {
+        case top, bottom
+    }
+
+    /// Where a pause ad sits.
+    enum PausePosition: String, Decodable, Sendable {
+        case top, bottom, fullscreen
+    }
+
     /// What each format adds to the common fields.
     enum Details: Sendable, Equatable {
         /// `duration`: milliseconds to keep it on screen; absent, the overlay stays until the app ends it.
         /// `sizes`: every variant the creative carries
         /// assets for, at least one, the first built for the request's player; the SDK picks the best fit
         /// for the real box at show.
-        case overlay(position: OverlayOptions.Position, sizes: [Size], duration: Int?)
+        case overlay(position: OverlayPosition, sizes: [Size], duration: Int?)
         /// `sizes` is empty for the fullscreen variant.
-        case pause(position: PauseOptions.Position, sizes: [Size])
+        case pause(position: PausePosition, sizes: [Size])
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
         case linear(duration: Int, skipOffset: Int?, reward: Reward?)
     }
@@ -140,12 +150,12 @@ struct AdPayload: Decodable, Sendable {
         switch format {
         case .overlay:
             details = .overlay(
-                position: try container.decode(OverlayOptions.Position.self, forKey: .position),
+                position: try container.decode(OverlayPosition.self, forKey: .position),
                 sizes: try Self.sizes(from: container),
                 duration: try container.decodeIfPresent(Int.self, forKey: .duration)
             )
         case .pause:
-            let position = try container.decode(PauseOptions.Position.self, forKey: .position)
+            let position = try container.decode(PausePosition.self, forKey: .position)
             details = .pause(position: position, sizes: position == .fullscreen ? [] : try Self.sizes(from: container))
         case .linear:
             details = .linear(

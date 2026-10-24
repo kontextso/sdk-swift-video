@@ -18,12 +18,12 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
-│   ├── VideoAds.swift                              one video's ads: format(_:options:), the creation-time request, the playhead
-│   ├── VideoAd.swift                               one ad: the lifecycle from load to didEnd
-│   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts and load()
-│   ├── VideoAdDelegate.swift, VideoAdError.swift   the lifecycle callbacks; what load and show throw
-│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, Options (+ FormatRequest), FormatKey
-│   ├── Loading/      how an answer becomes an ad (internal): AdLoader, AdSlot, ReceivedAd
+│   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
+│   ├── VideoAd.swift                               one loaded ad: show, dismiss, reject, the page's events, the one didEnd
+│   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts, load() (shared), reject()
+│   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load, show, reject and dismiss throw
+│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, AdFormat
+│   ├── Loading/      how an answer becomes an ad (internal): ReceivedAd, awaitShared (work a caller can stop waiting for)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
@@ -34,6 +34,10 @@ sdk-swift-video/
 ├── Package.swift            SPM manifest
 └── CHANGELOG.md, RELEASING.md
 ```
+
+The lifecycle these files implement is the Notion page *SDK Lifecycle*: every `format(_:)` asks for all formats
+with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns the bid state and re-serves held bids
+until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
 The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `Loading/` turns answers into ads, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Rendering/`
 is what happens on screen (the Notion hub's "Rendering" section), `Support/` is plumbing.

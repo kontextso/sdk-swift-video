@@ -41,7 +41,7 @@ struct IntegrationTests {
         harness.serve(Fixtures.ad(id: "img-pause"))
         let delegate = RecordingDelegate()
 
-        let ad = try await ads.format(.pause, options: PauseOptions(positions: [.top, .bottom])).load()
+        let ad = try await ads.format(.pause).load()
         ad.delegate = delegate
         #expect(ad.isReady)
         #expect(await waitUntil { self.events(for: "img-pause") == ["loaded"] })
@@ -56,7 +56,7 @@ struct IntegrationTests {
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double
         #expect(exposure == 1, "the page heard ad.exposure")
 
-        ad.dismiss()
+        try ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(harness.player.view.subviews.isEmpty)
         #expect(await waitUntil { self.events(for: "img-pause").contains("overlayViewDuration") })
@@ -93,7 +93,7 @@ struct IntegrationTests {
         #expect(await waitUntil { opened.count == 1 })
         #expect(delegate.clicks.first?.url.absoluteString == "https://brand.test/offer")
         #expect(await waitUntil { self.events(for: "img-click").contains("click") })
-        ad.dismiss()
+        try ad.dismiss()
     }
 
     @Test func aPageNavigatingAwayIsAClickOnlyAfterATouchAndNeverLeavesTheWebView() async throws {
@@ -117,7 +117,7 @@ struct IntegrationTests {
         #expect(opened.first?.absoluteString == "https://brand.test/tap")
         #expect(delegate.clicks.first?.area == "creative")
         #expect(ad.bridge.webView.url?.scheme == FramePageServer.scheme, "still our page, the URL opened outside")
-        ad.dismiss()
+        try ad.dismiss()
     }
 
     // MARK: Linear, video creative
@@ -126,7 +126,7 @@ struct IntegrationTests {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
         let delegate = RecordingDelegate()
-        let ad = try await ads.format(.linear, options: LinearOptions(rewarded: true)).load()
+        let ad = try await ads.format(.linear).load()
         ad.delegate = delegate
         #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
@@ -196,17 +196,40 @@ struct IntegrationTests {
         } catch VideoAdError.destroyed {}
     }
 
-    @Test func expiredAdCannotBeShown() async throws {
+    @Test func expiredAdCannotBeShownAndTheNextFormatGetsANewBid() async throws {
         let ads = await start()
-        harness.serve(Fixtures.ad(id: "img-exp", expires: 1500))  // enough for the page to load first
-        let delegate = RecordingDelegate()
+        harness.serve(Fixtures.ad(id: "img-exp", expires: 800))  // enough for the page to load first
         let ad = try await ads.format(.pause).load()
-        ad.delegate = delegate
         #expect(ad.isReady)
-        #expect(await waitUntil(3) { delegate.invalidations == [.expired] })
+        await sleepMs(850)
         do { try ad.show(in: harness.player.view) } catch VideoAdError.invalidated(.expired) {} catch { Issue.record("expected expired") }
         harness.serve(Fixtures.ad(id: "img-exp2"))
-        _ = try await ads.format(.pause).load()
+        let next = try await ads.format(.pause).load()
+        #expect(next.id == "img-exp2")
+        #expect(harness.server.requests(to: "/v2/video/ads").last?.body?["held"] as? [String] == [])
+    }
+
+    /// The loop from the SDK Lifecycle page: prepare early (format + load), show at the pause, the publisher's
+    /// own auction rejecting a bid, and the next pause served from a fresh bid.
+    @Test func theWholeLoopPrepareEarlyShowAtThePauseRejectWhenOutbid() async throws {
+        let ads = await start()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-loop1"), "overlay": Fixtures.overlayAd(id: "img-loopo")])
+        let pause = try await ads.format(.pause)
+        let pauseAd = try await pause.load()
+        try pauseAd.show(in: harness.player.view)
+        #expect(await waitUntil { self.events(for: "img-loop1").contains("impression") })
+        try pauseAd.dismiss()
+
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-loop2"), "overlay": Fixtures.overlayAd(id: "img-loopo")])
+        let next = try await ads.format(.pause)
+        #expect(next.id == "img-loop2", "the shown bid is never served again")
+        #expect(harness.server.requests(to: "/v2/video/ads").last?.body?["held"] as? [String] == ["img-loopo"], "the overlay bid is still held")
+        try next.reject(.outbid(winningPrice: 3))
+        #expect(await waitUntil { self.events(for: "img-loop2") == ["notUsed"] }, "nothing rendered, one notice")
+        let overlay = try await ads.format(.overlay)
+        #expect(overlay.id == "img-loopo", "re-served unchanged")
+        ads.destroy()
+        #expect(await waitUntil { self.events(for: "img-loopo") == ["notUsed"] }, "destroy closes the held overlay bid")
     }
 
     @Test func movingOnToTheNextEpisodeDestroysThePreviousAdsOnScreen() async throws {
@@ -227,7 +250,7 @@ struct IntegrationTests {
         let current = await start()
         harness.player.playhead = 80
         // The next episode's VideoAds has no playhead source yet: the player's time belongs to episode 6.
-        let next = VideoAds(content: .init(id: "100001-7", language: "en"), playerSize: harness.player.view.bounds.size)
+        let next = VideoAds(content: .init(id: "100001-7", language: "en"))
         harness.serve(Fixtures.linearAd(id: "vid-next"))
         _ = try await next.format(.linear).load()
         let player = harness.server.requests(to: "/v2/video/ads").last?.body?["player"] as? [String: Any]
@@ -236,16 +259,18 @@ struct IntegrationTests {
         withExtendedLifetime(current) {}
     }
 
-    @Test func everyBridgeIsReleasedWhenItsAdIsGone() async throws {
+    @Test func theBridgeLivesWhileTheBidIsHeldAndIsReleasedWhenItEnds() async throws {
         let ads = await start()
         harness.serve(Fixtures.ad(id: "img-rel"))
         weak var bridge: FrameBridge?
         try await {
             let ad = try await ads.format(.pause).load()
             bridge = ad.bridge
-            #expect(bridge != nil)
         }()
-        #expect(await waitUntil { bridge == nil }, "dropping the ad releases its WebView")
+        await sleepMs(50)
+        #expect(bridge != nil, "dropping the reference is not a rejection: the bid keeps its loaded ad")
+        try await ads.format(.pause).reject()
+        #expect(await waitUntil { bridge == nil }, "rejecting releases its WebView")
     }
 }
 }

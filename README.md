@@ -61,14 +61,13 @@ KontextVideo.Configuration(
     requestTrackingAuthorization: false,       // let the SDK show the ATT dialog before the first ads request
                                                // (needs NSUserTrackingUsageDescription in your Info.plist)
     logLevel: .warning,                        // .none, .error, .warning, .info, .debug
-    adServerURL: KontextVideo.Configuration.defaultAdServerURL,  // override only for a staging or mock server
-    formatDefaults: [.linear: .init(refetch: .afterEnd)]   // per-format defaults, on top of the SDK's (see 4)
+    adServerURL: KontextVideo.Configuration.defaultAdServerURL   // override only for a staging or mock server
 )
 ```
 
 What you know about the viewer usually arrives later: the user after login, consent when your consent platform
 has it. Set these on the shared instance whenever you learn them, from anywhere; the next ads request carries
-them; ads already loaded or fetched keep the values they were requested with. `nil` clears a value.
+them; bids already received keep the values they were requested with. `nil` clears a value.
 
 ```swift
 KontextVideo.shared.user = .init(id: "u_84213907", email: "ryan@example.com")
@@ -78,39 +77,32 @@ KontextVideo.shared.regulatory = .init(coppa: false)        // the rest is read 
 KontextVideo.shared.variantId = "experiment-b"              // A/B testing, agreed with Kontext
 ```
 
-### 2. The player area and the playhead
+### 2. The playhead
 
-There is no player object to conform or wrap. The SDK needs two facts about your player and takes each where it is
-cheapest: the player's size, given once when you create the `VideoAds` (nothing for a full-screen player, the usual
-case), and the content playhead, which the SDK *reads* when it needs one (at a request, in beacon macros) rather than
-having you push it. For an `AVPlayer`, `trackPlayhead(of:)` is the whole integration; for any other player set a
-closure. The view the ad goes into is passed at `show(in:)`. This is Google IMA's model (`IMAContentPlayhead`,
+There is no player object to conform or wrap. The SDK assumes a full-screen player: every request carries the screen
+in its current orientation, the server picks ad sizes and positions for it, and `show(in:)` fits the ad into the real
+view at that moment. The one fact it needs from your player is the content playhead, which it *reads* when it needs
+one (at a request, in beacon macros) rather than having you push it. For an `AVPlayer`, `trackPlayhead(of:)` is the
+whole integration; for any other player set a closure. This is Google IMA's model (`IMAContentPlayhead`,
 `IMAAVPlayerContentPlayhead`), without the protocol.
 
 ```swift
-let ads = VideoAds(content: content, formats: [.pause(), .linear()])        // full screen; one request for the declared formats, now
-let ads = VideoAds(content: content, playerSize: CGSize(width: 390, height: 220), formats: [.overlay()])   // or the size in points
-
 ads.trackPlayhead(of: avPlayer)                   // AVPlayer: the SDK reads currentTime() itself, holds the player weakly
 ads.playheadProvider = { myPlayer.currentTime }   // any other player: seconds
-
-try ad.show(in: playerView)                       // the view the content plays in (see 5)
 ```
 
-Attach the playhead any time, before or after loading: a request made before the player exists carries content time
-0, which is what a prefetch should say. With one `AVPlayer` reused across episodes (`replaceCurrentItem`), call
-`trackPlayhead(of:)` when the episode starts playing in it, not when you create the `VideoAds`, or the next
-episode's prefetch would carry the previous episode's time.
+Attach the playhead any time: a request made before the player exists carries content time 0, which is what a
+prefetch should say. With one `AVPlayer` reused across episodes (`replaceCurrentItem`), call `trackPlayhead(of:)` when
+the episode starts playing in it, not when you create the `VideoAds`, or the next episode's prefetch would carry the
+previous episode's time.
 
 ### 3. Create the ads for a video
 
-One `VideoAds` per video. Create it as early as you like, for example for the next episode while the current one
-plays; any number can be alive at once. `KontextVideo.Content` describes the video ("content" is the ad-industry
-word for it): `id` is your own id, in any scheme; everything else is optional context that helps targeting. Times
-are seconds. Leave `mediaRating` unset when you do not know it; the SDK never guesses.
-
-When the viewer moves on to the next episode, `destroy()` the previous episode's `VideoAds` (see 7): an ad of it
-still on screen ends with `didEnd(.destroyed)`, so nothing of episode 5 sits over episode 6.
+One `VideoAds` per video (episode). Creating it sends nothing; every request comes from `format(_:)`. Create it as
+early as you like, for example for the next episode while the current one plays; any number can be alive at once.
+`KontextVideo.Content` describes the video ("content" is the ad-industry word for it): `id` is your own id, in any
+scheme; everything else is optional context that helps targeting. Times are seconds. Leave `mediaRating` unset when
+you do not know it; the SDK never guesses.
 
 ```swift
 let ads = VideoAds(content: .init(
@@ -122,73 +114,59 @@ let ads = VideoAds(content: .init(
     genre: "romance",
     mediaRating: .safe,          // optional; unset = unknown
     series: .init(id: "100001", title: "My Marionette Lover", episodeCount: 40)
-), formats: [.overlay(), .pause(), .linear(LinearOptions(timing: .preroll))])
+))
 
 ads.trackPlayhead(of: avPlayer)  // when the episode starts playing
 ```
 
-### 4. Loading the ads
+### 4. Get a bid, load it early, or reject it
 
-Declare the formats a video will show when you create its `VideoAds`, each with its options; the SDK sends one
-`/video/ads` request for all of them right away, so every ad is in hand before the episode starts. Which configuration
-a format uses (demand, floors, frequency caps, reporting) is decided in the Kontext dashboard; you name nothing.
-Every declared format is an auction, so declare what the video will show, not everything.
+`ads.format(.pause)` gives you the bid for one format as a `VideoAd.Bid`: its facts (`price`, `size`, `duration`, ...),
+nothing rendered yet. Every call asks the server for **all** formats and lists the unshown bids the SDK holds; the
+server returns those unchanged until they expire, so you get the same bid (and its loaded ad) back, and the bids for
+the other formats wait for their own `format(_:)` call. Which formats a publisher has, and their demand, floors and
+caps, are configured in the Kontext dashboard; you name nothing. Calls made while a request runs share it: call
+`format(_:)` for several formats at once with `async let`, one request answers all of them.
 
-`ads.format(.pause)` gives the server's answer for a format as a `VideoAd.Bid`: its facts (`price`, `size`, `duration`, ...) and `load()`. `load()` renders the ad the
-request brought and returns it ready to show, or throws: the format's no-fill, a failed request, a busy loader, an SDK
-that is not ready. When a loader holds nothing (the format was not declared, its ad was shown, expired or discarded)
-`load()` fetches one first, with the declared options. And once an overlay or pause ad has ended, its loader asks for
-the next one by itself, so the following `load()` renders at once: `Configuration.formatDefaults[format].refetch` is
-`.afterEnd` for overlay and pause and `.never` for linear, whose `timing` names one moment; override per format at
-`initialize`. You own the ad you get; keep a reference until it is shown,
-drop it and it is gone. One *unshown* ad per format at a time: a second `load` while one is loading or waiting to be
-shown throws `.formatBusy`, but a `load` while the previous ad is on screen is fine, so the next one is ready the
-moment the current one ends. Requests made while the SDK is still initialising wait for it; after a failed
-`/config`, every request retries it first.
+`bid.load()` renders the creative and returns a `VideoAd` ready to show; a second `load()` returns the same ad. Load
+early, so that at the moment (the viewer pauses) only `show` runs. A `VideoAds` holds at most one unshown bid per
+format; drop your reference and the SDK still keeps it, loaded, for the next `format(_:)` call.
+
+When you do not use a bid (another network won your own auction, the moment passed) call `reject()`, on the bid or on
+the loaded ad: the SDK tells the server, which tells the buyer; the WebView is released and the next `format(_:)`
+gets a new bid. It works until `show` and throws afterwards (`.alreadyShown`).
 
 ```swift
-let ads = VideoAds(content: content, formats: [
-    // A strip across the player while the content plays; the SDK removes it after its duration.
-    .overlay(OverlayOptions(
-        positions: [.bottom],            // where you can render it; default: top and bottom
-        maxDuration: 10                  // seconds on screen at most; the server picks a creative that fits
-    )),
-    // A card, or the full player, while the content is paused.
-    .pause(PauseOptions(
-        positions: [.top, .fullscreen]   // what you can render; default: top and bottom
-    )),
-    // A full-screen video at a moment you pick.
-    .linear(LinearOptions(
-        timing: .preroll,                // where you will show it; default: .midroll
-        maxDuration: 30,                 // seconds
-        muted: false,                    // start with the sound off; default: false
-        rewarded: false                  // non-skippable, with a reward granted when the video completes
-    )),
-])
-
-let preroll = try await ads.format(.linear).load()   // renders the ad the request brought; ready, or throws
-let card = try await ads.format(.pause).load()
-card.price.value                             // your own auction, if you run one
-
-// Looking before rendering: format() gives the server's answer as a Bid, nothing rendered yet
-let overlay = try await ads.format(.overlay)        // waits for the request if it is in flight
-if overlay.price.value > myFloor {                  // price, size, duration…
-    let ad = try await overlay.load()               // renders exactly this answer
+// Early: when the episode opens, or in didEnd of the previous ad
+let pause = try await ads.format(.pause)
+if pause.price.value >= otherNetworkPrice {        // your own auction, if you run one
+    pauseAd = try await pause.load()                // ready to show
+} else {
+    try pause.reject(.outbid(winningPrice: otherNetworkPrice))
 }
 
-// Other options than the held answer was asked with: a new request for this one format (the same options: the held one)
-let postroll = try await ads.format(.linear, options: LinearOptions(timing: .postroll)).load()
+// Several formats at once: one request
+async let pauseBid = ads.format(.pause)
+async let linearBid = ads.format(.linear)
+let (p, l) = try await (pauseBid, linearBid)
 
-// No fill and failures are errors, thrown by format() and load() (a no-fill once; the next call asks again)
+// No fill and failures are errors
 do {
-    let ad = try await ads.format(.pause).load()
+    let bid = try await ads.format(.pause)
 } catch VideoAdError.noFill(let reason) {
     // nothing to show; reason: noAdMatch, frequencyCap, formatNotEnabled (no configuration for this format), …
+    // the next call asks again
 } catch {
-    // .formatBusy, .notInitialized, .initializationFailed, .disabled(reason:), .destroyed,
-    // .creativeFailed(code:), .request(error), CancellationError
+    // .request(error) (only when no valid bid is held; otherwise that one is returned), .notInitialized,
+    // .initializationFailed, .disabled(reason:), .destroyed, CancellationError
 }
 ```
+
+`load()` throws `.creativeFailed(code:)` (the creative failed, or did not report ready within 10 s of active time),
+`.invalidated(.expired)` (the bid's lifetime ran out, before or during the load), `.invalidated(.rejected)`,
+`.destroyed`, `.disabled(reason:)`. Expiry is found out at the next call, never delivered: a bid or a loaded ad that can
+no longer be shown says so when `load()` or `show` throws. Cancelling the task that awaits `format(_:)` or `load()`
+stops only that call (`CancellationError`); the request or the load continues and its result is kept.
 
 ### 5. Show it, listen, dismiss
 
@@ -198,23 +176,23 @@ SwiftUI. The SDK places its own view in it at the ad's position and size (a full
 `dismiss()` ends a pause ad when your content resumes. An overlay ends by itself when its `duration` of time on screen elapses
 (`didEnd(.completed)`; the clock freezes while the app is in the background); `dismiss()` is for ending it earlier (the content ended, a seek). `show` throws when
 presentation cannot begin (nothing fired):
-`.alreadyShown`, `.anotherAdShowing` (one ad on screen per `VideoAds`: dismiss the other first), `.invalidated(reason)` or
-`.containerTooSmall` (the ad is discarded); `show` returning is the signal that
-presentation began, there is no "did show" callback. Set a `VideoAdDelegate` on the ad for everything after:
-`didRecordImpression`, `didClick`, `didEarn`, `didFail`, and exactly one `didEnd(reason:)` for every way an ad ends,
-including your own `dismiss()` and `destroy()` (delivered synchronously, from inside that call). Resume your content in
-`didEnd`, and only there.
+`.alreadyShown`, `.anotherAdShowing` (one ad on screen in the whole app: show it after the other ended),
+`.invalidated(reason)`, `.disabled(reason:)`, `.wrongPresentation` (`show(in:)` on a linear ad) or
+`.containerTooSmall` (the ad stays ready: show it in a bigger view, or reject it). `show` succeeds once the ad is on
+screen; there is no "did show" callback. Set a `VideoAdDelegate` on the ad for everything after:
+`didRecordImpression` (at most once, maybe never), `didClick` (every tap), `didFail`, and exactly one
+`didEnd(reason:)` for every way an ad ends, including your own `dismiss()` and `destroy()` (delivered synchronously,
+from inside that call). Resume your content in `didEnd`, and only there.
 
 ```swift
-let ad = try await ads.format(.pause).load()
-ad.delegate = self
+pauseAd.delegate = self
 
 func viewerPaused() {
-    if let ad = pauseAd, ad.isReady { try? ad.show(in: playerView) } else { loadPauseAd() }   // show if ready, else load
+    if let ad = pauseAd, ad.isReady { try? ad.show(in: playerView) } else { preparePauseAd() }   // instant; else prepare the next
 }
 
 func viewerResumed() {
-    pauseAd?.dismiss()                                                        // didEnd(.dismissed) follows
+    try? pauseAd?.dismiss()                                                   // didEnd(.dismissed) follows
 }
 
 extension PlayerController: VideoAdDelegate {
@@ -231,13 +209,14 @@ extension PlayerController: VideoAdDelegate {
 A linear ad is presented by the SDK itself, full screen: `show()` presents from the key window's top view
 controller (as AdMob's `present(from: nil)` and MAX's `showAd()` do), `show(from:)` from a controller you name when
 that guess would be wrong (a player presented as a sheet, a second window). Only the SDK dismisses it (the video
-completed, a skip, a close, an error, an interruption, or your `destroy()`), and every way ends in one `didEnd`. Pause
+completed, a skip, a close, an error, an interruption, or your `destroy()`; `dismiss()` throws
+`.wrongPresentation`), and every way ends in one `didEnd`. Pause
 your content before `show` and resume it in `didEnd`. `show` also throws `.presenterUnavailable` when no view
 controller can present right now (yours is off screen or already presenting; with `show()`, no key window or a top
 controller mid-transition); the ad stays ready, try again later or pass the right controller.
 
 ```swift
-let linear = try await ads.format(.linear).load()
+let linear = try await ads.format(.linear).load()   // early
 linear.delegate = self
 contentPlayer.pause()
 do {
@@ -250,8 +229,9 @@ do {
 
 ### 6. Release them
 
-When the viewer leaves the video. Nothing destroys a `VideoAds` for you, so destroy the previous episode's when
-you move on.
+When the viewer leaves the video. Every bid it still holds, loaded or not, is released and the server told it was not
+used; an ad of it still on screen ends with `didEnd(.destroyed)`, so nothing of episode 5 sits over episode 6.
+Releasing the object does the same, best effort; call `destroy()` explicitly when you move on.
 
 ```swift
 ads.destroy()

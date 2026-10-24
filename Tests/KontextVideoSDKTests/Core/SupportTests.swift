@@ -14,14 +14,14 @@ struct SupportTests {
             (.initializationFailed, "/config failed, and retrying it failed too; no ads until it succeeds"),
             (.destroyed, "the VideoAds was destroyed"),
             (.disabled(reason: "publisherDisabled"), "the SDK is disabled by the server (publisherDisabled)"),
-            (.formatBusy, "this format already has an ad loading, or loaded and not yet shown"),
             (.noFill(reason: "noAdMatch"), "no fill (noAdMatch)"),
-            (.anotherAdShowing, "another ad of this VideoAds is on screen; dismiss it first"),
+            (.anotherAdShowing, "another ad is on screen; show this one after it ended"),
             (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
             (.alreadyShown, "the ad was already shown"),
-            (.invalidated(.expired), "the ad was invalidated (expired)"),
-            (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the player's view is too small for the ad; at least 150×150 points are needed"),
+            (.invalidated(.expired), "the bid ended before it was shown (expired)"),
+            (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the view is too small for the ad; at least 150×150 points are needed"),
             (.presenterUnavailable, "no view controller can present the ad now"),
+            (.wrongPresentation, "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear; dismiss() only for overlay and pause)"),
         ]
         for (error, expected) in cases {
             #expect(error.description == expected)
@@ -37,8 +37,11 @@ struct SupportTests {
     @Test func delegateMethodsAllHaveDefaults() async throws {
         final class Minimal: VideoAdDelegate {}
         let delegate = Minimal()
-        let ad = VideoAd(received: try Fixtures.received(Fixtures.ad(id: "d1")))
-        delegate.videoAd(ad, didInvalidate: .expired)
+        Environment.assertionFailure = { _ in }
+        defer { Environment.reset() }
+        let ads = VideoAds(content: .init(id: "v", language: "en"))
+        let bid = VideoAd.Bid(received: try Fixtures.received(Fixtures.ad(id: "d1")), owner: ads)
+        let ad = VideoAd(bid: bid)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: "creative"))
         delegate.videoAd(ad, didEarn: VideoAd.Reward(label: "coins", amount: 1))
@@ -47,7 +50,11 @@ struct SupportTests {
     }
 
     @Test func delegateIsHeldWeakly() async throws {
-        let ad = VideoAd(received: try Fixtures.received(Fixtures.ad(id: "d2")))
+        Environment.assertionFailure = { _ in }
+        defer { Environment.reset() }
+        let ads = VideoAds(content: .init(id: "v", language: "en"))
+        let bid = VideoAd.Bid(received: try Fixtures.received(Fixtures.ad(id: "d2")), owner: ads)
+        let ad = VideoAd(bid: bid)
         var delegate: RecordingDelegate? = RecordingDelegate()
         ad.delegate = delegate
         #expect(ad.delegate != nil)
@@ -62,23 +69,18 @@ struct SupportTests {
         #expect(VideoAd.Click(url: url, area: "a") == VideoAd.Click(url: url, area: "a"))
         #expect(VideoAd.Click(url: url, area: "a") != VideoAd.Click(url: url, area: "b"))
         #expect(VideoAd.InvalidationReason.creativeFailed(code: 1) != .creativeFailed(code: 2))
+        #expect(VideoAd.RejectReason.outbid(winningPrice: 2) != .outbid())
+        #expect(VideoAd.RejectReason.notUsed == .notUsed)
     }
 
-    // MARK: Loaders
+    // MARK: Formats
 
-    @Test func loadersForwardToTheirVideoAds() async {
+    @Test func everyFormatThrowsNotInitializedBeforeInitialize() async {
         SDKHarness.reset()
         Environment.assertionFailure = { _ in }
         let ads = TestPlayer().ads(for: .init(id: "v", language: "en"))
-        // Not initialized: every load and fetch throws before any request, which proves the forwarding reaches VideoAds.
-        for work in [
-            { _ = try await ads.format(.overlay).load() },
-            { _ = try await ads.format(.pause).load() },
-            { _ = try await ads.format(.linear).load() },
-            { _ = try await ads.format(.overlay, options: .default) },
-            { _ = try await ads.format(.pause, options: .default) },
-            { _ = try await ads.format(.linear, options: .default) },
-        ] as [() async throws -> Void] {
+        for format in AdFormat.allCases {
+            let work = { _ = try await ads.format(format) }
             do {
                 try await work()
                 Issue.record("expected notInitialized")

@@ -22,33 +22,6 @@ extension KontextVideo {
             case debug
         }
 
-        /// When a format's loader asks the server for the next ad by itself.
-        public enum RefetchPolicy: Sendable, Equatable {
-            /// Never: the next `ads.format(_:)` or `load()` fetches when the SDK holds nothing.
-            case never
-            /// After an ad of the format ended (`didEnd`): the loader fetches the next one with the options
-            /// declared at `VideoAds` creation, so the next `ads.format(_:)` / `load()` renders at once. One request per
-            /// ended ad, never a loop.
-            case afterEnd
-        }
-
-        /// What a format does unless told otherwise. One entry per format; v2 may add per-request overrides.
-        public struct FormatDefaults: Sendable, Equatable {
-            public var refetch: RefetchPolicy
-
-            public init(refetch: RefetchPolicy) {
-                self.refetch = refetch
-            }
-        }
-
-        /// The defaults of every format: overlay and pause ads recur within a video, so they refetch after
-        /// each ended ad; a linear ad's `timing` names one moment, so it does not.
-        public static let standardFormatDefaults: [AdFormat: FormatDefaults] = [
-            .overlay: FormatDefaults(refetch: .afterEnd),
-            .pause: FormatDefaults(refetch: .afterEnd),
-            .linear: FormatDefaults(refetch: .never),
-        ]
-
         /// Identifies the publisher. Not a secret.
         ///
         /// Publishers typically have two kinds of token:
@@ -63,23 +36,17 @@ extension KontextVideo {
         /// The ad server base URL, by default the production server.
         /// Override it only for testing against a staging or mock server.
         public let adServerURL: URL
-        /// Per-format defaults; every format has an entry (`standardFormatDefaults`, with the given ones on top).
-        public let formatDefaults: [AdFormat: FormatDefaults]
 
-        /// `formatDefaults` overrides the standard ones per format: `[.linear: .init(refetch: .afterEnd)]` changes linear
-        /// and leaves overlay and pause as they are.
         public init(
             publisherToken: String,
             requestTrackingAuthorization: Bool = false,
             logLevel: LogLevel = .warning,
-            adServerURL: URL = Configuration.defaultAdServerURL,
-            formatDefaults: [AdFormat: FormatDefaults] = [:]
+            adServerURL: URL = Configuration.defaultAdServerURL
         ) {
             self.publisherToken = publisherToken
             self.requestTrackingAuthorization = requestTrackingAuthorization
             self.logLevel = logLevel
             self.adServerURL = adServerURL
-            self.formatDefaults = Configuration.standardFormatDefaults.merging(formatDefaults) { _, given in given }
         }
     }
 }

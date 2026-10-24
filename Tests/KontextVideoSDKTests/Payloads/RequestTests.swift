@@ -50,8 +50,9 @@ struct RequestTests {
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
-            player: .make(playerSize: CGSize(width: 390, height: 220), playheadMs: Int((playhead * 1000).rounded())),
-            formats: [.pause(PauseOptions(positions: [.fullscreen]))]
+            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: Int((playhead * 1000).rounded())),
+            sessionId: "s-1",
+            held: ["a-1", "a-2"]
         )
     }
 
@@ -67,15 +68,15 @@ struct RequestTests {
         #expect(json["attStatus"] as? String == "authorized")
         #expect(json["idfv"] is String)
         #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == false)
-        let formats = try #require(json["formats"] as? [[String: Any]])
-        #expect(formats.count == 1)
-        #expect(formats.first?["format"] as? String == "pause")
+        #expect(json["formats"] == nil, "no formats: the server answers every one")
         #expect(json["placementId"] == nil, "no placement ids on the wire")
-        #expect((formats.first?["options"] as? [String: Any])?["positions"] as? [String] == ["fullscreen"])
+        #expect(json["sessionId"] as? String == "s-1")
+        #expect(json["held"] as? [String] == ["a-1", "a-2"])
         #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
         let player = json["player"] as? [String: Any]
         #expect(player?["width"] as? Int == 390)
-        #expect(player?["height"] as? Int == 220)
+        #expect(player?["height"] as? Int == 844)
+        #expect(player?["fullscreen"] as? Bool == true)
         #expect(player?["playhead"] as? Int == 12_345)
         let device = json["device"] as? [String: Any]
         #expect((device?["screen"] as? [String: Any])?["dpr"] is Double)
@@ -89,49 +90,27 @@ struct RequestTests {
         request = AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playerSize: nil, playheadMs: 0),
-            formats: [.overlay(), .linear(LinearOptions(timing: .postroll))]
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playheadMs: 0),
+            sessionId: "s-2", held: []
         )
         let json = try Fixtures.encode(request)
         #expect(json["ifa"] == nil)
         #expect(json["attStatus"] as? String == "denied")
-        let formats = json["formats"] as? [[String: Any]]
-        #expect(formats?.map { $0["format"] as? String } == ["overlay", "linear"], "every declared format, in order")
-        #expect((formats?.first?["options"] as? [String: Any])?.isEmpty == true, "no option set: an empty object")
-    }
-
-    @Test func eachOptionsTypeKnowsItsFormat() {
-        #expect(OverlayOptions.format == .overlay)
-        #expect(PauseOptions.format == .pause)
-        #expect(LinearOptions.format == .linear)
+        #expect(json["held"] as? [String] == [], "nothing held: an empty list, never absent")
     }
 
     // MARK: PlayerSnapshot
 
-    @Test func snapshotSendsTheGivenSizeAndThePlayhead() {
-        let snapshot = PlayerSnapshot.make(playerSize: CGSize(width: 390, height: 220), playheadMs: 47_001)
-        #expect(snapshot.playhead == 47_001)
-        #expect(snapshot.width == 390)
-        #expect(snapshot.height == 220)
-        #expect(snapshot.fullscreen == false)
-    }
-
-    @Test func snapshotRoundsAFractionalSize() {
-        let snapshot = PlayerSnapshot.make(playerSize: CGSize(width: 393.4, height: 220.6), playheadMs: 0)
-        #expect(snapshot.width == 393)
-        #expect(snapshot.height == 221)
-    }
-
-    @Test func snapshotWithoutASizeIsTheScreenFullScreen() {
-        let window = TestWindow(size: CGSize(width: 390, height: 844))
+    @Test func snapshotIsTheKeyWindowInItsOrientationFullScreen() {
+        let window = TestWindow(size: CGSize(width: 844, height: 390))
         defer { window.tearDown() }
         Environment.keyWindow = { window.window }
-        let snapshot = PlayerSnapshot.make(playerSize: nil, playheadMs: 0)
-        #expect(snapshot.width == 390 && snapshot.height == 844, "the key window's size in points")
+        let snapshot = PlayerSnapshot.make(playheadMs: 47_001)
+        #expect(snapshot.width == 844 && snapshot.height == 390, "landscape: the key window's size in points")
         #expect(snapshot.fullscreen)
-        #expect(PlayerSnapshot.make(playerSize: CGSize(width: 390, height: 844), playheadMs: 0).fullscreen, "a given size that matches the screen")
+        #expect(snapshot.playhead == 47_001)
         Environment.keyWindow = { nil }
-        let bare = PlayerSnapshot.make(playerSize: nil, playheadMs: 0)
+        let bare = PlayerSnapshot.make(playheadMs: 0)
         #expect(bare.fullscreen, "no window yet: the main screen")
         #expect(bare.width == Int(UIScreen.main.bounds.width.rounded()))
     }

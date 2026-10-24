@@ -34,18 +34,18 @@ struct DecodingTests {
     // MARK: AdsResponse
 
     @Test func adsResponseWithAdIgnoresTimedModeFields() throws {
-        let response = try decode(AdsResponse.self, Fixtures.adsResponse(Fixtures.ad(), nextRequestAt: 25_000))
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad()], "nextRequestAt": 25_000]]])
         let result = try #require(response.result(for: .pause))
         #expect(result.ads.first?.id == "ad-1")
         #expect(result.noFillReason == nil)
     }
 
     @Test func adsResponseAnswersPerFormat() throws {
-        let response = try decode(AdsResponse.self, Fixtures.adsResponse(formats: [
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [
             Fixtures.filledEntry(Fixtures.linearAd(id: "l1")),
             Fixtures.noFillEntry("frequencyCap", format: "overlay"),
             Fixtures.filledEntry(Fixtures.ad(id: "p1")),
-        ]))
+        ]])
         #expect(response.result(for: .linear)?.ads.map(\.id) == ["l1"])
         #expect(response.result(for: .overlay)?.ads.isEmpty == true)
         #expect(response.result(for: .overlay)?.noFillReason == "frequencyCap")
@@ -54,7 +54,7 @@ struct DecodingTests {
     }
 
     @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
-        let response = try decode(AdsResponse.self, Fixtures.noFill("temporaryError", nextRequestAt: 38_000))
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.noFillEntry("temporaryError", format: "pause", nextRequestAt: 38_000)]])
         #expect(response.result(for: .pause)?.noFillReason == "temporaryError")
     }
 
@@ -77,7 +77,7 @@ struct DecodingTests {
     }
 
     @Test func aResponseForOtherFormatsHasNoEntryForThisOne() throws {
-        let response = try decode(AdsResponse.self, Fixtures.adsResponse(Fixtures.linearAd()))
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd())]])
         #expect(response.result(for: .pause) == nil)
     }
 

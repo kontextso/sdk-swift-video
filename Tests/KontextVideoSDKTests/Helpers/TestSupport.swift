@@ -4,7 +4,7 @@ import Testing
 import UIKit
 
 /// A player for tests: a view the test places in a window, and a playhead the test sets. `ads(for:)`
-/// makes a `VideoAds` sized to the view that reads the playhead from here.
+/// makes a `VideoAds` that reads the playhead from here.
 @MainActor
 final class TestPlayer {
     let view: UIView
@@ -14,8 +14,8 @@ final class TestPlayer {
         view = UIView(frame: CGRect(origin: .zero, size: size))
     }
 
-    func ads(for content: KontextVideo.Content, playerSize: CGSize? = nil, formats: [FormatRequest] = []) -> VideoAds {
-        let ads = VideoAds(content: content, playerSize: playerSize ?? view.bounds.size, formats: formats)
+    func ads(for content: KontextVideo.Content) -> VideoAds {
+        let ads = VideoAds(content: content)
         ads.playheadProvider = { [unowned self] in playhead }
         return ads
     }
@@ -26,15 +26,9 @@ final class TestPlayer {
 final class RecordingDelegate: VideoAdDelegate {
     private(set) var events: [String] = []
     private(set) var endReasons: [VideoAd.EndReason] = []
-    private(set) var invalidations: [VideoAd.InvalidationReason] = []
     private(set) var failures: [VideoAdError] = []
     private(set) var clicks: [VideoAd.Click] = []
     private(set) var rewards: [VideoAd.Reward] = []
-
-    func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
-        events.append("invalidate:\(reason)")
-        invalidations.append(reason)
-    }
 
     func videoAdDidRecordImpression(_ ad: VideoAd) { events.append("impression") }
 
@@ -115,13 +109,6 @@ struct SDKHarness {
         KontextVideo.Configuration(publisherToken: "test-dev", logLevel: .none, adServerURL: server.baseURL)
     }
 
-    /// Initializes with per-format defaults on top of the harness configuration.
-    func initialize(formatDefaults: [AdFormat: KontextVideo.Configuration.FormatDefaults]) async -> KontextVideo.State {
-        await WebKitWarmup.ensure()
-        let configuration = KontextVideo.Configuration(publisherToken: "test-dev", logLevel: .none, adServerURL: server.baseURL, formatDefaults: formatDefaults)
-        return await KontextVideo.shared.initialize(with: configuration)
-    }
-
     init() {
         SDKHarness.reset()
         server.install()
@@ -144,27 +131,26 @@ struct SDKHarness {
         return await KontextVideo.shared.initialize(with: configuration)
     }
 
-    /// Serves `ad` for the next ads request, as the answer for the format it asks for. A pause fixture
-    /// asked for as an overlay (or the reverse) is relabelled: the two share a shape, and most tests care
-    /// about the flow, not the format.
-    func serve(_ ad: [String: Any]) {
-        server.on("/v2/video/ads") { request in
-            var ad = ad
-            let asked = (request.body?["formats"] as? [[String: Any]])?.first?["format"] as? String
-            if let asked, ["overlay", "pause"].contains(asked), ["overlay", "pause"].contains(ad["format"] as? String ?? "") {
-                ad["format"] = asked
-            }
-            return .json(Fixtures.adsResponse(ad))
+    /// Answers every ads request with `ad` for its own format and a no-fill for the others.
+    func serve(_ ad: [String: Any], delay: TimeInterval = 0) {
+        server.on("/v2/video/ads") { _ in
+            var response = StubServer.Response.json(Fixtures.adsResponse(ad))
+            response.delay = delay
+            return response
         }
     }
 
-    /// Answers a multi-format request: one entry per requested format, from `entries` by format name.
-    func serve(formats entries: [String: [String: Any]]) {
-        server.on("/v2/video/ads") { request in
-            let asked = (request.body?["formats"] as? [[String: Any]])?.compactMap { $0["format"] as? String } ?? []
-            return .json(Fixtures.adsResponse(formats: asked.compactMap { entries[$0] }))
+    /// Answers every ads request with one entry per format: `entries` by format name, a no-fill for the rest.
+    func serve(formats entries: [String: [String: Any]], delay: TimeInterval = 0) {
+        server.on("/v2/video/ads") { _ in
+            var response = StubServer.Response.json(Fixtures.adsResponse(formats: entries))
+            response.delay = delay
+            return response
         }
     }
+
+    /// The `/video/ads` requests the SDK sent, in order.
+    var adsRequests: [StubServer.Recorded] { server.requests(to: "/v2/video/ads") }
 
     static func reset() {
         KontextVideo.shared.resetForTesting()

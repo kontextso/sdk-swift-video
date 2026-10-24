@@ -48,6 +48,16 @@ public final class KontextVideo {
         configuration != nil
     }
 
+    /// The ad on screen, from any `VideoAds`: at most one in the whole app. Set at `show`, cleared at
+    /// `didEnd`; holding it here also retains the ad until then, whatever the app does with its reference.
+    var adOnScreen: VideoAd?
+
+    /// The server's reason while the SDK is switched off, else `nil`.
+    var disabledReason: String? {
+        if case .disabled(let reason) = state { return reason }
+        return nil
+    }
+
     /// When the server asked for the debug log (`reportDebug` in the `/config` response).
     private(set) var reportDebug = false
     private var initTask: Task<Void, Never>?
@@ -135,6 +145,7 @@ public final class KontextVideo {
         user = nil
         regulatory = nil
         variantId = nil
+        adOnScreen = nil
         reportDebug = false
         DebugReporter.shared.isEnabled = false
         Logger.level = .warning

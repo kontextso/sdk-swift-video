@@ -1,198 +1,308 @@
 import Foundation
 @testable import KontextVideoSDK
 import Testing
+import UIKit
 
-/// `ads.format(_:options:)` and `VideoAd.Bid`: the answer it holds, nothing rendered until `load()`, the
-/// busy rule, expiry, and what `destroy()` does to a held answer.
+/// `VideoAd.Bid`: the facts before anything is rendered, `load()` (shared, never rendered twice),
+/// `reject()` at every stage, expiry before and during a load, a creative that fails or dies, and the
+/// conflicting calls on one bid. Pages are real: the in-process frame server answers the WebView.
 extension SerialSuites {
 @Suite
 @MainActor
 struct BidTests {
     private let harness = SDKHarness()
     private let pages = FramePageServer()
+    private let window = TestWindow()
+    /// The `VideoAds` behind each bid: releasing it would destroy the bid.
+    private let owners = Owners()
+
+    final class Owners {
+        var all: [VideoAds] = []
+    }
 
     init() {
         pages.install()
+        window.add(harness.player.view)
     }
 
-    private func makeAds() async -> VideoAds {
+    private func bid(_ ad: [String: Any]) async throws -> (VideoAd.Bid, VideoAds) {
         _ = await harness.initialize()
-        return harness.player.ads(for: .init(id: "ep-1", language: "en"))
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
+        owners.all.append(ads)
+        harness.serve(ad)
+        let format = AdFormat(rawValue: ad["format"] as? String ?? "pause")!
+        return (try await ads.format(format), ads)
     }
+
+    private func error(_ work: () async throws -> Any) async -> VideoAdError? {
+        do {
+            _ = try await work()
+            Issue.record("expected a throw")
+            return nil
+        } catch let error as VideoAdError {
+            return error
+        } catch {
+            Issue.record("unexpected \(error)")
+            return nil
+        }
+    }
+
+    private func beacons(_ event: String) async -> [[String: String]] {
+        await sleepMs(80)
+        return harness.server.beacons.filter { $0.event == event }.map(\.query)
+    }
+
+    // MARK: Facts and load
 
     @Test func aBidGivesTheFactsAndRendersNothing() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.overlayAd(id: "img-o1", duration: 6000, position: "top"))
-        let bid = try await ads.format(.overlay, options: OverlayOptions(positions: [.top]))
-        #expect(bid.id == "img-o1")
-        #expect(bid.format == .overlay)
-        #expect(bid.price.value > 0)
+        let (bid, ads) = try await bid(Fixtures.ad(id: "img-1", moreSizes: [["width": 200, "height": 200, "scalable": true, "maintainAspectRatio": true]]))
+        #expect(bid.id == "img-1")
+        #expect(bid.format == .pause)
+        #expect(bid.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
         #expect(bid.position == .top)
-        #expect(bid.size == VideoAd.Size(width: 320, height: 90))
-        #expect(bid.sizes == [VideoAd.Size(width: 320, height: 90)])
-        #expect(bid.duration == 6)
-        #expect(bid.skipOffset == nil)
-        #expect(bid.reward == nil)
-        #expect(try await ads.format(.overlay) === bid, "the held answer, no second request")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
-        #expect(pages.served.isEmpty, "no page was loaded")
-        #expect(harness.server.beacons.isEmpty, "no beacon fired")
-        let formats = harness.server.requests(to: "/v2/video/ads").first?.body?["formats"] as? [[String: Any]]
-        #expect((formats?.first?["options"] as? [String: Any])?["positions"] as? [String] == ["top"])
-    }
-
-    @Test func aSecondLoadOnTheSameBidReturnsTheSameAd() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p15"))
-        let bid = try await ads.format(.pause)
-        let first = try await bid.load()
-        let second = try await bid.load()
-        #expect(first === second, "a bid is not a factory")
-        #expect(pages.served == ["img-p15"])
-    }
-
-    @Test func everyCallForTheSameAnswerGetsTheSameBidSoItIsRenderedOnce() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p16"))
-        let pause = try await ads.format(.pause)            // look at the price first
-        let ad = try await ads.format(.pause).load()        // then load through a second call
-        try ad.show(in: harness.player.view)
-        let again = try await pause.load()                  // the first handle, after the ad was shown
-        #expect(again === ad, "the same answer is the same ad, not a second render")
-        #expect(pages.served == ["img-p16"], "one page load")
-        ad.dismiss()
+        #expect(bid.size == VideoAd.Size(width: 300, height: 300))
+        #expect(bid.sizes.count == 2)
+        #expect(bid.duration == nil)
+        #expect(bid.invalidationReason == nil)
+        await sleepMs(50)
+        #expect(pages.served.isEmpty, "nothing rendered before load()")
+        _ = ads
     }
 
     @Test func linearFactsAreInSeconds() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.linearAd(id: "vid-l1", duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
-        let bid = try await ads.format(.linear)
+        let (bid, _) = try await bid(Fixtures.linearAd(id: "vid-1", duration: 15_000, skipOffset: 5_000))
         #expect(bid.duration == 15)
         #expect(bid.skipOffset == 5)
-        #expect(bid.reward == VideoAd.Reward(label: "coins", amount: 50))
-        #expect(bid.position == nil && bid.sizes.isEmpty)
+        #expect(bid.position == nil)
+        #expect(bid.size == nil)
     }
 
-    @Test func loadRendersWhatInfoDescribedWithTheSameFacts() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p2"))
-        let bid = try await ads.format(.pause)
-        let ad = try await ads.format(.pause).load()
+    @Test func loadReturnsAReadyAdWithTheSameFactsAndFiresLoaded() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-2"))
+        let ad = try await bid.load()
         #expect(ad.isReady)
-        #expect(ad.id == bid.id && ad.price == bid.price && ad.sizes == bid.sizes, "the same facts; the expiry counts from the response, not from load()")
-        #expect(pages.served == ["img-p2"])
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1, "load rendered the held answer")
-        #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("loaded") })
+        #expect(ad.id == bid.id && ad.price == bid.price && ad.size == bid.size)
+        #expect(await beacons("loaded").count == 1)
+        #expect(await beacons("impression").isEmpty, "loading fires nothing billable")
     }
 
-    @Test func aLoadedUnshownAdKeepsTheLoaderBusyUntilShown() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p3"))
-        let ad = try await ads.format(.pause).load()
-        do {
-            _ = try await ads.format(.pause).load()
-            Issue.record("expected formatBusy")
-        } catch VideoAdError.formatBusy {}
-        do {
-            _ = try await ads.format(.pause, options: .default)
-            Issue.record("expected formatBusy")
-        } catch VideoAdError.formatBusy {}
-        try ad.show(in: harness.player.view)
-        harness.serve(Fixtures.ad(id: "img-p4"))
-        let next = try await ads.format(.pause).load()
-        #expect(next.id == "img-p4", "an ad on screen does not block the next")
-        ad.dismiss()
+    @Test func aSecondLoadReturnsTheSameAd() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-3"))
+        let first = try await bid.load()
+        #expect(try await bid.load() === first)
+        #expect(pages.served == ["img-3"])
     }
 
-    @Test func theSameOptionsGetTheHeldAnswerOtherOptionsANewOne() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p5"))
+    @Test func loadsAtOnceShareOneRender() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "slow-4"))
+        async let one = bid.load()
+        async let two = bid.load()
+        let (a, b) = try await (one, two)
+        #expect(a === b, "the second call awaits the first")
+        #expect(pages.served == ["slow-4"], "rendered once")
+    }
+
+    @Test func loadsAtOnceShareTheSameError() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "err-5"))
+        let one = Task { try await bid.load() }
+        let two = Task { try await bid.load() }
+        for result in [await one.result, await two.result] {
+            guard case .failure(VideoAdError.creativeFailed(let code)) = result else { Issue.record("expected creativeFailed, got \(result)"); continue }
+            #expect(code == 502)
+        }
+        #expect(pages.served == ["err-5"])
+    }
+
+    @Test func cancellingALoadStopsOnlyItsWaitingTheLoadContinues() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "slow-6", frameURL: "\(Fixtures.frameOrigin)/frame/slow-6?step=300"))
+        let first = Task { try await bid.load() }
+        await sleepMs(50)
+        first.cancel()
+        do {
+            _ = try await first.value
+            Issue.record("expected CancellationError")
+        } catch is CancellationError {}
+        let ad = try await bid.load()
+        #expect(ad.isReady)
+        #expect(pages.served == ["slow-6"], "the cancelled load went on; nothing rendered again")
+    }
+
+    // MARK: A creative that fails
+
+    @Test func aFailingCreativeThrowsItsCodeFiresErrorAndDropsTheBid() async throws {
+        let (bid, ads) = try await bid(Fixtures.ad(id: "err-7"))
+        let failure = await error { try await bid.load() }
+        guard case .creativeFailed(let code) = failure else { Issue.record("expected creativeFailed, got \(String(describing: failure))"); return }
+        #expect(code == 502)
+        #expect(await beacons("error").map { $0["code"] } == ["502"])
+        #expect(bid.invalidationReason == .creativeFailed(code: 502))
+        harness.serve(Fixtures.ad(id: "img-8"))
         _ = try await ads.format(.pause)
-        let same = try await ads.format(.pause, options: .default)
-        #expect(same.id == "img-p5", "asked with the declared options: the held answer, no request")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
-        harness.serve(Fixtures.ad(id: "img-p6"))
-        let fresh = try await ads.format(.pause, options: PauseOptions(positions: [.fullscreen]))
-        #expect(fresh.id == "img-p6", "other options: a new request")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
-        #expect(try await ads.format(.pause).load().id == "img-p6", "the fresh answer is the held one now")
-        #expect(pages.served == ["img-p6"], "the replaced answer was never rendered")
+        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a failed bid is not held")
     }
 
-    @Test func anExpiredHeldAnswerIsFetchedAgain() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p7", expires: 100))
-        _ = try await ads.format(.pause)
-        await sleepMs(150)
-        harness.serve(Fixtures.ad(id: "img-p8"))
-        let ad = try await ads.format(.pause).load()
-        #expect(ad.id == "img-p8")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 2)
+    @Test func aCreativeThatNeverLoadsThrowsTheGeneralCode() async throws {
+        FrameBridge.loadTimeout = 0.3
+        let (bid, _) = try await bid(Fixtures.ad(id: "dead-9"))
+        let failure = await error { try await bid.load() }
+        guard case .creativeFailed(let code) = failure else { Issue.record("expected creativeFailed, got \(String(describing: failure))"); return }
+        #expect(code == 500)
     }
 
-    @Test func aTargetingChangeKeepsAHeldAnswer() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p9"))
-        _ = try await ads.format(.pause)
-        KontextVideo.shared.variantId = "b"
-        let ad = try await ads.format(.pause).load()
-        #expect(ad.id == "img-p9", "the held answer stays; the next request carries the new targeting")
-        #expect(harness.server.requests(to: "/v2/video/ads").count == 1)
-    }
-
-    @Test func destroyMakesTheLoaderThrowDestroyed() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p11"))
-        _ = try await ads.format(.pause)
-        ads.destroy()
+    @Test func theLoadTimeoutCountsOnlyActiveTime() async throws {
+        FrameBridge.loadTimeout = 0.3
+        Environment.isApplicationActive = { false }
+        let (bid, _) = try await bid(Fixtures.ad(id: "dead-10"))
+        let load = Task { try await bid.load() }
+        await sleepMs(600)
+        #expect(bid.invalidationReason == nil, "in the background the timeout does not run")
+        Environment.isApplicationActive = { true }
         do {
-            _ = try await ads.format(.pause).load()
-            Issue.record("expected destroyed")
-        } catch VideoAdError.destroyed {}
-        do {
-            _ = try await ads.format(.pause)
-            Issue.record("expected destroyed")
-        } catch VideoAdError.destroyed {}
-    }
-
-    @Test func aBidKeptAfterItsVideoAdsWasReleasedThrowsDestroyed() async throws {
-        var ads: VideoAds? = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p12"))
-        let bid = try await ads!.format(.pause)
-        ads = nil
-        do {
-            _ = try await bid.load()
-            Issue.record("expected destroyed")
-        } catch VideoAdError.destroyed {}
-    }
-
-    @Test func aCreativeFailureSurfacesAtLoadNotAtTheBid() async throws {
-        let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "err-p13"))
-        _ = try await ads.format(.pause)
-        do {
-            _ = try await ads.format(.pause).load()
+            _ = try await load.value
             Issue.record("expected creativeFailed")
-        } catch VideoAdError.creativeFailed(let code) {
-            #expect(code == 502, "the page's own code")
-        }
-        #expect(await waitUntil { self.harness.server.beacons.map(\.event).contains("error") })
-        harness.serve(Fixtures.ad(id: "img-p14"))
-        #expect(try await ads.format(.pause).load().id == "img-p14", "the failed answer is spent; the next load fetches")
+        } catch VideoAdError.creativeFailed {}
     }
 
-    @Test func theBidThrowsTheRequestSideErrors() async throws {
-        let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("noAdMatch", format: "overlay")))
+    @Test func aCreativeThatDiesAfterLoadingMakesShowThrowWithoutADelegateCall() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-11"))
+        let ad = try await bid.load()
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        _ = try? await ad.bridge.webView.evaluateJavaScript("fail(405)")
+        #expect(await waitUntil { bid.invalidationReason != nil })
+        #expect(bid.invalidationReason == .creativeFailed(code: 405))
+        #expect(delegate.events.isEmpty, "nothing is delivered before show")
         do {
-            _ = try await ads.format(.overlay)
-            Issue.record("expected noFill")
-        } catch VideoAdError.noFill(let reason) {
-            #expect(reason == "noAdMatch")
+            try ad.show(in: harness.player.view)
+            Issue.record("expected a throw")
+        } catch VideoAdError.invalidated(let reason) {
+            #expect(reason == .creativeFailed(code: 405))
         }
+    }
+
+    // MARK: Expiry
+
+    @Test func anExpiredBidThrowsAtLoad() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-12", expires: 30))
+        await sleepMs(60)
+        let failure = await error { try await bid.load() }
+        guard case .invalidated(.expired) = failure else { Issue.record("expected invalidated(.expired), got \(String(describing: failure))"); return }
+        #expect(pages.served.isEmpty)
+        #expect(await beacons("error").isEmpty, "expiry is not a creative error")
+    }
+
+    @Test func aBidThatExpiresDuringTheLoadDropsTheResult() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "slow-13", expires: 150, frameURL: "\(Fixtures.frameOrigin)/frame/slow-13?step=300"))
+        let failure = await error { try await bid.load() }
+        guard case .invalidated(.expired) = failure else { Issue.record("expected invalidated(.expired), got \(String(describing: failure))"); return }
+        #expect(await beacons("error").isEmpty)
+    }
+
+    @Test func aLoadedAdThatExpiredThrowsAtShow() async throws {
+        // 1 s: enough for the page to load first on a slow runner; expiry before load is another test.
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-14", expires: 1000))
+        let ad = try await bid.load()
+        await sleepMs(1050)
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected a throw")
+        } catch VideoAdError.invalidated(let reason) {
+            #expect(reason == .expired)
+        }
+        #expect(bid.invalidationReason == .expired)
+    }
+
+    // MARK: Reject
+
+    @Test func rejectBeforeLoadFiresNotUsedAndLoadThrows() async throws {
+        let (bid, ads) = try await bid(Fixtures.ad(id: "img-15"))
+        try bid.reject()
+        #expect(await beacons("notUsed").map { $0["reason"] } == ["notUsed"])
+        let failure = await error { try await bid.load() }
+        guard case .invalidated(.rejected) = failure else { Issue.record("expected invalidated(.rejected), got \(String(describing: failure))"); return }
+        harness.serve(Fixtures.ad(id: "img-16"))
+        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a rejected bid is not held")
+    }
+
+    @Test func rejectOutbidCarriesTheWinningPrice() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-17"))
+        try bid.reject(.outbid(winningPrice: 2.4))
+        let beacon = await beacons("notUsed").first
+        #expect(beacon?["reason"] == "outbid")
+        #expect(beacon?["wp"] == "2.4")
+    }
+
+    @Test func rejectDuringTheLoadCancelsItAndReleasesTheWebView() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "dead-18"))
+        let load = Task { try await bid.load() }
+        await sleepMs(100)
+        try bid.reject()
+        do {
+            _ = try await load.value
+            Issue.record("expected invalidated(.rejected)")
+        } catch VideoAdError.invalidated(let reason) {
+            #expect(reason == .rejected)
+        }
+        #expect(await beacons("notUsed").count == 1)
+    }
+
+    @Test func rejectAfterLoadMakesShowThrowAndTheAdRejectIsTheSame() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-19"))
+        let ad = try await bid.load()
+        try ad.reject()
+        #expect(bid.invalidationReason == .rejected)
+        #expect(ad.isReady == false)
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected a throw")
+        } catch VideoAdError.invalidated(let reason) {
+            #expect(reason == .rejected)
+        }
+        #expect(await beacons("notUsed").count == 1)
+    }
+
+    @Test func rejectAfterShowThrowsAlreadyShown() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-20"))
+        let ad = try await bid.load()
+        try ad.show(in: harness.player.view)
+        #expect(throws: VideoAdError.self) { try bid.reject() }
+        do { try ad.reject() } catch VideoAdError.alreadyShown {} catch { Issue.record("expected alreadyShown, got \(error)") }
+        #expect(await beacons("notUsed").isEmpty)
+        try ad.dismiss()
+    }
+
+    @Test func rejectTwiceThrowsAndSendsOneNotice() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-21"))
+        try bid.reject()
+        do { try bid.reject() } catch VideoAdError.invalidated(let reason) { #expect(reason == .rejected) }
+        #expect(await beacons("notUsed").count == 1)
+    }
+
+    @Test func rejectAnExpiredBidThrowsWithoutANotice() async throws {
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-22", expires: 30))
+        await sleepMs(60)
+        do { try bid.reject() } catch VideoAdError.invalidated(let reason) { #expect(reason == .expired) }
+        #expect(await beacons("notUsed").isEmpty, "the server closes an expired bid itself")
+    }
+
+    // MARK: After the VideoAds ended
+
+    @Test func aBidOfADestroyedVideoAdsThrowsDestroyed() async throws {
+        let (bid, ads) = try await bid(Fixtures.ad(id: "img-23"))
+        ads.destroy()
+        let failure = await error { try await bid.load() }
+        guard case .destroyed = failure else { Issue.record("expected destroyed, got \(String(describing: failure))"); return }
+        do { try bid.reject() } catch VideoAdError.destroyed {} catch { Issue.record("expected destroyed, got \(error)") }
+    }
+
+    @Test func destroyDuringTheLoadThrowsDestroyed() async throws {
+        let (bid, ads) = try await bid(Fixtures.ad(id: "dead-24"))
+        let load = Task { try await bid.load() }
+        await sleepMs(100)
         ads.destroy()
         do {
-            _ = try await ads.format(.overlay)
+            _ = try await load.value
             Issue.record("expected destroyed")
         } catch VideoAdError.destroyed {}
     }

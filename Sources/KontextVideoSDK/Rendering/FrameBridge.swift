@@ -96,14 +96,21 @@ final class FrameBridge: NSObject {
         }
     }
 
-    /// Loads the page. `ad.loaded` must arrive within `loadTimeout`.
+    /// Loads the page. `ad.loaded` must arrive within `loadTimeout` of active time: WebKit does not run a
+    /// page in the background, so time there does not count.
     func load() {
         Logger.debug("frame \(adId.prefix(8)): loading \(url)")
         parkOffscreen()
         webView.load(URLRequest(url: url))
         loadTimeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.loadTimeout * 1_000_000_000))
-            guard let self, !Task.isCancelled, state == .loading else { return }
+            let step = min(0.25, Self.loadTimeout)
+            var waited: TimeInterval = 0
+            while waited < Self.loadTimeout {
+                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                if Environment.isApplicationActive() { waited += step }
+            }
+            guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
             fail(.loadFailed(code: loadErrorCode))
         }

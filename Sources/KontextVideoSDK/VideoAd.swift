@@ -1,8 +1,8 @@
 import Foundation
 import UIKit
 
-/// One ad, returned by a loader's `load`. The app owns it: keep a reference until it is shown, drop it
-/// and it is gone (its loader only holds it weakly). An ad is shown at most once.
+/// One loaded ad, returned by `Bid.load()`, ready to show. An ad is shown at most once; from `show` until
+/// `didEnd` the SDK retains it.
 ///
 /// Read-only properties of the ad for the app's own decisions (an auction, a debug screen); times are
 /// seconds, whatever the wire sends.
@@ -43,17 +43,18 @@ public final class VideoAd {
         public let amount: Double
     }
 
-    /// Why a loaded ad can no longer be shown.
+    /// Why a bid ended before it was shown. Found out at the next call (`format`, `load`, `show`,
+    /// `reject`), which throws it; nothing is delivered through the delegate.
     public enum InvalidationReason: Sendable, Equatable {
-        /// The ad's lifetime ran out before it was shown.
+        /// The bid's lifetime ran out (or the server replaced it, which it does only after that).
         case expired
+        /// The app called `reject()`.
+        case rejected
         /// The `VideoAds` was destroyed.
         case destroyed
-        /// The creative died while the ad waited to be shown (for example the web content process was
-        /// terminated). `code` is the VAST error code the SDK fired.
+        /// The creative failed to load, or died while the ad waited to be shown (for example the web
+        /// content process was terminated). `code` is the VAST error code the SDK fired.
         case creativeFailed(code: Int)
-        /// `show` found the player's view below 50 % of the ad's size.
-        case containerTooSmall
     }
 
     /// The facts, as the `Bid` gave them before rendering; `size` may differ after `show`.
@@ -103,8 +104,10 @@ public final class VideoAd {
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
 
-    /// The server's answer this ad renders; the expiry counts from the response.
+    /// The server's answer this ad renders; the expiry counts from the first receipt.
     let received: ReceivedAd
+    /// The bid it was loaded from; it holds the ad until `show`. Weak: after `show` the app may drop the bid.
+    private(set) weak var bid: Bid?
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
     /// once, so `load` can return a ready ad.
     let bridge: FrameBridge
@@ -112,48 +115,39 @@ public final class VideoAd {
     private(set) var isLoaded = false
     /// `load` waiting for the page.
     private var loadContinuation: CheckedContinuation<Void, Error>?
-    /// The `VideoAds` that loaded it; told when the ad is shown and when it ends.
-    weak var owner: VideoAds?
+    /// The `VideoAds` it belongs to; told when the ad is shown and when it ends.
+    private(set) weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: UIView?
     /// The controller the SDK presented for a linear ad.
     private var linearController: LinearViewController?
-    /// Delivers `didInvalidate(.expired)` when the time comes.
-    private var expiryTask: Task<Void, Never>?
-    /// Fires the `tracking` entries, each once.
+    /// Fires the `tracking` entries, each once; the bid's, so `notUsed` and the rest never fire twice.
     private let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private var durationTask: Task<Void, Never>?
 
-    /// The expiry counts from the response, not from this moment. The page starts loading at once.
-    init(received: ReceivedAd) {
-        self.received = received
+    /// The page starts loading at once. Expiry is checked at the next call, never by a timer.
+    init(bid: Bid) {
+        received = bid.received
+        self.bid = bid
+        owner = bid.owner
+        tracker = bid.tracker
         bridge = FrameBridge(adId: received.id, url: received.frameURL, isVideo: received.creative == .video)
-        tracker = Tracker(adId: received.id, entries: received.tracking)
-        tracker.contentPlayhead = { [weak self] in self?.owner?.playhead ?? 0 }
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
-        let remaining = received.remainingLifetime
-        expiryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            guard let self, !Task.isCancelled, !wasShown else { return }
-            invalidate(.expired)
-        }
     }
 
     // MARK: Showing
 
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
-    /// Throws when presentation cannot begin, with nothing fired: `alreadyShown`, `invalidated`,
-    /// `containerTooSmall` (the ad is discarded). From here until `didEnd` the SDK retains the ad.
+    /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
+    /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `containerTooSmall`
+    /// (the ad stays ready). Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it.
     public func show(in view: UIView) throws {
-        guard format != .linear else {
-            Environment.assertionFailure("KontextVideo: a linear ad is shown with show(from:)")
-            throw VideoAdError.presenterUnavailable
-        }
+        guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
         let container = view
         let host = UIView(frame: try frame(in: container.bounds))
@@ -165,7 +159,6 @@ public final class VideoAd {
         container.addSubview(host)
         hostView = host
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
-        shownBox = container.bounds.size
         begin()
     }
 
@@ -173,15 +166,13 @@ public final class VideoAd {
     /// and not already presenting; with `nil` (the default) from the key window's top view controller,
     /// as AdMob's `present(from: nil)` and MAX's `showAd()` do. Pass the controller when the guess would
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
-    /// Throws when presentation cannot begin, with nothing fired: `alreadyShown`, `invalidated`,
+    /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (an overlay or pause
+    /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,
     /// `presenterUnavailable` (the ad stays ready; try again later or pass the right controller). Only the
     /// SDK dismisses it: the video completing, a skip, a close, an error, or an interruption, each ending
     /// in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
-        guard format == .linear else {
-            Environment.assertionFailure("KontextVideo: an overlay or pause ad is shown with show(in:)")
-            throw VideoAdError.presenterUnavailable
-        }
+        guard format == .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
@@ -229,18 +220,30 @@ public final class VideoAd {
     /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again. For an
     /// overlay with a `duration` this is the way to end it earlier (the content ended, a seek); left alone,
     /// the SDK removes it when the duration elapses, with `didEnd(.completed)`. An overlay without one,
-    /// like a pause ad, stays until this, the viewer's close control or `destroy()`.
-    public func dismiss() {
+    /// like a pause ad, stays until this, the viewer's close control or `destroy()`. Before `show` and
+    /// after `didEnd` it does nothing. Throws `wrongPresentation` for a linear ad: it ends by itself or by
+    /// the viewer's Skip or close; `destroy()` is the way to force it off.
+    public func dismiss() throws {
+        guard format != .linear else { throw VideoAdError.wrongPresentation }
         guard wasShown, !hasEnded else { return }
         Logger.debug("ad \(id.prefix(8)): dismissed by the app")
         end(.dismissed)
     }
 
+    /// The app does not use the ad: the same as `reject` on its bid. Throws `alreadyShown` after `show`,
+    /// `invalidated(reason)` or `destroyed` when the bid already ended.
+    public func reject(_ reason: RejectReason = .notUsed) throws {
+        if wasShown { throw VideoAdError.alreadyShown }
+        guard let bid else { throw Bid.error(for: invalidationReason ?? .expired) }
+        try bid.reject(reason)
+    }
+
     private func checkShowable() throws {
         if wasShown { throw VideoAdError.alreadyShown }
-        if let owner, owner.isShowingAnAd { throw VideoAdError.anotherAdShowing }
-        if isExpired { invalidate(.expired) }
-        if let reason = invalidationReason { throw VideoAdError.invalidated(reason) }
+        if let reason = invalidationReason { throw Bid.error(for: reason) }
+        guard let bid else { throw VideoAdError.invalidated(.expired) }
+        try bid.checkUsable()
+        if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
         guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: received.creative == .video ? 400 : 500)) }
     }
 
@@ -262,8 +265,8 @@ public final class VideoAd {
         let scale = fit(size)
         guard scale >= Self.minimumScale else {
             let minimum = CGSize(width: (nominal.width * Self.minimumScale).rounded(.up), height: (nominal.height * Self.minimumScale).rounded(.up))
-            Logger.warning("ad \(id.prefix(8)): player view \(Int(bounds.width))×\(Int(bounds.height)) is below 50 % of the ad's \(size.width)×\(size.height); discarded")
-            invalidate(.containerTooSmall)
+            Logger.warning("ad \(id.prefix(8)): view \(Int(bounds.width))×\(Int(bounds.height)) is below 50 % of the ad's \(size.width)×\(size.height); the ad stays ready")
+            chosenSize = nil
             throw VideoAdError.containerTooSmall(minimum: minimum)
         }
         let scaled = CGSize(width: (nominal.width * scale).rounded(), height: (nominal.height * scale).rounded())
@@ -272,14 +275,13 @@ public final class VideoAd {
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
-    /// Presentation began: the page is told, the owner retains the ad; `show` returning is the app's signal.
-    /// The view's box at `show(in:)`, handed to the owner for its next requests.
-    private var shownBox: CGSize?
-
+    /// Presentation began: the page is told, the SDK retains the ad, the bid leaves its `VideoAds`; `show`
+    /// returning is the app's signal.
     private func begin(startMeter: Bool = true) {
         wasShown = true
-        expiryTask?.cancel()
-        owner?.adDidBeginShowing(self, in: shownBox)
+        KontextVideo.shared.adOnScreen = self
+        owner?.adDidBeginShowing(self)
+        bid?.adDidBeginShowing()
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image
@@ -421,6 +423,7 @@ public final class VideoAd {
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
         DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
+        if KontextVideo.shared.adOnScreen === self { KontextVideo.shared.adOnScreen = nil }
         owner?.adDidEnd(self)
         delegate?.videoAd(self, didEnd: reason)
     }
@@ -436,35 +439,14 @@ public final class VideoAd {
     }
 
     /// Resolves when the page reported `ad.loaded`; throws `creativeFailed` when it failed or timed out
-    /// first, `CancellationError` when the awaiting task was cancelled (the page is stopped then).
+    /// first, the bid's invalidation when it ended meanwhile (rejected, destroyed). Called once, by the
+    /// bid's load, which nobody cancels.
     func awaitLoaded() async throws {
         if isLoaded { return }
-        if let reason = invalidationReason, case .creativeFailed(let code) = reason { throw VideoAdError.creativeFailed(code: code) }
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                // The handler may have run before the continuation existed (a task cancelled early).
-                if loadCancelled || Task.isCancelled {
-                    cancelLoad()
-                    continuation.resume(throwing: CancellationError())
-                } else {
-                    loadContinuation = continuation
-                }
-            }
-        } onCancel: {
-            Task { @MainActor in self.cancelLoad() }
-        }
-    }
-
-    private var loadCancelled = false
-
-    private func cancelLoad() {
-        guard !loadCancelled, !isLoaded else { return }
-        loadCancelled = true
-        bridge.hide()
-        Logger.debug("ad \(id.prefix(8)): load cancelled")
-        if let continuation = loadContinuation {
-            loadContinuation = nil
-            continuation.resume(throwing: CancellationError())
+        if case .creativeFailed(let code)? = invalidationReason { throw VideoAdError.creativeFailed(code: code) }
+        if let reason = invalidationReason { throw Bid.error(for: reason) }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            loadContinuation = continuation
         }
     }
 
@@ -487,7 +469,9 @@ public final class VideoAd {
                 delegate?.videoAd(self, didFail: .creativeFailed(code: code))
                 end(.failed)
             } else {
-                invalidate(.creativeFailed(code: code))
+                // Died while waiting to be shown: the bid ends; `show` will throw.
+                bid?.invalidate(.creativeFailed(code: code))
+                didInvalidate(.creativeFailed(code: code))
             }
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.host ?? url.absoluteString)")
@@ -549,44 +533,27 @@ public final class VideoAd {
         received.isExpired
     }
 
-    /// Whether this ad still counts for its loader's one-unshown-ad rule: loading, or loaded and not
-    /// yet shown. An ad on screen does not block the next load.
-    var isPendingUnshown: Bool {
-        !wasShown && invalidationReason == nil && !isExpired
-    }
-
-    /// A loaded, unshown ad can no longer be shown; the delegate hears why. For an ad on screen,
-    /// `.destroyed` ends it instead (`didEnd(.destroyed)`).
-    func invalidate(_ reason: InvalidationReason) {
-        if wasShown {
-            if reason == .destroyed { end(.destroyed) }
-            return
-        }
-        guard invalidationReason == nil else { return }
+    /// The bid ended before `show`: the page is torn down and a load still waiting throws. For an ad on
+    /// screen nothing happens; `destroy()` ends that one with `didEnd(.destroyed)`.
+    func didInvalidate(_ reason: InvalidationReason) {
+        guard !wasShown, invalidationReason == nil else { return }
         invalidationReason = reason
-        expiryTask?.cancel()
         bridge.hide()
         Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
-        DebugReporter.shared.event("ad.invalidated", adId: id, state: ["reason": .string("\(reason)")])
         if let continuation = loadContinuation {
-            // `load` was still waiting for the page: it throws instead of hanging.
             loadContinuation = nil
-            continuation.resume(throwing: VideoAdError.invalidated(reason))
-        } else {
-            delegate?.videoAd(self, didInvalidate: reason)
+            continuation.resume(throwing: reason == .destroyed ? VideoAdError.destroyed : VideoAdError.invalidated(reason))
         }
     }
 
     /// Dropping the last reference releases everything: the bridge tears the page down in its own
-    /// `deinit`; the timer and the expiry task are stopped here. Never reached while the ad is on screen,
-    /// because its `VideoAds` retains it until `didEnd`.
+    /// `deinit`; the duration clock is stopped here. Never reached while the ad is on screen, because the
+    /// SDK retains it until `didEnd`.
     deinit {
-        let expiry = expiryTask
         let clock = durationTask
         let observers = activityObservers
         let meter = self.meter
         let teardown: @MainActor () -> Void = {
-            expiry?.cancel()
             clock?.cancel()
             observers.forEach(NotificationCenter.default.removeObserver)
             meter?.stopTimer()

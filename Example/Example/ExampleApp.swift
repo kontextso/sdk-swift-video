@@ -47,19 +47,37 @@ final class Demo: ObservableObject {
             genre: "romance",
             series: .init(id: "demo", title: "My Marionette Lover", episodeCount: 6)
         )
-        // The player fills the screen in this example, so no playerSize; a smaller player would pass its size.
-        // The three formats this screen shows, asked for in one request now; the loaders hold the answers.
-        let ads = VideoAds(content: content, formats: [
-            .linear(LinearOptions(timing: .midroll)),
-            .pause(PauseOptions(positions: [.top, .bottom])),
-            .overlay(OverlayOptions(positions: [.bottom])),
-        ])
+        // Creating it sends nothing; every request comes from format(_:), and asks for all formats.
+        let ads = VideoAds(content: content)
         self.ads = ads
         contentPlayer.play()
         ads.trackPlayhead(of: contentPlayer)   // the episode is playing in this player: the SDK reads its time
+        prepareEarly()
 
         if CommandLine.arguments.contains("--demo") {
             runScriptedDemo()
+        }
+    }
+
+    /// Prepare early: the three formats at once share one request (`async let`), and the pause ad is loaded
+    /// now, so when the viewer pauses, only `show` runs.
+    private func prepareEarly() {
+        Task {
+            guard let ads else { return }
+            async let pause = describeBid(.pause, of: ads)
+            async let overlay = describeBid(.overlay, of: ads)
+            async let linear = describeBid(.linear, of: ads)
+            for line in await [pause, overlay, linear] { note(line) }
+            await loadPauseAdAndWait()
+        }
+    }
+
+    private func describeBid(_ format: AdFormat, of ads: VideoAds) async -> String {
+        do {
+            let bid = try await ads.format(format)
+            return "\(format) bid \(bid.id.prefix(8)): \(bid.price.value) \(bid.price.currency) cpm"
+        } catch {
+            return "\(format): \(error)"
         }
     }
 
@@ -80,10 +98,11 @@ final class Demo: ObservableObject {
             // Something outside the SDK dismisses the presentation: didEnd(.interrupted)
             Self.topViewController?.presentingViewController?.dismiss(animated: true)
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            // An ad loaded and dropped without being shown: released, the loader free again
+            // A bid the app does not use: rejected, the server tells the DSP, the next format() gets a new one
             await loadPauseAdAndWait()
+            try? pauseAd?.reject(.outbid(winningPrice: 3.2))
             pauseAd = nil
-            note("pause ad dropped without showing")
+            note("pause ad rejected (outbid)")
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             // An ad on screen when the VideoAds is destroyed: didEnd(.destroyed)
             await loadPauseAdAndWait()
@@ -162,7 +181,7 @@ final class Demo: ObservableObject {
         Task { await loadOverlayAndWait() }
     }
 
-    /// The pause idiom: show if ready, else load for next time.
+    /// The pause idiom: show if ready, else prepare one for next time.
     func viewerPaused() {
         contentPlayer.pause()
         guard let ad = pauseAd, ad.isReady else {
@@ -178,7 +197,7 @@ final class Demo: ObservableObject {
     }
 
     func viewerResumed() {
-        pauseAd?.dismiss()
+        try? pauseAd?.dismiss()
         contentPlayer.play()
     }
 
@@ -192,7 +211,7 @@ final class Demo: ObservableObject {
     }
 
     func dismissOverlay() {
-        overlayAd?.dismiss()
+        try? overlayAd?.dismiss()
     }
 
     func destroy() {
@@ -206,10 +225,6 @@ final class Demo: ObservableObject {
 }
 
 extension Demo: VideoAdDelegate {
-    func videoAd(_ ad: VideoAd, didInvalidate reason: VideoAd.InvalidationReason) {
-        note("\(ad.format) \(ad.id.prefix(8)) invalidated: \(reason)")
-    }
-
     func videoAdDidRecordImpression(_ ad: VideoAd) {
         note("\(ad.format) \(ad.id.prefix(8)) impression")
     }
@@ -245,3 +260,4 @@ struct ExampleApp: App {
         }
     }
 }
+
