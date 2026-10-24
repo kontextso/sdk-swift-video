@@ -74,8 +74,7 @@ struct VideoAdTests {
         #expect(ad.duration == nil)
         #expect(ad.skipOffset == nil)
         #expect(ad.reward == nil)
-        let remaining = ad.received.remainingLifetime
-        #expect(remaining > 85 && remaining <= 90, "expires (ms from receipt) in seconds, counted from the response")
+        #expect(ad.received.lifetime == 90, "expires (ms from receipt) in seconds")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
     }

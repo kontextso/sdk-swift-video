@@ -1,4 +1,4 @@
-/// The answer to `POST /video/ads`: one entry per requested format, in the request's order, each with
+/// The answer to `POST /video/ads`: one entry per format (the SDK always asks for all of them), each with
 /// its ads or its no-fill reason; or the kill switch. `nextRequestAt` (timed mode) is on the wire but
 /// not read: the SDK has no timed mode yet, every ad is shown at a moment the app picks.
 enum AdsResponse: Decodable, Sendable {
@@ -8,7 +8,7 @@ enum AdsResponse: Decodable, Sendable {
     /// The no-fill reason for a format with no configuration in the dashboard: the integration, not the moment.
     static let formatNotEnabled = "formatNotEnabled"
 
-    /// One per requested format. `ads` is a sequence, the first to be shown first; today a filled entry
+    /// One per format. `ads` is a sequence, the first to be shown first; today a filled entry
     /// carries one. Decoded strictly on `format` and `ads` (they decide the answer), leniently on the reason.
     struct FormatResult: Decodable, Sendable {
         let format: AdFormat

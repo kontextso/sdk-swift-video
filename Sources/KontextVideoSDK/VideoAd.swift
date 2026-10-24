@@ -281,7 +281,6 @@ public final class VideoAd {
         wasShown = true
         KontextVideo.shared.adOnScreen = self
         owner?.adDidBeginShowing(self)
-        bid?.adDidBeginShowing()
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image

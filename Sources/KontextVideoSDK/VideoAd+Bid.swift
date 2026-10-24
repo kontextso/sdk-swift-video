@@ -138,11 +138,6 @@ extension VideoAd {
             owner?.bidDidEnd(self)
         }
 
-        /// Shown: it leaves its `VideoAds`, so the next request does not list it.
-        func adDidBeginShowing() {
-            owner?.bidDidEnd(self)
-        }
-
         static func error(for reason: InvalidationReason) -> VideoAdError {
             reason == .destroyed ? .destroyed : .invalidated(reason)
         }

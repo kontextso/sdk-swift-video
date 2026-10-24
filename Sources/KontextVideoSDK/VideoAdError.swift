@@ -17,7 +17,9 @@ public enum VideoAdError: Error, Sendable {
     case disabled(reason: String)
     /// The request succeeded and the server had nothing for this format: `noAdMatch`, `frequencyCap`,
     /// `contentUnsafe`, `formatNotEnabled` (no configuration for this format in the Kontext dashboard),
-    /// `temporaryError`, ... Not a failure, and never retried by the SDK; the app decides when to ask again.
+    /// `temporaryError`, ..., or the SDK's own `alreadyUsed` (the answer was a bid the app had just shown or
+    /// rejected while the request ran). Not a failure, and never retried by the SDK; the app decides when
+    /// to ask again.
     case noFill(reason: String)
     /// The request failed: no network, a timeout, a server error, an unexpected answer. Thrown only when
     /// the SDK holds no valid bid for the format; otherwise `format()` returns that one.

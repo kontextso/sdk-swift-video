@@ -109,7 +109,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            state.bids[format] = VideoAd.Bid(received: VideoAd.ReceivedAd(ad: ad, receivedAt: ProcessInfo.processInfo.systemUptime), owner: self)
+            state.bids[format] = VideoAd.Bid(received: VideoAd.ReceivedAd(ad: ad, receivedAt: VideoAd.ReceivedAd.now), owner: self)
         }
         return noFill
     }
@@ -202,8 +202,10 @@ public final class VideoAds {
         state.spentIds.insert(bid.id)
     }
 
+    /// Shown: the ad's bid leaves its format, so the next request does not list it.
     func adDidBeginShowing(_ ad: VideoAd) {
         state.showing = ad
+        if let bid = ad.bid { bidDidEnd(bid) }
     }
 
     func adDidEnd(_ ad: VideoAd) {
