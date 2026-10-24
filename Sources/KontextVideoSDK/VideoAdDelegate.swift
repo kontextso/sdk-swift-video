@@ -20,8 +20,6 @@ public protocol VideoAdDelegate: AnyObject {
     /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where (`creative`, `endCard`, ...).
     /// Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
-    /// A rewarded linear ad completed: grant the reward.
-    func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward)
     /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows right away.
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
     /// Presentation is over. Exactly once per successful `show`.
@@ -31,7 +29,6 @@ public protocol VideoAdDelegate: AnyObject {
 public extension VideoAdDelegate {
     func videoAdDidRecordImpression(_ ad: VideoAd) {}
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {}
-    func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {}
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {}
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {}
 }

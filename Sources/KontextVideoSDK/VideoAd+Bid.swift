@@ -34,7 +34,6 @@ extension VideoAd {
         public var sizes: [Size] { received.sizes }
         public var duration: TimeInterval? { received.duration }
         public var skipOffset: TimeInterval? { received.skipOffset }
-        public var reward: Reward? { received.reward }
 
         /// Why the bid ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
         public private(set) var invalidationReason: InvalidationReason?

@@ -44,7 +44,6 @@ struct SupportTests {
         let ad = VideoAd(bid: bid)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: "creative"))
-        delegate.videoAd(ad, didEarn: VideoAd.Reward(label: "coins", amount: 1))
         delegate.videoAd(ad, didFail: .presenterUnavailable)
         delegate.videoAd(ad, didEnd: .completed)
     }

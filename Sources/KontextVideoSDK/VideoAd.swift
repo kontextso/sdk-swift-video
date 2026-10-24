@@ -37,12 +37,6 @@ public final class VideoAd {
         case fullscreen
     }
 
-    /// What the viewer earns when a rewarded linear ad completes.
-    public struct Reward: Sendable, Equatable {
-        public let label: String
-        public let amount: Double
-    }
-
     /// Why a bid ended before it was shown. Found out at the next call (`format`, `load`, `show`,
     /// `reject`), which throws it; nothing is delivered through the delegate.
     public enum InvalidationReason: Sendable, Equatable {
@@ -76,8 +70,6 @@ public final class VideoAd {
     public var duration: TimeInterval? { received.duration }
     /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
     public var skipOffset: TimeInterval? { received.skipOffset }
-    /// Set on a rewarded linear ad.
-    public var reward: Reward? { received.reward }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -96,7 +88,7 @@ public final class VideoAd {
     public private(set) var wasShown = false
     /// `true` once `didEnd` was delivered.
     public private(set) var hasEnded = false
-    /// Whether the creative ran to its end: a video reached `complete` (the reward was granted), an
+    /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
     /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
     public private(set) var isCompleted = false
@@ -521,9 +513,6 @@ public final class VideoAd {
             // The end card, when there is one, becomes visible now.
             tracker.fire("creativeView", part: "endCard")
             Logger.info("ad \(id.prefix(8)): complete")
-            if let reward {
-                delegate?.videoAd(self, didEarn: reward)
-            }
         }
     }
 

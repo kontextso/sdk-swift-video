@@ -18,7 +18,7 @@ enum FrameEvent: Sendable {
     case video(name: String, playhead: Int)
     /// The ad video passed a `progress` entry's offset.
     case progress(offset: Int, playhead: Int)
-    /// The video played to the end. The SDK fires `complete` and grants the reward.
+    /// The video played to the end. The SDK fires `complete`.
     case complete(playhead: Int)
     /// The creative failed to load or play, with the VAST error code.
     case error(code: Int)

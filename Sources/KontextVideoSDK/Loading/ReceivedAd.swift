@@ -19,8 +19,6 @@ extension VideoAd {
         let duration: TimeInterval?
         /// When a linear ad's Close may appear; `nil` means not before the end.
         let skipOffset: TimeInterval?
-        /// On a rewarded linear ad.
-        let reward: Reward?
 
         /// What the page renders; decides the viewability clock, the video events and the error codes.
         let creative: AdPayload.Creative
@@ -54,7 +52,6 @@ extension VideoAd {
                 sizes = wireSizes.map { Size(width: $0.width, height: $0.height) }
                 duration = wireDuration.map { TimeInterval($0) / 1000 }
                 skipOffset = nil
-                reward = nil
             case .pause(let wirePosition, let wireSizes):
                 sizes = wireSizes.map { Size(width: $0.width, height: $0.height) }
                 switch wirePosition {
@@ -64,13 +61,11 @@ extension VideoAd {
                 }
                 duration = nil
                 skipOffset = nil
-                reward = nil
-            case .linear(let wireDuration, let wireSkipOffset, let wireReward):
+            case .linear(let wireDuration, let wireSkipOffset):
                 position = nil
                 sizes = []
                 duration = TimeInterval(wireDuration) / 1000
                 skipOffset = wireSkipOffset.map { TimeInterval($0) / 1000 }
-                reward = wireReward.map { Reward(label: $0.label, amount: $0.amount) }
             }
         }
 

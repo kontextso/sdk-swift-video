@@ -58,7 +58,6 @@ enum Fixtures {
         moreSizes: [[String: Any]] = [],
         duration: Int? = nil,
         skipOffset: Int? = nil,
-        reward: [String: Any]? = nil,
         frameURL: String? = nil,
         extra: [String: Any] = [:]
     ) -> [String: Any] {
@@ -77,7 +76,6 @@ enum Fixtures {
         if let size { ad["sizes"] = [size] + moreSizes }
         if let duration { ad["duration"] = duration }
         if let skipOffset { ad["skipOffset"] = skipOffset }
-        if let reward { ad["reward"] = reward }
         extra.forEach { ad[$0.key] = $0.value }
         return ad
     }
@@ -86,8 +84,8 @@ enum Fixtures {
         ad(id: id, format: "overlay", position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
-    static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000, reward: [String: Any]? = nil) -> [String: Any] {
-        ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset, reward: reward)
+    static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000) -> [String: Any] {
+        ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset)
     }
 
     /// Every format answered: `ad` for its own format, a no-fill for the others.

@@ -233,10 +233,6 @@ extension Demo: VideoAdDelegate {
         note("\(ad.format) \(ad.id.prefix(8)) click (\(click.area)) \(click.url.host ?? "")")
     }
 
-    func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {
-        note("\(ad.format) \(ad.id.prefix(8)) reward \(reward.amount) \(reward.label)")
-    }
-
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {
         note("\(ad.format) \(ad.id.prefix(8)) failed: \(error)")
     }

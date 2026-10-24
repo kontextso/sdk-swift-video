@@ -28,7 +28,6 @@ final class RecordingDelegate: VideoAdDelegate {
     private(set) var endReasons: [VideoAd.EndReason] = []
     private(set) var failures: [VideoAdError] = []
     private(set) var clicks: [VideoAd.Click] = []
-    private(set) var rewards: [VideoAd.Reward] = []
 
     func videoAdDidRecordImpression(_ ad: VideoAd) { events.append("impression") }
 
@@ -37,10 +36,6 @@ final class RecordingDelegate: VideoAdDelegate {
         clicks.append(click)
     }
 
-    func videoAd(_ ad: VideoAd, didEarn reward: VideoAd.Reward) {
-        events.append("reward:\(reward.label)")
-        rewards.append(reward)
-    }
 
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {
         events.append("fail")

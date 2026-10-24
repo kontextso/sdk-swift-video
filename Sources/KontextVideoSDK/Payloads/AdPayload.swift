@@ -67,11 +67,6 @@ struct AdPayload: Decodable, Sendable {
         return sizes
     }
 
-    struct Reward: Decodable, Sendable, Equatable {
-        let label: String
-        let amount: Double
-    }
-
     /// Where an overlay sits; never full screen.
     enum OverlayPosition: String, Decodable, Sendable {
         case top, bottom
@@ -92,7 +87,7 @@ struct AdPayload: Decodable, Sendable {
         /// `sizes` is empty for the fullscreen variant.
         case pause(position: PausePosition, sizes: [Size])
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
-        case linear(duration: Int, skipOffset: Int?, reward: Reward?)
+        case linear(duration: Int, skipOffset: Int?)
     }
 
     let id: String
@@ -109,7 +104,7 @@ struct AdPayload: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, format, creative, trigger, price, expires, rendering, tracking
-        case position, sizes, duration, skipOffset, reward
+        case position, sizes, duration, skipOffset
     }
 
     private enum TriggerKeys: String, CodingKey {
@@ -160,8 +155,7 @@ struct AdPayload: Decodable, Sendable {
         case .linear:
             details = .linear(
                 duration: try container.decode(Int.self, forKey: .duration),
-                skipOffset: try container.decodeIfPresent(Int.self, forKey: .skipOffset),
-                reward: try container.decodeIfPresent(Reward.self, forKey: .reward)
+                skipOffset: try container.decodeIfPresent(Int.self, forKey: .skipOffset)
             )
         }
     }

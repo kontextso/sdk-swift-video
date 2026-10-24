@@ -128,21 +128,25 @@ struct DecodingTests {
         #expect(duration == 6000)
     }
 
-    @Test func linearAdWithSkipOffsetAndReward() throws {
-        let ad = try Fixtures.payload(Fixtures.linearAd(duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
+    @Test func linearAdWithSkipOffset() throws {
+        let ad = try Fixtures.payload(Fixtures.linearAd(duration: 15_000, skipOffset: 5000))
         #expect(ad.format == .linear)
         #expect(ad.creative == .video)
-        guard case .linear(let duration, let skipOffset, let reward) = ad.details else { Issue.record("expected linear"); return }
+        guard case .linear(let duration, let skipOffset) = ad.details else { Issue.record("expected linear"); return }
         #expect(duration == 15_000)
         #expect(skipOffset == 5000)
-        #expect(reward == AdPayload.Reward(label: "coins", amount: 50))
     }
 
-    @Test func rewardedLinearHasNoSkipOffset() throws {
-        let ad = try Fixtures.payload(Fixtures.linearAd(skipOffset: nil, reward: ["label": "coins", "amount": 50]))
-        guard case .linear(_, let skipOffset, let reward) = ad.details else { Issue.record("expected linear"); return }
+    @Test func aLinearAdWithoutSkipOffsetHasNoCloseBeforeComplete() throws {
+        let ad = try Fixtures.payload(Fixtures.linearAd(skipOffset: nil))
+        guard case .linear(_, let skipOffset) = ad.details else { Issue.record("expected linear"); return }
         #expect(skipOffset == nil)
-        #expect(reward != nil)
+    }
+
+    @Test func aRewardOnTheWireIsIgnored() throws {
+        var linear = Fixtures.linearAd()
+        linear["reward"] = ["label": "coins", "amount": 50]
+        #expect(throws: Never.self) { try Fixtures.payload(linear) }
     }
 
     @Test func trackingEntriesKeepOffsetAndPart() throws {

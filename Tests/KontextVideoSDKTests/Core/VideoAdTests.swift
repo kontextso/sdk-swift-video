@@ -73,7 +73,6 @@ struct VideoAdTests {
         #expect(ad.size == VideoAd.Size(width: 300, height: 300))
         #expect(ad.duration == nil)
         #expect(ad.skipOffset == nil)
-        #expect(ad.reward == nil)
         #expect(ad.received.lifetime == 90, "expires (ms from receipt) in seconds")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
@@ -88,12 +87,11 @@ struct VideoAdTests {
     }
 
     @Test func linearAdExposesVideoFacts() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i1", duration: 15_000, skipOffset: 5000, reward: ["label": "coins", "amount": 50]))
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i1", duration: 15_000, skipOffset: 5000))
         #expect(ad.position == nil)
         #expect(ad.size == nil)
         #expect(ad.duration == 15)
         #expect(ad.skipOffset == 5)
-        #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
         let (fullscreen, _, _) = try await makeAd(Fixtures.ad(id: "p2", position: "fullscreen", size: nil))
         #expect(fullscreen.position == .fullscreen)
         #expect(fullscreen.size == nil)
@@ -479,12 +477,12 @@ struct VideoAdTests {
         #expect(harness.server.beacons.first { $0.event == "pause" }?.query["aph"] == "00:00:03.000")
     }
 
-    @Test func completeFiresCompleteAndTheEndCardsCreativeViewAndTheReward() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i5", reward: ["label": "coins", "amount": 50]))
+    @Test func completeFiresCompleteAndTheEndCardsCreativeView() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i5"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
-        #expect(delegate.rewards == [VideoAd.Reward(label: "coins", amount: 50)])
+        #expect(ad.isCompleted)
         #expect(ad.hasEnded == false, "the end card is up")
         let fired = await beacons()
         #expect(fired.contains("complete"))

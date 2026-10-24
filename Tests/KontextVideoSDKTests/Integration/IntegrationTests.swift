@@ -122,18 +122,17 @@ struct IntegrationTests {
 
     // MARK: Linear, video creative
 
-    @Test func linearPlaysToCompletionWithTheReward() async throws {
+    @Test func linearPlaysToCompletion() async throws {
         let ads = await start()
-        harness.serve(Fixtures.linearAd(id: "vid-full", reward: ["label": "coins", "amount": 50]))
+        harness.serve(Fixtures.linearAd(id: "vid-full"))
         let delegate = RecordingDelegate()
         let ad = try await ads.format(.linear).load()
         ad.delegate = delegate
-        #expect(ad.reward == VideoAd.Reward(label: "coins", amount: 50))
 
         try ad.show(from: window.root)
         #expect(delegate.events.isEmpty)
         #expect(await waitUntil(3) { delegate.events.contains("impression") }, "at video.start")
-        #expect(await waitUntil(3) { delegate.rewards.count == 1 }, "at video.complete")
+        #expect(await waitUntil(3) { ad.isCompleted }, "at video.complete")
         #expect(delegate.endReasons.isEmpty, "the end card is up")
         #expect(await waitUntil { Set(self.events(for: "vid-full")).isSuperset(of: ["start", "firstQuartile", "midpoint", "progress", "thirdQuartile", "complete", "creativeView(endCard)"]) })
         let progress = harness.server.beacons.first { $0.adId == "vid-full" && $0.event == "progress" }
