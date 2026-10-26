@@ -57,6 +57,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           tag="${GITHUB_REF_NAME}"
-          version=$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/KontextVideoSDK/API/SDKInfo.swift)
+          version=$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/KontextVideoSDK/Payloads/SDKInfo.swift)
           echo "tag $tag, SDKInfo.version $version"
           [ "$tag" = "$version" ] || { echo "::error::tag $tag does not match SDKInfo.version $version"; exit 1; }

@@ -30,8 +30,11 @@ sdk-swift-video/
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      Logger, Environment (the test seams), the debug reporter
 │   └── PrivacyInfo.xcprivacy
-├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen
-├── Package.swift            SPM manifest
+├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
+├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
+├── .github/workflows/ci.yml the three CI jobs (see CI)
+├── Package.swift            SPM manifest; KontextKit pinned exact
+├── CLAUDE.md                project context for Claude Code
 └── CHANGELOG.md, RELEASING.md
 ```
 
@@ -60,9 +63,9 @@ pnpm install && pnpm dev
 xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
-`--demo` as a launch argument runs every flow without touching the screen: a pause ad shown and dismissed, an
-overlay, a linear ad interrupted from outside, an ad dropped without being shown, and `destroy()` with an ad
-on screen. From a terminal:
+`--demo` as a launch argument runs every flow without touching the screen: the three formats prepared at once,
+a pause ad shown and dismissed, an overlay, a linear ad interrupted from outside, a bid rejected as outbid, and
+`destroy()` with an ad on screen. From a terminal:
 
 ```bash
 xcrun simctl launch <simulator-id> so.kontext.example-video --demo
@@ -80,7 +83,11 @@ What to read afterwards:
   ```
 
 The mock's README lists the switches a request can flip: a token ending in `-disabled` or `-debug`, a video id
-starting with `nofill`, and so on.
+starting with `nofill`, containing `html` or `expires-30`, and so on.
+
+To look inside an ad's page (the DOM, the JS console, the frame protocol messages): Safari → Settings → Advanced →
+"Show features for web developers", then Safari → Develop → the simulator → the example app → the frame page.
+Xcode's debug builds are inspectable; nothing to configure in the SDK.
 
 ## Where things are decided
 
@@ -91,6 +98,16 @@ starting with `nofill`, and so on.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView
   invisibly in the key window and hands it over with `takeWebView()` at show.
 - Every public class is `@MainActor`; `deinit`s hop to the main actor for their cleanup.
+
+## Code style
+
+- Swift 5.9, iOS 14+. `StrictConcurrency` is on in `Package.swift`: a concurrency warning is a bug, fix it
+  before committing; it is what a publisher building in Swift 6 language mode would see as an error.
+- Every type that touches UIKit, WebKit or ATT is `@MainActor`; `deinit`s hop to the main actor for their cleanup.
+- Comments say *why*, in prose, not what: a doc comment on every public declaration and on every internal one
+  whose reason is not obvious from its name. No references to tickets or PRs.
+- Public API changes go to the Notion page *SDK Lifecycle* first, then here, then to `sdk-kotlin-video`.
+- No linter yet; `xcodebuild` warnings are the signal and the build is kept at zero.
 
 ## Tests
 
@@ -127,8 +144,42 @@ Rules the suites follow:
 - `SDKHarness` resets everything before a test and installs the stub server; the seams it uses are in
   `Support/Environment.swift`, and production never sets them.
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
+- Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the bid clock. A test that sleeps to
+  let something expire is flaky on a slow runner and goes against the suite's budget, about 45 s in all.
+- The stub server routes each session's requests to the server that created it, so a beacon a previous test's
+  `VideoAds` fires from `deinit` never lands in the next test's recordings.
 
 What the package runner cannot do, and where it is covered instead: there is no `UIWindowScene`, so UIKit never
 completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The linear ad
 tests therefore assert what the SDK asked UIKit to do and drive the controller's disappearance decision directly;
 the example app's `--demo` run against the mock covers the real presentation, interruption and dismissal.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request, on `macos-15` with Xcode 16.4:
+
+- **Example app**: `xcodegen generate` and a build of `Example/` against the local SDK. It is what catches a
+  public API change that breaks a real integration.
+- **Test**: `xcodebuild test` on the SDK target, iPhone 16 / iOS 18.5.
+- **Release tag matches SDKInfo.version**: on a tag push only; fails when the tag and `SDKInfo.version` differ.
+
+## Cross-SDK consistency
+
+The Kotlin twin is [sdk-kotlin-video](https://github.com/kontextso/sdk-kotlin-video): the same formats, the same
+lifecycle (the Notion page *SDK Lifecycle*), the same wire contract, and file-structure parity where the languages
+allow it (`VideoAds.swift` / `VideoAds.kt`, `VideoAd.swift` / `VideoAd.kt`, ...). When adding or renaming a public
+type, match the Kotlin counterpart, or leave a comment saying why not. The server both talk to is mocked by
+[sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server).
+
+## KontextKit dependency
+
+Device, privacy (ATT, IFA, the IAB consent keys) and StoreKit facts come from
+[KontextKit](https://github.com/kontextso/kontextkit-ios), pinned to an exact version in `Package.swift` while it
+is pre-1.0; the SDK uses its `KontextKit` product only, not the Open Measurement xcframework. What the SDK needs
+and KontextKit lacks goes into KontextKit, not into a workaround here. To build against an unreleased KontextKit,
+point `Package.swift` at a sibling checkout and revert before committing:
+
+```swift
+.package(path: "../kontextkit-ios"),
+```
+

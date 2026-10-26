@@ -15,13 +15,13 @@ How to cut a release of the **Kontext Video SDK**. Replace `0.1.0` with the vers
 
 ## 2. Update the changelog
 
-Move the `## Unreleased` entries in `CHANGELOG.md` under a new `## 0.1.0` heading. Breaking changes get a
-`### Breaking` section first, with what integrators must do.
+Add a `## 0.2.0` heading at the top of `CHANGELOG.md` with what changed since the last release. Breaking
+changes get a `### Breaking` section first, with what integrators must do.
 
 ```markdown
 ## 0.2.0
 ### Breaking
-`show(in:)` is gone; the player's view is the container. Conform your player to `KontextVideoPlayer`.
+Short description of what changed and what integrators need to do.
 
 * Add …
 * Fix …
