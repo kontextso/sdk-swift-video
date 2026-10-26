@@ -275,11 +275,11 @@ public final class VideoAd {
         owner?.adDidBeginShowing(self)
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
-        // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image
-        // creative, while a video's waits for its first frame.
+        // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
+        // HTML creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        if received.creative == .image {
+        if received.creative != .video {
             recordImpression()
         }
         // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then

@@ -80,8 +80,8 @@ enum Fixtures {
         return ad
     }
 
-    static func overlayAd(id: String = "ad-o", duration: Int = 6000, position: String = "bottom") -> [String: Any] {
-        ad(id: id, format: "overlay", position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
+    static func overlayAd(id: String = "ad-o", duration: Int = 6000, position: String = "bottom", creative: String = "image") -> [String: Any] {
+        ad(id: id, format: "overlay", creative: creative, position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
     static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000) -> [String: Any] {

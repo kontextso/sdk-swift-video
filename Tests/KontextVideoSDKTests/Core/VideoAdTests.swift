@@ -137,6 +137,13 @@ struct VideoAdTests {
         #expect(!fired.contains("overlayViewDuration"))
     }
 
+    @Test func anHtmlCreativeCountsItsImpressionAtShowLikeAnImage() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "h1", creative: "html"))
+        try ad.show(in: harness.player.view)
+        #expect(delegate.events == ["impression"], "no first frame to wait for")
+        #expect(Set(await beacons()).isSuperset(of: ["creativeView", "impression"]))
+    }
+
     @Test func showPlacesABottomOverlayAtTheBottom() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o2"))
         try ad.show(in: harness.player.view)

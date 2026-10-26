@@ -95,13 +95,21 @@ final class StubServer: @unchecked Sendable {
     // MARK: Installation
 
     nonisolated(unsafe) static var current: StubServer?
+    /// Every installed server by its marker, so a request made on an older session (a beacon a previous
+    /// test's `VideoAds` fires from `deinit`, on a background thread) reaches its own server, never the
+    /// one the next test installed meanwhile.
+    nonisolated(unsafe) private static var servers: [String: StubServer] = [:]
+    private static let markerHeader = "X-Kontext-Stub"
+    private let marker = UUID().uuidString
 
     /// Makes this server the SDK's session.
     @MainActor
     func install() {
         StubServer.current = self
+        StubServer.servers[marker] = self
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
+        configuration.httpAdditionalHeaders = [StubServer.markerHeader: marker]
         Environment.session = URLSession(configuration: configuration)
     }
 
@@ -110,6 +118,12 @@ final class StubServer: @unchecked Sendable {
         current = nil
         Environment.session = .shared
     }
+
+    /// The server a request belongs to: the one its session was created for, else the current one.
+    fileprivate static func server(for request: URLRequest) -> StubServer? {
+        if let marker = request.value(forHTTPHeaderField: markerHeader), let server = servers[marker] { return server }
+        return current
+    }
 }
 
 final class StubProtocol: URLProtocol {
@@ -117,7 +131,7 @@ final class StubProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let server = StubServer.current else {
+        guard let server = StubServer.server(for: request) else {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
             return
         }

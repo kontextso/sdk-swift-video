@@ -3,7 +3,10 @@ import Foundation
 import Testing
 import UIKit
 
-/// The smaller public pieces: error descriptions, delegate defaults, placements.
+/// The smaller public pieces: error descriptions, delegate defaults, formats. Serialized: it resets the
+/// shared instance and the stub server, which other suites are using.
+extension SerialSuites {
+@Suite
 @MainActor
 struct SupportTests {
     // MARK: VideoAdError
@@ -100,4 +103,5 @@ struct SupportTests {
         #expect(Logger.level == .none)
         Logger.level = .warning
     }
+}
 }

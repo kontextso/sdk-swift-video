@@ -12,11 +12,14 @@ struct AdPayload: Decodable, Sendable {
         case window(from: Int, to: Int)
     }
 
-    /// What the page renders. The viewability clock (1 s for an image, 2 s for a video), the video events
-    /// and the `complete` beacon depend on it.
+    /// What the page renders. The viewability clock (1 s for an image or HTML, 2 s for a video), when the
+    /// impression counts (at `show`, or at a video's first frame), the video events and the `complete`
+    /// beacon depend on it.
     enum Creative: String, Decodable, Sendable {
         case image
         case video
+        /// Third-party markup (an HTML or MRAID banner) the page inserts on `ad.show`; counts like an image.
+        case html
     }
 
     enum Rendering: Sendable, Equatable {

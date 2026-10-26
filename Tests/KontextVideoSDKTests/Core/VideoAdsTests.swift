@@ -35,9 +35,12 @@ struct VideoAdsTests {
         }
     }
 
-    private func notUsedBeacons() async -> [(adId: String, reason: String?)] {
-        await sleepMs(80)
-        return harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.adId, $0.query["reason"]) }
+    /// The `notUsed` beacons that arrived. Expecting some: waits for that many (they travel through
+    /// URLSession); expecting none: gives them 80 ms to show up.
+    private func notUsedBeacons(expecting count: Int = 0) async -> [(adId: String, reason: String?)] {
+        let arrived = { self.harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.adId, $0.query["reason"]) } }
+        if count == 0 { await sleepMs(80) } else { _ = await waitUntil { arrived().count >= count } }
+        return arrived()
     }
 
     // MARK: The request
@@ -348,7 +351,7 @@ struct VideoAdsTests {
             #expect(reason == VideoAds.alreadyUsed, "a spent id is never accepted again")
         }
         #expect(try await linear.value.id == "vid-l20", "other formats get their bids normally")
-        #expect(await notUsedBeacons().map(\.adId) == ["img-p20"], "one notice, from the reject")
+        #expect(await notUsedBeacons(expecting: 1).map(\.adId) == ["img-p20"], "one notice, from the reject")
     }
 
     @Test func aBidShownWhileARequestRunsIsIgnoredWhenTheResponseReServesIt() async throws {
@@ -388,7 +391,7 @@ struct VideoAdsTests {
 
         ads.destroy()
         #expect(delegate.endReasons == [.destroyed])
-        #expect(Set(await notUsedBeacons().map(\.adId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
+        #expect(Set(await notUsedBeacons(expecting: 2).map(\.adId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
         #expect(await notUsedBeacons().allSatisfy { $0.reason == "destroyed" })
         #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
         let unloadedLoad = await error { try await unloaded.load() }
@@ -423,7 +426,7 @@ struct VideoAdsTests {
         ads = nil
         #expect(bid.invalidationReason == .destroyed)
         #expect(ad.isReady == false)
-        #expect(await notUsedBeacons().map(\.reason) == ["destroyed"])
+        #expect(await notUsedBeacons(expecting: 1).map(\.reason) == ["destroyed"])
     }
 
     // MARK: Playhead

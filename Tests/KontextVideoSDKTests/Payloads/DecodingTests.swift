@@ -143,6 +143,11 @@ struct DecodingTests {
         #expect(skipOffset == nil)
     }
 
+    @Test func anHtmlCreativeDecodesAndAnUnknownKindIsRejected() throws {
+        #expect(try Fixtures.payload(Fixtures.ad(creative: "html")).creative == .html)
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(creative: "native")) }
+    }
+
     @Test func aRewardOnTheWireIsIgnored() throws {
         var linear = Fixtures.linearAd()
         linear["reward"] = ["label": "coins", "amount": 50]
