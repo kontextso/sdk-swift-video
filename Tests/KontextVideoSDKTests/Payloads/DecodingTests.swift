@@ -103,7 +103,7 @@ struct DecodingTests {
         #expect(ad.rendering == .frame(URL(string: "kontext-test://frames/frame/ad-1")!))
         guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .top)
-        #expect(sizes == [AdPayload.Size(width: 300, height: 300, scalable: true, maintainAspectRatio: true)])
+        #expect(sizes == [AdPayload.Size(width: 300, height: 300)])
     }
 
     @Test func fullscreenPauseAdHasNoSizes() throws {
