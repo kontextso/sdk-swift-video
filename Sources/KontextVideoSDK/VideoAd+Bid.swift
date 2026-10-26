@@ -27,18 +27,18 @@ extension VideoAd {
     public final class Bid {
         /// The facts an app decides on before rendering. Where the ad goes and how big it is are the
         /// SDK's business at `show`; nothing of that is exposed.
-        public var id: String { data.id }
-        public var format: AdFormat { data.format }
-        public var price: Price { data.price }
+        public var id: String { served.id }
+        public var format: AdFormat { served.format }
+        public var price: Price { served.price }
         /// Linear: the video's length. Overlay: how long the SDK keeps it on screen, `nil` when it stays
         /// until the app ends it. Pause: always `nil`. Seconds.
-        public var duration: TimeInterval? { data.duration }
+        public var duration: TimeInterval? { served.duration }
 
         /// Why the bid ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
         public private(set) var invalidationReason: InvalidationReason?
 
         /// The server's answer; its deadline counts from the first receipt, a re-serve does not move it.
-        let data: AdData
+        let served: ServedAd
         /// Fires the bid's beacons: `notUsed` before anything is rendered, the rest through the `VideoAd`.
         let tracker: Tracker
         /// The `VideoAds` that holds it.
@@ -49,10 +49,10 @@ extension VideoAd {
         /// The load in flight, shared by every `load()` call: the second waits for the first.
         private var loading: Task<VideoAd, Error>?
 
-        init(data: AdData, owner: VideoAds) {
-            self.data = data
+        init(served: ServedAd, owner: VideoAds) {
+            self.served = served
             self.owner = owner
-            tracker = Tracker(adId: data.id, entries: data.tracking)
+            tracker = Tracker(adId: served.id, entries: served.tracking)
             tracker.contentPlayhead = { [weak owner] in owner?.playhead ?? 0 }
         }
 
@@ -76,7 +76,7 @@ extension VideoAd {
         public func reject(_ reason: RejectReason = .notUsed) throws {
             if ad?.wasShown == true { throw VideoAdError.alreadyShown }
             if let invalidationReason { throw Self.error(for: invalidationReason) }
-            if data.isExpired {
+            if served.isExpired {
                 invalidate(.expired)
                 throw VideoAdError.invalidated(.expired)
             }
@@ -90,7 +90,7 @@ extension VideoAd {
             guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
             if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
             if let invalidationReason { throw Self.error(for: invalidationReason) }
-            if data.isExpired {
+            if served.isExpired {
                 invalidate(.expired)
                 throw VideoAdError.invalidated(.expired)
             }

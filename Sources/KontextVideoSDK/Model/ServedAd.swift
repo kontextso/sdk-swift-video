@@ -3,7 +3,7 @@ import Foundation
 /// An ad as the SDK keeps it: `AdPayload` (the wire) converted once into the facts `VideoAd.Bid` and
 /// `VideoAd` report (times in seconds, whatever the wire sends), what the renderer needs, and the clock.
 /// A plain value with no behavior; `Bid` and `VideoAd` both read it. The only place that reads `AdPayload`.
-struct AdData {
+struct ServedAd {
     let id: String
     let format: AdFormat
     let price: VideoAd.Price

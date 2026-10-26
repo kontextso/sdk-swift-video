@@ -53,7 +53,7 @@ public final class VideoAds {
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let error) {
-            if let held = state.bids[format], !held.data.isExpired {
+            if let held = state.bids[format], !held.served.isExpired {
                 Logger.info("\(format) for \(content.id): request failed, returning the held bid \(held.id.prefix(8))")
                 return held
             }
@@ -67,7 +67,7 @@ public final class VideoAds {
     /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()`.
     /// Expired bids are dropped first (silently; the server knows `expires`), so `held` lists valid ones.
     private func startRequest() -> Task<[AdFormat: String], Error> {
-        for bid in Array(state.bids.values) where bid.data.isExpired { bid.invalidate(.expired) }
+        for bid in Array(state.bids.values) where bid.served.isExpired { bid.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.bids[$0]?.id }
         let task = Task { [weak self] () throws -> [AdFormat: String] in
             defer { self?.request = nil }
@@ -97,7 +97,7 @@ public final class VideoAds {
             }
             if let current, current.id == ad.id {
                 // Re-served: kept unchanged, unless it expired while the request ran (it never comes back).
-                guard current.data.isExpired else { continue }
+                guard current.served.isExpired else { continue }
                 current.invalidate(.expired)
             }
             current?.invalidate(.expired)
@@ -108,7 +108,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            state.bids[format] = VideoAd.Bid(data: AdData(payload: ad, receivedAt: Environment.now()), owner: self)
+            state.bids[format] = VideoAd.Bid(served: ServedAd(payload: ad, receivedAt: Environment.now()), owner: self)
         }
         return noFill
     }
