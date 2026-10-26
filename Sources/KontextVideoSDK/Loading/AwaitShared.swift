@@ -1,8 +1,11 @@
 import Foundation
 
-/// Awaits work that belongs to a `VideoAds` (a request, a load), not to the caller. Cancelling the
-/// caller's task makes only this call throw `CancellationError`, at once; the work keeps running, and
-/// other callers waiting for it, or the next call, get its result.
+/// Waits for someone else's work without owning it: any number of callers can wait on the same running
+/// task (a request, a creative load), each gets the task's result when it finishes, and a caller that is
+/// cancelled stops waiting immediately (`CancellationError`) without cancelling the task or affecting the
+/// other callers. Starting, storing and cancelling the work is the owner's job (`VideoAds.request`,
+/// `Bid.loading`); this is only the joining half. A plain `task.value` would keep a cancelled caller
+/// waiting until the task finished.
 @MainActor
 func awaitShared<T: Sendable>(_ task: Task<T, Error>) async throws -> T {
     let waiter = Waiter<T>()
