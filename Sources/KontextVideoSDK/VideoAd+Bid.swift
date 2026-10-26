@@ -111,6 +111,10 @@ extension VideoAd {
                     self?.invalidate(.creativeFailed(code: code))
                     DebugReporter.shared.event("ad.loadFailed", adId: ad.id, level: .warning, state: ["code": .number(Double(code))])
                     throw VideoAdError.creativeFailed(code: code)
+                } catch {
+                    // The bid ended meanwhile: say why in the order the app expects (destroyed, disabled, rejected, ...).
+                    try self?.checkUsable()
+                    throw error
                 }
                 guard let self else { throw VideoAdError.destroyed }
                 // Expired while the page loaded: the result is dropped.

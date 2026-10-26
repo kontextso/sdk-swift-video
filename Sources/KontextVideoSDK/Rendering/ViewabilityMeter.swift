@@ -64,7 +64,7 @@ final class ViewabilityMeter {
             exposedSince = nil
             return
         }
-        let active = UIApplication.shared.applicationState == .active
+        let active = Environment.isApplicationActive()
         let frameInWindow = view.convert(view.bounds, to: window)
         let visible = active && !view.isHidden && view.alpha > 0.01 ? frameInWindow.intersection(window.bounds) : .null
         let area = view.bounds.width * view.bounds.height

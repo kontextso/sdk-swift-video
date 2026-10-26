@@ -45,6 +45,20 @@ struct ViewabilityMeterTests {
         #expect(meter.verdict == .viewable)
     }
 
+    @Test func aViewInAnInactiveAppIsExposedZeroSoThePagePausesItsVideo() async {
+        defer { window.tearDown(); Environment.isApplicationActive = { true } }
+        Environment.isApplicationActive = { false }
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)
+        let sink = attach(meter)
+        meter.start()
+        #expect(await waitUntil(1) { !sink.exposures.isEmpty })
+        await sleepMs(150)
+        #expect(sink.exposures.allSatisfy { $0 == 0 }, "in the background the page hears exposure 0")
+        #expect(sink.verdict == nil, "and no viewability clock runs")
+        Environment.isApplicationActive = { true }
+        #expect(await waitUntil(1) { sink.verdict == .viewable }, "on return the ad counts again")
+    }
+
     @Test func viewHalfOffScreenReportsHalfExposure() async {
         defer { window.tearDown() }
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 300, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)

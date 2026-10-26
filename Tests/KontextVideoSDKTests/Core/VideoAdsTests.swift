@@ -267,6 +267,22 @@ struct VideoAdsTests {
         #expect(await notUsedBeacons().isEmpty, "no notices: the server switched the SDK off, it knows")
     }
 
+    @Test func aKillSwitchDuringALoadMakesItThrowDisabled() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "dead-p16b"))
+        let bid = try await ads.format(.pause)
+        let load = Task { try await bid.load() }
+        await sleepMs(100)
+        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        _ = await error { try await ads.format(.linear) }
+        do {
+            _ = try await load.value
+            Issue.record("expected disabled")
+        } catch VideoAdError.disabled(let reason) {
+            #expect(reason == "publisherDisabled")
+        }
+    }
+
     @Test func aDisabledConfigThrowsDisabled() async {
         harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
         let ads = await makeAds()
