@@ -65,5 +65,5 @@ refuses a tag that does not match `SDKInfo.version`.
 
 - [kontextkit-ios](https://github.com/kontextso/kontextkit-ios): the shared iOS primitives this SDK depends on
 - [sdk-kotlin-video](https://github.com/kontextso/sdk-kotlin-video): the Kotlin twin
-- [sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server): the ad server stand-in
+- `sdk-video-mock-server` (internal, not on GitHub): the ad server stand-in
 - [sdk-swift](https://github.com/kontextso/sdk-swift): the chat SDK; the conventions here follow its

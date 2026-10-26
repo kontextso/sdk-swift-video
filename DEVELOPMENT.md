@@ -8,7 +8,7 @@ is the *Video Ads API & SDK v2* document and its *Video Ads SDK Public API* page
 - macOS 14+ with Xcode 16+.
 - An iOS 14+ simulator (Xcode → Window → Devices and Simulators, or `xcrun simctl`).
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) for the example project: `brew install xcodegen`.
-- Node 20+ and pnpm for the mock ad server, [sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server).
+- Node 20+ and pnpm for the mock ad server, `sdk-video-mock-server` (internal).
 
 The SDK imports UIKit and WebKit, so `swift build` on the host does not work; build and test on a simulator.
 
@@ -169,7 +169,7 @@ The Kotlin twin is [sdk-kotlin-video](https://github.com/kontextso/sdk-kotlin-vi
 lifecycle (the Notion page *SDK Lifecycle*), the same wire contract, and file-structure parity where the languages
 allow it (`VideoAds.swift` / `VideoAds.kt`, `VideoAd.swift` / `VideoAd.kt`, ...). When adding or renaming a public
 type, match the Kotlin counterpart, or leave a comment saying why not. The server both talk to is mocked by
-[sdk-video-mock-server](https://github.com/kontextso/sdk-video-mock-server).
+`sdk-video-mock-server` (internal).
 
 ## KontextKit dependency
 
