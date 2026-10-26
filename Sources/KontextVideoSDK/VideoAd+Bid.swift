@@ -25,16 +25,14 @@ extension VideoAd {
     /// ```
     @MainActor
     public final class Bid {
-        /// The facts, as the `VideoAd` will report them (`size` may change at `show`).
+        /// The facts an app decides on before rendering. Where the ad goes and how big it is are the
+        /// SDK's business at `show`; nothing of that is exposed.
         public var id: String { received.id }
         public var format: AdFormat { received.format }
         public var price: Price { received.price }
-        public var position: Position? { received.position }
-        public var size: Size? { received.size }
-        /// Every size the creative was built for, the default first; the SDK picks one at `show`.
-        public var sizes: [Size] { received.sizes }
+        /// Linear: the video's length. Overlay: how long the SDK keeps it on screen, `nil` when it stays
+        /// until the app ends it. Pause: always `nil`. Seconds.
         public var duration: TimeInterval? { received.duration }
-        public var skipOffset: TimeInterval? { received.skipOffset }
 
         /// Why the bid ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
         public private(set) var invalidationReason: InvalidationReason?

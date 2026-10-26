@@ -23,15 +23,15 @@ public final class VideoAd {
         public let precision: Precision
     }
 
-    /// The box the creative was built for, in points. The SDK scales it down to 50 % of this when the
-    /// player is smaller, and refuses to show below that.
-    public struct Size: Sendable, Equatable {
-        public let width: Int
-        public let height: Int
+    /// The box a creative was built for, in points. The SDK scales it down to 50 % of this when the view
+    /// is smaller, and refuses to show below that. Internal: where and how big is the SDK's business.
+    struct Size: Sendable, Equatable {
+        let width: Int
+        let height: Int
     }
 
-    /// Where the server placed the ad, among the `positions` the app offered.
-    public enum Position: Sendable, Equatable {
+    /// Where the server placed the ad.
+    enum Position: Sendable, Equatable {
         case top
         case bottom
         case fullscreen
@@ -51,25 +51,16 @@ public final class VideoAd {
         case creativeFailed(code: Int)
     }
 
-    /// The facts, as the `Bid` gave them before rendering; `size` may differ after `show`.
+    /// The facts, as the `Bid` gave them.
     public var id: String { received.id }
     public var format: AdFormat { received.format }
     public var price: Price { received.price }
-    /// `nil` for a linear ad.
-    public var position: Position? { received.position }
-    /// `nil` for a linear ad and for a full-screen pause ad.
-    /// Before `show`: the default variant. After `show`: the variant the SDK chose for the view.
-    public var size: Size? { chosenSize ?? received.size }
-    /// Every size the creative was built for, the default first (`nil` for a linear ad and a
-    /// full-screen pause ad). The SDK picks the best fit for the view at `show`: the largest that fits
-    /// without scaling, else the one with the best scale still at or above 50 %.
-    public var sizes: [Size] { received.sizes }
-    private var chosenSize: Size?
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
     public var duration: TimeInterval? { received.duration }
-    /// Linear: seconds until the Close may appear; `nil` means no Close before the video completes.
-    public var skipOffset: TimeInterval? { received.skipOffset }
+    /// The size variant `show` chose for the view: the largest that fits without scaling, else the one
+    /// with the best scale still at or above 50 %.
+    private(set) var chosenSize: Size?
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
@@ -143,7 +134,7 @@ public final class VideoAd {
         try checkShowable()
         let container = view
         let host = UIView(frame: try frame(in: container.bounds))
-        host.autoresizingMask = position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
+        host.autoresizingMask = received.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, received.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
         let webView = bridge.takeWebView()
         webView.frame = host.bounds
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -243,7 +234,7 @@ public final class VideoAd {
     /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
     /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
-        guard position != .fullscreen, let defaultSize = received.size else { return bounds }
+        guard received.position != .fullscreen, let defaultSize = received.size else { return bounds }
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
@@ -263,7 +254,7 @@ public final class VideoAd {
         }
         let scaled = CGSize(width: (nominal.width * scale).rounded(), height: (nominal.height * scale).rounded())
         let x = ((bounds.width - scaled.width) / 2).rounded()
-        let y = position == .top ? 0 : bounds.height - scaled.height
+        let y = received.position == .top ? 0 : bounds.height - scaled.height
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
