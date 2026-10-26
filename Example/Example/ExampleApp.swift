@@ -100,7 +100,7 @@ final class Demo: ObservableObject {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             // A bid the app does not use: rejected, the server tells the DSP, the next format() gets a new one
             await loadPauseAdAndWait()
-            try? pauseAd?.reject(.outbid(winningPrice: 3.2))
+            try? pauseAd?.reject(.outbid(winningPrice: 3.2, winner: "AppLovin MAX"))
             pauseAd = nil
             note("pause ad rejected (outbid)")
             try? await Task.sleep(nanoseconds: 1_000_000_000)

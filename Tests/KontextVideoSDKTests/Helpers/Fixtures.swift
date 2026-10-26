@@ -22,7 +22,7 @@ enum Fixtures {
             ["event": "error", "url": url("error", "code=[ERRORCODE]&aph=[ADPLAYHEAD]")],
             ["event": "iconView", "url": url("iconView", "")],
             ["event": "iconClick", "url": url("iconClick", "")],
-            ["event": "notUsed", "url": url("notUsed", "reason=[REASON]&wp=[WINNINGPRICE]")],
+            ["event": "notUsed", "url": url("notUsed", "reason=[REASON]&wp=[WINNINGPRICE]&winner=[WINNER]")],
         ]
         if video {
             entries += [

@@ -247,12 +247,17 @@ struct BidTests {
         #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a rejected bid is not held")
     }
 
-    @Test func rejectOutbidCarriesTheWinningPrice() async throws {
+    @Test func rejectOutbidCarriesTheWinningPriceAndTheWinner() async throws {
         let (bid, _) = try await bid(Fixtures.ad(id: "img-17"))
-        try bid.reject(.outbid(winningPrice: 2.4))
+        try bid.reject(.outbid(winningPrice: 2.4, winner: "AppLovin MAX"))
         let beacon = await beacons("notUsed").first
         #expect(beacon?["reason"] == "outbid")
         #expect(beacon?["wp"] == "2.4")
+        #expect(beacon?["winner"] == "AppLovin MAX", "percent-encoded on the wire, decoded here")
+        let (other, _) = try await self.bid(Fixtures.ad(id: "img-17b"))
+        try other.reject(.outbid())
+        let bare = await beacons("notUsed").last
+        #expect(bare?["wp"]?.isEmpty == true && bare?["winner"]?.isEmpty == true, "both optional")
     }
 
     @Test func rejectDuringTheLoadCancelsItAndReleasesTheWebView() async throws {

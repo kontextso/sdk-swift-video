@@ -5,8 +5,9 @@ extension VideoAd {
     public enum RejectReason: Sendable, Equatable {
         /// The app does not use it, for any reason: the moment passed, the viewer left, the app's own choice.
         case notUsed
-        /// Another network won the publisher's auction; `winningPrice` (CPM) when the app knows it.
-        case outbid(winningPrice: Double? = nil)
+        /// Another network won the publisher's auction; `winningPrice` (CPM) and `winner` (the network, in
+        /// the app's own words: `"AppLovin MAX"`, `"AdMob"`) when the app knows them. DSPs use both.
+        case outbid(winningPrice: Double? = nil, winner: String? = nil)
     }
 
     /// The server's answer for one format, before anything is rendered: what `VideoAds.format(_:)` returns.

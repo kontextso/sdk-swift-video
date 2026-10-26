@@ -22,8 +22,8 @@ final class Tracker {
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
-    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[REASON]` and
-    /// `[WINNINGPRICE]`. Returns the occurrence's fire id, for a click-through that must carry the same one.
+    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[REASON]`,
+    /// `[WINNINGPRICE]` and `[WINNER]`. Returns the occurrence's fire id, for a click-through that must carry the same one.
     @discardableResult
     func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil, notUsed: NotUsed? = nil) -> String {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
@@ -52,20 +52,22 @@ final class Tracker {
     struct NotUsed: Equatable {
         /// `notUsed` or `outbid` (the app's `reject`), `destroyed` (`VideoAds.destroy()`).
         let reason: String
-        /// What won the publisher's own auction, when the app said so.
+        /// What won the publisher's own auction, when the app said so: the price and the network.
         let winningPrice: Double?
+        let winner: String?
 
-        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil)
+        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil, winner: nil)
 
-        init(reason: String, winningPrice: Double?) {
+        init(reason: String, winningPrice: Double?, winner: String?) {
             self.reason = reason
             self.winningPrice = winningPrice
+            self.winner = winner
         }
 
         init(_ rejection: VideoAd.RejectReason) {
             switch rejection {
-            case .notUsed: self.init(reason: "notUsed", winningPrice: nil)
-            case .outbid(let price): self.init(reason: "outbid", winningPrice: price)
+            case .notUsed: self.init(reason: "notUsed", winningPrice: nil, winner: nil)
+            case .outbid(let price, let winner): self.init(reason: "outbid", winningPrice: price, winner: winner)
             }
         }
     }
@@ -81,6 +83,7 @@ final class Tracker {
             .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
             .replacingOccurrences(of: "[REASON]", with: notUsed?.reason ?? "")
             .replacingOccurrences(of: "[WINNINGPRICE]", with: notUsed?.winningPrice.map { String($0) } ?? "")
+            .replacingOccurrences(of: "[WINNER]", with: Self.encode(notUsed?.winner ?? ""))
     }
 
     private func send(_ url: URL, event: String, part: String?) {
