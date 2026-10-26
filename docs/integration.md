@@ -1,7 +1,7 @@
 # Integration guide: Kontext Video SDK for iOS
 
-How to put Kontext video ads (overlay, pause, linear) into an iOS app. This guide will move to
-[docs.kontext.so](https://docs.kontext.so) when the video SDK's page is published; until then it lives here.
+How to put Kontext video ads (overlay, pause, linear) into an iOS app. The source of the docs page
+[docs.kontext.so/sdk/video/ios](https://docs.kontext.so/sdk/video/ios); kept here next to the code it describes.
 Contributors: [DEVELOPMENT.md](../DEVELOPMENT.md). Releases: [RELEASING.md](../RELEASING.md), [CHANGELOG.md](../CHANGELOG.md).
 
 The SDK builds on [KontextKit](https://github.com/kontextso/kontextkit-ios) for the device, privacy and StoreKit
