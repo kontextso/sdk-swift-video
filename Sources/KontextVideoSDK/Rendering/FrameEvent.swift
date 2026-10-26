@@ -15,7 +15,8 @@ enum FrameEvent: Sendable {
     case skip(playhead: Int)
     /// A moment of the ad video; the SDK fires the beacon of the same name.
     case video(VideoEvent, playhead: Int)
-    /// The ad video passed a `progress` entry's offset.
+    /// The ad video passed one of the `progress` tracking entries' offsets; `offset` (ms) says which one
+    /// fires. The only video moment with more than a playhead.
     case progress(offset: Int, playhead: Int)
     /// The video played to the end. The SDK fires `complete`.
     case complete(playhead: Int)
