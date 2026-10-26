@@ -1,6 +1,6 @@
 # Development
 
-For contributors working on the Kontext Video SDK. The integration guide is the [README](README.md); the contract
+For contributors working on the Kontext Video SDK. The integration guide is [docs/integration.md](docs/integration.md); the contract
 is the *Video Ads API & SDK v2* document and its *Video Ads SDK Public API* page in Notion.
 
 ## Prerequisites
