@@ -59,6 +59,23 @@ struct ViewabilityMeterTests {
         #expect(await waitUntil(1) { sink.verdict == .viewable }, "on return the ad counts again")
     }
 
+    @Test func measuringGoesOnAfterTheVerdictAndTheViewLeavingTheWindowIsReported() async {
+        defer { window.tearDown() }
+        let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 0.1)
+        let sink = attach(meter)
+        var detached = 0
+        meter.onDetached = { detached += 1 }
+        meter.start()
+        #expect(await waitUntil(1) { sink.verdict == .viewable })
+        view.removeFromSuperview()
+        #expect(await waitUntil(1) { sink.exposures.last == 0 }, "the page still hears exposure after the verdict")
+        #expect(await waitUntil(1) { detached == 1 })
+        await sleepMs(100)
+        #expect(detached == 1, "reported once")
+        meter.stop()
+    }
+
     @Test func viewHalfOffScreenReportsHalfExposure() async {
         defer { window.tearDown() }
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 300, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)

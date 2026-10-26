@@ -669,6 +669,29 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.dismissed])
     }
 
+    @Test func theViewLeavingTheWindowEndsAnInlineAdAsInterrupted() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p23"))
+        try ad.show(in: harness.player.view)
+        #expect(KontextVideo.shared.adOnScreen === ad)
+        harness.player.view.removeFromSuperview()
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
+        #expect(KontextVideo.shared.adOnScreen == nil, "the next show in the app is not blocked")
+        let fired = await beacons()
+        #expect(!fired.contains("close") && fired.contains("overlayViewDuration"))
+        window.add(harness.player.view)
+    }
+
+    @Test func aViewReParentedAtOnceDoesNotInterruptTheAd() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p24"))
+        try ad.show(in: harness.player.view)
+        harness.player.view.removeFromSuperview()
+        window.add(harness.player.view)
+        await sleepMs(200)
+        #expect(delegate.endReasons.isEmpty)
+        #expect(ad.wasShown && !ad.hasEnded)
+        try ad.dismiss()
+    }
+
     @Test func dismissAfterTheEndDoesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p22"))
         try ad.show(in: harness.player.view)

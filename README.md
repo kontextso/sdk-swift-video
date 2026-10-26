@@ -179,7 +179,8 @@ presentation cannot begin (nothing fired):
 `.alreadyShown`, `.anotherAdShowing` (one ad on screen in the whole app: show it after the other ended),
 `.invalidated(reason)`, `.disabled(reason:)`, `.wrongPresentation` (`show(in:)` on a linear ad) or
 `.containerTooSmall` (the ad stays ready: show it in a bigger view, or reject it). `show` succeeds once the ad is on
-screen; there is no "did show" callback. Set a `VideoAdDelegate` on the ad for everything after:
+screen; there is no "did show" callback. If your view leaves the window while the ad is on it (you navigated away
+without `dismiss()`), the ad ends with `didEnd(.interrupted)` within about half a second, so it never blocks the next one. Set a `VideoAdDelegate` on the ad for everything after:
 `didRecordImpression` (at most once, maybe never), `didClick` (every tap), `didFail`, and exactly one
 `didEnd(reason:)` for every way an ad ends, including your own `dismiss()` and `destroy()` (delivered synchronously,
 from inside that call). Resume your content in `didEnd`, and only there.
