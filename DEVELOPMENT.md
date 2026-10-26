@@ -23,7 +23,7 @@ sdk-swift-video/
 │   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts, load() (shared), reject()
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load, show, reject and dismiss throw
 │   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, AdFormat
-│   ├── Loading/      how an answer becomes an ad (internal): ReceivedAd, awaitShared (work a caller can stop waiting for)
+│   ├── Loading/      how an answer becomes an ad (internal): AdData (the server's ad as a value), awaitShared (work a caller can stop waiting for)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)

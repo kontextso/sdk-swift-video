@@ -137,8 +137,8 @@ enum Fixtures {
     }
 
     /// The answer as a bid takes it, received now.
-    static func received(_ ad: [String: Any]) throws -> ReceivedAd {
-        ReceivedAd(ad: try payload(ad), receivedAt: Environment.now())
+    static func adData(_ ad: [String: Any]) throws -> AdData {
+        AdData(payload: try payload(ad), receivedAt: Environment.now())
     }
 
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {

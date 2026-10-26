@@ -52,12 +52,12 @@ public final class VideoAd {
     }
 
     /// The facts, as the `Bid` gave them.
-    public var id: String { received.id }
-    public var format: AdFormat { received.format }
-    public var price: Price { received.price }
+    public var id: String { data.id }
+    public var format: AdFormat { data.format }
+    public var price: Price { data.price }
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
-    public var duration: TimeInterval? { received.duration }
+    public var duration: TimeInterval? { data.duration }
     /// The size variant `show` chose for the view: the largest that fits without scaling, else the one
     /// with the best scale still at or above 50 %.
     private(set) var chosenSize: Size?
@@ -88,7 +88,7 @@ public final class VideoAd {
     static let minimumScale: CGFloat = 0.5
 
     /// The server's answer this ad renders; the expiry counts from the first receipt.
-    let received: ReceivedAd
+    let data: AdData
     /// The bid it was loaded from; it holds the ad until `show`. Weak: after `show` the app may drop the bid.
     private(set) weak var bid: Bid?
     /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
@@ -113,11 +113,11 @@ public final class VideoAd {
 
     /// The page starts loading at once. Expiry is checked at the next call, never by a timer.
     init(bid: Bid) {
-        received = bid.received
+        data = bid.data
         self.bid = bid
         owner = bid.owner
         tracker = bid.tracker
-        bridge = FrameBridge(adId: received.id, url: received.frameURL, isVideo: received.creative == .video)
+        bridge = FrameBridge(adId: data.id, url: data.frameURL, isVideo: data.creative == .video)
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         bridge.load()
     }
@@ -134,7 +134,7 @@ public final class VideoAd {
         try checkShowable()
         let container = view
         let host = UIView(frame: try frame(in: container.bounds))
-        host.autoresizingMask = received.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, received.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
+        host.autoresizingMask = data.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, data.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
         let webView = bridge.takeWebView()
         webView.frame = host.bounds
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -227,20 +227,20 @@ public final class VideoAd {
         guard let bid else { throw VideoAdError.invalidated(.expired) }
         try bid.checkUsable()
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
-        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: received.creative == .video ? 400 : 500)) }
+        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: data.creative == .video ? 400 : 500)) }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
     /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
     /// so a player that changed shape between `load` and `show` gets the size built for it.
     private func frame(in bounds: CGRect) throws -> CGRect {
-        guard received.position != .fullscreen, let defaultSize = received.size else { return bounds }
+        guard data.position != .fullscreen, let defaultSize = data.size else { return bounds }
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
-        let unscaled = received.sizes.filter { fit($0) >= 1 }
+        let unscaled = data.sizes.filter { fit($0) >= 1 }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
-            ?? received.sizes.max { fit($0) < fit($1) }
+            ?? data.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
@@ -254,7 +254,7 @@ public final class VideoAd {
         }
         let scaled = CGSize(width: (nominal.width * scale).rounded(), height: (nominal.height * scale).rounded())
         let x = ((bounds.width - scaled.width) / 2).rounded()
-        let y = received.position == .top ? 0 : bounds.height - scaled.height
+        let y = data.position == .top ? 0 : bounds.height - scaled.height
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
@@ -270,7 +270,7 @@ public final class VideoAd {
         // HTML creative, while a video's waits for its first frame.
         tracker.fire("creativeView")
         tracker.fire("iconView")
-        if received.creative != .video {
+        if data.creative != .video {
             recordImpression()
         }
         // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then
@@ -365,7 +365,7 @@ public final class VideoAd {
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
     private func startMeter() {
         guard !hasEnded, meter == nil else { return }
-        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: received.creative == .video ? 2 : 1)
+        let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: data.creative == .video ? 2 : 1)
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -523,7 +523,7 @@ public final class VideoAd {
 
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
-        received.isExpired
+        data.isExpired
     }
 
     /// The bid ended before `show`: the page is torn down and a load still waiting throws. For an ad on

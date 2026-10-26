@@ -125,7 +125,7 @@ struct VideoAdsTests {
         let again = try await ads.format(.pause)
         #expect(again === bid)
         #expect(again.price.value == 7.5, "the same id holds the same payload")
-        #expect(again.received.isExpired == false, "and keeps its original deadline")
+        #expect(again.data.isExpired == false, "and keeps its original deadline")
     }
 
     @Test func otherFormatsWaitForTheirOwnCall() async throws {

@@ -42,7 +42,7 @@ struct VideoAdTests {
 
     /// An ad on its own bid, rendered outside the `load()` flow so each page event is driven by hand.
     private func makeLoose(_ payload: [String: Any], in ads: VideoAds) -> VideoAd {
-        let bid = VideoAd.Bid(received: try! Fixtures.received(payload), owner: ads)
+        let bid = VideoAd.Bid(data: try! Fixtures.adData(payload), owner: ads)
         owners.bids.append(bid)
         return VideoAd(bid: bid)
     }
@@ -69,11 +69,11 @@ struct VideoAdTests {
         #expect(ad.id == "p1")
         #expect(ad.format == .pause)
         #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
-        #expect(ad.received.position == .top)
-        #expect(ad.received.size == VideoAd.Size(width: 300, height: 300))
+        #expect(ad.data.position == .top)
+        #expect(ad.data.size == VideoAd.Size(width: 300, height: 300))
         #expect(ad.duration == nil)
-        #expect(ad.received.skipOffset == nil)
-        #expect(ad.received.lifetime == 90, "expires (ms from receipt) in seconds")
+        #expect(ad.data.skipOffset == nil)
+        #expect(ad.data.lifetime == 90, "expires (ms from receipt) in seconds")
         #expect(ad.isReady)
         #expect(ad.wasShown == false)
     }
@@ -81,20 +81,20 @@ struct VideoAdTests {
     @Test func overlayAdExposesSecondsAndATimedAnswerIsAnOrdinaryAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o1", format: "overlay", trigger: ["kind": "window", "from": 4000, "to": 10_000], position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
-        #expect(ad.received.position == .bottom)
+        #expect(ad.data.position == .bottom)
         #expect(ad.duration == 6)
         #expect(ad.isReady, "no timed mode yet: the window on the wire changes nothing for the app")
     }
 
     @Test func linearAdExposesVideoFacts() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i1", duration: 15_000, skipOffset: 5000))
-        #expect(ad.received.position == nil)
-        #expect(ad.received.size == nil)
+        #expect(ad.data.position == nil)
+        #expect(ad.data.size == nil)
         #expect(ad.duration == 15)
-        #expect(ad.received.skipOffset == 5)
+        #expect(ad.data.skipOffset == 5)
         let (fullscreen, _, _) = try await makeAd(Fixtures.ad(id: "p2", position: "fullscreen", size: nil))
-        #expect(fullscreen.received.position == .fullscreen)
-        #expect(fullscreen.received.size == nil)
+        #expect(fullscreen.data.position == .fullscreen)
+        #expect(fullscreen.data.size == nil)
     }
 
     @Test func notLoadedAdIsNotReady() async throws {
@@ -368,14 +368,14 @@ struct VideoAdTests {
     @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {
         let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13s", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
-        #expect(ad.received.sizes == [VideoAd.Size(width: 320, height: 90), VideoAd.Size(width: 728, height: 90)])
-        #expect((ad.chosenSize ?? ad.received.size) == VideoAd.Size(width: 320, height: 90), "the default before show")
+        #expect(ad.data.sizes == [VideoAd.Size(width: 320, height: 90), VideoAd.Size(width: 728, height: 90)])
+        #expect((ad.chosenSize ?? ad.data.size) == VideoAd.Size(width: 320, height: 90), "the default before show")
         var shown: [String: Any]?
         ad.bridge.onSend = { type, payload in if type == "ad.show" { shown = payload } }
         let landscape = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
         window.add(landscape)
         try ad.show(in: landscape)
-        #expect((ad.chosenSize ?? ad.received.size) == VideoAd.Size(width: 728, height: 90), "the player turned out wide: the wide variant")
+        #expect((ad.chosenSize ?? ad.data.size) == VideoAd.Size(width: 728, height: 90), "the player turned out wide: the wide variant")
         #expect((shown?["size"] as? [String: Int]) == ["width": 728, "height": 90], "the page is told which variant")
         #expect(try #require(landscape.subviews.last).frame == CGRect(x: 58, y: 300, width: 728, height: 90))
         try ad.dismiss()
@@ -385,7 +385,7 @@ struct VideoAdTests {
         let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13t", format: "overlay", position: "bottom", size: ["width": 600, "height": 100, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
         try ad.show(in: harness.player.view)   // 390 wide: 600×100 fits at 0.65, 728×90 at 0.54
-        #expect((ad.chosenSize ?? ad.received.size) == VideoAd.Size(width: 600, height: 100), "the variant with the best scale")
+        #expect((ad.chosenSize ?? ad.data.size) == VideoAd.Size(width: 600, height: 100), "the variant with the best scale")
         #expect(try #require(harness.player.view.subviews.last).frame.width == 390)
         try ad.dismiss()
     }

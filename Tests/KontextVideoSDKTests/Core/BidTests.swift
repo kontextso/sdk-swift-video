@@ -59,9 +59,9 @@ struct BidTests {
         #expect(bid.id == "img-1")
         #expect(bid.format == .pause)
         #expect(bid.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
-        #expect(bid.received.position == .top)
-        #expect(bid.received.size == VideoAd.Size(width: 300, height: 300))
-        #expect(bid.received.sizes.count == 2)
+        #expect(bid.data.position == .top)
+        #expect(bid.data.size == VideoAd.Size(width: 300, height: 300))
+        #expect(bid.data.sizes.count == 2)
         #expect(bid.duration == nil)
         #expect(bid.invalidationReason == nil)
         await sleepMs(50)
@@ -72,16 +72,16 @@ struct BidTests {
     @Test func linearFactsAreInSeconds() async throws {
         let (bid, _) = try await bid(Fixtures.linearAd(id: "vid-1", duration: 15_000, skipOffset: 5_000))
         #expect(bid.duration == 15)
-        #expect(bid.received.skipOffset == 5)
-        #expect(bid.received.position == nil)
-        #expect(bid.received.size == nil)
+        #expect(bid.data.skipOffset == 5)
+        #expect(bid.data.position == nil)
+        #expect(bid.data.size == nil)
     }
 
     @Test func loadReturnsAReadyAdWithTheSameFactsAndFiresLoaded() async throws {
         let (bid, _) = try await bid(Fixtures.ad(id: "img-2"))
         let ad = try await bid.load()
         #expect(ad.isReady)
-        #expect(ad.id == bid.id && ad.price == bid.price && ad.received.size == bid.received.size)
+        #expect(ad.id == bid.id && ad.price == bid.price && ad.data.size == bid.data.size)
         #expect(await beacons("loaded").count == 1)
         #expect(await beacons("impression").isEmpty, "loading fires nothing billable")
     }
@@ -183,7 +183,7 @@ struct BidTests {
     // MARK: Expiry
 
     @Test func expiryCountsFromTheFirstReceiptOnTheSDKsClock() async throws {
-        let fresh = try Fixtures.received(Fixtures.ad(expires: 1000))
+        let fresh = try Fixtures.adData(Fixtures.ad(expires: 1000))
         #expect(fresh.isExpired == false)
         advanceClock(by: 0.999)
         #expect(fresh.isExpired == false)

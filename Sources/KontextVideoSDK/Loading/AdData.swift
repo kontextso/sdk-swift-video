@@ -1,9 +1,9 @@
 import Foundation
 
-/// An ad as the server sent it, before rendering, as the SDK keeps it: the facts `VideoAd.Bid` and `VideoAd`
-/// report (times in seconds, whatever the wire sends), what the renderer needs, and the clocks. Built
-/// once from the wire object; the only place that reads `AdPayload`.
-struct ReceivedAd {
+/// An ad as the SDK keeps it: `AdPayload` (the wire) converted once into the facts `VideoAd.Bid` and
+/// `VideoAd` report (times in seconds, whatever the wire sends), what the renderer needs, and the clock.
+/// A plain value with no behavior; `Bid` and `VideoAd` both read it. The only place that reads `AdPayload`.
+struct AdData {
     let id: String
     let format: AdFormat
     let price: VideoAd.Price
@@ -30,7 +30,7 @@ struct ReceivedAd {
     /// Seconds the ad lives from receipt.
     let lifetime: TimeInterval
 
-    init(ad: AdPayload, receivedAt: TimeInterval) {
+    init(payload ad: AdPayload, receivedAt: TimeInterval) {
         id = ad.id
         format = ad.format
         price = VideoAd.Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
