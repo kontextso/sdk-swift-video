@@ -486,23 +486,29 @@ public final class VideoAd {
             if format == .linear, !isCompleted {
                 tracker.fire("skip")
                 end(.skipped)
-            } else if reason == "complete" {
-                end(.completed)
             } else {
-                tracker.fire("close")
-                end(reason == "resume" ? .resumed : .closed)
+                switch reason {
+                case .complete:
+                    end(.completed)
+                case .resume:
+                    tracker.fire("close")
+                    end(.resumed)
+                case .close:
+                    tracker.fire("close")
+                    end(.closed)
+                }
             }
         case .skip(let playhead):
             tracker.adPlayhead = playhead
             tracker.fire("skip")
             end(.skipped)
-        case .video(let name, let playhead):
+        case .video(let event, let playhead):
             tracker.adPlayhead = playhead
-            Logger.debug("ad \(id.prefix(8)): video.\(name)")
-            if name == "start" {
+            Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
+            if event == .start {
                 recordImpression()
             }
-            tracker.fire(name)
+            tracker.fire(event.rawValue)
         case .progress(let offset, let playhead):
             tracker.adPlayhead = playhead
             tracker.fire("progress", offset: offset)

@@ -267,7 +267,7 @@ final class FrameBridge: NSObject {
         case "ad.close":
             guard state == .shown else { return }
             end()
-            onEvent?(.close(reason: body["reason"] as? String ?? "close"))
+            onEvent?(.close(reason: (body["reason"] as? String).flatMap(FrameEvent.CloseReason.init(rawValue:)) ?? .close))
         case "video.skip":
             guard state == .shown else { return }
             end()
@@ -275,12 +275,12 @@ final class FrameBridge: NSObject {
         case "video.complete":
             guard state == .shown else { return }
             onEvent?(.complete(playhead: playhead))
-        case "video.start", "video.firstQuartile", "video.midpoint", "video.thirdQuartile", "video.pause", "video.resume", "video.mute", "video.unmute":
-            guard state == .shown else { return }
-            onEvent?(.video(name: String(type.dropFirst("video.".count)), playhead: playhead))
         case "video.progress":
             guard state == .shown, let offset = (body["offset"] as? NSNumber)?.intValue else { return }
             onEvent?(.progress(offset: offset, playhead: playhead))
+        case let type where type.hasPrefix("video."):
+            guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))) else { return }
+            onEvent?(.video(event, playhead: playhead))
         case "ad.error":
             guard state == .loading || state == .loaded || state == .shown else { return }
             fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)))

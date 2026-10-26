@@ -132,12 +132,15 @@ struct FrameBridgeTests {
     @Test func videoEventsCarryTheirNameAndPlayhead() {
         let (bridge, recorder) = makeBridge(isVideo: true)
         shown(bridge)
-        for name in ["start", "firstQuartile", "midpoint", "thirdQuartile", "pause", "resume", "mute", "unmute"] {
-            bridge.receive(message("video.\(name)", ["playhead": 1234]), from: main)
-            guard case .video(let got, let playhead) = recorder.last else { Issue.record("expected video for \(name)"); continue }
-            #expect(got == name)
+        for event in FrameEvent.VideoEvent.allCases {
+            bridge.receive(message("video.\(event.rawValue)", ["playhead": 1234]), from: main)
+            guard case .video(let got, let playhead) = recorder.last else { Issue.record("expected video for \(event)"); continue }
+            #expect(got == event)
             #expect(playhead == 1234)
         }
+        let before = recorder.events.count
+        bridge.receive(message("video.buffering", ["playhead": 1234]), from: main)
+        #expect(recorder.events.count == before, "a video moment the SDK does not know is ignored")
     }
 
     @Test func progressCarriesTheOffset() {
@@ -165,18 +168,23 @@ struct FrameBridgeTests {
         shown(bridge)
         bridge.receive(message("ad.close", ["reason": "resume"]), from: main)
         guard case .close(let reason) = recorder.last else { Issue.record("expected close"); return }
-        #expect(reason == "resume")
+        #expect(reason == .resume)
         #expect(bridge.state == .ended)
         bridge.receive(message("ad.close"), from: main)
         #expect(recorder.events.count == 2, "nothing after ended")
     }
 
-    @Test func closeDefaultsToCloseReason() {
+    @Test func closeWithoutAReasonOrWithAnUnknownOneReadsAsClose() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)
         bridge.receive(message("ad.close"), from: main)
         guard case .close(let reason) = recorder.last else { Issue.record("expected close"); return }
-        #expect(reason == "close")
+        #expect(reason == .close)
+        let (other, otherRecorder) = makeBridge()
+        shown(other)
+        other.receive(message("ad.close", ["reason": "swipe"]), from: main)
+        guard case .close(let unknown) = otherRecorder.last else { Issue.record("expected close"); return }
+        #expect(unknown == .close, "a reason the SDK does not know is a plain close")
     }
 
     @Test func skipEndsThePage() {
