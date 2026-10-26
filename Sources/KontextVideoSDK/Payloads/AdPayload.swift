@@ -57,8 +57,6 @@ struct AdPayload: Decodable, Sendable {
     struct Size: Decodable, Sendable, Equatable {
         let width: Int
         let height: Int
-        let scalable: Bool
-        let maintainAspectRatio: Bool
     }
 
     /// `sizes`, at least one entry, the first built for the request's player.

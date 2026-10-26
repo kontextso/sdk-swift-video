@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import UIKit
 
 /// The ads of one video (one episode). Creating it sends nothing; every request comes from `format(_:)`.
 /// Create the next episode's while the current one plays if you like; any number can be alive at once.

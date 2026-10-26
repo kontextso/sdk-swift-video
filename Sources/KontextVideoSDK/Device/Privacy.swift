@@ -10,11 +10,13 @@ import KontextKit
 /// derives OpenRTB `device.ext.atts` and `lmt` (1 unless authorized) from it, never from this object.
 struct IFA: Encodable, Sendable {
     let id: String
+    // Read by the synthesized encoder only. swiftlint:disable:next unused_declaration
     let type = "idfa"
     /// Never `true` on iOS: since iOS 10 an opted-out device returns no id at all, so an id is always one
     /// that may be used. Kept because the shared `IFA` type serves platforms that hand out an id together
     /// with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs), where the id still works
     /// for frequency capping and fraud but not for targeting.
+    // swiftlint:disable:next unused_declaration
     let limitAdTracking = false
 }
 

@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Why a call could not do its job. Thrown, never delivered through the delegate: a thrown error means
 /// nothing happened on screen and nothing was fired.

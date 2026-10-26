@@ -1,5 +1,3 @@
-import Foundation
-
 /// The three ad formats. Every request asks for all of them; `ads.format(_:)` returns one.
 public enum AdFormat: String, Codable, Sendable, CaseIterable {
     /// A strip across the player while the content plays.

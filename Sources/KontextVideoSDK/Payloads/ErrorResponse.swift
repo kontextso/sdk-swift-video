@@ -1,5 +1,3 @@
-import Foundation
-
 /// The ad server's error body (JSON:API-shaped, see the API's Common page). Decoded leniently: every
 /// field is optional, so a server that sends less than the contract still gets its message into the
 /// log and never makes the SDK drop the whole body. The SDK acts on no code today; the item goes to the

@@ -1,5 +1,3 @@
-import Foundation
-
 /// Waits for someone else's work without owning it: any number of callers can wait on the same running
 /// task (a request, a creative load), each gets the task's result when it finishes, and a caller that is
 /// cancelled stops waiting immediately (`CancellationError`) without cancelling the task or affecting the

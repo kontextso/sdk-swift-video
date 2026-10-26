@@ -1,6 +1,5 @@
 import Foundation
 import KontextKit
-import UIKit
 
 /// Entry point of the Kontext Video SDK.
 @MainActor
@@ -137,6 +136,7 @@ public final class KontextVideo {
     }
 
     /// Back to the state before `initialize(with:)`. Tests only: the shared instance is process-wide.
+    // swiftlint:disable:next unused_declaration
     func resetForTesting() {
         initTask?.cancel()
         initTask = nil

@@ -25,6 +25,8 @@ enum Environment {
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
     nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
 
+    // Called by the tests, which the analyzer does not see.
+    // swiftlint:disable:next unused_declaration
     static func reset() {
         session = .shared
         keyWindow = defaultKeyWindow
