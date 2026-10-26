@@ -242,6 +242,18 @@ struct VideoAdsTests {
         #expect(harness.server.requests(to: "/v2/config").count > configs, "format() retried /config")
     }
 
+    @Test func destroyWhileWaitingForInitThrowsDestroyed() async {
+        var config = StubServer.Response.failure(.timedOut)
+        config.delay = 0.2
+        harness.server.on("/v2/config", config)
+        let ads = await makeAds()
+        let call = Task { try await ads.format(.pause) }
+        await sleepMs(50)
+        ads.destroy()
+        let result = await call.result
+        guard case .failure(VideoAdError.destroyed) = result else { Issue.record("expected destroyed, got \(result)"); return }
+    }
+
     @Test func formatWaitsForInitInFlight() async throws {
         await WebKitWarmup.ensure()
         var config = StubServer.Response.json(Fixtures.initEnabled())
@@ -447,6 +459,10 @@ struct VideoAdsTests {
         #expect(ads.playheadMs == 0, "never NaN")
         ads.playheadProvider = { -3 }
         #expect(ads.playheadMs == 0, "never negative")
+        ads.playheadProvider = { .infinity }
+        #expect(ads.playheadMs == 0, "never infinite")
+        ads.playheadProvider = { .greatestFiniteMagnitude }
+        #expect(ads.playheadMs == Int(VideoAds.maxPlayhead * 1000), "a huge value is clamped, not a crash")
         let player = AVPlayer()
         ads.trackPlayhead(of: player)
         #expect(ads.playheadProvider == nil, "tracking a player replaces the provider")

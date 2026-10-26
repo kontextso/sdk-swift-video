@@ -129,12 +129,14 @@ public final class VideoAds {
     /// Waits for `/config`, reads the ATT status, builds and sends the request. The kill switch in the
     /// answer switches the whole SDK off and drops every ad, with no notices: the server knows.
     private func send(held: [String]) async throws -> AdsResponse {
-        guard await KontextVideo.shared.waitUntilEnabled() else {
+        let enabled = await KontextVideo.shared.waitUntilEnabled()
+        // Destroyed while waiting: `destroyed`, whatever `/config` said meanwhile.
+        guard !isDestroyed else { throw VideoAdError.destroyed }
+        guard enabled else {
             Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
             if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
             throw VideoAdError.initializationFailed
         }
-        guard !isDestroyed else { throw VideoAdError.destroyed }
         guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
         // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
@@ -174,19 +176,24 @@ public final class VideoAds {
         trackedPlayer = player
     }
 
-    /// Content time in seconds, read now: the provider's, the tracked player's, or 0.
+    /// Content time in seconds, read now: the provider's, the tracked player's, or 0. Clamped to
+    /// `0...maxPlayhead`: a broken provider (NaN, infinity, a huge number) must not crash the app
+    /// when `playheadMs` converts to `Int`.
     var playhead: TimeInterval {
+        let value: TimeInterval
         if let playheadProvider {
-            let value = playheadProvider()
-            return value.isFinite ? max(0, value) : 0
+            value = playheadProvider()
+        } else if let trackedPlayer {
+            value = trackedPlayer.currentTime().seconds  // NaN for an invalid or indefinite time
+        } else {
+            return 0
         }
-        if let trackedPlayer {
-            let time = trackedPlayer.currentTime()
-            guard time.isNumeric, !time.seconds.isNaN else { return 0 }
-            return max(0, time.seconds)
-        }
-        return 0
+        guard value.isFinite else { return 0 }
+        return min(max(0, value), Self.maxPlayhead)
     }
+
+    /// Longer than any video: ten years, in seconds.
+    static let maxPlayhead: TimeInterval = 315_360_000
 
     /// Content time in milliseconds as a request sends it.
     var playheadMs: Int {
