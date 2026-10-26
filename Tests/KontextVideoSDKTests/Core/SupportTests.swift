@@ -43,7 +43,7 @@ struct SupportTests {
         Environment.assertionFailure = { _ in }
         defer { Environment.reset() }
         let ads = VideoAds(content: .init(id: "v", language: "en"))
-        let bid = VideoAd.Bid(served: try Fixtures.servedAd(Fixtures.ad(id: "d1")), owner: ads)
+        let bid = VideoAd.Bid(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d1")), owner: ads)
         let ad = VideoAd(bid: bid)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: .creative))
@@ -55,7 +55,7 @@ struct SupportTests {
         Environment.assertionFailure = { _ in }
         defer { Environment.reset() }
         let ads = VideoAds(content: .init(id: "v", language: "en"))
-        let bid = VideoAd.Bid(served: try Fixtures.servedAd(Fixtures.ad(id: "d2")), owner: ads)
+        let bid = VideoAd.Bid(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d2")), owner: ads)
         let ad = VideoAd(bid: bid)
         var delegate: RecordingDelegate? = RecordingDelegate()
         ad.delegate = delegate
