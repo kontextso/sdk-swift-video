@@ -44,7 +44,9 @@ the mock server `sdk-video-mock-server` on `localhost:5175`; `--demo` runs every
 - The page never fires a beacon; `Tracker` does, each entry once. The SDK never requests an ad by itself.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then the code, then `sdk-kotlin-video`.
 - Follow ad-SDK conventions (AdMob, AppLovin MAX, IMA) and modern Apple patterns: `async throws` for one-result
-  calls, a delegate for the on-screen moments, nested model types under `KontextVideo`, `TimeInterval` seconds in
+  calls, a delegate for the on-screen moments, public types nested under `KontextVideo` (what the app constructs)
+  or `VideoAd` (what it reads off an ad) with `AdFormat` the one top-level exception, internal types top level,
+  `TimeInterval` seconds in
   the public API (milliseconds on the wire), enums for closed vocabularies with an `other(String)` escape where the
   page may send its own label.
 - `StrictConcurrency` is on: a concurrency warning is a bug. Every type touching UIKit, WebKit or ATT is `@MainActor`.
