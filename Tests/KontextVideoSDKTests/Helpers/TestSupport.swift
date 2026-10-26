@@ -36,7 +36,6 @@ final class RecordingDelegate: VideoAdDelegate {
         clicks.append(click)
     }
 
-
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {
         events.append("fail")
         failures.append(error)

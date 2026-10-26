@@ -8,18 +8,14 @@ excluded:
   - .build
   - Example
 
-line_length:
-  warning: 150
-  error: 200
-
 type_body_length:
   # One suite per source file: the big ones (VideoAdTests) carry many small @Test functions.
-  warning: 500
-  error: 700
-
-file_length:
   warning: 700
   error: 900
+
+file_length:
+  warning: 800
+  error: 1000
 
 function_body_length:
   warning: 80
@@ -27,10 +23,21 @@ function_body_length:
 
 cyclomatic_complexity:
   # Thin dispatchers over the frame protocol's message types (FrameBridge.receive, VideoAd.handle).
-  warning: 20
-  error: 25
+  warning: 25
+  error: 30
+
+function_parameter_count:
+  # AdsRequest.make takes every input of a request by name; a parameter object would only hide them.
+  warning: 8
+  error: 10
 
 disabled_rules:
+  # Doc comments and log lines read better unbroken; the compiler does not care.
+  - line_length
+  # Tests describe beacons as (adId, event, query) tuples; a struct would add nothing.
+  - large_tuple
+  # URLProtocol's `class func canInit` must stay `class` to override, even in a final subclass.
+  - static_over_final_class
   - trailing_comma
   - identifier_name
   - type_name

@@ -99,7 +99,7 @@ struct DebugReporterTests {
         #expect(names.contains("ads.response"))
         #expect(names.contains("ad.loaded"))
         for body in harness.server.requests(to: "/v2/debug").compactMap(\.body) {
-            let text = String(decoding: try JSONSerialization.data(withJSONObject: body), as: UTF8.self)
+            let text = try #require(String(bytes: JSONSerialization.data(withJSONObject: body), encoding: .utf8))
             #expect(!text.contains("idfv") && !text.contains("email") && !text.contains("gdprConsent"), "never the forbidden fields")
         }
     }
