@@ -30,7 +30,7 @@ Move the `## Unreleased` entries in `CHANGELOG.md` under a new `## 0.1.0` headin
 ## 3. Bump the version
 
 One place: `SDKInfo.version` in `Sources/KontextVideoSDK/Payloads/SDKInfo.swift`. The SDK sends it with every request,
-and CI refuses a release tag that does not match it. The integration guide's
+and CI refuses a release tag that does not match it. The docs page's
 `from: "0.1.0"` means "that version or newer" and stays as it is.
 
 ```
@@ -52,7 +52,7 @@ The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`. The
 ## 5. Verify
 
 1. A fresh project resolves `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")`,
-   builds, and runs the integration guide's walkthrough against the production ad server with a `{publisher}-dev` token.
+   builds, and runs the docs page's walkthrough against the production ad server with a `{publisher}-dev` token.
 2. Tell the publishers waiting for the release; the changelog entry is the release note.
 
 ## Before the first App Store submission that includes the SDK
