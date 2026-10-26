@@ -22,13 +22,12 @@ sdk-swift-video/
 │   ├── VideoAd.swift                               one loaded ad: show, dismiss, reject, the page's events, the one didEnd
 │   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts, load() (shared), reject()
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load, show, reject and dismiss throw
-│   ├── Model/        what the app passes in: Configuration, Content, User, Regulatory, AdFormat
-│   ├── Loading/      how an answer becomes an ad (internal): AdData (the server's ad as a value), awaitShared (work a caller can stop waiting for)
+│   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdData)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
-│   ├── Support/      Logger, Environment (the test seams), the debug reporter
+│   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
 │   └── PrivacyInfo.xcprivacy
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
@@ -42,7 +41,7 @@ The lifecycle these files implement is the Notion page *SDK Lifecycle*: every `f
 with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns the bid state and re-serves held bids
 until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
-The rule for the tree: the root is what the app calls, `Model/` is what it passes in, `Loading/` turns answers into ads, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Rendering/`
+The rule for the tree: the root is what the app calls, `Model/` is the model, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Rendering/`
 is what happens on screen (the Notion hub's "Rendering" section), `Support/` is plumbing.
 
 ## Building
