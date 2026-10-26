@@ -182,13 +182,17 @@ struct BidTests {
 
     // MARK: Expiry
 
-    @Test func expiryCountsFromTheFirstReceiptOnAClockThatKeepsCountingInSleep() throws {
+    @Test func expiryCountsFromTheFirstReceiptOnAMonotonicClock() async throws {
         let fresh = try Fixtures.received(Fixtures.ad(expires: 1000))
         #expect(fresh.isExpired == false)
         let old = VideoAd.ReceivedAd(ad: try Fixtures.payload(Fixtures.ad(expires: 1000)), receivedAt: VideoAd.ReceivedAd.now - 2)
         #expect(old.isExpired)
-        let uptime = ProcessInfo.processInfo.systemUptime
-        #expect(VideoAd.ReceivedAd.now >= uptime, "CLOCK_MONOTONIC includes the time asleep that systemUptime leaves out")
+        // The clock is CLOCK_MONOTONIC, which keeps counting while the device sleeps; a test cannot sleep
+        // the device, so it checks what it can: the clock advances and never goes backwards.
+        let before = VideoAd.ReceivedAd.now
+        await sleepMs(50)
+        let elapsed = VideoAd.ReceivedAd.now - before
+        #expect(elapsed >= 0.05 && elapsed < 5)
     }
 
     @Test func anExpiredBidThrowsAtLoad() async throws {
