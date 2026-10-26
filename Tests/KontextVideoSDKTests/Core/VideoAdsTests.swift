@@ -465,8 +465,7 @@ struct VideoAdsTests {
         #expect(ads.playheadMs == Int(VideoAds.maxPlayhead * 1000), "a huge value is clamped, not a crash")
         let player = AVPlayer()
         ads.trackPlayhead(of: player)
-        #expect(ads.playheadProvider == nil, "tracking a player replaces the provider")
-        #expect(ads.playheadMs == 0, "no item: 0")
+        #expect(ads.playheadMs == 0, "tracking a player replaces the provider; no item: 0")
         ads.playheadProvider = { 5 }
         #expect(ads.playheadMs == 5_000, "a provider replaces the tracked player")
         let bare = VideoAds(content: .init(id: "bare", language: "en"))

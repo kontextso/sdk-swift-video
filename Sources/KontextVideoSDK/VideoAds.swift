@@ -12,13 +12,9 @@ public final class VideoAds {
 
     /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
     /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
-    /// `trackPlayhead(of:)` is the one-liner. Setting it replaces a tracked player. Nothing set: 0,
-    /// which is what a request made before the episode plays (a prefetch) should carry.
-    public var playheadProvider: (() -> TimeInterval)? {
-        didSet { if playheadProvider != nil { trackedPlayer = nil } }
-    }
-    /// The `AVPlayer` whose `currentTime()` is the playhead; held weakly.
-    private weak var trackedPlayer: AVPlayer?
+    /// `trackPlayhead(of:)` sets it for you. Nothing set: 0, which is what a request made before the
+    /// episode plays (a prefetch) should carry.
+    public var playheadProvider: (() -> TimeInterval)?
 
     /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
     let sessionId = UUID().uuidString.lowercased()
@@ -170,25 +166,16 @@ public final class VideoAds {
     /// Reads the content playhead from this `AVPlayer` whenever the SDK needs one; the player is held
     /// weakly and `currentTime()` is read at that moment, no observer is attached. With one `AVPlayer`
     /// reused across episodes, call it when this episode starts playing in it, not at creation: before
-    /// that the player's time belongs to the previous episode. Replaces a `playheadProvider`.
+    /// that the player's time belongs to the previous episode. Sets `playheadProvider`.
     public func trackPlayhead(of player: AVPlayer) {
-        playheadProvider = nil
-        trackedPlayer = player
+        // `seconds` is NaN for an invalid or indefinite time; `playhead` turns that into 0.
+        playheadProvider = { [weak player] in player?.currentTime().seconds ?? 0 }
     }
 
-    /// Content time in seconds, read now: the provider's, the tracked player's, or 0. Clamped to
-    /// `0...maxPlayhead`: a broken provider (NaN, infinity, a huge number) must not crash the app
-    /// when `playheadMs` converts to `Int`.
+    /// Content time in seconds, read now: the provider's, or 0. Clamped to `0...maxPlayhead`: a broken
+    /// provider (NaN, infinity, a huge number) must not crash the app when `playheadMs` converts to `Int`.
     var playhead: TimeInterval {
-        let value: TimeInterval
-        if let playheadProvider {
-            value = playheadProvider()
-        } else if let trackedPlayer {
-            value = trackedPlayer.currentTime().seconds  // NaN for an invalid or indefinite time
-        } else {
-            return 0
-        }
-        guard value.isFinite else { return 0 }
+        guard let value = playheadProvider?(), value.isFinite else { return 0 }
         return min(max(0, value), Self.maxPlayhead)
     }
 
