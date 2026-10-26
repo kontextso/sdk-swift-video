@@ -115,7 +115,7 @@ struct IntegrationTests {
         await inPage(ad, "window.location.href = 'https://brand.test/tap'")
         #expect(await waitUntil { opened.count == 1 })
         #expect(opened.first?.absoluteString == "https://brand.test/tap")
-        #expect(delegate.clicks.first?.area == "creative")
+        #expect(delegate.clicks.first?.area == .creative)
         #expect(ad.bridge.webView.url?.scheme == FramePageServer.scheme, "still our page, the URL opened outside")
         try ad.dismiss()
     }
@@ -197,10 +197,10 @@ struct IntegrationTests {
 
     @Test func expiredAdCannotBeShownAndTheNextFormatGetsANewBid() async throws {
         let ads = await start()
-        harness.serve(Fixtures.ad(id: "img-exp", expires: 800))  // enough for the page to load first
+        harness.serve(Fixtures.ad(id: "img-exp", expires: 30_000))
         let ad = try await ads.format(.pause).load()
         #expect(ad.isReady)
-        await sleepMs(850)
+        advanceClock(by: 31)
         do { try ad.show(in: harness.player.view) } catch VideoAdError.invalidated(.expired) {} catch { Issue.record("expected expired") }
         harness.serve(Fixtures.ad(id: "img-exp2"))
         let next = try await ads.format(.pause).load()

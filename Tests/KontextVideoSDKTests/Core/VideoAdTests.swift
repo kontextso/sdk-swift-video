@@ -104,9 +104,9 @@ struct VideoAdTests {
     }
 
     @Test func expiryIsFoundOutAtShowNotByATimer() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p4", expires: 200))
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p4", expires: 30_000))
         #expect(ad.isReady)
-        await sleepMs(250)
+        advanceClock(by: 31)
         #expect(ad.isReady == false)
         #expect(ad.invalidationReason == nil, "nothing happens until the next call")
         #expect(delegate.events.isEmpty)
@@ -397,7 +397,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
         send(ad, "ad.click", ["url": "https://brand.test/offer", "area": "cta"])
-        #expect(delegate.clicks == [VideoAd.Click(url: URL(string: "https://brand.test/offer")!, area: "cta")])
+        #expect(delegate.clicks == [VideoAd.Click(url: URL(string: "https://brand.test/offer")!, area: .other("cta"))])
         #expect(opened.map(\.absoluteString) == ["https://brand.test/offer"])
         #expect(await beacons().contains("click"))
         #expect(ad.hasEnded == false, "a click does not end the ad")
@@ -658,11 +658,11 @@ struct VideoAdTests {
     }
 
     @Test func anAdOnScreenIgnoresInvalidationAndFinishesNormally() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p21", expires: 150))
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p21", expires: 30_000))
         try ad.show(in: harness.player.view)
         ad.didInvalidate(.expired)
         ad.bid?.invalidate(.expired)
-        await sleepMs(200)
+        advanceClock(by: 31)
         #expect(delegate.endReasons.isEmpty, "expiry does not touch an ad on screen")
         #expect(ad.invalidationReason == nil)
         try ad.dismiss()

@@ -182,22 +182,25 @@ struct BidTests {
 
     // MARK: Expiry
 
-    @Test func expiryCountsFromTheFirstReceiptOnAMonotonicClock() async throws {
+    @Test func expiryCountsFromTheFirstReceiptOnTheSDKsClock() async throws {
         let fresh = try Fixtures.received(Fixtures.ad(expires: 1000))
         #expect(fresh.isExpired == false)
-        let old = VideoAd.ReceivedAd(ad: try Fixtures.payload(Fixtures.ad(expires: 1000)), receivedAt: VideoAd.ReceivedAd.now - 2)
-        #expect(old.isExpired)
-        // The clock is CLOCK_MONOTONIC, which keeps counting while the device sleeps; a test cannot sleep
-        // the device, so it checks what it can: the clock advances and never goes backwards.
-        let before = VideoAd.ReceivedAd.now
+        advanceClock(by: 0.999)
+        #expect(fresh.isExpired == false)
+        advanceClock(by: 0.002)
+        #expect(fresh.isExpired)
+        // The real clock is CLOCK_MONOTONIC, which keeps counting while the device sleeps; a test cannot
+        // sleep the device, so it checks what it can: the clock advances and never goes backwards.
+        Environment.reset()
+        let before = Environment.now()
         await sleepMs(50)
-        let elapsed = VideoAd.ReceivedAd.now - before
+        let elapsed = Environment.now() - before
         #expect(elapsed >= 0.05 && elapsed < 5)
     }
 
     @Test func anExpiredBidThrowsAtLoad() async throws {
-        let (bid, _) = try await bid(Fixtures.ad(id: "img-12", expires: 30))
-        await sleepMs(60)
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-12", expires: 30_000))
+        advanceClock(by: 31)
         let failure = await error { try await bid.load() }
         guard case .invalidated(.expired) = failure else { Issue.record("expected invalidated(.expired), got \(String(describing: failure))"); return }
         #expect(pages.served.isEmpty)
@@ -205,17 +208,23 @@ struct BidTests {
     }
 
     @Test func aBidThatExpiresDuringTheLoadDropsTheResult() async throws {
-        let (bid, _) = try await bid(Fixtures.ad(id: "slow-13", expires: 150, frameURL: "\(Fixtures.frameOrigin)/frame/slow-13?step=300"))
-        let failure = await error { try await bid.load() }
-        guard case .invalidated(.expired) = failure else { Issue.record("expected invalidated(.expired), got \(String(describing: failure))"); return }
+        let (bid, _) = try await bid(Fixtures.ad(id: "slow-13", expires: 30_000, frameURL: "\(Fixtures.frameOrigin)/frame/slow-13?step=300"))
+        let load = Task { try await bid.load() }
+        await sleepMs(50)
+        advanceClock(by: 31)
+        do {
+            _ = try await load.value
+            Issue.record("expected invalidated(.expired)")
+        } catch VideoAdError.invalidated(let reason) {
+            #expect(reason == .expired)
+        }
         #expect(await beacons("error").isEmpty)
     }
 
     @Test func aLoadedAdThatExpiredThrowsAtShow() async throws {
-        // 1 s: enough for the page to load first on a slow runner; expiry before load is another test.
-        let (bid, _) = try await bid(Fixtures.ad(id: "img-14", expires: 1000))
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-14", expires: 30_000))
         let ad = try await bid.load()
-        await sleepMs(1050)
+        advanceClock(by: 31)
         do {
             try ad.show(in: harness.player.view)
             Issue.record("expected a throw")
@@ -293,8 +302,8 @@ struct BidTests {
     }
 
     @Test func rejectAnExpiredBidThrowsWithoutANotice() async throws {
-        let (bid, _) = try await bid(Fixtures.ad(id: "img-22", expires: 30))
-        await sleepMs(60)
+        let (bid, _) = try await bid(Fixtures.ad(id: "img-22", expires: 30_000))
+        advanceClock(by: 31)
         do { try bid.reject() } catch VideoAdError.invalidated(let reason) { #expect(reason == .expired) }
         #expect(await beacons("notUsed").isEmpty, "the server closes an expired bid itself")
     }

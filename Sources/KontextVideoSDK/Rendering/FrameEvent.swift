@@ -5,8 +5,8 @@ import Foundation
 enum FrameEvent: Sendable {
     /// The creative is loaded and can be shown (the VAST `loaded` moment).
     case loaded
-    /// The viewer clicked the ad. `area` is `creative`, `endCard`, or whatever else the page says.
-    case click(url: URL, fallbackUrl: URL?, area: String)
+    /// The viewer clicked the ad.
+    case click(url: URL, fallbackUrl: URL?, area: VideoAd.Click.Area)
     /// The page needs a URL opened that is not an ad click (`purpose`: `adChoices`, ...). Fires no `click`.
     case open(url: URL, purpose: String)
     /// The page's own end: the viewer's close control, or the page ending itself.

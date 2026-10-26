@@ -180,9 +180,9 @@ struct VideoAdsTests {
 
     @Test func anExpiredBidIsDroppedSilentlyBeforeTheNextRequest() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p11", expires: 50))
+        harness.serve(Fixtures.ad(id: "img-p11", expires: 30_000))
         let bid = try await ads.format(.pause)
-        await sleepMs(80)
+        advanceClock(by: 31)
         harness.serve(Fixtures.ad(id: "img-p12"))
         _ = try await ads.format(.pause)
         #expect(harness.adsRequests[1].body?["held"] as? [String] == [], "an expired bid is not listed")
@@ -192,10 +192,13 @@ struct VideoAdsTests {
 
     @Test func aReServedIdThatExpiredDuringTheRequestNeverComesBack() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p13", expires: 150))
+        harness.serve(Fixtures.ad(id: "img-p13", expires: 30_000))
         let bid = try await ads.format(.pause)
         harness.serve(Fixtures.ad(id: "img-p13"), delay: 0.3)
-        let late = await error { try await ads.format(.pause) }
+        let again = Task { try await ads.format(.pause) }
+        await sleepMs(50)
+        advanceClock(by: 31)
+        let late = await error { try await again.value }
         guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
         #expect(reason == VideoAds.alreadyUsed)
         #expect(bid.invalidationReason == .expired)

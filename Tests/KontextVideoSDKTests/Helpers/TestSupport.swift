@@ -79,6 +79,14 @@ final class TestWindow {
     }
 }
 
+/// Moves the SDK's clock forward by `seconds` from now: what expiry tests use instead of waiting, so a
+/// slow runner cannot change the outcome. `SDKHarness.reset()` puts the real clock back.
+@MainActor
+func advanceClock(by seconds: TimeInterval) {
+    let previous = Environment.now
+    Environment.now = { previous() + seconds }
+}
+
 /// Polls `condition` on the main actor until it holds or `timeout` passes.
 @MainActor
 func waitUntil(_ timeout: TimeInterval = 2, _ condition: @MainActor () -> Bool) async -> Bool {

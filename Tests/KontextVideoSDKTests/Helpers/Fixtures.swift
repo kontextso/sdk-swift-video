@@ -138,7 +138,7 @@ enum Fixtures {
 
     /// The answer as a bid takes it, received now.
     static func received(_ ad: [String: Any]) throws -> VideoAd.ReceivedAd {
-        VideoAd.ReceivedAd(ad: try payload(ad), receivedAt: VideoAd.ReceivedAd.now)
+        VideoAd.ReceivedAd(ad: try payload(ad), receivedAt: Environment.now())
     }
 
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {

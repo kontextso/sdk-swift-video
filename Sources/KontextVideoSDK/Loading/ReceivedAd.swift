@@ -26,8 +26,7 @@ extension VideoAd {
         let frameURL: URL
         /// The beacons; the SDK fires each once.
         let tracking: [AdPayload.TrackingEvent]
-        /// `ReceivedAd.now` at the first receipt: `expires` counts from here; a re-serve does not move it. Never a `Date`: the monotonic
-        /// clock cannot be set by the user, so a changed device clock cannot expire an ad early or late.
+        /// `Environment.now()` at the first receipt: `expires` counts from here; a re-serve does not move it.
         let receivedAt: TimeInterval
         /// Seconds the ad lives from receipt.
         let lifetime: TimeInterval
@@ -70,13 +69,7 @@ extension VideoAd {
         }
 
         var isExpired: Bool {
-            Self.now - receivedAt >= lifetime
-        }
-
-        /// Seconds on a monotonic clock that keeps counting while the device sleeps (`CLOCK_MONOTONIC` on
-        /// Apple platforms; `systemUptime` stops during sleep, and a bid must expire in a locked pocket too).
-        static var now: TimeInterval {
-            TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
+            Environment.now() - receivedAt >= lifetime
         }
     }
 }

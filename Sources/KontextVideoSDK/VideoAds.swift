@@ -109,7 +109,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            state.bids[format] = VideoAd.Bid(received: VideoAd.ReceivedAd(ad: ad, receivedAt: VideoAd.ReceivedAd.now), owner: self)
+            state.bids[format] = VideoAd.Bid(received: VideoAd.ReceivedAd(ad: ad, receivedAt: Environment.now()), owner: self)
         }
         return noFill
     }

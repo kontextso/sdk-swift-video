@@ -260,7 +260,7 @@ final class FrameBridge: NSObject {
                 return
             }
             if type == "ad.click" {
-                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(URL.init(string:)), area: body["area"] as? String ?? "creative"))
+                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(URL.init(string:)), area: VideoAd.Click.Area(body["area"] as? String)))
             } else {
                 onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
             }
@@ -332,7 +332,7 @@ final class FrameBridge: NSObject {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.host ?? target.absoluteString) cancelled")
             return
         }
-        onEvent?(.click(url: target, fallbackUrl: nil, area: "creative"))
+        onEvent?(.click(url: target, fallbackUrl: nil, area: .creative))
     }
 }
 

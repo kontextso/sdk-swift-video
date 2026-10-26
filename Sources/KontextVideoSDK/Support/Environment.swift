@@ -20,6 +20,10 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
+    /// The clock a bid's lifetime is measured on: seconds since an arbitrary point, monotonic, and still
+    /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and a bid must
+    /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
+    nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
 
     static func reset() {
         session = .shared
@@ -29,6 +33,11 @@ enum Environment {
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
+        now = defaultNow
+    }
+
+    private nonisolated static func defaultNow() -> TimeInterval {
+        TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
     }
 
     private static func defaultKeyWindow() -> UIWindow? {

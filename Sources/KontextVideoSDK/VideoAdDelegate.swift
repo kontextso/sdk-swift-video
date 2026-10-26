@@ -17,8 +17,7 @@ public protocol VideoAdDelegate: AnyObject {
     /// The impression was counted: at `show` for an image, at the first frame of the ad video for a video
     /// (usually under a second after `show` returned; if it never comes, `didFail` then `didEnd(.failed)`).
     func videoAdDidRecordImpression(_ ad: VideoAd)
-    /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where (`creative`, `endCard`, ...).
-    /// Once per tap.
+    /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows right away.
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
@@ -37,10 +36,29 @@ extension VideoAd {
     /// A tap on the ad. A struct rather than loose parameters so fields can be added without renaming the
     /// delegate method.
     public struct Click: Sendable, Equatable {
+        /// Where the viewer tapped.
+        public enum Area: Sendable, Equatable {
+            /// The creative itself: the image, the video, the card.
+            case creative
+            /// A linear ad's end card, after the video completed.
+            case endCard
+            /// A label of the page's own (`cta`, `logo`, ...), passed through unchanged.
+            case other(String)
+
+            /// From the page's `area`: absent is the creative.
+            init(_ raw: String?) {
+                switch raw {
+                case nil, "creative": self = .creative
+                case "endCard": self = .endCard
+                case let label?: self = .other(label)
+                }
+            }
+        }
+
         /// What the SDK opened.
         public let url: URL
-        /// Where the viewer tapped, as the creative names it: `creative`, `endCard`, or its own value.
-        public let area: String
+        /// Where the viewer tapped.
+        public let area: Area
     }
 
     /// How an ad on screen ended: who or what took it off the screen. Whether the creative ran to its

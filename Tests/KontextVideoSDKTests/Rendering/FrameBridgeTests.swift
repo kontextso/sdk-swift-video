@@ -258,7 +258,7 @@ struct FrameBridgeTests {
         guard case .click(let url, let fallback, let area) = recorder.last else { Issue.record("expected click"); return }
         #expect(url.absoluteString == "https://brand.test")
         #expect(fallback == nil)
-        #expect(area == "creative")
+        #expect(area == .creative)
     }
 
     @Test func clickWithoutATouchIsDropped() {
@@ -276,7 +276,7 @@ struct FrameBridgeTests {
         guard case .click(let url, let fallback, let area) = recorder.last else { Issue.record("expected click"); return }
         #expect(url.scheme == "brandapp", "deep links are allowed")
         #expect(fallback?.host == "brand.test")
-        #expect(area == "creative")
+        #expect(area == .creative)
     }
 
     @Test func intentSchemeIsRefused() {
