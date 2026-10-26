@@ -1,0 +1,67 @@
+# The same rules as sdk-swift, with this repo's limits. Run `swiftlint lint` before committing; CI runs it too.
+
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - Example
+
+line_length:
+  warning: 150
+  error: 200
+
+type_body_length:
+  # One suite per source file: the big ones (VideoAdTests) carry many small @Test functions.
+  warning: 500
+  error: 700
+
+file_length:
+  warning: 700
+  error: 900
+
+function_body_length:
+  warning: 80
+  error: 100
+
+cyclomatic_complexity:
+  # Thin dispatchers over the frame protocol's message types (FrameBridge.receive, VideoAd.handle).
+  warning: 20
+  error: 25
+
+disabled_rules:
+  - trailing_comma
+  - identifier_name
+  - type_name
+  - nesting
+  - todo
+  - orphaned_doc_comment
+  # Tests legitimately use try! / as! / !. The force-* rules have no per-path excludes, so they are off globally.
+  - force_cast
+  - force_try
+  # Wire fields are Bool? on purpose: the key may be absent.
+  - discouraged_optional_boolean
+
+opt_in_rules:
+  - closure_end_indentation
+  - closure_spacing
+  - contains_over_first_not_nil
+  - empty_count
+  - empty_string
+  - redundant_nil_coalescing
+  - implicit_optional_initialization
+  - sorted_imports
+  - unneeded_parentheses_in_closure_argument
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+custom_rules:
+  no_print_in_sdk:
+    name: "Use Logger instead of print"
+    regex: '\bprint\s*\('
+    match_kinds:
+      - identifier
+    severity: warning

@@ -7,6 +7,29 @@ on:
   pull_request:
 
 jobs:
+  # The same SwiftLint rules as sdk-swift (.swiftlint.yml). `analyze` needs a compiler log, so it builds first.
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SwiftLint
+        run: brew install swiftlint && swiftlint --version
+      - name: Lint
+        run: swiftlint lint --strict --reporter github-actions-logging
+      - name: Build for analyze
+        run: |
+          set -o pipefail
+          xcodebuild clean build \
+            -scheme KontextVideoSDK \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            > xcodebuild.log 2>&1 || (tail -100 xcodebuild.log; exit 1)
+      - name: Analyze
+        run: swiftlint analyze --strict --compiler-log-path xcodebuild.log --reporter github-actions-logging
+
   # The tests build the SDK; this job builds the example app against it, which is what catches a public
   # API change that breaks a real integration.
   example:
