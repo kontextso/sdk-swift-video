@@ -28,10 +28,9 @@ the mock server `sdk-video-mock-server` on `localhost:5175`; `--demo` runs every
 - `VideoAds`: one per video. `format(_:)` asks the server for all formats with the `VideoAds`'s `sessionId` and the
   ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Support/AwaitShared.swift`).
-- `VideoAd.Bid`: the server's answer, nothing rendered; `load()` (shared) renders it, `reject()` drops it with the
-  `notUsed` beacon.
-- `VideoAd`: the loaded ad; `show(in:)` for overlay and pause, `show()` for linear; `dismiss()`; the page's events
-  mapped to beacons and the delegate; `end(_:)` is the only terminal path.
+- `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
+  renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show()` for
+  linear; `dismiss()`; the page's events mapped to beacons and the delegate; `end(_:)` is the only terminal path.
 - `Rendering/`: `FrameBridge` (the WebView and the Kontext Frame Protocol), `Tracker` (beacons), `ViewabilityMeter`,
   `LinearViewController`. `Payloads/` is the wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Device/` what the
   SDK reads, `Support/Environment.swift` the seams the tests replace.

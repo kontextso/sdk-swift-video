@@ -22,7 +22,7 @@ struct VideoAdsTests {
         return harness.player.ads(for: .init(id: content, language: "en"))
     }
 
-    private func error(_ work: () async throws -> Any) async -> VideoAdError? {
+    private func error<T>(_ work: () async throws -> T) async -> VideoAdError? {
         do {
             _ = try await work()
             Issue.record("expected a throw")
@@ -104,26 +104,27 @@ struct VideoAdsTests {
 
     // MARK: Following the server
 
-    @Test func aReServedBidIsTheSameObjectWithItsLoadedAd() async throws {
+    @Test func aReServedAdIsTheSameObjectStillLoaded() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p4"))
         let first = try await ads.format(.pause)
-        let ad = try await first.load()
+        try await first.load()
         let second = try await ads.format(.pause)
-        #expect(second === first, "same id: the same Bid")
-        #expect(try await second.load() === ad, "and its loaded ad, nothing rendered again")
-        #expect(pages.served.filter { $0 == "img-p4" }.count == 1)
+        #expect(second === first, "same id: the same ad")
+        #expect(second.isLoaded)
+        try await second.load()
+        #expect(pages.served.filter { $0 == "img-p4" }.count == 1, "nothing rendered again")
     }
 
     @Test func aReServedPayloadIsIgnored() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p5", expires: 3_600_000))
-        let bid = try await ads.format(.pause)
+        let ad = try await ads.format(.pause)
         var changed = Fixtures.ad(id: "img-p5", expires: 1)
         changed["price"] = ["model": "cpm", "value": 99, "currency": "USD", "precision": "exact"]
         harness.serve(changed)
         let again = try await ads.format(.pause)
-        #expect(again === bid)
+        #expect(again === ad)
         #expect(again.price.value == 7.5, "the same id holds the same payload")
         #expect(again.descriptor.isExpired == false, "and keeps its original deadline")
     }
@@ -145,12 +146,12 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p7"))
         let old = try await ads.format(.pause)
-        let oldAd = try await old.load()
+        try await old.load()
         harness.serve(Fixtures.ad(id: "img-p8"))
         let new = try await ads.format(.pause)
         #expect(new.id == "img-p8")
         #expect(old.invalidationReason == .expired, "the server replaces a bid only once it expired")
-        #expect(throws: VideoAdError.self) { try oldAd.show(in: harness.player.view) }
+        #expect(throws: VideoAdError.self) { try old.show(in: harness.player.view) }
         let loadError = await error { try await old.load() }
         guard case .invalidated(.expired) = loadError else { Issue.record("expected invalidated(.expired), got \(String(describing: loadError))"); return }
         #expect(await notUsedBeacons().isEmpty, "no notice: the server replaced it, it knows")
@@ -181,19 +182,19 @@ struct VideoAdsTests {
     @Test func anExpiredBidIsDroppedSilentlyBeforeTheNextRequest() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p11", expires: 30_000))
-        let bid = try await ads.format(.pause)
+        let ad = try await ads.format(.pause)
         advanceClock(by: 31)
         harness.serve(Fixtures.ad(id: "img-p12"))
         _ = try await ads.format(.pause)
         #expect(harness.adsRequests[1].body?["held"] as? [String] == [], "an expired bid is not listed")
-        #expect(bid.invalidationReason == .expired)
+        #expect(ad.invalidationReason == .expired)
         #expect(await notUsedBeacons().isEmpty, "no expiry notice: the server knows expires")
     }
 
     @Test func aReServedIdThatExpiredDuringTheRequestNeverComesBack() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p13", expires: 30_000))
-        let bid = try await ads.format(.pause)
+        let ad = try await ads.format(.pause)
         harness.serve(Fixtures.ad(id: "img-p13"), delay: 0.3)
         let again = Task { try await ads.format(.pause) }
         await sleepMs(50)
@@ -201,7 +202,7 @@ struct VideoAdsTests {
         let late = await error { try await again.value }
         guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
         #expect(reason == VideoAds.alreadyUsed)
-        #expect(bid.invalidationReason == .expired)
+        #expect(ad.invalidationReason == .expired)
     }
 
     // MARK: Failures
@@ -258,7 +259,8 @@ struct VideoAdsTests {
         let ads = await makeAds()
         let other = harness.player.ads(for: .init(id: "other", language: "en"))
         harness.serve(Fixtures.ad(id: "img-p16"))
-        let loaded = try await other.format(.pause).load()
+        let loaded = try await other.format(.pause)
+        try await loaded.load()
         let held = try await ads.format(.pause)
         harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
         let off = await error { try await ads.format(.linear) }
@@ -276,8 +278,8 @@ struct VideoAdsTests {
     @Test func aKillSwitchDuringALoadMakesItThrowDisabled() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "dead-p16b"))
-        let bid = try await ads.format(.pause)
-        let load = Task { try await bid.load() }
+        let ad = try await ads.format(.pause)
+        let load = Task { try await ad.load() }
         await sleepMs(100)
         harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
         _ = await error { try await ads.format(.linear) }
@@ -340,13 +342,13 @@ struct VideoAdsTests {
     @Test func aBidRejectedWhileARequestRunsIsIgnoredWhenTheResponseReServesIt() async throws {
         let ads = await makeAds()
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")])
-        let bid = try await ads.format(.pause)
+        let ad = try await ads.format(.pause)
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")], delay: 0.2)
         let pause = Task { try await ads.format(.pause) }
         let linear = Task { try await ads.format(.linear) }
         await sleepMs(50)
         #expect(Set(harness.adsRequests.last?.body?["held"] as? [String] ?? []) == ["img-p20", "vid-l20"], "the request listed it before the reject")
-        try bid.reject()
+        try ad.reject()
         do {
             _ = try await pause.value
             Issue.record("expected noFill")
@@ -363,7 +365,8 @@ struct VideoAdsTests {
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p21"))
-        let ad = try await ads.format(.pause).load()
+        let ad = try await ads.format(.pause)
+        try await ad.load()
         harness.serve(Fixtures.ad(id: "img-p21"), delay: 0.2)
         let again = Task { try await ads.format(.pause) }
         await sleepMs(50)
@@ -385,9 +388,11 @@ struct VideoAdsTests {
         window.add(harness.player.view)
         let ads = await makeAds()
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p22"), "overlay": Fixtures.overlayAd(id: "img-o22"), "linear": Fixtures.linearAd(id: "vid-l22")])
-        let loaded = try await ads.format(.pause).load()
+        let loaded = try await ads.format(.pause)
+        try await loaded.load()
         let unloaded = try await ads.format(.linear)
-        let showing = try await ads.format(.overlay).load()
+        let showing = try await ads.format(.overlay)
+        try await showing.load()
         let delegate = RecordingDelegate()
         showing.delegate = delegate
         try showing.show(in: harness.player.view)
@@ -424,10 +429,10 @@ struct VideoAdsTests {
     @Test func releasingTheVideoAdsDoesWhatDestroyDoes() async throws {
         var ads: VideoAds? = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p24"))
-        let bid = try await ads!.format(.pause)
-        let ad = try await bid.load()
+        let ad = try await ads!.format(.pause)
+        try await ad.load()
         ads = nil
-        #expect(bid.invalidationReason == .destroyed)
+        #expect(ad.invalidationReason == .destroyed)
         #expect(ad.isReady == false)
         #expect(await notUsedBeacons(expecting: 1).map(\.reason) == ["destroyed"])
     }

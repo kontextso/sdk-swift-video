@@ -16,14 +16,14 @@ public enum VideoAdError: Error, Sendable {
     case disabled(reason: String)
     /// The request succeeded and the server had nothing for this format: `noAdMatch`, `frequencyCap`,
     /// `contentUnsafe`, `formatNotEnabled` (no configuration for this format in the Kontext dashboard),
-    /// `temporaryError`, ..., or the SDK's own `alreadyUsed` (the answer was a bid the app had just shown or
+    /// `temporaryError`, ..., or the SDK's own `alreadyUsed` (the answer was an ad the app had just shown or
     /// rejected while the request ran). Not a failure, and never retried by the SDK; the app decides when
     /// to ask again.
     case noFill(reason: String)
     /// The request failed: no network, a timeout, a server error, an unexpected answer. Thrown only when
-    /// the SDK holds no valid bid for the format; otherwise `format()` returns that one.
+    /// the SDK holds no valid ad for the format; otherwise `format()` returns that one.
     case request(Error)
-    /// The bid's creative did not load: the frame page failed or did not report `ad.loaded` within 10 s
+    /// The creative did not load: the frame page failed or did not report `ad.loaded` within 10 s
     /// of active time. `code` is the VAST error code the SDK fired (400 for a video, 500 otherwise, or the
     /// page's own).
     case creativeFailed(code: Int)
@@ -35,9 +35,11 @@ public enum VideoAdError: Error, Sendable {
     /// Another ad is on screen, from any `VideoAds`: at most one in the whole app. This ad is untouched
     /// and still ready: show it once the other one ended.
     case anotherAdShowing
-    /// The bid ended before it was shown: it expired, was rejected, or its creative died. `load()`, `show`
+    /// The ad ended before it was shown: it expired, was rejected, or its creative died. `load()`, `show`
     /// and `reject()` throw it from then on.
     case invalidated(VideoAd.InvalidationReason)
+    /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
+    case notLoaded
     /// The ad would have to be scaled below 50 % to fit the view (aspect ratio kept). The ad stays ready:
     /// show it in a bigger view, or reject it.
     case containerTooSmall(minimum: CGSize)
@@ -72,7 +74,9 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .anotherAdShowing:
             return "another ad is on screen; show this one after it ended"
         case .invalidated(let reason):
-            return "the bid ended before it was shown (\(reason))"
+            return "the ad ended before it was shown (\(reason))"
+        case .notLoaded:
+            return "the ad is not loaded yet; call load() first"
         case .containerTooSmall(let minimum):
             return "the view is too small for the ad; at least \(Int(minimum.width))×\(Int(minimum.height)) points are needed"
         case .presenterUnavailable:

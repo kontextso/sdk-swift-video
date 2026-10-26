@@ -3,7 +3,7 @@ import Foundation
 /// The moments of an ad on screen, delivered on the main actor. Every method has an empty default, so
 /// implement the ones you need. The delegate is held weakly, as every Apple delegate.
 ///
-/// Nothing is delivered before `show`: a bid or a loaded ad that can no longer be shown says so when
+/// Nothing is delivered before `show`: an ad that can no longer be shown says so when
 /// `load()` or `show` throws. The guarantee: `show` either throws or the ad is on screen; then the
 /// impression (at most once, maybe never) and any interactions; then exactly one terminal `videoAd(_:didEnd:)`,
 /// whoever ended it (the viewer, the creative, the system, or the app with `dismiss()` or `destroy()`).

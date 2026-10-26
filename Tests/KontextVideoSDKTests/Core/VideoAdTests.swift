@@ -18,8 +18,6 @@ struct VideoAdTests {
 
     final class Owners {
         var all: [VideoAds] = []
-        /// The ad holds its bid weakly; the test keeps it.
-        var bids: [VideoAd.Bid] = []
     }
 
     init() {
@@ -40,11 +38,11 @@ struct VideoAdTests {
         return (ad, delegate, ads)
     }
 
-    /// An ad on its own bid, rendered outside the `load()` flow so each page event is driven by hand.
+    /// An ad whose page starts loading outside the `load()` flow, so each page event is driven by hand.
     private func makeLoose(_ payload: [String: Any], in ads: VideoAds) -> VideoAd {
-        let bid = VideoAd.Bid(descriptor: try! Fixtures.descriptor(payload), owner: ads)
-        owners.bids.append(bid)
-        return VideoAd(bid: bid)
+        let ad = VideoAd(descriptor: try! Fixtures.descriptor(payload), owner: ads)
+        ad.bridge.load()
+        return ad
     }
 
     private func message(_ type: String, _ extra: [String: Any] = [:], adId: String) -> [String: Any] {
@@ -439,11 +437,10 @@ struct VideoAdTests {
         #expect(harness.server.beacons.first { $0.event == "error" }?.query["code"] == "405")
     }
 
-    @Test func errorWhileLoadedButUnshownEndsTheBidSilently() async throws {
+    @Test func errorWhileLoadedButUnshownEndsTheAdSilently() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p18"))
         send(ad, "ad.error", ["code": 502])
         #expect(ad.invalidationReason == .creativeFailed(code: 502))
-        #expect(ad.bid?.invalidationReason == .creativeFailed(code: 502))
         #expect(ad.isReady == false)
         #expect(delegate.events.isEmpty, "nothing is delivered before show")
         #expect(await beacons().contains("error"))
@@ -653,15 +650,13 @@ struct VideoAdTests {
         try weakAd?.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(KontextVideo.shared.adOnScreen == nil)
-        owners.bids.removeAll()
         #expect(await waitUntil { weakAd == nil }, "released after didEnd")
     }
 
     @Test func anAdOnScreenIgnoresInvalidationAndFinishesNormally() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p21", expires: 30_000))
         try ad.show(in: harness.player.view)
-        ad.didInvalidate(.expired)
-        ad.bid?.invalidate(.expired)
+        ad.invalidate(.expired)
         advanceClock(by: 31)
         #expect(delegate.endReasons.isEmpty, "expiry does not touch an ad on screen")
         #expect(ad.invalidationReason == nil)

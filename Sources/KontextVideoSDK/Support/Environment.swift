@@ -20,8 +20,8 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
-    /// The clock a bid's lifetime is measured on: seconds since an arbitrary point, monotonic, and still
-    /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and a bid must
+    /// The clock an ad's lifetime is measured on: seconds since an arbitrary point, monotonic, and still
+    /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and an ad must
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
     nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
 

@@ -22,7 +22,7 @@ public final class VideoAds {
 
     /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
     let sessionId = UUID().uuidString.lowercased()
-    /// The bids, the spent ids and the ad on screen; a reference so `deinit` can reach it.
+    /// The unshown ads, the spent ids and the ad on screen; a reference so `deinit` can reach it.
     private let state = State()
     /// The request in flight: every `format(_:)` meanwhile waits for it instead of sending another.
     private var request: Task<[AdFormat: String], Error>?
@@ -35,17 +35,17 @@ public final class VideoAds {
         Logger.debug("VideoAds created for video \(content.id)")
     }
 
-    // MARK: Getting a bid
+    // MARK: Getting an ad
 
-    /// The bid for one format: `try await ads.format(.pause)`, then its `price` and other facts, then
-    /// `load()` or `reject()`. Every call asks the server for all formats and lists the unshown bids it holds;
-    /// the server returns those unchanged until they expire, so the same bid (and its loaded ad) comes
-    /// back, and bids for the other formats wait for their own `format(_:)` call. Calls made while a
+    /// The ad for one format: `try await ads.format(.pause)`, then its `price` and other facts, then
+    /// `load()` or `reject()`. Every call asks the server for all formats and lists the unshown ads it holds
+    /// (`held`); the server returns those unchanged until they expire, so the same ad (loaded or not) comes
+    /// back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
     /// request runs share it (`async let` for several formats at once). A failed request returns the held
-    /// bid when it is still valid. Throws `noFill(reason:)`, `request` (nothing valid held), `destroyed`,
+    /// ad when it is still valid. Throws `noFill(reason:)`, `request` (nothing valid held), `destroyed`,
     /// `disabled(reason:)`, `notInitialized`, `initializationFailed`, or `CancellationError` when the
     /// calling task is cancelled (the request itself continues).
-    public func format(_ format: AdFormat) async throws -> VideoAd.Bid {
+    public func format(_ format: AdFormat) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
         let task = request ?? startRequest()
@@ -53,22 +53,22 @@ public final class VideoAds {
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let error) {
-            if let held = state.bids[format], !held.descriptor.isExpired {
-                Logger.info("\(format) for \(content.id): request failed, returning the held bid \(held.id.prefix(8))")
+            if let held = state.ads[format], !held.descriptor.isExpired {
+                Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
             }
             throw VideoAdError.request(error)
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
-        if let bid = state.bids[format] { return bid }
+        if let ad = state.ads[format] { return ad }
         throw VideoAdError.noFill(reason: noFill[format] ?? AdsResponse.unknownReason)
     }
 
     /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()`.
-    /// Expired bids are dropped first (silently; the server knows `expires`), so `held` lists valid ones.
+    /// Expired ads are dropped first (silently; the server knows `expires`), so `held` lists valid ones.
     private func startRequest() -> Task<[AdFormat: String], Error> {
-        for bid in Array(state.bids.values) where bid.descriptor.isExpired { bid.invalidate(.expired) }
-        let held = AdFormat.allCases.compactMap { state.bids[$0]?.id }
+        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
+        let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
         let task = Task { [weak self] () throws -> [AdFormat: String] in
             defer { self?.request = nil }
             guard let self else { throw VideoAdError.destroyed }
@@ -87,7 +87,7 @@ public final class VideoAds {
     private func apply(_ response: AdsResponse) -> [AdFormat: String] {
         var noFill: [AdFormat: String] = [:]
         for format in AdFormat.allCases {
-            let current = state.bids[format]
+            let current = state.ads[format]
             guard let ad = response.result(for: format)?.ads.first else {
                 current?.invalidate(.expired)
                 let reason = response.result(for: format)?.noFillReason ?? AdsResponse.unknownReason
@@ -108,7 +108,7 @@ public final class VideoAds {
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
             DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            state.bids[format] = VideoAd.Bid(descriptor: AdDescriptor(payload: ad, receivedAt: Environment.now()), owner: self)
+            state.ads[format] = VideoAd(descriptor: AdDescriptor(payload: ad, receivedAt: Environment.now()), owner: self)
         }
         return noFill
     }
@@ -127,7 +127,7 @@ public final class VideoAds {
     }
 
     /// Waits for `/config`, reads the ATT status, builds and sends the request. The kill switch in the
-    /// answer switches the whole SDK off and drops every bid, with no notices: the server knows.
+    /// answer switches the whole SDK off and drops every ad, with no notices: the server knows.
     private func send(held: [String]) async throws -> AdsResponse {
         guard await KontextVideo.shared.waitUntilEnabled() else {
             Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
@@ -157,7 +157,7 @@ public final class VideoAds {
         if case .disabled(let reason) = response {
             KontextVideo.shared.disable(reason: reason)
             // The reason is never seen: load() and show throw `.disabled` first.
-            for bid in Array(state.bids.values) { bid.invalidate(.destroyed) }
+            for ad in Array(state.ads.values) { ad.invalidate(.destroyed) }
             throw VideoAdError.disabled(reason: reason)
         }
         return response
@@ -193,18 +193,18 @@ public final class VideoAds {
         Int((playhead * 1000).rounded())
     }
 
-    // MARK: What the bids and ads report
+    // MARK: What the ads report
 
-    /// A bid ended or was shown: it leaves its format, and its id is never accepted again.
-    func bidDidEnd(_ bid: VideoAd.Bid) {
-        if state.bids[bid.format] === bid { state.bids[bid.format] = nil }
-        state.spentIds.insert(bid.id)
+    /// An ad ended before `show`, or was shown: it leaves its format, and its id is never accepted again.
+    func adDidLeave(_ ad: VideoAd) {
+        if state.ads[ad.format] === ad { state.ads[ad.format] = nil }
+        state.spentIds.insert(ad.id)
     }
 
-    /// Shown: the ad's bid leaves its format, so the next request does not list it.
+    /// Shown: the ad leaves its format, so the next request does not list it.
     func adDidBeginShowing(_ ad: VideoAd) {
         state.showing = ad
-        if let bid = ad.bid { bidDidEnd(bid) }
+        adDidLeave(ad)
     }
 
     func adDidEnd(_ ad: VideoAd) {
@@ -213,7 +213,7 @@ public final class VideoAds {
 
     // MARK: Destroying
 
-    /// Releases the video's ads. Call it when the viewer leaves the video. Every held bid, loaded or not,
+    /// Releases the video's ads. Call it when the viewer leaves the video. Every held ad, loaded or not,
     /// is dropped with a `notUsed` beacon (`destroyed`) and its WebView released; `load()` and `show` on
     /// them throw `destroyed`; the ad on screen ends with `didEnd(.destroyed)`; a `format()` or `load()` in
     /// flight throws `destroyed`. Calling it twice does nothing; afterwards `format()` throws `destroyed`.
@@ -245,21 +245,21 @@ extension VideoAds {
     /// What a `VideoAds` holds, in a class of its own so `deinit` can end it all.
     @MainActor
     final class State {
-        /// The unshown bid of each format, at most one.
-        var bids: [AdFormat: VideoAd.Bid] = [:]
+        /// The unshown ad of each format, at most one.
+        var ads: [AdFormat: VideoAd] = [:]
         /// Ids that left: shown, rejected, expired, failed, destroyed. A response that brings one back is
-        /// ignored for its format: the request listed the bid before the app used it.
+        /// ignored for its format: the request listed the ad before the app used it.
         var spentIds: Set<String> = []
         /// The ad of this `VideoAds` on screen. `KontextVideo.adOnScreen` retains it too.
         var showing: VideoAd?
 
-        /// `destroy()`: every held bid gets its `notUsed` beacon and ends; the ad on screen ends.
+        /// `destroy()`: every held ad gets its `notUsed` beacon and ends; the ad on screen ends.
         func endAll() {
-            for bid in Array(bids.values) {
-                bid.tracker.fire("notUsed", notUsed: .destroyed)
-                bid.invalidate(.destroyed)
+            for ad in Array(ads.values) {
+                ad.tracker.fire("notUsed", notUsed: .destroyed)
+                ad.invalidate(.destroyed)
             }
-            bids = [:]
+            ads = [:]
             showing?.end(.destroyed)
             showing = nil
         }

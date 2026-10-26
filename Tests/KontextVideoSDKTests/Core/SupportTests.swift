@@ -21,7 +21,8 @@ struct SupportTests {
             (.anotherAdShowing, "another ad is on screen; show this one after it ended"),
             (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
             (.alreadyShown, "the ad was already shown"),
-            (.invalidated(.expired), "the bid ended before it was shown (expired)"),
+            (.invalidated(.expired), "the ad ended before it was shown (expired)"),
+            (.notLoaded, "the ad is not loaded yet; call load() first"),
             (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the view is too small for the ad; at least 150×150 points are needed"),
             (.presenterUnavailable, "no view controller can present the ad now"),
             (.wrongPresentation, "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear; dismiss() only for overlay and pause)"),
@@ -43,8 +44,7 @@ struct SupportTests {
         Environment.assertionFailure = { _ in }
         defer { Environment.reset() }
         let ads = VideoAds(content: .init(id: "v", language: "en"))
-        let bid = VideoAd.Bid(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d1")), owner: ads)
-        let ad = VideoAd(bid: bid)
+        let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d1")), owner: ads)
         delegate.videoAdDidRecordImpression(ad)
         delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: .creative))
         delegate.videoAd(ad, didFail: .presenterUnavailable)
@@ -55,8 +55,7 @@ struct SupportTests {
         Environment.assertionFailure = { _ in }
         defer { Environment.reset() }
         let ads = VideoAds(content: .init(id: "v", language: "en"))
-        let bid = VideoAd.Bid(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d2")), owner: ads)
-        let ad = VideoAd(bid: bid)
+        let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d2")), owner: ads)
         var delegate: RecordingDelegate? = RecordingDelegate()
         ad.delegate = delegate
         #expect(ad.delegate != nil)

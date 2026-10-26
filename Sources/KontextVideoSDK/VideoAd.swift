@@ -1,11 +1,20 @@
 import Foundation
 import UIKit
 
-/// One loaded ad, returned by `Bid.load()`, ready to show. An ad is shown at most once; from `show` until
-/// `didEnd` the SDK retains it.
+/// One ad, from the server's answer to the end of its presentation: what `VideoAds.format(_:)` returns.
+/// Look at its facts (`price`, `duration`), then `load()` it (renders the creative, so `show` is instant)
+/// or `reject()` it; then `show`, the delegate's moments, and exactly one `didEnd`. An ad is shown at most
+/// once; from `show` until `didEnd` the SDK retains it. A `VideoAds` holds at most one unshown ad per
+/// format; `format(_:)` returns the same one until it is shown, rejected or dropped.
 ///
-/// Read-only properties of the ad for the app's own decisions (an auction, a debug screen); times are
-/// seconds, whatever the wire sends.
+/// ```swift
+/// let ad = try await ads.format(.pause)
+/// if ad.price.value >= otherNetworkPrice {
+///     try await ad.load()
+/// } else {
+///     try ad.reject(.outbid(winningPrice: otherNetworkPrice))
+/// }
+/// ```
 @MainActor
 public final class VideoAd {
     public struct Price: Sendable, Equatable {
@@ -37,10 +46,19 @@ public final class VideoAd {
         case fullscreen
     }
 
-    /// Why a bid ended before it was shown. Found out at the next call (`format`, `load`, `show`,
+    /// Why the app did not use an ad; the server tells the DSP.
+    public enum RejectReason: Sendable, Equatable {
+        /// The app does not use it, for any reason: the moment passed, the viewer left, the app's own choice.
+        case notUsed
+        /// Another network won the publisher's auction; `winningPrice` (CPM) and `winner` (the network, in
+        /// the app's own words: `"AppLovin MAX"`, `"AdMob"`) when the app knows them. DSPs use both.
+        case outbid(winningPrice: Double? = nil, winner: String? = nil)
+    }
+
+    /// Why an ad ended before it was shown. Found out at the next call (`format`, `load`, `show`,
     /// `reject`), which throws it; nothing is delivered through the delegate.
     public enum InvalidationReason: Sendable, Equatable {
-        /// The bid's lifetime ran out (or the server replaced it, which it does only after that).
+        /// The ad's lifetime ran out (or the server replaced it, which it does only after that).
         case expired
         /// The app called `reject()`.
         case rejected
@@ -51,7 +69,8 @@ public final class VideoAd {
         case creativeFailed(code: Int)
     }
 
-    /// The facts, as the `Bid` gave them.
+    /// The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
+    /// business at `show`; nothing of that is exposed.
     public var id: String { descriptor.id }
     public var format: AdFormat { descriptor.format }
     public var price: Price { descriptor.price }
@@ -62,6 +81,9 @@ public final class VideoAd {
     /// with the best scale still at or above 50 %.
     private(set) var chosenSize: Size?
 
+    /// The page reported the creative ready: `load()` finished.
+    public private(set) var isLoaded = false
+
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
     /// `show` throws when it cannot begin.
@@ -69,7 +91,7 @@ public final class VideoAd {
         isLoaded && !wasShown && invalidationReason == nil && !isExpired
     }
 
-    /// Why the ad was invalidated, once it was.
+    /// Why the ad ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
     public private(set) var invalidationReason: InvalidationReason?
 
     /// Receives the ad's moments. Held weakly.
@@ -87,39 +109,114 @@ public final class VideoAd {
     /// Below this share of the nominal size the ad is not shown.
     static let minimumScale: CGFloat = 0.5
 
-    /// The server's answer this ad renders; the expiry counts from the first receipt.
+    /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
+    /// move it.
     let descriptor: AdDescriptor
-    /// The bid it was loaded from; it holds the ad until `show`. Weak: after `show` the app may drop the bid.
-    private(set) weak var bid: Bid?
-    /// The WebView and the protocol with the frame page. Created with the ad; the page starts loading at
-    /// once, so `load` can return a ready ad.
-    let bridge: FrameBridge
-    /// The page reported `ad.loaded`.
-    private(set) var isLoaded = false
+    /// The WebView and the protocol with the frame page. Made on the first `load()`, never before: an ad
+    /// the app only looks at, or rejects, costs no WebView.
+    var bridge: FrameBridge {
+        if let loadedBridge { return loadedBridge }
+        let bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video)
+        bridge.onEvent = { [weak self] event in self?.handle(event) }
+        loadedBridge = bridge
+        return bridge
+    }
+    private var loadedBridge: FrameBridge?
+    /// The load in flight, shared by every `load()` call: the second waits for the first.
+    private var loading: Task<Void, Error>?
     /// `load` waiting for the page.
     private var loadContinuation: CheckedContinuation<Void, Error>?
-    /// The `VideoAds` it belongs to; told when the ad is shown and when it ends.
+    /// The `VideoAds` it belongs to; told when the ad leaves it, is shown, and ends.
     private(set) weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: UIView?
     /// The controller the SDK presented for a linear ad.
     private var linearController: LinearViewController?
-    /// Fires the `tracking` entries, each once; the bid's, so `notUsed` and the rest never fire twice.
-    private let tracker: Tracker
+    /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
+    let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private var durationTask: Task<Void, Never>?
 
-    /// The page starts loading at once. Expiry is checked at the next call, never by a timer.
-    init(bid: Bid) {
-        descriptor = bid.descriptor
-        self.bid = bid
-        owner = bid.owner
-        tracker = bid.tracker
-        bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video)
-        bridge.onEvent = { [weak self] event in self?.handle(event) }
+    /// Nothing is rendered here; `load()` does that. Expiry is checked at the next call, never by a timer.
+    init(descriptor: AdDescriptor, owner: VideoAds) {
+        self.descriptor = descriptor
+        self.owner = owner
+        tracker = Tracker(adId: descriptor.id, entries: descriptor.tracking)
+        tracker.contentPlayhead = { [weak owner] in owner?.playhead ?? 0 }
+    }
+
+    // MARK: Loading and rejecting
+
+    /// Renders the creative, so that `show` is instant: the SDK creates a WebView with the ad's page and
+    /// waits until the page reports the creative ready. Calls made while a load runs share it and get the
+    /// same outcome; a call after it returns at once, nothing is rendered twice. Throws
+    /// `creativeFailed(code:)` when the creative fails or does not report ready within 10 s of active
+    /// time, `invalidated(.expired)` once the ad's lifetime ran out (before or during the load),
+    /// `invalidated(.rejected)` after `reject()`, `destroyed`, `disabled(reason:)`, or `CancellationError`
+    /// when the calling task is cancelled (the load itself continues).
+    public func load() async throws {
+        try checkUsable()
+        if isLoaded, loading == nil { return }
+        let task = loading ?? startLoading()
+        try await awaitShared(task)
+    }
+
+    /// The app does not use the ad: the SDK sends the `notUsed` beacon (the server tells the DSP), drops the
+    /// ad and releases its WebView, if any. Works until `show`, loading or loaded; a `load()` in flight
+    /// throws `invalidated(.rejected)`, a later `show` too. Synchronous and fire-and-forget. Throws
+    /// `alreadyShown` after `show`, `invalidated(reason)` or `destroyed` when the ad already ended.
+    public func reject(_ reason: RejectReason = .notUsed) throws {
+        if wasShown { throw VideoAdError.alreadyShown }
+        if let invalidationReason { throw Self.error(for: invalidationReason) }
+        if descriptor.isExpired {
+            invalidate(.expired)
+            throw VideoAdError.invalidated(.expired)
+        }
+        Logger.info("\(format) ad \(id.prefix(8)): rejected (\(reason))")
+        tracker.fire("notUsed", notUsed: Tracker.NotUsed(reason))
+        invalidate(.rejected)
+    }
+
+    /// The ad can still be loaded or shown; otherwise the error to throw.
+    func checkUsable() throws {
+        guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
+        if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
+        if let invalidationReason { throw Self.error(for: invalidationReason) }
+        if descriptor.isExpired {
+            invalidate(.expired)
+            throw VideoAdError.invalidated(.expired)
+        }
+    }
+
+    /// The load belongs to the ad, not to the caller: an unstructured task nobody cancels. Only
+    /// `invalidate` stops it, by failing the wait for the page.
+    private func startLoading() -> Task<Void, Error> {
         bridge.load()
+        let task = Task { [weak self] () throws in
+            defer { self?.loading = nil }
+            guard let self else { throw VideoAdError.destroyed }
+            let started = ProcessInfo.processInfo.systemUptime
+            do {
+                try await awaitLoaded()
+            } catch VideoAdError.creativeFailed(let code) {
+                invalidate(.creativeFailed(code: code))
+                DebugReporter.shared.event("ad.loadFailed", adId: id, level: .warning, state: ["code": .number(Double(code))])
+                throw VideoAdError.creativeFailed(code: code)
+            } catch {
+                // The ad ended meanwhile: say why in the order the app expects (destroyed, disabled, rejected, ...).
+                try checkUsable()
+                throw error
+            }
+            // Expired while the page loaded: the result is dropped.
+            try checkUsable()
+            let durationMs = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            Logger.info("\(format) ad \(id.prefix(8)): ready in \(durationMs) ms")
+            DebugReporter.shared.event("ad.loaded", adId: id, state: ["durationMs": .number(Double(durationMs))])
+        }
+        loading = task
+        return task
     }
 
     // MARK: Showing
@@ -213,21 +310,11 @@ public final class VideoAd {
         end(.dismissed)
     }
 
-    /// The app does not use the ad: the same as `reject` on its bid. Throws `alreadyShown` after `show`,
-    /// `invalidated(reason)` or `destroyed` when the bid already ended.
-    public func reject(_ reason: RejectReason = .notUsed) throws {
-        if wasShown { throw VideoAdError.alreadyShown }
-        guard let bid else { throw Bid.error(for: invalidationReason ?? .expired) }
-        try bid.reject(reason)
-    }
-
     private func checkShowable() throws {
         if wasShown { throw VideoAdError.alreadyShown }
-        if let reason = invalidationReason { throw Bid.error(for: reason) }
-        guard let bid else { throw VideoAdError.invalidated(.expired) }
-        try bid.checkUsable()
+        try checkUsable()
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
-        guard isLoaded else { throw VideoAdError.invalidated(.creativeFailed(code: descriptor.creative == .video ? 400 : 500)) }
+        guard isLoaded else { throw VideoAdError.notLoaded }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
@@ -258,8 +345,8 @@ public final class VideoAd {
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
-    /// Presentation began: the page is told, the SDK retains the ad, the bid leaves its `VideoAds`; `show`
-    /// returning is the app's signal.
+    /// Presentation began: the page is told, the SDK retains the ad, the ad leaves its `VideoAds`'s unshown
+    /// ones; `show` returning is the app's signal.
     private func begin(startMeter: Bool = true) {
         wasShown = true
         KontextVideo.shared.adOnScreen = self
@@ -393,7 +480,7 @@ public final class VideoAd {
         stopObservingActivity()
         meter?.stop()
         meter = nil
-        bridge.hide()
+        loadedBridge?.hide()
         hostView?.removeFromSuperview()
         hostView = nil
         if let controller = linearController {
@@ -429,12 +516,12 @@ public final class VideoAd {
     }
 
     /// Resolves when the page reported `ad.loaded`; throws `creativeFailed` when it failed or timed out
-    /// first, the bid's invalidation when it ended meanwhile (rejected, destroyed). Called once, by the
-    /// bid's load, which nobody cancels.
-    func awaitLoaded() async throws {
+    /// first, the invalidation when the ad ended meanwhile (rejected, destroyed). Called once, by the load
+    /// task, which nobody cancels.
+    private func awaitLoaded() async throws {
         if isLoaded { return }
         if case .creativeFailed(let code)? = invalidationReason { throw VideoAdError.creativeFailed(code: code) }
-        if let reason = invalidationReason { throw Bid.error(for: reason) }
+        if let reason = invalidationReason { throw Self.error(for: reason) }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             loadContinuation = continuation
         }
@@ -459,9 +546,8 @@ public final class VideoAd {
                 delegate?.videoAd(self, didFail: .creativeFailed(code: code))
                 end(.failed)
             } else {
-                // Died while waiting to be shown: the bid ends; `show` will throw.
-                bid?.invalidate(.creativeFailed(code: code))
-                didInvalidate(.creativeFailed(code: code))
+                // Died while waiting to be shown: the ad ends; `show` will throw.
+                invalidate(.creativeFailed(code: code))
             }
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.host ?? url.absoluteString)")
@@ -526,17 +612,26 @@ public final class VideoAd {
         descriptor.isExpired
     }
 
-    /// The bid ended before `show`: the page is torn down and a load still waiting throws. For an ad on
-    /// screen nothing happens; `destroy()` ends that one with `didEnd(.destroyed)`.
-    func didInvalidate(_ reason: InvalidationReason) {
+    /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
+    /// a `load()` in flight throws. For an ad on screen nothing happens; `destroy()` ends that one with
+    /// `didEnd(.destroyed)`. No beacon here: `reject` and `destroy` fire `notUsed` themselves, an expired
+    /// ad is the server's to close, a failed creative already fired `error`.
+    func invalidate(_ reason: InvalidationReason) {
         guard !wasShown, invalidationReason == nil else { return }
         invalidationReason = reason
-        bridge.hide()
-        Logger.debug("ad \(id.prefix(8)) invalidated: \(reason)")
+        Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
+        DebugReporter.shared.event("ad.invalidated", adId: id, state: ["reason": .string("\(reason)")])
+        loadedBridge?.hide()
+        loadedBridge = nil
         if let continuation = loadContinuation {
             loadContinuation = nil
-            continuation.resume(throwing: reason == .destroyed ? VideoAdError.destroyed : VideoAdError.invalidated(reason))
+            continuation.resume(throwing: Self.error(for: reason))
         }
+        owner?.adDidLeave(self)
+    }
+
+    static func error(for reason: InvalidationReason) -> VideoAdError {
+        reason == .destroyed ? .destroyed : .invalidated(reason)
     }
 
     /// Dropping the last reference releases everything: the bridge tears the page down in its own

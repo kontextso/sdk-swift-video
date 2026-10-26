@@ -2,7 +2,7 @@
 /// task (a request, a creative load), each gets the task's result when it finishes, and a caller that is
 /// cancelled stops waiting immediately (`CancellationError`) without cancelling the task or affecting the
 /// other callers. Starting, storing and cancelling the work is the owner's job (`VideoAds.request`,
-/// `Bid.loading`); this is only the joining half. A plain `task.value` would keep a cancelled caller
+/// `VideoAd.loading`); this is only the joining half. A plain `task.value` would keep a cancelled caller
 /// waiting until the task finished.
 @MainActor
 func awaitShared<T: Sendable>(_ task: Task<T, Error>) async throws -> T {

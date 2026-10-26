@@ -64,18 +64,18 @@ final class Demo: ObservableObject {
     private func prepareEarly() {
         Task {
             guard let ads else { return }
-            async let pause = describeBid(.pause, of: ads)
-            async let overlay = describeBid(.overlay, of: ads)
-            async let linear = describeBid(.linear, of: ads)
+            async let pause = describe(.pause, of: ads)
+            async let overlay = describe(.overlay, of: ads)
+            async let linear = describe(.linear, of: ads)
             for line in await [pause, overlay, linear] { note(line) }
             await loadPauseAdAndWait()
         }
     }
 
-    private func describeBid(_ format: AdFormat, of ads: VideoAds) async -> String {
+    private func describe(_ format: AdFormat, of ads: VideoAds) async -> String {
         do {
-            let bid = try await ads.format(format)
-            return "\(format) bid \(bid.id.prefix(8)): \(bid.price.value) \(bid.price.currency) cpm"
+            let ad = try await ads.format(format)
+            return "\(format) ad \(ad.id.prefix(8)): \(ad.price.value) \(ad.price.currency) cpm"
         } catch {
             return "\(format): \(error)"
         }
@@ -98,7 +98,7 @@ final class Demo: ObservableObject {
             // Something outside the SDK dismisses the presentation: didEnd(.interrupted)
             Self.topViewController?.presentingViewController?.dismiss(animated: true)
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            // A bid the app does not use: rejected, the server tells the DSP, the next format() gets a new one
+            // An ad the app does not use: rejected, the server tells the DSP, the next format() gets a new one
             await loadPauseAdAndWait()
             try? pauseAd?.reject(.outbid(winningPrice: 3.2, winner: "AppLovin MAX"))
             pauseAd = nil
@@ -114,7 +114,8 @@ final class Demo: ObservableObject {
 
     private func loadLinearAndWait() async {
         do {
-            let ad = try await ads!.format(.linear).load()
+            let ad = try await ads!.format(.linear)
+            try await ad.load()
             ad.delegate = self
             linear = ad
             note("linear ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm, \(Int(ad.duration ?? 0)) s")
@@ -153,7 +154,8 @@ final class Demo: ObservableObject {
 
     private func loadPauseAdAndWait() async {
         do {
-            let ad = try await ads!.format(.pause).load()
+            let ad = try await ads!.format(.pause)
+            try await ad.load()
             ad.delegate = self
             pauseAd = ad
             note("pause ad \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")
@@ -164,7 +166,8 @@ final class Demo: ObservableObject {
 
     private func loadOverlayAndWait() async {
         do {
-            let ad = try await ads!.format(.overlay).load()
+            let ad = try await ads!.format(.overlay)
+            try await ad.load()
             ad.delegate = self
             overlayAd = ad
             note("overlay \(ad.id.prefix(8)) ready, \(ad.price.value) \(ad.price.currency) cpm")

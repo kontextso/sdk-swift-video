@@ -19,12 +19,11 @@ sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
 │   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
-│   ├── VideoAd.swift                               one loaded ad: show, dismiss, reject, the page's events, the one didEnd
-│   ├── VideoAd+Bid.swift                           the server's answer before rendering: the facts, load() (shared), reject()
+│   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the page's events, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load, show, reject and dismiss throw
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
-│   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload, ErrorResponse, SDKInfo
+│   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
@@ -108,7 +107,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - Nesting: a public type the app constructs nests under `KontextVideo` (`Configuration`, `Content`, `User`,
   `Regulatory`), so it never collides with the app's own `User` or `Content` and `.init(…)` works where the type
   is inferred; a public type the app reads off an ad nests under `VideoAd` (`Price`, `Click`, `EndReason`,
-  `RejectReason`, `Bid`). Internal types are top level: nesting protects app code from collisions, and internal
+  `RejectReason`). Internal types are top level: nesting protects app code from collisions, and internal
   types cannot collide. `AdFormat` is the one public top-level type: it names the formats everywhere and
   cannot realistically collide.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then here, then to `sdk-kotlin-video`.
@@ -138,7 +137,7 @@ Tests/KontextVideoSDKTests/
 ├── Network/      the client: transport, status codes, the error body
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included)
 ├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
-├── Core/         KontextVideo, VideoAds, VideoAd, bids, support, the debug reporter
+├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen), support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
 
@@ -149,7 +148,7 @@ Rules the suites follow:
 - `SDKHarness` resets everything before a test and installs the stub server; the seams it uses are in
   `Support/Environment.swift`, and production never sets them.
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
-- Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the bid clock. A test that sleeps to
+- Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the ad clock. A test that sleeps to
   let something expire is flaky on a slow runner and goes against the suite's budget, about 45 s in all.
 - The stub server routes each session's requests to the server that created it, so a beacon a previous test's
   `VideoAds` fires from `deinit` never lands in the next test's recordings.
