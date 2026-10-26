@@ -40,7 +40,7 @@ Sources/KontextVideoSDK/API/SDKInfo.swift    static let version = "0.1.0"
 ## 4. Commit and tag
 
 ```bash
-git add CHANGELOG.md Sources/KontextVideoSDK/API/SDKInfo.swift
+git add CHANGELOG.md Sources/KontextVideoSDK/Payloads/SDKInfo.swift
 git commit -m "Release 0.1.0"
 git tag -a 0.1.0 -m "Release 0.1.0"
 git push origin main 0.1.0
