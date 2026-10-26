@@ -34,7 +34,7 @@ and CI refuses a release tag that does not match it. The docs page's
 `from: "0.1.0"` means "that version or newer" and stays as it is.
 
 ```
-Sources/KontextVideoSDK/API/SDKInfo.swift    static let version = "0.1.0"
+Sources/KontextVideoSDK/Payloads/SDKInfo.swift    static let version = "0.1.0"
 ```
 
 ## 4. Commit and tag
