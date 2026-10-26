@@ -449,7 +449,7 @@ public final class VideoAd {
             tracker.fire("loaded")
             loadContinuation?.resume()
             loadContinuation = nil
-        case .loadFailed(let code), .error(let code):
+        case .error(let code):
             tracker.fire("error", errorCode: code)
             if let continuation = loadContinuation {
                 loadContinuation = nil

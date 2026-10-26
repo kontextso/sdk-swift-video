@@ -230,7 +230,7 @@ struct FrameBridgeTests {
         let (bridge, recorder) = makeBridge(isVideo: true)
         bridge.load()
         #expect(await waitUntil(1) { !recorder.events.isEmpty })
-        guard case .loadFailed(let code) = recorder.last else { Issue.record("expected loadFailed"); return }
+        guard case .error(let code) = recorder.last else { Issue.record("expected error"); return }
         #expect(code == 400)
         #expect(bridge.state == .ended)
     }

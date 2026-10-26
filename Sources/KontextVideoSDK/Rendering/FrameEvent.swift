@@ -19,10 +19,10 @@ enum FrameEvent: Sendable {
     case progress(offset: Int, playhead: Int)
     /// The video played to the end. The SDK fires `complete`.
     case complete(playhead: Int)
-    /// The creative failed to load or play, with the VAST error code.
+    /// The creative failed to load or play, with the VAST error code: the page's own (`ad.error`), or the
+    /// bridge's when it decided itself (no `ad.loaded` in time, the page could not be loaded, the web
+    /// process died: 400 for a video, 500 otherwise, 405 after show).
     case error(code: Int)
-    /// The page did not answer in time, or could not be loaded.
-    case loadFailed(code: Int)
 
     /// The video moments a page reports (`video.<name>`), named as their VAST beacons. `skip`, `progress`
     /// and `complete` carry more and are events of their own.

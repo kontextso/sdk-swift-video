@@ -112,7 +112,7 @@ final class FrameBridge: NSObject {
             }
             guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
-            fail(.loadFailed(code: loadErrorCode))
+            fail(.error(code: loadErrorCode))
         }
     }
 
@@ -364,12 +364,12 @@ extension FrameBridge: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard state == .loading else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
-        fail(.loadFailed(code: loadErrorCode))
+        fail(.error(code: loadErrorCode))
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Logger.warning("frame \(adId.prefix(8)): web content process terminated")
-        fail(state == .loading ? .loadFailed(code: loadErrorCode) : .error(code: 405))
+        fail(.error(code: state == .loading ? loadErrorCode : 405))
     }
 }
 
