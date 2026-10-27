@@ -90,7 +90,7 @@ struct RequestTests {
         request = AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playheadMs: 0),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0),
             sessionId: "s-2", held: []
         )
         let json = try Fixtures.encode(request)
@@ -105,12 +105,12 @@ struct RequestTests {
         let window = TestWindow(size: CGSize(width: 844, height: 390))
         defer { window.tearDown() }
         Environment.keyWindow = { window.window }
-        let snapshot = PlayerSnapshot.make(playheadMs: 47_001)
+        let snapshot = PlayerSnapshot.make(playhead: 47.0014)
         #expect(snapshot.width == 844 && snapshot.height == 390, "landscape: the key window's size in points")
         #expect(snapshot.fullscreen)
-        #expect(snapshot.playhead == 47_001)
+        #expect(snapshot.playhead == 47_001, "milliseconds on the wire, rounded")
         Environment.keyWindow = { nil }
-        let bare = PlayerSnapshot.make(playheadMs: 0)
+        let bare = PlayerSnapshot.make(playhead: 0)
         #expect(bare.fullscreen, "no window yet: the main screen")
         #expect(bare.width == Int(UIScreen.main.bounds.width.rounded()))
     }

@@ -454,22 +454,22 @@ struct VideoAdsTests {
     @Test func playheadComesFromTheProviderOrTheTrackedPlayerOrIsZero() async {
         let ads = await makeAds()
         harness.player.playhead = 47
-        #expect(ads.playheadMs == 47_000)
+        #expect(ads.playhead == 47)
         ads.playheadProvider = { .nan }
-        #expect(ads.playheadMs == 0, "never NaN")
+        #expect(ads.playhead == 0, "never NaN")
         ads.playheadProvider = { -3 }
-        #expect(ads.playheadMs == 0, "never negative")
+        #expect(ads.playhead == 0, "never negative")
         ads.playheadProvider = { .infinity }
-        #expect(ads.playheadMs == 0, "never infinite")
+        #expect(ads.playhead == 0, "never infinite")
         ads.playheadProvider = { .greatestFiniteMagnitude }
-        #expect(ads.playheadMs == Int(VideoAds.maxPlayhead * 1000), "a huge value is clamped, not a crash")
+        #expect(ads.playhead == 315_360_000, "a huge value is clamped, not a crash")
         let player = AVPlayer()
         ads.trackPlayhead(of: player)
-        #expect(ads.playheadMs == 0, "tracking a player replaces the provider; no item: 0")
+        #expect(ads.playhead == 0, "tracking a player replaces the provider; no item: 0")
         ads.playheadProvider = { 5 }
-        #expect(ads.playheadMs == 5_000, "a provider replaces the tracked player")
+        #expect(ads.playhead == 5, "a provider replaces the tracked player")
         let bare = VideoAds(content: .init(id: "bare", language: "en"))
-        #expect(bare.playheadMs == 0, "nothing set: the start of the video, what a prefetch sends")
+        #expect(bare.playhead == 0, "nothing set: the start of the video, what a prefetch sends")
     }
 
     @Test func aTrackedPlayerIsHeldWeakly() async {
@@ -477,7 +477,7 @@ struct VideoAdsTests {
         var player: AVPlayer? = AVPlayer()
         ads.trackPlayhead(of: player!)
         player = nil
-        #expect(ads.playheadMs == 0)
+        #expect(ads.playhead == 0)
     }
 }
 }

@@ -78,10 +78,12 @@ struct PlayerSnapshot: Encodable, Sendable, Equatable {
     /// Milliseconds in content time; 0 before the episode plays.
     let playhead: Int
 
-    /// The key window's size, or the screen's, in points: width < height is portrait.
+    /// The key window's size, or the screen's, in points: width < height is portrait. `playhead` in
+    /// seconds, as the SDK keeps it; the wire takes milliseconds.
     @MainActor
-    static func make(playheadMs: Int) -> PlayerSnapshot {
+    static func make(playhead: TimeInterval) -> PlayerSnapshot {
         let screen = (Environment.keyWindow()?.bounds ?? UIScreen.main.bounds).size
-        return PlayerSnapshot(width: Int(screen.width.rounded()), height: Int(screen.height.rounded()), fullscreen: true, playhead: playheadMs)
+        return PlayerSnapshot(width: Int(screen.width.rounded()), height: Int(screen.height.rounded()), fullscreen: true,
+                              playhead: Int((playhead * 1000).rounded()))
     }
 }

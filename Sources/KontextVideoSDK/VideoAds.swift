@@ -135,7 +135,7 @@ public final class VideoAds {
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playheadMs: playheadMs), sessionId: sessionId, held: held)
+                                      player: .make(playhead: playhead), sessionId: sessionId, held: held)
         Logger.debug("\(content.id): requesting at playhead \(request.player.playhead) ms, holding \(held.count)")
         DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(request.player.playhead))])
 
@@ -169,19 +169,11 @@ public final class VideoAds {
         playheadProvider = { [weak player] in player?.currentTime().seconds ?? 0 }
     }
 
-    /// Content time in seconds, read now: the provider's, or 0. Clamped to `0...maxPlayhead`: a broken
-    /// provider (NaN, infinity, a huge number) must not crash the app when `playheadMs` converts to `Int`.
+    /// Content time in seconds, read now: the provider's, or 0. Clamped to ten years: a broken provider
+    /// (NaN, infinity, a huge number) must not crash the app when the request converts it to `Int`.
     var playhead: TimeInterval {
         guard let value = playheadProvider?(), value.isFinite else { return 0 }
-        return min(max(0, value), Self.maxPlayhead)
-    }
-
-    /// Longer than any video: ten years, in seconds.
-    static let maxPlayhead: TimeInterval = 315_360_000
-
-    /// Content time in milliseconds as a request sends it.
-    var playheadMs: Int {
-        Int((playhead * 1000).rounded())
+        return min(max(0, value), 315_360_000)
     }
 
     // MARK: What the ads report
