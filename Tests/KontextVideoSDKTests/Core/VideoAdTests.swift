@@ -634,6 +634,36 @@ struct VideoAdTests {
         try ad.dismiss()
     }
 
+    @Test func aVideosViewabilityClockStopsAtComplete() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "v9e", creative: "video"))
+        try ad.show(in: harness.player.view)
+        send(ad, "video.start", ["playhead": 0])
+        #expect(ad.meter?.countsTime == true)
+        send(ad, "video.complete", ["playhead": 1_500])
+        #expect(ad.meter?.countsTime == false, "an end card on screen is not the video playing")
+        try ad.dismiss()
+    }
+
+    @Test func aVideoThatStartedBeforeTheLinearMeterExistsStillCountsAsPlaying() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10d"))
+        try ad.show(from: window.root)
+        #expect(ad.meter == nil, "a linear ad's meter waits for the presentation")
+        send(ad, "video.start", ["playhead": 0])
+        ad.startMeter()   // what the presentation completion does
+        #expect(ad.meter?.countsTime == true, "the start that came first is not forgotten")
+    }
+
+    @Test func destroyingFromInsideTheVideoImpressionCallbackFiresNothingAfterTheEnd() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "v9f", creative: "video"))
+        delegate.onImpression = { _ in ads.destroy() }
+        try ad.show(in: harness.player.view)
+        send(ad, "video.start", ["playhead": 0])
+        #expect(delegate.events == ["impression", "end:destroyed"])
+        send(ad, "video.firstQuartile", ["playhead": 2_500])
+        let fired = await beacons()
+        #expect(fired.contains("start") && fired.contains("impression") && !fired.contains("firstQuartile"), "the start's own beacons, nothing after the end: \(fired)")
+    }
+
     @Test func showInAViewThatIsNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10b"))
         let detached = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))

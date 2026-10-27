@@ -103,7 +103,8 @@ public final class VideoAd {
 
     /// `true` from a successful `show` on; an ad is shown at most once.
     public private(set) var wasShown = false
-    /// `true` once `didEnd` was delivered.
+    /// `true` once the ad began to end: nothing is on screen for the app any more. `didEnd` follows at once
+    /// for an overlay or pause ad, and once the dismissal finished for a linear ad.
     public private(set) var hasEnded = false
     /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
@@ -143,7 +144,11 @@ public final class VideoAd {
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
-    private var meter: ViewabilityMeter?
+    private(set) var meter: ViewabilityMeter?
+    /// The ad video is playing (from `video.start`, not while paused, over at `complete`): the only time a
+    /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
+    /// video starts: a linear ad's meter waits for the presentation to finish.
+    private var videoPlaying = false
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private(set) var durationTask: Task<Void, Never>?
     /// When the current stretch of active time on screen began; `nil` while the app is not active.
@@ -280,7 +285,8 @@ public final class VideoAd {
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
-            guard viewController.view.window != nil, viewController.presentedViewController == nil else {
+            guard viewController.view.window != nil, viewController.presentedViewController == nil,
+                  !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
                 throw VideoAdError.presenterUnavailable
             }
@@ -319,8 +325,9 @@ public final class VideoAd {
 
     /// How long a linear presentation may take to reach the screen before the ad gives up on it.
     static var presentationTimeout: TimeInterval = 2
-    /// How long a linear dismissal may take before `didEnd` is delivered anyway: a completion UIKit never
-    /// calls must not keep the app waiting.
+    /// How long a linear dismissal may take before `didEnd` is delivered anyway, once the controller has
+    /// left the screen (five times that if it has not): a completion UIKit never calls must not keep the
+    /// app waiting, and a dismissal still running must not be reported over.
     static var dismissalTimeout: TimeInterval = 1
 
     /// The key window's root controller, followed through what it presents to the top, as the peers do
@@ -481,12 +488,12 @@ public final class VideoAd {
 
     /// Viewability: 50 % of the box on screen for 1 s (image) or 2 s (video) is `viewable`; the page
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
-    private func startMeter() {
+    func startMeter() {
         guard !hasEnded, meter == nil else { return }
         let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: descriptor.creative == .video ? 2 : 1)
         // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
         // viewability clock runs only while the video plays (from `video.start`, not while paused).
-        meter.countsTime = descriptor.creative != .video
+        meter.countsTime = descriptor.creative != .video || videoPlaying
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -527,8 +534,14 @@ public final class VideoAd {
                 // that presents its next screen in `didEnd` must not collide with the animation.
                 dismissing = true
                 controller.dismiss(animated: true) { [weak self] in self?.finish(reason) }
+                // A completion UIKit never calls: once the controller has left the screen, or after a
+                // hard cap while it still has not, the app hears `didEnd` anyway.
                 Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: UInt64(Self.dismissalTimeout * 1_000_000_000))
+                    let deadline = Environment.now() + Self.dismissalTimeout
+                    let cap = Environment.now() + Self.dismissalTimeout * 5
+                    repeat {
+                        try? await Task.sleep(nanoseconds: UInt64(min(Self.dismissalTimeout, 0.25) * 1_000_000_000))
+                    } while Environment.now() < deadline || (controller.view.window != nil && Environment.now() < cap)
                     self?.finish(reason)
                 }
             }
@@ -644,21 +657,25 @@ public final class VideoAd {
             tracker.adPlayhead = playhead
             Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
             switch event {
-            case .start, .resume: meter?.countsTime = true
-            case .pause: meter?.countsTime = false
+            case .start, .resume: videoPlaying = true
+            case .pause: videoPlaying = false
             default: break
             }
+            meter?.countsTime = videoPlaying
+            tracker.fire(event.rawValue)
+            tracker.fireProgress(upTo: playhead)
+            // The delegate last: it may end the ad on the spot, and everything above was the event's own.
             if event == .start {
                 recordImpression()
             }
-            tracker.fire(event.rawValue)
-            tracker.fireProgress(upTo: playhead)
         case .progress(let offset, let playhead):
             tracker.adPlayhead = playhead
             tracker.fireProgress(upTo: max(offset, playhead))
         case .complete(let playhead):
             tracker.adPlayhead = playhead
             isCompleted = true
+            videoPlaying = false
+            meter?.countsTime = false   // the end card is not the video playing
             // Checkpoints before the end that the page never reported, then the end itself.
             tracker.fireProgress(upTo: playhead)
             tracker.fire("complete")

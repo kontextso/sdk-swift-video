@@ -9,7 +9,7 @@ excluded:
   - Example
 
 type_body_length:
-  # One suite per source file: the big ones (VideoAdTests) carry many small @Test functions.
+  # The sources; Tests/.swiftlint.yml raises this for the suites, which carry many small @Test functions.
   warning: 700
   error: 900
 

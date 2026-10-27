@@ -1,0 +1,10 @@
+# Nested configuration for the tests: one suite per source file, and the big ones (VideoAdTests) carry
+# many small @Test functions. The root limits stay for the sources.
+
+type_body_length:
+  warning: 1000
+  error: 1200
+
+file_length:
+  warning: 1100
+  error: 1300
