@@ -8,7 +8,7 @@ enum Fixtures {
     /// `video`: the creative's events; `nonLinear`: an overlay or pause ad's `overlayViewDuration`.
     static func tracking(video: Bool, nonLinear: Bool = true, origin: String = "https://ads.test", adId: String = "ad-1") -> [[String: Any]] {
         let url = { (event: String, extra: String) -> String in
-            "\(origin)/events/\(adId)/\(event)?\(extra.isEmpty ? "" : extra + "&")cb=[CACHEBUSTING]&fid=[FIREID]&ts=[TIMESTAMP]&cph=[CONTENTPLAYHEAD]"
+            "\(origin)/events/\(adId)/\(event)?\(extra.isEmpty ? "" : extra + "&")cb=[CACHEBUSTING]&fid=[KONTEXT_FIREID]&ts=[TIMESTAMP]&cph=[MEDIAPLAYHEAD]"
         }
         var entries: [[String: Any]] = [
             ["event": "loaded", "url": url("loaded", "")],
@@ -22,7 +22,7 @@ enum Fixtures {
             ["event": "error", "url": url("error", "code=[ERRORCODE]&aph=[ADPLAYHEAD]")],
             ["event": "iconView", "url": url("iconView", "")],
             ["event": "iconClick", "url": url("iconClick", "")],
-            ["event": "notUsed", "url": url("notUsed", "reason=[REASON]&wp=[WINNINGPRICE]&winner=[WINNER]")],
+            ["event": "notUsed", "url": url("notUsed", "reason=[KONTEXT_REASON]&wp=[KONTEXT_WINNINGPRICE]&winner=[KONTEXT_WINNER]")],
         ]
         if video {
             entries += [
@@ -42,7 +42,7 @@ enum Fixtures {
             ]
         }
         if nonLinear {
-            entries.append(["event": "overlayViewDuration", "url": url("overlayViewDuration", "ovd=[VIEWDURATION]")])
+            entries.append(["event": "overlayViewDuration", "url": url("overlayViewDuration", "ovd=[KONTEXT_VIEWDURATION]")])
         }
         return entries
     }

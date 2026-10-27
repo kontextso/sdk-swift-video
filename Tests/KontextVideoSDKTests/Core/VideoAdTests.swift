@@ -360,7 +360,7 @@ struct VideoAdTests {
         try ad.dismiss()
         _ = await beacons()
         let ovd = try #require(harness.server.beacons.first { $0.event == "overlayViewDuration" }?.query["ovd"].flatMap(Int.init))
-        #expect(ovd >= 100 && ovd < 400, "[VIEWDURATION] is ms on screen: \(ovd)")
+        #expect(ovd >= 100 && ovd < 400, "[KONTEXT_VIEWDURATION] is ms on screen: \(ovd)")
     }
 
     @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {

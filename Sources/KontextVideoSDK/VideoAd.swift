@@ -491,7 +491,7 @@ public final class VideoAd {
             }
         }
         if format != .linear {
-            // The ad was on screen, whatever ended it; `[VIEWDURATION]` is the active time, not the wall clock.
+            // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
             if let since = activeSince {
                 activeAccumulated += ProcessInfo.processInfo.systemUptime - since
                 activeSince = nil

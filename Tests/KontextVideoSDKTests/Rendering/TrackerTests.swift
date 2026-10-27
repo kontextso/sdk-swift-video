@@ -90,13 +90,40 @@ struct TrackerTests {
         tracker.fire("error", errorCode: 405)
         let beacon = try #require(await fired().first)
         #expect(beacon.query["code"] == "405")
-        #expect(beacon.query["cph"] == "01:01:01.250", "[CONTENTPLAYHEAD] is HH:MM:SS.mmm")
+        #expect(beacon.query["cph"] == "01:01:01.250", "[MEDIAPLAYHEAD] is HH:MM:SS.mmm")
         #expect(beacon.query["aph"] == "00:00:07.500", "[ADPLAYHEAD] is HH:MM:SS.mmm")
         let cb = try #require(beacon.query["cb"])
         #expect(cb.count == 8 && Int(cb) != nil, "[CACHEBUSTING] is 8 digits")
         let ts = try #require(beacon.query["ts"])
-        #expect(ts.hasSuffix("Z") && ts.contains("T") && ts.contains("."), "[TIMESTAMP] is ISO 8601 with milliseconds: \(ts)")
-        #expect(ISO8601DateFormatter().date(from: ts.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)) != nil)
+        #expect(ts.contains("T") && ts.contains("."), "[TIMESTAMP] is ISO 8601 with milliseconds: \(ts)")
+        #expect(ts.hasSuffix("Z") || ts.range(of: #"[+-]\d\d:\d\d$"#, options: .regularExpression) != nil, "in the device's zone: \(ts)")
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let parsed = try #require(parser.date(from: ts))
+        #expect(abs(parsed.timeIntervalSinceNow) < 5, "the moment of firing")
+    }
+
+    @Test func playheadsAreWholeMillisecondsNeverOneShort() async throws {
+        let tracker = try makeTracker()
+        tracker.contentPlayhead = { 9.806 }   // 9.80599… in binary: truncating the fraction gives .805
+        tracker.adPlayhead = 59_999
+        tracker.fire("error", errorCode: 400)
+        let beacon = try #require(await fired().first)
+        #expect(beacon.query["cph"] == "00:00:09.806")
+        #expect(beacon.query["aph"] == "00:00:59.999")
+    }
+
+    @Test func theDeprecatedContentPlayheadIsFilledLikeMediaPlayhead() async throws {
+        let tracker = Tracker(adId: "ad-1", entries: [
+            AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?old=[CONTENTPLAYHEAD]&new=[MEDIAPLAYHEAD]&x=[KONTEXT_UNKNOWN]", offset: nil, part: nil),
+        ])
+        tracker.contentPlayhead = { 2 }
+        tracker.fire("impression")
+        let beacon = try #require(await fired().first)
+        #expect(beacon.query["old"] == "00:00:02.000" && beacon.query["new"] == "00:00:02.000")
+        #expect(beacon.query["x"] == "[KONTEXT_UNKNOWN]", "a macro the SDK does not know stays in place")
+        let raw = try #require(server.requests(to: "/events/").first?.request.url?.absoluteString)
+        #expect(raw.contains("x=%5BKONTEXT_UNKNOWN%5D") && !raw.contains("%25"), "its brackets are encoded, so nothing else is re-encoded: \(raw)")
     }
 
     @Test func cacheBustingDiffersPerBeacon() async throws {

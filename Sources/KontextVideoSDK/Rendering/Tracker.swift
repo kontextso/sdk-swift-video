@@ -1,13 +1,16 @@
 import Foundation
 
-/// Fires an ad's `tracking` entries: each one once, when its moment happens, with the VAST macros
-/// substituted. The page never fires a beacon; the SDK fires every one. No retries: a beacon that did not
-/// leave is lost, as in every ad SDK.
+/// Fires an ad's `tracking` entries: each one once, when its moment happens, with the macros substituted:
+/// the IAB's (`[CACHEBUSTING]`, `[TIMESTAMP]`, `[MEDIAPLAYHEAD]` and its deprecated twin `[CONTENTPLAYHEAD]`,
+/// `[ADPLAYHEAD]`, `[ERRORCODE]`) and our own, prefixed `KONTEXT_` so they never collide with the IAB registry
+/// (`[REASON]` there is an integer for verification pixels). A macro the SDK does not know stays in place.
+/// The page never fires a beacon; the SDK fires every one. No retries: a beacon that did not leave is lost,
+/// as in every ad SDK.
 @MainActor
 final class Tracker {
     /// Milliseconds into the ad video, as the page last reported it; `[ADPLAYHEAD]`.
     var adPlayhead = 0
-    /// Content time in seconds at the moment of firing; `[CONTENTPLAYHEAD]`.
+    /// Content time in seconds at the moment of firing; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`.
     var contentPlayhead: () -> TimeInterval = { 0 }
 
     private let adId: String
@@ -22,8 +25,9 @@ final class Tracker {
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
-    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[REASON]`,
-    /// `[WINNINGPRICE]` and `[WINNER]`. Returns the occurrence's fire id, for a click-through that must carry the same one.
+    /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[KONTEXT_REASON]`,
+    /// `[KONTEXT_WINNINGPRICE]` and `[KONTEXT_WINNER]`. Returns the occurrence's fire id, for a click-through
+    /// that must carry the same one.
     @discardableResult
     func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil, notUsed: NotUsed? = nil) -> String {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
@@ -42,7 +46,7 @@ final class Tracker {
         return fireId
     }
 
-    /// The click-through with the beacon macros substituted, `[FIREID]` with the click's own fire id:
+    /// The click-through with the beacon macros substituted, `[KONTEXT_FIREID]` with the click's own fire id:
     /// a redirect URL and the `click` beacon then arrive as one occurrence.
     func clickThrough(_ url: URL, fireId: String) -> URL {
         URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil, notUsed: nil)) ?? url
@@ -75,15 +79,20 @@ final class Tracker {
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
         template
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
-            .replacingOccurrences(of: "[FIREID]", with: fireId)
-            .replacingOccurrences(of: "[VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
+            .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
             .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
             .replacingOccurrences(of: "[ADPLAYHEAD]", with: Self.encode(Self.playhead(seconds: TimeInterval(adPlayhead) / 1000)))
             .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
-            .replacingOccurrences(of: "[REASON]", with: notUsed?.reason ?? "")
-            .replacingOccurrences(of: "[WINNINGPRICE]", with: notUsed?.winningPrice.map { String($0) } ?? "")
-            .replacingOccurrences(of: "[WINNER]", with: Self.encode(notUsed?.winner ?? ""))
+            .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
+            .replacingOccurrences(of: "[KONTEXT_VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
+            .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
+            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: notUsed?.winningPrice.map { String($0) } ?? "")
+            .replacingOccurrences(of: "[KONTEXT_WINNER]", with: Self.encode(notUsed?.winner ?? ""))
+            // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
+            // URL, and every `%3A` above would become `%253A`.
+            .replacingOccurrences(of: "[", with: "%5B")
+            .replacingOccurrences(of: "]", with: "%5D")
     }
 
     private func send(_ url: URL, event: String, part: String?) {
@@ -102,20 +111,22 @@ final class Tracker {
         }.resume()
     }
 
-    // VAST 4 macro formats: ISO 8601 with milliseconds, and HH:MM:SS.mmm for playheads.
+    // VAST 4 macro formats: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone, and HH:MM:SS.mmm for playheads.
 
     private static let timestamp: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = .current
         return formatter
     }()
 
     private static func playhead(seconds: TimeInterval) -> String {
-        let total = max(0, seconds)
-        let hours = Int(total / 3600)
-        let minutes = Int(total / 60) % 60
-        let secs = Int(total) % 60
-        let millis = Int((total - floor(total)) * 1000)
+        // Whole milliseconds first: splitting the Double would lose one (9.806 is 9.80599… in binary).
+        let totalMs = Int((max(0, seconds) * 1000).rounded())
+        let hours = totalMs / 3_600_000
+        let minutes = totalMs / 60_000 % 60
+        let secs = totalMs / 1000 % 60
+        let millis = totalMs % 1000
         return String(format: "%02d:%02d:%02d.%03d", hours, minutes, secs, millis)
     }
 
