@@ -61,17 +61,14 @@ pnpm install && pnpm dev
 xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
-`--demo` as a launch argument runs every flow without touching the screen: the three formats prepared at once,
-a pause ad shown and dismissed, an overlay, a linear ad interrupted from outside, a bid rejected as outbid, and
-`destroy()` with an ad on screen. From a terminal:
-
-```bash
-xcrun simctl launch <simulator-id> so.kontext.example-video --demo
-```
+The home screen lists three videos, one per format. Opening one plays a bundled clip full screen, prepares that
+format's ad (`format` then `load`) and, 3 s in, shows it: the linear ad over the screen, the overlay inside the
+player, or a pause with the pause ad; a tap resumes, and the next pause gets its own ad. Leaving the screen
+calls `destroy()`. The whole integration is `Example/PlayerScreen.swift`.
 
 What to read afterwards:
 
-- The example's screen lists every delegate callback.
+- The player's bottom line shows the last delegate callback.
 - The mock's `http://localhost:5175/log` lists every request and beacon, newest first, with the ad id, the query
   (macros already substituted) and a note (`first impression: burl would fire now`, `unknown event`, ...).
 - The SDK's log, including debug lines (the subsystem is `so.kontext.video`):
@@ -157,7 +154,7 @@ Rules the suites follow:
 What the package runner cannot do, and where it is covered instead: there is no `UIWindowScene`, so UIKit never
 completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The linear ad
 tests therefore assert what the SDK asked UIKit to do and drive the controller's disappearance decision directly;
-the example app's `--demo` run against the mock covers the real presentation, interruption and dismissal.
+the example app against the mock covers the real presentation and dismissal.
 
 ## CI
 

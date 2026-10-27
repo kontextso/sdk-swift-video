@@ -60,16 +60,26 @@ final class RecordingDelegate: VideoAdDelegate {
 @MainActor
 final class RecordingSKAdNetwork: SKAdNetworkManaging {
     private(set) var calls: [String] = []
-    /// What `initImpression` does before it returns; a test that wants it slow or failing sets it.
+    /// What each call does before it returns; a test that wants one slow or failing sets it.
     var onInit: (@MainActor () async throws -> Void)?
+    var onStart: (@MainActor () async throws -> Void)?
+    var onEnd: (@MainActor () async throws -> Void)?
 
     func initImpression(_ skan: Skan) async throws {
         calls.append("init \(skan.itunesItem)")
         try await onInit?()
     }
 
-    func startImpression() async throws { calls.append("start") }
-    func endImpression() async throws { calls.append("end") }
+    func startImpression() async throws {
+        calls.append("start")
+        try await onStart?()
+    }
+
+    func endImpression() async throws {
+        calls.append("end")
+        try await onEnd?()
+    }
+
     func dispose() async throws { calls.append("dispose") }
 }
 

@@ -33,6 +33,9 @@ final class SKAdNetworkImpression {
             do {
                 try await Environment.skAdNetwork.initImpression(skan)
                 registered = true
+                // The ad left the screen while Apple registered it: no start for an ad nobody sees; the
+                // end already queued behind this releases the impression.
+                guard !ended else { return }
                 try await Environment.skAdNetwork.startImpression()
                 Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression started")
             } catch {
@@ -50,10 +53,15 @@ final class SKAdNetworkImpression {
             registered = false
             do {
                 try await Environment.skAdNetwork.endImpression()
-                try await Environment.skAdNetwork.dispose()
                 Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression ended")
             } catch {
                 report("end", error)
+            }
+            // Released whatever the end did: a failed end must not leave the impression behind for the next ad.
+            do {
+                try await Environment.skAdNetwork.dispose()
+            } catch {
+                report("dispose", error)
             }
         }
     }

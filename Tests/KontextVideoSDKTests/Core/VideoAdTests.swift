@@ -928,24 +928,28 @@ struct VideoAdTests {
 
     @Test func theEndWaitsForAStartStillInFlight() async throws {
         let gate = Gate()
-        harness.skAdNetwork.onInit = { while !gate.open { await sleepMs(5) } }
+        harness.skAdNetwork.onStart = { while !gate.open { await sleepMs(5) } }
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s5"), itunesItem: "s5"))
         try ad.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls == ["init s5", "start"] })
         try ad.dismiss()
         await sleepMs(60)
-        #expect(skanCalls == ["init s5"], "end waits until Apple answered the start")
+        #expect(skanCalls == ["init s5", "start"], "end waits until Apple answered the start")
         gate.open = true
         #expect(await waitUntil { skanCalls == ["init s5", "start", "end", "dispose"] })
     }
 
     @Test func theNextAdsImpressionStartsAfterThePreviousOneEnded() async throws {
         let gate = Gate()
-        harness.skAdNetwork.onInit = { while !gate.open { await sleepMs(5) } }
+        harness.skAdNetwork.onEnd = { while !gate.open { await sleepMs(5) } }
         let (first, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s6a"), itunesItem: "s6a"))
         let (second, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s6b"), itunesItem: "s6b"))
         try first.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls.count == 2 })
         try first.dismiss()
         try second.show(in: harness.player.view)
+        await sleepMs(60)
+        #expect(skanCalls == ["init s6a", "start", "end"], "the next ad's init waits for the end in flight")
         gate.open = true
         #expect(await waitUntil { skanCalls.count == 6 })
         #expect(skanCalls == ["init s6a", "start", "end", "dispose", "init s6b", "start"], "one impression at a time, in order")
@@ -962,6 +966,54 @@ struct VideoAdTests {
         #expect(skanCalls == ["init s7"], "nothing to end when Apple refused the impression")
         #expect(delegate.events == ["impression", "end:dismissed"])
         #expect(await beacons().contains("impression"))
+    }
+
+    @Test func aFailedEndStillReleasesTheImpressionBeforeTheNextAd() async throws {
+        harness.skAdNetwork.onEnd = { throw TestFailure() }
+        let (first, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s11a"), itunesItem: "s11a"))
+        let (second, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s11b"), itunesItem: "s11b"))
+        try first.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls.count == 2 })
+        try first.dismiss()
+        try second.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls.count == 6 })
+        #expect(skanCalls == ["init s11a", "start", "end", "dispose", "init s11b", "start"], "dispose runs whatever the end did")
+        try second.dismiss()
+    }
+
+    @Test func anAdThatEndedWhileAppleRegisteredItIsNeverStarted() async throws {
+        let gate = Gate()
+        harness.skAdNetwork.onInit = { while !gate.open { await sleepMs(5) } }
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s12"), itunesItem: "s12"))
+        try ad.show(in: harness.player.view)
+        try ad.dismiss()
+        gate.open = true
+        #expect(await waitUntil { skanCalls.count == 3 })
+        await sleepMs(30)
+        #expect(skanCalls == ["init s12", "end", "dispose"], "no start for an ad already gone; the end releases it")
+    }
+
+    @Test func aFailedStartStillGetsItsEnd() async throws {
+        harness.skAdNetwork.onStart = { throw TestFailure() }
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s13"), itunesItem: "s13"))
+        try ad.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls.count == 2 })
+        try ad.dismiss()
+        #expect(await waitUntil { skanCalls == ["init s13", "start", "end", "dispose"] }, "Apple asks for the end even after a failed start")
+    }
+
+    @Test func repeatedStartAndEndAreOneLifecycle() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s14"), itunesItem: "s14"))
+        try ad.show(in: harness.player.view)
+        let impression = try #require(ad.skAdNetwork)
+        impression.start()
+        impression.start()
+        #expect(await waitUntil { skanCalls.count == 2 })
+        try ad.dismiss()
+        impression.end()
+        impression.end()
+        await sleepMs(60)
+        #expect(skanCalls == ["init s14", "start", "end", "dispose"])
     }
 
     @Test func aClickOnAnAdWhoseNetworkSignedTheClickOpensTheStoreSheetNotTheURL() async throws {

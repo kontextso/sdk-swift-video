@@ -18,6 +18,10 @@ targets:
         product: KontextVideoSDK
     sources:
       - path: Example
+        excludes:
+          - Resources
+      - path: Example/Resources
+        buildPhase: resources
     info:
       path: Example/Info.plist
       properties:
