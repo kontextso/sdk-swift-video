@@ -54,14 +54,16 @@ enum Environment {
         TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
     }
 
-    /// The key window of a foreground scene: a background scene's window (iPad, two windows of the app)
-    /// cannot present anything the viewer sees.
+    /// The key window of the scene receiving events, else of a foreground scene that is not (an iPhone
+    /// while a system alert is up, the ATT dialog included). Active first: `connectedScenes` is a set, and
+    /// an iPad with two foreground windows must not get whichever comes first. A background scene's
+    /// window cannot present anything the viewer sees.
     private static func defaultKeyWindow() -> UIWindow? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let keyWindow = { (state: UIScene.ActivationState) in
+            scenes.filter { $0.activationState == state }.flatMap(\.windows).first { $0.isKeyWindow }
+        }
+        return keyWindow(.foregroundActive) ?? keyWindow(.foregroundInactive)
     }
 
     private static func defaultOpenURL(_ url: URL, completion: @escaping @MainActor (Bool) -> Void) {
