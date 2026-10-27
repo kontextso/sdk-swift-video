@@ -68,7 +68,7 @@ jobs:
             -destination 'platform=iOS Simulator,OS=18.5,name=iPhone 16' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
-            | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)"
+            | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)|Fatal error|precondition|Crash|crashed|Restarting after|exited abnormally|Terminating app"
 
   # A release tag must be the version the SDK reports (SDKInfo.version), or publishers see one
   # version on GitHub and another in our logs.
