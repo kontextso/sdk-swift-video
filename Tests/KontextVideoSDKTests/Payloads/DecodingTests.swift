@@ -144,7 +144,11 @@ struct DecodingTests {
         noFidelities["fidelities"] = []
         var brokenFidelity = Fixtures.skan()
         brokenFidelity["fidelities"] = [["fidelity": 1, "nonce": "n"]]
-        for skan in [missingNetwork, noFidelities, brokenFidelity, "not an object"] as [Any] {
+        var hugeFidelity = Fixtures.skan()
+        hugeFidelity["fidelities"] = [["fidelity": 1e300, "nonce": "n", "timestamp": "1", "signature": "s"]]
+        var fractionalFidelity = Fixtures.skan()
+        fractionalFidelity["fidelities"] = [["fidelity": 1.5, "nonce": "n", "timestamp": "1", "signature": "s"]]
+        for skan in [missingNetwork, noFidelities, brokenFidelity, hugeFidelity, fractionalFidelity, "not an object"] as [Any] {
             let payload = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan]]))
             #expect(payload.id == "ad-1" && payload.attribution?.skan == nil, "\(skan)")
         }

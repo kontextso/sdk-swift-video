@@ -123,7 +123,8 @@ private extension KeyedDecodingContainer {
     func requireIntCoercing(forKey key: Key) throws -> Int {
         if let int = try? decode(Int.self, forKey: key) { return int }
         if let string = try? decode(String.self, forKey: key), let int = Int(string) { return int }
-        if let double = try? decode(Double.self, forKey: key) { return Int(double) }
+        // `Int(exactly:)`: a huge or fractional number is unparseable, not a trap.
+        if let double = try? decode(Double.self, forKey: key), let int = Int(exactly: double) { return int }
         throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "missing or unparseable \(key.stringValue)")
     }
 }
