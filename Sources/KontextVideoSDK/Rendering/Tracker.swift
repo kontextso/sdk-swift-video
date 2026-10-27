@@ -52,30 +52,6 @@ final class Tracker {
         URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil, notUsed: nil)) ?? url
     }
 
-    /// Why the SDK did not use a bid, for the `notUsed` beacon: the server closes the bid with this reason.
-    struct NotUsed: Equatable {
-        /// `notUsed` or `outbid` (the app's `reject`), `destroyed` (`VideoAds.destroy()`).
-        let reason: String
-        /// What won the publisher's own auction, when the app said so: the price and the network.
-        let winningPrice: Double?
-        let winner: String?
-
-        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil, winner: nil)
-
-        init(reason: String, winningPrice: Double?, winner: String?) {
-            self.reason = reason
-            self.winningPrice = winningPrice
-            self.winner = winner
-        }
-
-        init(_ rejection: VideoAd.RejectReason) {
-            switch rejection {
-            case .notUsed: self.init(reason: "notUsed", winningPrice: nil, winner: nil)
-            case .outbid(let price, let winner): self.init(reason: "outbid", winningPrice: price, winner: winner)
-            }
-        }
-    }
-
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
         template
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
@@ -132,6 +108,32 @@ final class Tracker {
 
     private static func encode(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? value
+    }
+}
+
+extension Tracker {
+    /// Why the SDK did not use a bid, for the `notUsed` beacon: the server closes the bid with this reason.
+    struct NotUsed: Equatable {
+        /// `notUsed` or `outbid` (the app's `reject`), `destroyed` (`VideoAds.destroy()`).
+        let reason: String
+        /// What won the publisher's own auction, when the app said so: the price and the network.
+        let winningPrice: Double?
+        let winner: String?
+
+        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil, winner: nil)
+
+        init(reason: String, winningPrice: Double?, winner: String?) {
+            self.reason = reason
+            self.winningPrice = winningPrice
+            self.winner = winner
+        }
+
+        init(_ rejection: VideoAd.RejectReason) {
+            switch rejection {
+            case .notUsed: self.init(reason: "notUsed", winningPrice: nil, winner: nil)
+            case .outbid(let price, let winner): self.init(reason: "outbid", winningPrice: price, winner: winner)
+            }
+        }
     }
 }
 
