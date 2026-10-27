@@ -288,6 +288,62 @@ struct FrameBridgeTests {
         #expect(recorder.events.count == 1)
     }
 
+    @Test func aRefusedFallbackIsDroppedAndTheClickStays() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "https://brand.test/offer", "fallbackUrl": "intent://x"]), from: main)
+        guard case .click(let url, let fallback, _) = recorder.last else { Issue.record("expected click"); return }
+        #expect(url.host == "brand.test" && fallback == nil, "the fallback is opened under the same policy as the URL")
+    }
+
+    @Test func schemesThatAreNotLinksAreRefused() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        for raw in ["javascript:alert(1)", "data:text/html,hi", "file:///etc/passwd", "blob:https://x/y", "about:blank"] {
+            bridge.noteTouch()
+            bridge.receive(message("ad.click", ["url": raw]), from: main)
+        }
+        #expect(recorder.events.count == 1, "\(recorder.events)")
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "itms-apps://apps.apple.com/app/id1"]), from: main)
+        #expect(recorder.events.count == 2, "store links open")
+    }
+
+    @Test func oneTouchOpensOneURL() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "https://brand.test/offer"]), from: main)
+        bridge.externalNavigation(to: URL(string: "https://brand.test/offer")!)
+        bridge.receive(message("ad.open", ["url": "https://adchoices.test", "purpose": "adChoices"]), from: main)
+        #expect(recorder.events.count == 2, "the tap was spent by the click: \(recorder.events)")
+        bridge.noteTouch()
+        bridge.externalNavigation(to: URL(string: "https://brand.test/other")!)
+        #expect(recorder.events.count == 3, "a new tap opens again")
+    }
+
+    @Test func aRedirectWithTheExplicitDefaultPortIsTheSameOrigin() {
+        let (https, _) = makeBridge(url: URL(string: "https://server.kontext.so/frame/ad-1")!)
+        #expect(https.isSameOrigin(URL(string: "https://server.kontext.so:443/frame/ad-1/next")!))
+        #expect(https.isSameOrigin(URL(string: "https://server.kontext.so/other")!))
+        #expect(!https.isSameOrigin(URL(string: "https://server.kontext.so:8443/frame/ad-1")!))
+        #expect(!https.isSameOrigin(URL(string: "http://server.kontext.so/frame/ad-1")!))
+        #expect(!https.isSameOrigin(URL(string: "https://evil.test/frame/ad-1")!))
+        let (local, _) = makeBridge(url: URL(string: "http://localhost:5175/frame/ad-1")!)
+        #expect(local.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        #expect(!local.isSameOrigin(URL(string: "http://localhost/x")!))
+    }
+
+    @Test func aProcessTerminationAfterTheEndReportsNothing() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        bridge.hide()
+        let before = recorder.events.count
+        bridge.webViewWebContentProcessDidTerminate(bridge.webView)
+        #expect(recorder.events.count == before && bridge.state == .ended)
+    }
+
     @Test func openCarriesThePurposeAndIsNotAClick() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)

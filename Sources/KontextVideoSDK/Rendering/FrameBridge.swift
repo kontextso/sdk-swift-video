@@ -20,8 +20,9 @@ final class FrameBridge: NSObject {
     static var loadTimeout: TimeInterval = 10
     /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1
-    /// Web, store and app deep links all open; `intent:` can start any Android component and is refused.
-    static let refusedSchemes: Set<String> = ["intent"]
+    /// Web, store and app deep links all open; `intent:` can start any Android component, and the rest are
+    /// not links to anywhere. iOS refuses the latter itself; the SDK's policy says so.
+    static let refusedSchemes: Set<String> = ["intent", "javascript", "data", "file", "blob", "about"]
 
     let adId: String
     let webView: WKWebView
@@ -251,16 +252,18 @@ final class FrameBridge: NSObject {
             onEvent?(.loaded)
         case "ad.click", "ad.open":
             guard state == .shown, let raw = body["url"] as? String, let url = Self.url(raw) else { return }
-            guard let scheme = url.scheme?.lowercased(), !Self.refusedSchemes.contains(scheme) else {
+            guard Self.isAllowed(url) else {
                 Logger.warning("frame \(adId.prefix(8)): \(type) to \(raw) dropped, scheme refused")
                 return
             }
-            guard wasTouchedRecently else {
+            guard consumeTouch() else {
                 Logger.warning("frame \(adId.prefix(8)): \(type) to \(url.host ?? raw) dropped, no touch before it")
                 return
             }
             if type == "ad.click" {
-                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(Self.url), area: VideoAd.Click.Area(body["area"] as? String)))
+                // The fallback is opened under the same policy; a refused one is dropped, the click stays.
+                let fallback = (body["fallbackUrl"] as? String).flatMap(Self.url).flatMap { Self.isAllowed($0) ? $0 : nil }
+                onEvent?(.click(url: url, fallbackUrl: fallback, area: VideoAd.Click.Area(body["area"] as? String)))
             } else {
                 onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
             }
@@ -294,20 +297,44 @@ final class FrameBridge: NSObject {
         lastTouchAt = ProcessInfo.processInfo.systemUptime
     }
 
-    private var wasTouchedRecently: Bool {
-        ProcessInfo.processInfo.systemUptime - lastTouchAt <= Self.touchWindow
+    /// One tap opens one URL: the touch is spent by the first click, open or navigation it authorized, so a
+    /// page that reports a tap and also navigates on it does not open twice.
+    private func consumeTouch() -> Bool {
+        guard ProcessInfo.processInfo.systemUptime - lastTouchAt <= Self.touchWindow else { return false }
+        lastTouchAt = -.infinity
+        return true
+    }
+
+    /// A URL the page may have opened: anything but the refused schemes.
+    static func isAllowed(_ target: URL) -> Bool {
+        guard let scheme = target.scheme?.lowercased() else { return false }
+        return !refusedSchemes.contains(scheme)
     }
 
     /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
     /// explicit 443 in the URL and the origin's 0 are the same origin.
     func isFrameOrigin(_ sender: Sender) -> Bool {
         guard sender.scheme == url.scheme, sender.host == url.host else { return false }
-        let defaultPort = url.scheme == "https" ? 443 : (url.scheme == "http" ? 80 : 0)
-        let expected = url.port ?? defaultPort
-        return sender.port == expected || (sender.port == 0 && expected == defaultPort) || (sender.port == defaultPort && url.port == nil)
+        let expected = Self.effectivePort(of: url)
+        return sender.port == expected || (sender.port == 0 && expected == Self.defaultPort(for: url.scheme))
     }
 
+    /// Whether `target` is in the page's origin, with the default port and an explicit one the same.
+    func isSameOrigin(_ target: URL) -> Bool {
+        target.scheme == url.scheme && target.host == url.host && Self.effectivePort(of: target) == Self.effectivePort(of: url)
+    }
+
+    private static func effectivePort(of url: URL) -> Int {
+        url.port ?? defaultPort(for: url.scheme)
+    }
+
+    private static func defaultPort(for scheme: String?) -> Int {
+        scheme == "https" ? 443 : (scheme == "http" ? 80 : 0)
+    }
+
+    /// Terminal with an error; after the end nothing is reported any more.
     private func fail(_ event: FrameEvent) {
+        guard state != .ended else { return }
         end()
         onEvent?(event)
     }
@@ -334,8 +361,8 @@ final class FrameBridge: NSObject {
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
     /// without one it is a forced redirect and goes nowhere.
-    private func externalNavigation(to target: URL) {
-        guard state == .shown, wasTouchedRecently, let scheme = target.scheme?.lowercased(), !Self.refusedSchemes.contains(scheme) else {
+    func externalNavigation(to target: URL) {
+        guard state == .shown, Self.isAllowed(target), consumeTouch() else {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.host ?? target.absoluteString) cancelled")
             return
         }
@@ -353,7 +380,7 @@ extension FrameBridge: WKNavigationDelegate {
         }
         if navigationAction.targetFrame?.isMainFrame == false {
             decisionHandler(.allow)
-        } else if target.scheme == url.scheme, target.host == url.host, target.port == url.port {
+        } else if isSameOrigin(target) {
             decisionHandler(.allow)
         } else if target.absoluteString == "about:blank" {
             decisionHandler(.allow)
