@@ -241,7 +241,7 @@ struct VideoAdTests {
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         send(ad, "ad.close", ["reason": "complete"])
-        #expect(delegate.endReasons == [.completed], "the page ended itself: nobody closed anything")
+        #expect(await waitUntil { delegate.endReasons == [.completed] }, "the page ended itself: nobody closed anything")
         #expect(ad.isCompleted)
         let fired = await beacons()
         #expect(fired.contains("complete") && !fired.contains("close"), "nobody closed anything")
@@ -520,7 +520,7 @@ struct VideoAdTests {
         #expect(fired.contains("creativeView(endCard)"))
         #expect(ad.isCompleted, "the video ran to its end")
         send(ad, "ad.close", ["reason": "close"])
-        #expect(delegate.endReasons == [.closed], "the ✕ is .closed in every format; isCompleted says the video was watched")
+        #expect(await waitUntil { delegate.endReasons == [.closed] }, "the ✕ is .closed in every format; isCompleted says the video was watched")
         #expect(ad.isCompleted)
     }
 
@@ -542,7 +542,7 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 6000])
-        #expect(delegate.endReasons == [.skipped])
+        #expect(await waitUntil { delegate.endReasons == [.skipped] })
         let fired = await beacons()
         #expect(fired.contains("skip"))
         #expect(!fired.contains("overlayViewDuration"), "linear ads have no view duration")
@@ -561,7 +561,7 @@ struct VideoAdTests {
         #expect(presented.prefersStatusBarHidden)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 1000])
-        #expect(delegate.endReasons == [.skipped])
+        #expect(await waitUntil { delegate.endReasons == [.skipped] })
         // The package test runner has no window scene, so UIKit never finishes a transition here; the
         // SDK's request to dismiss is what can be checked. The example's --demo run covers the real thing.
         #expect(presented.isEndingByAd)
@@ -589,7 +589,8 @@ struct VideoAdTests {
         send(ad, "ad.click", ["url": "https://brand.test/late"])
         send(ad, "ad.error", ["code": 405])
         send(ad, "video.start", ["playhead": 0])
-        #expect(opened.isEmpty && delegate.endReasons.count == 1 && !delegate.events.contains("fail"), "late messages: no click, no fail, no second end")
+        #expect(await waitUntil { delegate.endReasons == [.closed] })
+        #expect(opened.isEmpty && !delegate.events.contains("fail"), "late messages: no click, no fail, no second end")
     }
 
     @Test func aPresenterStillDismissingItsModalIsNotUsed() async throws {
@@ -611,8 +612,8 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10c"))
         try ad.show(from: window.root)
         #expect(ad.wasShown && KontextVideo.shared.adOnScreen === ad)
-        #expect(await waitUntil { ad.hasEnded })
-        #expect(delegate.events.contains("fail") && delegate.endReasons == [.failed])
+        #expect(await waitUntil { delegate.endReasons == [.failed] })
+        #expect(delegate.events.contains("fail"))
         #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")
     }
 
@@ -679,7 +680,7 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "ad.close", ["reason": "close"])
-        #expect(delegate.endReasons == [.skipped], "a close before the end is a skip")
+        #expect(await waitUntil { delegate.endReasons == [.skipped] }, "a close before the end is a skip")
         #expect(ad.isCompleted == false)
         let fired = await beacons()
         #expect(fired.contains("skip") && !fired.contains("close"))
@@ -697,7 +698,7 @@ struct VideoAdTests {
         do { try ad.dismiss() } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
         #expect(delegate.endReasons.isEmpty, "still on screen")
         send(ad, "video.skip", ["playhead": 1000])
-        #expect(delegate.endReasons == [.skipped])
+        #expect(await waitUntil { delegate.endReasons == [.skipped] })
     }
 
     @Test func dismissalFromOutsideIsInterrupted() async throws {
@@ -722,10 +723,10 @@ struct VideoAdTests {
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
         let presented = try #require(window.root.presentedViewController as? LinearViewController)
         ads.destroy()
-        #expect(delegate.endReasons == [.destroyed])
+        #expect(await waitUntil { delegate.endReasons == [.destroyed] })
         #expect(presented.isEndingByAd, "the SDK asked UIKit to dismiss")
         presented.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
-        #expect(delegate.endReasons == [.destroyed], "the ad's own dismissal is not an interruption")
+        #expect(await waitUntil { delegate.endReasons == [.destroyed] }, "the ad's own dismissal is not an interruption")
         let fired = await beacons()
         #expect(!fired.contains("close") && !fired.contains("overlayViewDuration"), "no VAST event for an app abort")
     }

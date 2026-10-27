@@ -138,6 +138,8 @@ public final class VideoAd {
     private var linearController: LinearViewController?
     /// UIKit finished presenting the linear ad: the `present` completion ran.
     private var presentationConfirmed = false
+    /// `didEnd` was delivered. For a linear ad that is after its dismissal, so this lags `hasEnded`.
+    private var finished = false
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
@@ -317,6 +319,9 @@ public final class VideoAd {
 
     /// How long a linear presentation may take to reach the screen before the ad gives up on it.
     static var presentationTimeout: TimeInterval = 2
+    /// How long a linear dismissal may take before `didEnd` is delivered anyway: a completion UIKit never
+    /// calls must not keep the app waiting.
+    static var dismissalTimeout: TimeInterval = 1
 
     /// The key window's root controller, followed through what it presents to the top, as the peers do
     /// (AdMob 11, MAX). `nil` when there is no key window or the top controller cannot present: it is
@@ -513,11 +518,19 @@ public final class VideoAd {
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
         hostView?.removeFromSuperview()
         hostView = nil
+        var dismissing = false
         if let controller = linearController {
             linearController = nil
             controller.isEndingByAd = true
             if controller.presentingViewController != nil, reason != .interrupted {
-                controller.dismiss(animated: true)
+                // `didEnd` waits for the dismissal, as AdMob's and MAX's "dismissed" callbacks do: an app
+                // that presents its next screen in `didEnd` must not collide with the animation.
+                dismissing = true
+                controller.dismiss(animated: true) { [weak self] in self?.finish(reason) }
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(Self.dismissalTimeout * 1_000_000_000))
+                    self?.finish(reason)
+                }
             }
         }
         if format != .linear {
@@ -530,6 +543,14 @@ public final class VideoAd {
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
         DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
+        if !dismissing { finish(reason) }
+    }
+
+    /// The screen is free and the app hears `didEnd`: at once for an overlay or pause ad, once the
+    /// dismissal finished for a linear ad. Once.
+    private func finish(_ reason: EndReason) {
+        guard !finished else { return }
+        finished = true
         if KontextVideo.shared.adOnScreen === self { KontextVideo.shared.adOnScreen = nil }
         owner?.adDidEnd(self)
         delegate?.videoAd(self, didEnd: reason)

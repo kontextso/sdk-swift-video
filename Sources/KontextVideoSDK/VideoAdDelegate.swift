@@ -8,8 +8,10 @@ import Foundation
 /// impression (at most once, maybe never) and any interactions; then exactly one terminal `videoAd(_:didEnd:)`,
 /// whoever ended it (the viewer, the creative, the system, or the app with `dismiss()` or `destroy()`).
 /// Resume your content in `didEnd`, whatever the reason. There is no "did show" callback: `show`
-/// returning is that signal, and `didEnd` is delivered once, synchronously, even from inside your own
-/// `dismiss()` or `destroy()` call, so the resume logic lives in `didEnd` alone.
+/// returning is that signal. `didEnd` is delivered once: for an overlay or pause ad synchronously, even
+/// from inside your own `dismiss()` or `destroy()` call; for a linear ad once its dismissal animation
+/// finished (as AdMob's and MAX's "dismissed" callbacks), so presenting your next screen from it is safe.
+/// Either way the resume logic lives in `didEnd` alone.
 @MainActor
 public protocol VideoAdDelegate: AnyObject {
     // After a successful show: the impression and interactions, in no guaranteed order; didEnd last

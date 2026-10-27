@@ -166,6 +166,8 @@ struct SDKHarness {
         KontextVideo.configRetryDelay = 2
         FrameBridge.loadTimeout = 10
         ViewabilityMeter.interval = 0.25
+        // The runner never completes a modal transition: a linear ad's didEnd comes from the fallback.
+        VideoAd.dismissalTimeout = 0.05
         DebugReporter.interval = 0.1
         DebugReporter.shared.isEnabled = false
     }
