@@ -125,6 +125,33 @@ struct ViewabilityMeterTests {
         meter.stop()
     }
 
+    @Test func aScaledAncestorDoesNotShrinkTheShare() async {
+        defer { window.tearDown() }
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 400, height: 400))
+        player.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)   // a mini player: on screen in full, at half size
+        window.add(player)
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 100))
+        player.addSubview(view)
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 5)
+        let sink = attach(meter)
+        meter.start()
+        await sleepMs(80)
+        #expect(sink.exposures.first == 1, "the whole ad is visible, however small it is drawn")
+        meter.stop()
+    }
+
+    @Test func stopIsFinalAndStartDoesNotRestart() async {
+        defer { window.tearDown() }
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.05)
+        let sink = attach(meter)
+        meter.start()
+        meter.stop()
+        #expect(sink.verdict == .notViewable)
+        meter.start()
+        await sleepMs(120)
+        #expect(sink.exposures.count == 1, "no tick after stop: \(sink.exposures)")
+    }
+
     @Test func aGapBetweenTicksRestartsTheDwell() async {
         defer { window.tearDown() }
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.5)

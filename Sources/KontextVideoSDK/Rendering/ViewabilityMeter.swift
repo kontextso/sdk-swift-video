@@ -39,6 +39,8 @@ final class ViewabilityMeter {
     /// Ticks in a row that found no window; the second one reports the detachment.
     private var detachedTicks = 0
     private var detachedReported = false
+    /// `stop()` was called: measuring never resumes, whatever `start()` says afterwards.
+    private var stopped = false
 
     init(view: UIView, requiredSeconds: TimeInterval) {
         self.view = view
@@ -46,11 +48,12 @@ final class ViewabilityMeter {
     }
 
     func start() {
-        guard timer == nil else { return }
-        tick()
+        guard timer == nil, !stopped else { return }
+        // The timer first: a callback from the first tick that stops the meter must find it there.
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        tick()
     }
 
     /// Stops measuring without a verdict; for the owner's `deinit` teardown, which runs on the main actor.
@@ -61,6 +64,7 @@ final class ViewabilityMeter {
 
     /// The ad ended: a verdict is still owed when none was reached.
     func stop() {
+        stopped = true
         timer?.invalidate()
         timer = nil
         if verdict == nil {
@@ -84,10 +88,13 @@ final class ViewabilityMeter {
             return
         }
         detachedTicks = 0
-        let visible = Environment.isApplicationActive() ? Self.visibleRect(of: view, in: window) : .null
+        let inWindow = Environment.isApplicationActive() ? Self.visibleRect(of: view, in: window) : .null
+        // Back in the view's own coordinates before comparing areas: an ancestor's transform (a scaled-down
+        // player) shrinks the window rectangle, not the share of the ad that can be seen.
+        let visible = inWindow.isNull ? .null : view.convert(inWindow, from: window).intersection(view.bounds)
         let area = view.bounds.width * view.bounds.height
-        let percentage = visible.isNull || area == 0 ? 0 : Double(visible.width * visible.height / area)
-        report(percentage, visible: visible.isNull ? .zero : window.convert(visible, to: view))
+        let percentage = visible.isNull || area == 0 ? 0 : min(1, Double(visible.width * visible.height / area))
+        report(percentage, visible: visible.isNull ? .zero : visible)
 
         if percentage >= Self.threshold {
             // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
