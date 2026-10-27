@@ -1,6 +1,6 @@
 # Development
 
-For contributors working on the Kontext Video SDK. The integration guide is [docs.kontext.so/video/sdk/ios](https://docs.kontext.so/video/sdk/ios); the contract
+For contributors working on the Kontext Video SDK. The integration guide is [docs.kontext.so/video/sdk/swift](https://docs.kontext.so/video/sdk/swift); the contract
 is the *Video Ads API & SDK v2* document and its *Video Ads SDK Public API* page in Notion.
 
 ## Prerequisites
