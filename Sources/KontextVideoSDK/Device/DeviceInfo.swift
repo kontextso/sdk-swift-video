@@ -1,6 +1,7 @@
+// Needed for `AVAudioSession`, which the analyzer files under AVFAudio (iOS 14.5+; AVFoundation covers 14.0).
+// swiftlint:disable:next unused_import
 import AVFoundation
 import KontextKit
-import UIKit
 
 /// The `os` object of a request. KontextKit's names are the API's: `ios`, `ipados`, `tvos`.
 struct OSInfo: Encodable, Sendable {
