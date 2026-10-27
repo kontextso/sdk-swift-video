@@ -38,6 +38,19 @@ struct KontextVideoTests {
         #expect(reported == .enabled)
     }
 
+    @Test func aResetDuringInitializeIsNotUndoneByTheCancelledRequest() async {
+        var slow = StubServer.Response.json(Fixtures.initEnabled())
+        slow.delay = 0.2
+        harness.server.on("/v2/config", slow)
+        var reported: KontextVideo.State?
+        sdk.initialize(with: harness.configuration) { reported = $0 }
+        await sleepMs(30)
+        sdk.resetForTesting()
+        await sleepMs(300)
+        #expect(sdk.state == .notInitialized, "the cancelled request neither fails nor enables what was reset")
+        #expect(reported == nil, "and its completion never fires")
+    }
+
     @Test func secondInitializeIsIgnored() async {
         _ = await harness.initialize()
         var completions = 0

@@ -77,6 +77,8 @@ public final class KontextVideo {
         state = .initializing
         initTask = Task {
             await fetchConfig(configuration: configuration)
+            // Cancelled by `resetForTesting()`: the state is no longer this call's to report.
+            guard !Task.isCancelled else { return }
             completion?(state)
         }
     }
@@ -172,7 +174,10 @@ public final class KontextVideo {
         let client = APIClient(baseURL: configuration.adServerURL)
         let request = ConfigRequest.make(configuration: configuration, installId: Self.installId)
         do {
-            switch try await Self.sendConfigRequest(request, client: client) {
+            let response = try await Self.sendConfigRequest(request, client: client)
+            // Cancelled meanwhile (`resetForTesting()`): the answer belongs to a state that was reset.
+            guard !Task.isCancelled else { return }
+            switch response {
             case .enabled(let reportDebug):
                 self.reportDebug = reportDebug
                 DebugReporter.shared.isEnabled = reportDebug
@@ -184,6 +189,7 @@ public final class KontextVideo {
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {
+            guard !Task.isCancelled else { return }
             state = .failed
             Logger.error("/config failed, no ads until it succeeds: \(error)")
         }
