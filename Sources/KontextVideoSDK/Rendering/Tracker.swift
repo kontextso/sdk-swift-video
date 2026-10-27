@@ -51,6 +51,22 @@ final class Tracker {
         return fireId
     }
 
+    private func send(_ url: URL, event: String, part: String?) {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let label = part.map { "\(event) (\($0))" } ?? event
+        Logger.debug("ad \(adId.prefix(8)): beacon \(label)")
+        let id = adId
+        session.dataTask(with: request) { _, response, error in
+            if let error {
+                Logger.warning("ad \(id.prefix(8)): \(label) beacon failed, \(error.localizedDescription)")
+            } else if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
+                Logger.warning("ad \(id.prefix(8)): \(label) beacon answered \(status)")
+            }
+        }.resume()
+    }
+
     /// The click-through with the beacon macros substituted, `[KONTEXT_FIREID]` with the click's own fire id:
     /// a redirect URL and the `click` beacon then arrive as one occurrence.
     func clickThrough(_ url: URL, fireId: String) -> URL {
@@ -78,22 +94,6 @@ final class Tracker {
             // URL, and every `%3A` above would become `%253A`.
             .replacingOccurrences(of: "[", with: "%5B")
             .replacingOccurrences(of: "]", with: "%5D")
-    }
-
-    private func send(_ url: URL, event: String, part: String?) {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 10
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        let label = part.map { "\(event) (\($0))" } ?? event
-        Logger.debug("ad \(adId.prefix(8)): beacon \(label)")
-        let id = adId
-        session.dataTask(with: request) { _, response, error in
-            if let error {
-                Logger.warning("ad \(id.prefix(8)): \(label) beacon failed, \(error.localizedDescription)")
-            } else if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
-                Logger.warning("ad \(id.prefix(8)): \(label) beacon answered \(status)")
-            }
-        }.resume()
     }
 
     // VAST 4 macro formats: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone, and HH:MM:SS.mmm for playheads.
