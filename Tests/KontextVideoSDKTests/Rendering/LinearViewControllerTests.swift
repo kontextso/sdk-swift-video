@@ -46,5 +46,6 @@ struct LinearViewControllerTests {
         #expect(controller.view.backgroundColor == .black)
         #expect(controller.prefersStatusBarHidden)
         #expect(controller.prefersHomeIndicatorAutoHidden)
+        #expect(controller.view.accessibilityViewIsModal, "VoiceOver reads the ad alone")
     }
 }

@@ -28,6 +28,8 @@ final class LinearViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        // VoiceOver reads the ad alone, not the content behind it.
+        view.accessibilityViewIsModal = true
         webView.frame = view.bounds
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(webView)
