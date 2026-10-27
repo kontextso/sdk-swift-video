@@ -44,7 +44,7 @@ final class DebugReporter {
         var description: String {
             switch self {
             case .string(let value): return value
-            case .number(let value): return value == value.rounded() ? String(Int(value)) : String(value)
+            case .number(let value): return Int(exactly: value).map(String.init) ?? String(value)
             case .bool(let value): return String(value)
             }
         }
@@ -67,6 +67,8 @@ final class DebugReporter {
     static let shared = DebugReporter()
     /// At most one request per interval. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 0.1
+    /// Events kept while a batch cannot leave (a slow or failing server); beyond this the oldest go.
+    static let maxBuffered = 500
 
     /// Set from the `/config` response; nothing is sent while `false`.
     var isEnabled = false {
@@ -84,6 +86,7 @@ final class DebugReporter {
         Logger.debug(Self.line(name, adId: adId, state: state))
         guard isEnabled else { return }
         buffer.append(Event(createdAt: Self.timestamp.string(from: Date()), name: name, adId: adId, level: level, state: state))
+        if buffer.count > Self.maxBuffered { buffer.removeFirst(buffer.count - Self.maxBuffered) }
         scheduleFlush()
     }
 
@@ -97,12 +100,16 @@ final class DebugReporter {
         return parts.joined(separator: " ")
     }
 
+    /// One batch at a time: the task lives until its request answered, so a slow server gets no second
+    /// request; events that arrived meanwhile leave with the next batch.
     private func scheduleFlush() {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.interval * 1_000_000_000))
-            self?.flushTask = nil
-            await self?.flush()
+            guard let self else { return }
+            await flush()
+            flushTask = nil
+            if isEnabled, !buffer.isEmpty { scheduleFlush() }
         }
     }
 

@@ -85,6 +85,51 @@ struct DebugReporterTests {
         #expect(DebugReporter.shared.isEnabled, "reporting stays on; a lost batch is lost")
     }
 
+    @Test func oneRequestAtATimeAndTheRestWaitForIt() async {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        _ = await harness.initialize()
+        await sleepMs(120)   // the config.response batch is out
+        let before = harness.server.requests(to: "/v2/debug").count
+        var slow = StubServer.Response.empty()
+        slow.delay = 0.3
+        harness.server.on("/v2/debug", slow)
+        DebugReporter.shared.event("first")
+        await sleepMs(100)   // the first batch is in flight now, for 300 ms
+        for i in 0..<5 {
+            DebugReporter.shared.event("later", state: ["i": .number(Double(i))])
+            await sleepMs(20)
+        }
+        #expect(harness.server.requests(to: "/v2/debug").count == before + 1, "no second request while the first is answered")
+        #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").count == before + 2 })
+        let second = harness.server.requests(to: "/v2/debug").last?.body?["events"] as? [[String: Any]]
+        #expect(second?.count == 5, "the events that arrived meanwhile left together, after")
+        await sleepMs(200)
+        #expect(harness.server.requests(to: "/v2/debug").count == before + 2, "and nothing more")
+    }
+
+    @Test func theBufferKeepsTheNewestEventsOnly() async {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.server.on("/v2/debug", .failure(.notConnectedToInternet))
+        _ = await harness.initialize()
+        DebugReporter.shared.event("fill")   // opens a batch that will fail; the rest pile up behind it
+        await sleepMs(20)
+        for i in 0..<(DebugReporter.maxBuffered + 10) {
+            DebugReporter.shared.event("tick", state: ["i": .number(Double(i))])
+        }
+        harness.server.on("/v2/debug", .empty())
+        #expect(await waitUntil(3) { self.harness.server.requests(to: "/v2/debug").contains { ($0.body?["events"] as? [[String: Any]])?.count == DebugReporter.maxBuffered } })
+        let batch = harness.server.requests(to: "/v2/debug").last?.body?["events"] as? [[String: Any]]
+        #expect((batch?.first?["state"] as? [String: Any])?["i"] as? Double == 10, "the oldest ten were dropped")
+    }
+
+    @Test func aNumberBeyondIntFormatsWithoutATrap() {
+        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(1e30)]) == "n a=1e+30")
+        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(.infinity)]) == "n a=inf")
+        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(.nan)]) == "n a=nan")
+        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(42), "b": .number(1.5)]) == "n a=42 b=1.5")
+        DebugReporter.shared.event("n", state: ["a": .number(.infinity)])   // the console line is formatted whether or not reporting is on
+    }
+
     @Test func theLoadFlowReportsItsEvents() async throws {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         let pages = FramePageServer()
