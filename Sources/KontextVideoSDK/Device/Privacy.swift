@@ -31,13 +31,24 @@ struct TrackingInfo: Sendable {
         attStatus = Self.name(of: status)
     }
 
+    /// The dialog in progress, shared: two requests at once (this episode's and the prefetched next one's)
+    /// ask Apple once and both get the viewer's answer. Apple does not keep a second request made while
+    /// the dialog is up. Cleared when the dialog closes; the OS stays the authority on the status.
+    @MainActor
+    private static var authorization: Task<ATTrackingManager.AuthorizationStatus, Never>?
+
     /// Reads the current state. With `requestAuthorization`, shows the App Tracking Transparency dialog
     /// first when the user has not answered yet (the app's Info.plist needs `NSUserTrackingUsageDescription`).
     @MainActor
     static func current(requestAuthorization: Bool) async -> TrackingInfo {
-        var status = ATTrackingManager.trackingAuthorizationStatus
+        var status = Environment.trackingAuthorizationStatus()
         if requestAuthorization, status == .notDetermined {
-            status = await ATTrackingManager.requestTrackingAuthorization()
+            let task = authorization ?? Task {
+                defer { authorization = nil }
+                return await Environment.requestTrackingAuthorization()
+            }
+            authorization = task
+            status = await task.value
             Logger.info("ATT: \(name(of: status))")
         }
         var ifa: IFA?

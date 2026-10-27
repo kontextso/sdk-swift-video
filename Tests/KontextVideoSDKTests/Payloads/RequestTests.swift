@@ -143,6 +143,36 @@ struct RequestTests {
         }
     }
 
+    @Test func concurrentRequestsShowTheDialogOnceAndBothGetTheAnswer() async {
+        var prompts = 0
+        let gate = Gate()
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        Environment.requestTrackingAuthorization = {
+            prompts += 1
+            while !gate.open { await sleepMs(5) }
+            return .authorized
+        }
+        async let first = TrackingInfo.current(requestAuthorization: true)
+        async let second = TrackingInfo.current(requestAuthorization: true)
+        await sleepMs(40)
+        gate.open = true
+        let (a, b) = await (first, second)
+        #expect(prompts == 1, "one dialog for both")
+        #expect(a.attStatus == "authorized" && b.attStatus == "authorized")
+        Environment.trackingAuthorizationStatus = { .authorized }
+        _ = await TrackingInfo.current(requestAuthorization: true)
+        #expect(prompts == 1, "answered: no dialog")
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        _ = await TrackingInfo.current(requestAuthorization: false)
+        #expect(prompts == 1, "not asked for: no dialog")
+        _ = await TrackingInfo.current(requestAuthorization: true)
+        #expect(prompts == 2, "the shared task was cleared, a later request asks again")
+    }
+
+    final class Gate {
+        var open = false
+    }
+
     @Test func consentStorageReadsTheIABKeys() {
         let defaults = UserDefaults(suiteName: "consent-test")!
         defaults.removePersistentDomain(forName: "consent-test")

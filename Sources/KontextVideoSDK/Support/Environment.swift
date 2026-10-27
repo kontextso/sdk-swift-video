@@ -1,3 +1,4 @@
+import AppTrackingTransparency
 import Foundation
 import UIKit
 import WebKit
@@ -20,6 +21,9 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
+    /// App Tracking Transparency: the status now, and the dialog. Tests answer without the OS.
+    static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
+    static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = { await ATTrackingManager.requestTrackingAuthorization() }
     /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
     static var skAdNetwork: any SKAdNetworkManaging = KontextKitSKAdNetwork()
     /// Presents the App Store product sheet an app-install ad's click opens.
@@ -39,6 +43,8 @@ enum Environment {
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
+        trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
+        requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
         skAdNetwork = KontextKitSKAdNetwork()
         storeProduct = KontextKitStoreProduct()
         now = defaultNow
