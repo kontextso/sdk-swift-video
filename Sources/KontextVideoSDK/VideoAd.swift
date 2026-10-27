@@ -93,6 +93,10 @@ public final class VideoAd {
 
     /// Why the ad ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
     public private(set) var invalidationReason: InvalidationReason?
+    /// On the monotonic clock, as the SDK decides it.
+    var isExpired: Bool {
+        descriptor.isExpired
+    }
 
     /// Receives the ad's moments. Held weakly.
     public weak var delegate: (any VideoAdDelegate)?
@@ -138,6 +142,18 @@ public final class VideoAd {
     private var meter: ViewabilityMeter?
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
     private var durationTask: Task<Void, Never>?
+    /// When the current stretch of active time on screen began; `nil` while the app is not active.
+    private var activeSince: TimeInterval?
+    /// Active time on screen before the current stretch, seconds.
+    private var activeAccumulated: TimeInterval = 0
+    /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
+    nonisolated(unsafe) private var activityObservers: [any NSObjectProtocol] = []
+    /// Seconds the ad has been on screen while the app was active.
+    var activeTimeOnScreen: TimeInterval {
+        activeAccumulated + (activeSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
+    }
+    /// The impression fires once: at `show` for an image, at the first frame for a video.
+    private var impressionRecorded = false
 
     /// Nothing is rendered here; `load()` does that. Expiry is checked at the next call, never by a timer.
     init(descriptor: AdDescriptor, owner: VideoAds) {
@@ -379,18 +395,6 @@ public final class VideoAd {
         }
     }
 
-    /// When the current stretch of active time on screen began; `nil` while the app is not active.
-    private var activeSince: TimeInterval?
-    /// Active time on screen before the current stretch, seconds.
-    private var activeAccumulated: TimeInterval = 0
-    /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
-    nonisolated(unsafe) private var activityObservers: [any NSObjectProtocol] = []
-
-    /// Seconds the ad has been on screen while the app was active.
-    var activeTimeOnScreen: TimeInterval {
-        activeAccumulated + (activeSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
-    }
-
     /// The buyer's NonLinear `duration`, counted on active time only. `dismiss()` ends it earlier.
     private func startDurationClock() {
         guard durationTask == nil, !hasEnded, let duration else { return }
@@ -441,8 +445,6 @@ public final class VideoAd {
         activityObservers.forEach(NotificationCenter.default.removeObserver)
         activityObservers = []
     }
-
-    private var impressionRecorded = false
 
     private func recordImpression() {
         guard !impressionRecorded else { return }
@@ -612,11 +614,6 @@ public final class VideoAd {
             tracker.fire("creativeView", part: "endCard")
             Logger.info("ad \(id.prefix(8)): complete")
         }
-    }
-
-    /// On the monotonic clock, as the SDK decides it.
-    var isExpired: Bool {
-        descriptor.isExpired
     }
 
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
