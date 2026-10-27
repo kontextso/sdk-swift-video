@@ -250,7 +250,7 @@ final class FrameBridge: NSObject {
             state = .loaded
             onEvent?(.loaded)
         case "ad.click", "ad.open":
-            guard state == .shown, let raw = body["url"] as? String, let url = URL(string: raw) else { return }
+            guard state == .shown, let raw = body["url"] as? String, let url = Self.url(raw) else { return }
             guard let scheme = url.scheme?.lowercased(), !Self.refusedSchemes.contains(scheme) else {
                 Logger.warning("frame \(adId.prefix(8)): \(type) to \(raw) dropped, scheme refused")
                 return
@@ -260,7 +260,7 @@ final class FrameBridge: NSObject {
                 return
             }
             if type == "ad.click" {
-                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(URL.init(string:)), area: VideoAd.Click.Area(body["area"] as? String)))
+                onEvent?(.click(url: url, fallbackUrl: (body["fallbackUrl"] as? String).flatMap(Self.url), area: VideoAd.Click.Area(body["area"] as? String)))
             } else {
                 onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
             }
@@ -323,6 +323,13 @@ final class FrameBridge: NSObject {
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.loadHTMLString("", baseURL: nil)
+    }
+
+    /// A URL the page sent. A click-through may carry a beacon macro (`[KONTEXT_FIREID]`): its brackets are
+    /// percent-encoded first, or `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it
+    /// (iOS 17); the tracker reads the encoded form.
+    static func url(_ raw: String) -> URL? {
+        URL(string: raw.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D"))
     }
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;

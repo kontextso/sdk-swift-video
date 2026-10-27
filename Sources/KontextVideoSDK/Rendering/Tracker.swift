@@ -1,6 +1,7 @@
 import Foundation
 
-/// Fires an ad's `tracking` entries: each one once, when its moment happens, with the macros substituted:
+/// Fires an ad's `tracking` entries when their moment happens, once each except the events that repeat
+/// (`repeatable`), with the macros substituted:
 /// the IAB's (`[CACHEBUSTING]`, `[TIMESTAMP]`, `[MEDIAPLAYHEAD]` and its deprecated twin `[CONTENTPLAYHEAD]`,
 /// `[ADPLAYHEAD]`, `[ERRORCODE]`) and our own, prefixed `KONTEXT_` so they never collide with the IAB registry
 /// (`[REASON]` there is an integer for verification pixels). A macro the SDK does not know stays in place.
@@ -12,6 +13,10 @@ final class Tracker {
     var adPlayhead = 0
     /// Content time in seconds at the moment of firing; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`.
     var contentPlayhead: () -> TimeInterval = { 0 }
+
+    /// Events that fire every time they happen, as VAST players do (a second click is a second click, every
+    /// pause counts); each occurrence gets its own fire id. Everything else fires once per entry.
+    static let repeatable: Set<String> = ["click", "pause", "resume", "mute", "unmute"]
 
     private let adId: String
     private let entries: [AdPayload.TrackingEvent]
@@ -36,7 +41,7 @@ final class Tracker {
         for (index, entry) in entries.enumerated() where !fired.contains(index) {
             guard entry.event == event, entry.part == part else { continue }
             if let offset, entry.offset != offset { continue }
-            fired.insert(index)
+            if !Self.repeatable.contains(event) { fired.insert(index) }
             guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
                 Logger.warning("ad \(adId.prefix(8)): \(event) beacon has an invalid URL")
                 continue
@@ -54,6 +59,10 @@ final class Tracker {
 
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
         template
+            // A macro may arrive with its brackets encoded (a click-through parsed into a `URL`); the end
+            // re-encodes whatever is left, so a bracket that was never a macro comes out as it went in.
+            .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
+            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
             .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))

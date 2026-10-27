@@ -34,6 +34,23 @@ struct TrackerTests {
         #expect(beacons.map(\.event) == ["impression"])
     }
 
+    @Test func clicksAndPlaybackTogglesFireEveryTimeWithTheirOwnFireId() async throws {
+        let tracker = try makeTracker()
+        let first = tracker.fire("click")
+        let second = tracker.fire("click")
+        tracker.fire("pause")
+        tracker.fire("resume")
+        tracker.fire("pause")
+        tracker.fire("start")
+        tracker.fire("start")
+        let beacons = await fired()
+        #expect(beacons.map(\.event) == ["click", "click", "pause", "resume", "pause", "start"], "clicks and toggles repeat; start is once")
+        let clickIds = beacons.filter { $0.event == "click" }.map { $0.query["fid"] }
+        #expect(clickIds == [first, second] && first != second, "a second click is a second fire")
+        let through = tracker.clickThrough(URL(string: "https://ads.test/redirect?fid=%5BKONTEXT_FIREID%5D&q=%5Bkept%5D")!, fireId: second)
+        #expect(through.query == "fid=\(second)&q=%5Bkept%5D", "the click-through carries its click's fire id; a bracket that is no macro survives")
+    }
+
     @Test func everyFireCarriesItsOwnFireIdSharedByItsURLs() async throws {
         let tracker = try makeTracker()
         tracker.fire("impression")

@@ -388,6 +388,20 @@ struct VideoAdTests {
         try ad.dismiss()
     }
 
+    @Test func aClickThroughWithTheFireIdMacroOpensWithTheClickBeaconsFireId() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p14b"))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        try ad.show(in: harness.player.view)
+        ad.bridge.noteTouch()
+        send(ad, "ad.click", ["url": "https://ads.test/redirect?fid=[KONTEXT_FIREID]&cb=[CACHEBUSTING]"])
+        _ = await beacons()
+        let click = try #require(harness.server.beacons.first { $0.event == "click" })
+        let fid = try #require(click.query["fid"])
+        #expect(opened.count == 1 && opened[0].query?.contains("fid=\(fid)") == true, "one occurrence, the redirect and the beacon: \(opened)")
+        #expect(opened[0].absoluteString.contains("[") == false && opened[0].absoluteString.contains("%25") == false, "macros filled, nothing re-encoded")
+    }
+
     @Test func clickOpensTheURLFiresClickAndTellsTheDelegate() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p14"))
         var opened: [URL] = []
