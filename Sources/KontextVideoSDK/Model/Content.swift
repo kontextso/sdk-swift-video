@@ -88,7 +88,13 @@ extension KontextVideo {
             try container.encodeIfPresent(title, forKey: .title)
             try container.encodeIfPresent(categories, forKey: .categories)
             try container.encodeIfPresent(description, forKey: .description)
-            try container.encodeIfPresent(duration.map { Int(($0 * 1000).rounded()) }, forKey: .duration)
+            // A NaN (`AVPlayerItem.duration.seconds` before the item is ready, or live), infinite, negative or
+            // absurd duration is left out rather than trapped on: it is contextual signal, not the ad.
+            let durationMs = duration.flatMap { seconds -> Int? in
+                guard seconds.isFinite, seconds >= 0 else { return nil }
+                return Int(exactly: (seconds * 1000).rounded())
+            }
+            try container.encodeIfPresent(durationMs, forKey: .duration)
             try container.encodeIfPresent(episodeNumber, forKey: .episodeNumber)
             try container.encodeIfPresent(keywords, forKey: .keywords)
             try container.encodeIfPresent(genre, forKey: .genre)

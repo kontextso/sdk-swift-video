@@ -30,6 +30,15 @@ struct ModelEncodingTests {
         #expect((json["series"] as? [String: Any])?["title"] as? String == "S")
     }
 
+    @Test func aDurationThatIsNotADurationIsLeftOut() throws {
+        for seconds in [TimeInterval.nan, .infinity, -.infinity, 1e30, -1] {
+            let json = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: seconds))
+            #expect(json["duration"] == nil, "\(seconds)")
+            #expect(json["id"] as? String == "v", "the rest of the content still encodes")
+        }
+        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 0))["duration"] as? Int == 0)
+    }
+
     @Test func contentDurationRoundsToNearestMillisecond() throws {
         let json = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 1.0004))
         #expect(json["duration"] as? Int == 1000)
