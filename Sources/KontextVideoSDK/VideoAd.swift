@@ -224,11 +224,15 @@ public final class VideoAd {
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
-    /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `containerTooSmall`
-    /// (the ad stays ready). Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it.
+    /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
+    /// (the view is not on screen) and `containerTooSmall` (the ad stays ready in both). Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it.
     public func show(in view: UIView) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
+        guard view.window != nil else {
+            Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen")
+            throw VideoAdError.presenterUnavailable
+        }
         let container = view
         let host = UIView(frame: try frame(in: container.bounds))
         host.autoresizingMask = descriptor.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, descriptor.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]

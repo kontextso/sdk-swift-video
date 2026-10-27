@@ -108,6 +108,52 @@ struct ViewabilityMeterTests {
         #expect(sink.verdict == .notViewable)
     }
 
+    @Test func anAncestorThatClipsCutsTheExposure() async {
+        defer { window.tearDown() }
+        let scroll = UIScrollView(frame: CGRect(x: 0, y: 0, width: 400, height: 100))   // clipsToBounds by default
+        window.add(scroll)
+        let view = UIView(frame: CGRect(x: 0, y: 50, width: 200, height: 100))           // its lower half is outside the scroll view
+        scroll.addSubview(view)
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 5)
+        let sink = attach(meter)
+        meter.start()
+        await sleepMs(80)
+        #expect(sink.exposures.first == 0.5, "the window would say 1: the scroll view clips half")
+        scroll.isHidden = true
+        await sleepMs(80)
+        #expect(sink.exposures.last == 0, "a hidden ancestor hides the ad")
+        meter.stop()
+    }
+
+    @Test func aGapBetweenTicksRestartsTheDwell() async {
+        defer { window.tearDown() }
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.5)
+        let sink = attach(meter)
+        meter.start()
+        await sleepMs(60)
+        advanceClock(by: 3)   // the main thread stalled, or the app was suspended: nothing was measured meanwhile
+        await sleepMs(60)
+        #expect(sink.verdict == nil, "three seconds passed on the clock, but not continuously on screen")
+        meter.stop()
+        #expect(sink.verdict == .notViewable)
+    }
+
+    @Test func exposureIsReportedWhenThePlaceChangesAtTheSamePercentage() async {
+        defer { window.tearDown() }
+        let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 5)
+        var rectangles: [CGRect] = []
+        meter.onExposure = { _, rect in rectangles.append(rect) }
+        meter.start()
+        await sleepMs(80)
+        view.frame.origin.x = 300          // the right half is off screen: 50 %
+        await sleepMs(80)
+        view.frame.origin.x = -100         // the left half is off screen: still 50 %, another rectangle
+        await sleepMs(80)
+        #expect(rectangles.count == 3 && rectangles[1] != rectangles[2], "the page hears where the visible part is: \(rectangles)")
+        meter.stop()
+    }
+
     @Test func exposureIsReportedOnlyWhenItChanges() async {
         defer { window.tearDown() }
         let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))

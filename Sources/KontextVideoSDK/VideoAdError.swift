@@ -41,9 +41,10 @@ public enum VideoAdError: Error, Sendable {
     /// The ad would have to be scaled below 50 % to fit the view (aspect ratio kept). The ad stays ready:
     /// show it in a bigger view, or reject it.
     case containerTooSmall(minimum: CGSize)
-    /// No view controller can present the linear ad right now: the one given is already presenting or
-    /// not on screen; with `show()`, there is no key window or its top controller is mid-transition. The ad
-    /// stays ready: try again later, or pass the right controller.
+    /// Nothing on screen can hold the ad right now. Linear: the view controller given is already presenting
+    /// or not on screen; with `show()`, there is no key window or its top controller is mid-transition.
+    /// Overlay and pause: the view is not in a window. The ad stays ready: try again later, or pass the
+    /// right view or controller.
     case presenterUnavailable
     /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad,
     /// `dismiss()` on a linear ad. The ad stays as it was.

@@ -568,6 +568,14 @@ struct VideoAdTests {
         #expect(presented.view.subviews.isEmpty || presented.view.subviews.first !== ad.bridge.webView || ad.hasEnded)
     }
 
+    @Test func showInAViewThatIsNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10b"))
+        let detached = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))
+        do { try ad.show(in: detached) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable, got \(error)") }
+        #expect(ad.isReady, "retryable")
+        #expect(await beacons() == ["loaded"], "nothing fired by the attempt")
+    }
+
     @Test func showFromWhenNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10"))
         let detached = UIViewController()

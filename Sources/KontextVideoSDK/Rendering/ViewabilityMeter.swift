@@ -31,7 +31,11 @@ final class ViewabilityMeter {
     private let requiredSeconds: TimeInterval
     private var timer: Timer?
     private var exposedSince: TimeInterval?
+    /// When the last tick ran: a tick that comes much later than the next one was due means nothing was
+    /// measured meanwhile (a stalled main thread, a suspended app), and continuity cannot be claimed.
+    private var lastTick: TimeInterval?
     private var lastPercentage = -1.0
+    private var lastVisible = CGRect.null
     /// Ticks in a row that found no window; the second one reports the detachment.
     private var detachedTicks = 0
     private var detachedReported = false
@@ -49,12 +53,10 @@ final class ViewabilityMeter {
         }
     }
 
-    /// Stops measuring without a verdict; for the owner's `deinit`, from any thread.
-    nonisolated func stopTimer() {
-        MainActor.assumeIsolated {
-            timer?.invalidate()
-            timer = nil
-        }
+    /// Stops measuring without a verdict; for the owner's `deinit` teardown, which runs on the main actor.
+    func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
 
     /// The ad ended: a verdict is still owed when none was reached.
@@ -67,6 +69,9 @@ final class ViewabilityMeter {
     }
 
     private func tick() {
+        let now = Environment.now()
+        let stalled = lastTick.map { now - $0 > Self.interval * 2 } ?? false
+        lastTick = now
         guard let view, let window = view.window else {
             report(0, visible: .zero)
             exposedSince = nil
@@ -79,16 +84,14 @@ final class ViewabilityMeter {
             return
         }
         detachedTicks = 0
-        let active = Environment.isApplicationActive()
-        let frameInWindow = view.convert(view.bounds, to: window)
-        let visible = active && !view.isHidden && view.alpha > 0.01 ? frameInWindow.intersection(window.bounds) : .null
+        let visible = Environment.isApplicationActive() ? Self.visibleRect(of: view, in: window) : .null
         let area = view.bounds.width * view.bounds.height
         let percentage = visible.isNull || area == 0 ? 0 : Double(visible.width * visible.height / area)
         report(percentage, visible: visible.isNull ? .zero : window.convert(visible, to: view))
 
-        let now = ProcessInfo.processInfo.systemUptime
         if percentage >= Self.threshold {
-            if exposedSince == nil { exposedSince = now }
+            // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
+            if exposedSince == nil || stalled { exposedSince = now }
             if let since = exposedSince, now - since >= requiredSeconds {
                 decide(.viewable)
             }
@@ -97,10 +100,31 @@ final class ViewabilityMeter {
         }
     }
 
+    /// The part of `view` that can be seen, in the window's coordinates: its frame cut by the window and
+    /// by every ancestor that clips (a scroll view, a container with `clipsToBounds`); `.null` when it or
+    /// an ancestor is hidden or transparent. Overlap by sibling views is not seen; nothing cheap sees it.
+    private static func visibleRect(of view: UIView, in window: UIWindow) -> CGRect {
+        var rect = view.convert(view.bounds, to: window).intersection(window.bounds)
+        var current: UIView? = view
+        while let node = current, node !== window {
+            if node.isHidden || node.alpha <= 0.01 { return .null }
+            if node !== view, node.clipsToBounds {
+                rect = rect.intersection(node.convert(node.bounds, to: window))
+            }
+            if rect.isNull { return .null }
+            current = node.superview
+        }
+        return rect
+    }
+
+    /// The page hears about a change of share or of place: half the ad at the top and half at the bottom
+    /// are the same percentage and a different `visibleRectangle`.
     private func report(_ percentage: Double, visible: CGRect) {
         let rounded = (percentage * 100).rounded() / 100
-        guard rounded != lastPercentage else { return }
+        let place = visible.integral
+        guard rounded != lastPercentage || place != lastVisible else { return }
         lastPercentage = rounded
+        lastVisible = place
         onExposure?(rounded, visible)
     }
 
