@@ -53,10 +53,29 @@ struct AdPayload: Decodable, Sendable {
         let part: String?
     }
 
-    /// The nominal box the creative was built for, in points; the VAST NonLinear attributes.
+    /// The nominal box the creative was built for, in points; the VAST NonLinear attributes. Both sides
+    /// positive, or the geometry at `show` is nonsense.
     struct Size: Decodable, Sendable, Equatable {
         let width: Int
         let height: Int
+
+        init(width: Int, height: Int) {
+            self.width = width
+            self.height = height
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            width = try container.decode(Int.self, forKey: .width)
+            height = try container.decode(Int.self, forKey: .height)
+            guard width > 0, height > 0 else {
+                throw DecodingError.dataCorruptedError(forKey: .width, in: container, debugDescription: "a size must be positive")
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case width, height
+        }
     }
 
     /// `sizes`, at least one entry, the first built for the request's player.

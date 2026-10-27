@@ -125,7 +125,7 @@ public final class VideoAd {
         loadedBridge = bridge
         return bridge
     }
-    private var loadedBridge: FrameBridge?
+    private(set) var loadedBridge: FrameBridge?
     /// The load in flight, shared by every `load()` call: the second waits for the first.
     private var loading: Task<Void, Error>?
     /// `load` waiting for the page.
@@ -136,18 +136,20 @@ public final class VideoAd {
     private var hostView: UIView?
     /// The controller the SDK presented for a linear ad.
     private var linearController: LinearViewController?
+    /// UIKit finished presenting the linear ad: the `present` completion ran.
+    private var presentationConfirmed = false
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
     private var meter: ViewabilityMeter?
     /// Removes an overlay when its `duration` elapses; the app runs no timer.
-    private var durationTask: Task<Void, Never>?
+    private(set) var durationTask: Task<Void, Never>?
     /// When the current stretch of active time on screen began; `nil` while the app is not active.
     private var activeSince: TimeInterval?
     /// Active time on screen before the current stretch, seconds.
     private var activeAccumulated: TimeInterval = 0
     /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
-    nonisolated(unsafe) private var activityObservers: [any NSObjectProtocol] = []
+    nonisolated(unsafe) private(set) var activityObservers: [any NSObjectProtocol] = []
     /// Seconds the ad has been on screen while the app was active.
     var activeTimeOnScreen: TimeInterval {
         activeAccumulated + (activeSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
@@ -298,10 +300,23 @@ public final class VideoAd {
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         presenter.present(controller, animated: true) { [weak self] in
+            self?.presentationConfirmed = true
             self?.startMeter()
         }
         begin(startMeter: false)
+        // UIKit can refuse a presentation without an error (another one in progress); then the completion
+        // never runs, no meter watches the controller, and the ad would stay "on screen" forever.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.presentationTimeout * 1_000_000_000))
+            guard let self, !hasEnded, !presentationConfirmed, controller.view.window == nil else { return }
+            Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
+            delegate?.videoAd(self, didFail: .presenterUnavailable)
+            end(.failed)
+        }
     }
+
+    /// How long a linear presentation may take to reach the screen before the ad gives up on it.
+    static var presentationTimeout: TimeInterval = 2
 
     /// The key window's root controller, followed through what it presents to the top, as the peers do
     /// (AdMob 11, MAX). `nil` when there is no key window or the top controller cannot present: it is
@@ -312,7 +327,9 @@ public final class VideoAd {
         while let presented = controller.presentedViewController, !presented.isBeingDismissed {
             controller = presented
         }
-        guard controller.view.window != nil, !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
+        // Still presenting (its modal is mid-dismissal), or mid-transition itself: UIKit would refuse.
+        guard controller.view.window != nil, controller.presentedViewController == nil,
+              !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
         return controller
     }
 
@@ -373,17 +390,9 @@ public final class VideoAd {
         owner?.adDidBeginShowing(self)
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
-        // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
-        // HTML creative, while a video's waits for its first frame.
-        tracker.fire("creativeView")
-        tracker.fire("iconView")
-        if descriptor.creative != .video {
-            recordImpression()
-        }
-        // A video's impression waits for `video.start`. The page owns the start timeout (3 s, then
-        // `ad.error` 405) and, when autoplay was refused, waits for the viewer's tap as long as it
-        // takes; the SDK keeps no start timer, it could not tell the two apart.
         DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
+        // Everything the ad needs while on screen is set up before anyone outside hears of it: the
+        // impression delegate below may end the ad on the spot, and `end()` must find all of it.
         if startMeter {
             self.startMeter()
         }
@@ -393,12 +402,23 @@ public final class VideoAd {
             observeActivity()
             if Environment.isApplicationActive() { beginActiveStretch() }
         }
+        // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
+        // HTML creative, while a video's waits for its first frame. A video's impression waits for
+        // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
+        // was refused, waits for the viewer's tap as long as it takes; the SDK keeps no start timer, it
+        // could not tell the two apart.
+        tracker.fire("creativeView")
+        tracker.fire("iconView")
+        if descriptor.creative != .video {
+            recordImpression()
+        }
     }
 
     /// The buyer's NonLinear `duration`, counted on active time only. `dismiss()` ends it earlier.
     private func startDurationClock() {
         guard durationTask == nil, !hasEnded, let duration else { return }
-        let remaining = max(0, duration - activeTimeOnScreen)
+        // Clamped to a day: a nonsense server value must not trap the `UInt64` conversion.
+        let remaining = min(max(0, duration - activeTimeOnScreen), 86_400)
         durationTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !hasEnded else { return }
@@ -459,6 +479,9 @@ public final class VideoAd {
     private func startMeter() {
         guard !hasEnded, meter == nil else { return }
         let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: descriptor.creative == .video ? 2 : 1)
+        // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
+        // viewability clock runs only while the video plays (from `video.start`, not while paused).
+        meter.countsTime = descriptor.creative != .video
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
@@ -487,6 +510,7 @@ public final class VideoAd {
         meter?.stop()
         meter = nil
         loadedBridge?.hide()
+        loadedBridge = nil   // an ended ad keeps its facts, not a WebView
         hostView?.removeFromSuperview()
         hostView = nil
         if let controller = linearController {
@@ -535,6 +559,8 @@ public final class VideoAd {
 
     /// What the page reports, mapped to the beacons and the delegate.
     private func handle(_ event: FrameEvent) {
+        // The bridge stops delivering once hidden; this is the same rule at the ad's own door.
+        guard !hasEnded, invalidationReason == nil else { return }
         switch event {
         case .loaded:
             isLoaded = true
@@ -596,6 +622,11 @@ public final class VideoAd {
         case .video(let event, let playhead):
             tracker.adPlayhead = playhead
             Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
+            switch event {
+            case .start, .resume: meter?.countsTime = true
+            case .pause: meter?.countsTime = false
+            default: break
+            }
             if event == .start {
                 recordImpression()
             }

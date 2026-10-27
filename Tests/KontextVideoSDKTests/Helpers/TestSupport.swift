@@ -28,8 +28,13 @@ final class RecordingDelegate: VideoAdDelegate {
     private(set) var endReasons: [VideoAd.EndReason] = []
     private(set) var failures: [VideoAdError] = []
     private(set) var clicks: [VideoAd.Click] = []
+    /// What the app does inside the impression callback; a test that dismisses from there sets it.
+    var onImpression: ((VideoAd) -> Void)?
 
-    func videoAdDidRecordImpression(_ ad: VideoAd) { events.append("impression") }
+    func videoAdDidRecordImpression(_ ad: VideoAd) {
+        events.append("impression")
+        onImpression?(ad)
+    }
 
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {
         events.append("click:\(click.area)")

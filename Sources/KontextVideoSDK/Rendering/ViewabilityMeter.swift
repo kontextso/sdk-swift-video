@@ -41,6 +41,10 @@ final class ViewabilityMeter {
     private var detachedReported = false
     /// `stop()` was called: measuring never resumes, whatever `start()` says afterwards.
     private var stopped = false
+    /// Whether exposure counts towards the dwell right now. The owner turns it off while a video creative
+    /// is not playing (before its start, while paused): the rule wants seconds of the video played.
+    /// Exposure is still measured and reported either way.
+    var countsTime = true
 
     init(view: UIView, requiredSeconds: TimeInterval) {
         self.view = view
@@ -101,7 +105,7 @@ final class ViewabilityMeter {
         // The page's reaction to the exposure may have ended the ad.
         guard !stopped else { return }
 
-        if percentage >= Self.threshold {
+        if percentage >= Self.threshold, countsTime {
             // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
             if exposedSince == nil || stalled { exposedSince = now }
             if let since = exposedSince, now - since >= requiredSeconds {

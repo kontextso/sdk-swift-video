@@ -69,6 +69,12 @@ struct DecodingTests {
         #expect(response.result(for: .pause)?.noFillReason?.description == "brandNew", "the wire name survives for logs")
     }
 
+    @Test func aSizeMustBePositive() throws {
+        var payload = Fixtures.ad()
+        payload["sizes"] = [["width": 0, "height": 300]]
+        #expect(throws: DecodingError.self) { try Fixtures.payload(payload) }
+    }
+
     @Test func adsResponseReasonsOfTheWrongTypeReadUnknown() throws {
         let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [], "noFillReason": 7]]])
         #expect(response.result(for: .pause)?.noFillReason == .unknown, "the answer is understood, the reason is not")

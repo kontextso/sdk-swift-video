@@ -568,6 +568,71 @@ struct VideoAdTests {
         #expect(presented.view.subviews.isEmpty || presented.view.subviews.first !== ad.bridge.webView || ad.hasEnded)
     }
 
+    @Test func dismissingFromInsideTheImpressionCallbackLeavesNothingRunning() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c"))
+        delegate.onImpression = { try? $0.dismiss() }
+        try ad.show(in: harness.player.view)
+        #expect(delegate.events == ["impression", "end:dismissed"], "ended from inside the impression callback")
+        #expect(ad.activityObservers.isEmpty, "the observers set up at show were removed by the end that followed")
+        #expect(ad.durationTask?.isCancelled != false && ad.loadedBridge == nil, "no clock running, no WebView")
+    }
+
+    @Test func aMessageAfterTheEndChangesNothing() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "v9c"))
+        try ad.show(from: window.root)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.complete", ["playhead": 10_000])
+        send(ad, "ad.close", ["reason": "close"])
+        #expect(ad.hasEnded)
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        send(ad, "ad.click", ["url": "https://brand.test/late"])
+        send(ad, "ad.error", ["code": 405])
+        send(ad, "video.start", ["playhead": 0])
+        #expect(opened.isEmpty && delegate.endReasons.count == 1 && !delegate.events.contains("fail"), "late messages: no click, no fail, no second end")
+    }
+
+    @Test func aPresenterStillDismissingItsModalIsNotUsed() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10b"))
+        Environment.keyWindow = { [window] in window.window }
+        let modal = UIViewController()
+        window.root.present(modal, animated: false)
+        #expect(await waitUntil { self.window.root.presentedViewController === modal })
+        // The runner never finishes the dismissal, which is the moment at issue: the modal is going, the root still presents it.
+        window.root.dismiss(animated: true)
+        do { try ad.show() } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable, got \(error)") }
+        #expect(ad.isReady, "the ad waits for a presenter that can present")
+    }
+
+    @Test func aPresentationUIKitNeverCompletesEndsTheAdAsFailed() async throws {
+        // The runner never completes a modal transition and the controller never reaches a window: what a refused presentation looks like.
+        VideoAd.presentationTimeout = 0.2
+        defer { VideoAd.presentationTimeout = 2 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10c"))
+        try ad.show(from: window.root)
+        #expect(ad.wasShown && KontextVideo.shared.adOnScreen === ad)
+        #expect(await waitUntil { ad.hasEnded })
+        #expect(delegate.events.contains("fail") && delegate.endReasons == [.failed])
+        #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")
+    }
+
+    @Test func aVideoIsViewableOnlyWhileItPlays() async throws {
+        ViewabilityMeter.interval = 0.02
+        defer { ViewabilityMeter.interval = 0.25 }
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "v9d", creative: "video"))
+        try ad.show(in: harness.player.view)
+        await sleepMs(150)   // on screen in full, autoplay refused: the video has not started
+        #expect(!(await beacons()).contains("viewable"), "exposed, but no video played yet")
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.pause", ["playhead": 500])
+        await sleepMs(150)
+        #expect(!(await beacons()).contains("viewable"), "paused: the clock does not run")
+        send(ad, "video.resume", ["playhead": 500])
+        await sleepMs(2_300)
+        #expect((await beacons()).contains("viewable"), "two seconds of the video played while exposed")
+        try ad.dismiss()
+    }
+
     @Test func showInAViewThatIsNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10b"))
         let detached = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))
