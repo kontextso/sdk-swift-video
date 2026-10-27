@@ -15,6 +15,7 @@ final class ViewabilityMeter {
 
     /// How often the box is measured. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 0.25
+    /// The MRC rule's share: at least half the box on screen, for `requiredSeconds` without a break.
     static let threshold: Double = 0.5
 
     /// Exposure changed: percentage on screen and the visible rectangle in the view's coordinates.
