@@ -28,6 +28,7 @@ struct PlayerScreen: View {
         .onTapGesture { playback.toggle() }
         .overlay(alignment: .topLeading) {
             Button {
+                playback.stop()
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
@@ -47,8 +48,9 @@ struct PlayerScreen: View {
             .padding(.bottom, 48)
         }
         .statusBarHidden()
+        // Not onDisappear: the linear ad's full-screen presentation covers this view, and SwiftUI
+        // reports that as a disappearance too.
         .onAppear { playback.start() }
-        .onDisappear { playback.stop() }
     }
 }
 
