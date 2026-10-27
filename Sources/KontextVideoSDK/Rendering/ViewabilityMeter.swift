@@ -49,10 +49,13 @@ final class ViewabilityMeter {
 
     func start() {
         guard timer == nil, !stopped else { return }
-        // The timer first: a callback from the first tick that stops the meter must find it there.
-        timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
+        // The timer first: a callback from the first tick that stops the meter must find it there. In the
+        // common modes, so it keeps ticking while the viewer scrolls (the default mode pauses then).
+        let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
         tick()
     }
 
@@ -95,6 +98,8 @@ final class ViewabilityMeter {
         let area = view.bounds.width * view.bounds.height
         let percentage = visible.isNull || area == 0 ? 0 : min(1, Double(visible.width * visible.height / area))
         report(percentage, visible: visible.isNull ? .zero : visible)
+        // The page's reaction to the exposure may have ended the ad.
+        guard !stopped else { return }
 
         if percentage >= Self.threshold {
             // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
@@ -111,6 +116,7 @@ final class ViewabilityMeter {
     /// by every ancestor that clips (a scroll view, a container with `clipsToBounds`); `.null` when it or
     /// an ancestor is hidden or transparent. Overlap by sibling views is not seen; nothing cheap sees it.
     private static func visibleRect(of view: UIView, in window: UIWindow) -> CGRect {
+        guard !window.isHidden, window.alpha > 0.01 else { return .null }
         var rect = view.convert(view.bounds, to: window).intersection(window.bounds)
         var current: UIView? = view
         while let node = current, node !== window {
