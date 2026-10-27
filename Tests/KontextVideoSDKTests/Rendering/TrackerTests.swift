@@ -143,6 +143,21 @@ struct TrackerTests {
         #expect(beacon.query["aph"] == "00:00:59.999")
     }
 
+    @Test func aNonsensePlayheadIsClampedNotCrashed() async throws {
+        #expect(Tracker.playhead(seconds: .infinity) == "00:00:00.000")
+        #expect(Tracker.playhead(seconds: .nan) == "00:00:00.000")
+        #expect(Tracker.playhead(seconds: -5) == "00:00:00.000")
+        #expect(Tracker.playhead(seconds: TimeInterval(Int.max) / 1000) == "87600:00:00.000", "ten years, not a trap")
+        #expect(Tracker.playhead(seconds: 1e300) == "87600:00:00.000")
+        #expect(Tracker.playhead(seconds: 3661.25) == "01:01:01.250")
+        let tracker = try makeTracker()
+        tracker.adPlayhead = Int.max
+        tracker.contentPlayhead = { .infinity }
+        tracker.fire("error", errorCode: 400)
+        let beacon = try #require(await fired().first)
+        #expect(beacon.query["aph"] == "87600:00:00.000" && beacon.query["cph"] == "00:00:00.000")
+    }
+
     @Test func theDeprecatedContentPlayheadIsFilledLikeMediaPlayhead() async throws {
         let tracker = Tracker(adId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?old=[CONTENTPLAYHEAD]&new=[MEDIAPLAYHEAD]&x=[KONTEXT_UNKNOWN]", offset: nil, part: nil),
@@ -173,6 +188,16 @@ struct TrackerTests {
         #expect(raw.range(of: "cph=00%3A00%3A00.000") != nil, "colons in playheads are escaped")
         let ts = try #require(URLComponents(string: raw)?.percentEncodedQueryItems?.first { $0.name == "ts" }?.value)
         #expect(ts.contains("%3A") && !ts.contains(":"), "the timestamp's colons are escaped: \(ts)")
+    }
+
+    @Test func aWinnerAndAPriceAreEncodedAsOneQueryValue() async throws {
+        let tracker = try makeTracker()
+        tracker.fire("notUsed", notUsed: Tracker.NotUsed(.outbid(winningPrice: 1e+20, winner: "Ad/Net;work?x=1&y=2 +")))
+        let beacon = try #require(await fired().first)
+        #expect(beacon.query["winner"] == "Ad/Net;work?x=1&y=2 +", "decoded, the name is intact")
+        #expect(beacon.query["wp"] == "1e+20")
+        let raw = try #require(server.requests(to: "/events/").first?.request.url?.absoluteString)
+        #expect(raw.contains("winner=Ad%2FNet%3Bwork%3Fx%3D1%26y%3D2%20%2B") && raw.contains("wp=1e%2B20"), "nothing a parser could take for a delimiter: \(raw)")
     }
 
     @Test func invalidURLsAreSkippedWithoutStoppingOthers() async throws {

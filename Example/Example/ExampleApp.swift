@@ -32,7 +32,7 @@ final class Demo: ObservableObject {
         let configuration = KontextVideo.Configuration(
             publisherToken: "example-debug",
             logLevel: .debug,
-            adServerURL: URL(string: "http://localhost:5175")!
+            adServerURL: URL(string: "http://192.168.18.228:3002")!
         )
         KontextVideo.shared.initialize(with: configuration) { [weak self] state in
             self?.state = "\(state)"

@@ -98,7 +98,7 @@ final class Tracker {
             .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
             .replacingOccurrences(of: "[KONTEXT_VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
             .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
-            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: notUsed?.winningPrice.map { String($0) } ?? "")
+            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: Self.encode(notUsed?.winningPrice.map { String($0) } ?? ""))
             .replacingOccurrences(of: "[KONTEXT_WINNER]", with: Self.encode(notUsed?.winner ?? ""))
             // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
             // URL, and every `%3A` above would become `%253A`.
@@ -114,10 +114,15 @@ final class Tracker {
         return formatter
     }()
 
+    /// Playheads beyond this (ten years, the same cap as the content playhead) are nonsense and clamped:
+    /// a value near `Int.max` would trap the `Int` conversion below.
+    static let maxPlayhead: TimeInterval = 315_360_000
+
     /// `[MEDIAPLAYHEAD]`, `[ADPLAYHEAD]`: `HH:MM:SS.mmm`.
-    private static func playhead(seconds: TimeInterval) -> String {
+    static func playhead(seconds: TimeInterval) -> String {
+        let seconds = seconds.isFinite ? min(max(0, seconds), maxPlayhead) : 0
         // Whole milliseconds first: splitting the Double would lose one (9.806 is 9.80599… in binary).
-        let totalMs = Int((max(0, seconds) * 1000).rounded())
+        let totalMs = Int((seconds * 1000).rounded())
         let hours = totalMs / 3_600_000
         let minutes = totalMs / 60_000 % 60
         let secs = totalMs / 1000 % 60
@@ -125,6 +130,8 @@ final class Tracker {
         return String(format: "%02d:%02d:%02d.%03d", hours, minutes, secs, millis)
     }
 
+    /// A value inside one query parameter: only RFC 3986's unreserved characters stay, so `:` in a playhead,
+    /// `+` in a price and `;`, `/` or `?` in a winner's name are no parser's delimiter.
     private static func encode(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? value
     }
@@ -170,10 +177,6 @@ extension Tracker {
 }
 
 private extension CharacterSet {
-    /// Everything a query value may contain unescaped; `:` and `+` are escaped so playheads and offsets survive.
-    static let urlQueryValueAllowed: CharacterSet = {
-        var set = CharacterSet.urlQueryAllowed
-        set.remove(charactersIn: ":+&=")
-        return set
-    }()
+    /// RFC 3986 unreserved: letters, digits, `-._~`.
+    static let urlQueryValueAllowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 }

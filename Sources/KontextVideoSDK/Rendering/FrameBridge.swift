@@ -242,7 +242,8 @@ final class FrameBridge: NSObject {
             return
         }
         Logger.debug("frame \(adId.prefix(8)): ← \(type)")
-        let playhead = (body["playhead"] as? NSNumber)?.intValue ?? 0
+        // Milliseconds into the ad video, clamped to a day: a page value near `Int.max` must not reach arithmetic.
+        let playhead = min(max(0, (body["playhead"] as? NSNumber)?.intValue ?? 0), 86_400_000)
 
         switch type {
         case "ad.loaded":

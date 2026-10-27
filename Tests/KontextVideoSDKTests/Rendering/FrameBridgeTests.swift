@@ -129,6 +129,20 @@ struct FrameBridgeTests {
         #expect(bridge.state == .loaded)
     }
 
+    @Test func aNonsensePlayheadFromThePageIsClamped() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        bridge.receive(message("video.start", ["playhead": 9_223_372_036_854_775_807]), from: main)
+        guard case .video(_, let huge) = recorder.last else { Issue.record("expected video"); return }
+        #expect(huge == 86_400_000, "a day at most")
+        bridge.receive(message("video.pause", ["playhead": -7]), from: main)
+        guard case .video(_, let negative) = recorder.last else { Issue.record("expected video"); return }
+        #expect(negative == 0)
+        bridge.receive(message("video.resume", ["playhead": 1e300]), from: main)
+        guard case .video(_, let double) = recorder.last else { Issue.record("expected video"); return }
+        #expect(double == 86_400_000, "a Double beyond Int saturates, then clamps")
+    }
+
     @Test func videoEventsCarryTheirNameAndPlayhead() {
         let (bridge, recorder) = makeBridge(isVideo: true)
         shown(bridge)
