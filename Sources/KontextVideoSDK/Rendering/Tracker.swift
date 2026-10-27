@@ -96,8 +96,7 @@ final class Tracker {
             .replacingOccurrences(of: "]", with: "%5D")
     }
 
-    // VAST 4 macro formats: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone, and HH:MM:SS.mmm for playheads.
-
+    /// `[TIMESTAMP]`: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone.
     private static let timestamp: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -105,6 +104,7 @@ final class Tracker {
         return formatter
     }()
 
+    /// `[MEDIAPLAYHEAD]`, `[ADPLAYHEAD]`: `HH:MM:SS.mmm`.
     private static func playhead(seconds: TimeInterval) -> String {
         // Whole milliseconds first: splitting the Double would lose one (9.806 is 9.80599… in binary).
         let totalMs = Int((max(0, seconds) * 1000).rounded())
