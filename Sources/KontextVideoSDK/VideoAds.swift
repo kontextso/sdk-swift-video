@@ -49,6 +49,8 @@ public final class VideoAds {
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let error) {
+            // Destroyed between the failure and this caller's turn: the held ads are gone, and the app asked for that.
+            guard !isDestroyed else { throw VideoAdError.destroyed }
             if let held = state.ads[format], !held.descriptor.isExpired {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
