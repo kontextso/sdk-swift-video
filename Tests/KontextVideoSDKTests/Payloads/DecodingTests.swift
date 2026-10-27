@@ -185,6 +185,25 @@ struct DecodingTests {
         #expect(payload.attribution?.skan == nil && payload.attribution?.aakJWS == "eyJ.e30.sig")
     }
 
+    // MARK: Consistency
+
+    @Test func anAdOfAnotherFormatThanItsResultFailsTheResponse() throws {
+        let stray = Fixtures.overlayAd(id: "o-in-pause")
+        #expect(throws: DecodingError.self) {
+            try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [stray]]]])
+        }
+        _ = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "overlay", "ads": [stray]]]])
+    }
+
+    @Test func theFrameURLMustBeAbsoluteWithAHost() throws {
+        for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1"] {
+            #expect(try Fixtures.payload(Fixtures.ad(frameURL: ok)).rendering == .frame(URL(string: ok)!))
+        }
+        for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank"] {
+            #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
+        }
+    }
+
     // MARK: AdPayload per format
 
     @Test func pauseAdWithSize() throws {

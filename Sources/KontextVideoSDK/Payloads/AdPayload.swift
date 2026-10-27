@@ -160,7 +160,13 @@ struct AdPayload: Decodable, Sendable {
         let rendering = try container.nestedContainer(keyedBy: RenderingKeys.self, forKey: .rendering)
         switch try rendering.decode(String.self, forKey: .kind) {
         case "frame":
-            self.rendering = .frame(try rendering.decode(URL.self, forKey: .url))
+            // A page to load: absolute, with a scheme and a host. A relative path or a `javascript:`, `data:`,
+            // `file:` or `blob:` value is not a page of ours.
+            let url = try rendering.decode(URL.self, forKey: .url)
+            guard url.scheme != nil, let host = url.host, !host.isEmpty else {
+                throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be absolute with a host")
+            }
+            self.rendering = .frame(url)
         case let kind:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: rendering, debugDescription: "unknown rendering kind \(kind)")
         }

@@ -20,8 +20,13 @@ enum AdsResponse: Decodable, Sendable {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            format = try container.decode(AdFormat.self, forKey: .format)
+            let format = try container.decode(AdFormat.self, forKey: .format)
+            self.format = format
             ads = try container.decode([AdPayload].self, forKey: .ads)
+            // The SDK files the ad under the result's format and finds it again by the ad's own: both must agree.
+            if let stray = ads.first(where: { $0.format != format }) {
+                throw DecodingError.dataCorruptedError(forKey: .ads, in: container, debugDescription: "ad \(stray.id) is \(stray.format), the result is \(format)")
+            }
             noFillReason = ads.isEmpty ? VideoAdError.NoFillReason(try? container.decodeIfPresent(String.self, forKey: .noFillReason)) : nil
         }
     }
