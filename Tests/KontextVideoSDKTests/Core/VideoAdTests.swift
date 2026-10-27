@@ -355,12 +355,14 @@ struct VideoAdTests {
 
     @Test func overlayViewDurationCarriesTheActiveTimeOnScreenInMilliseconds() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13d"))
+        let shownAt = ProcessInfo.processInfo.systemUptime
         try ad.show(in: harness.player.view)
         await sleepMs(120)
         try ad.dismiss()
+        let onScreenMs = Int((ProcessInfo.processInfo.systemUptime - shownAt) * 1000)   // what the test itself saw, on any machine
         _ = await beacons()
         let ovd = try #require(harness.server.beacons.first { $0.event == "overlayViewDuration" }?.query["ovd"].flatMap(Int.init))
-        #expect(ovd >= 100 && ovd < 400, "[KONTEXT_VIEWDURATION] is ms on screen: \(ovd)")
+        #expect(ovd >= 100 && ovd <= onScreenMs + 20, "[KONTEXT_VIEWDURATION] is ms on screen: \(ovd) of \(onScreenMs)")
     }
 
     @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {
