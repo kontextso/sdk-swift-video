@@ -480,10 +480,13 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "v9b"))
         try ad.show(from: window.root)
         send(ad, "video.start", ["playhead": 0])
-        send(ad, "video.progress", ["offset": 7000, "playhead": 7000])   // the fixture's checkpoint is 5000
+        send(ad, "video.midpoint", ["playhead": 7000])   // the fixture's checkpoint is 5000; no video.progress at all
         _ = await beacons()
         let progress = harness.server.beacons.filter { $0.event == "progress" }
-        #expect(progress.map { $0.query["offset"] } == ["5000"], "decided from the playhead, not the page's number")
+        #expect(progress.map { $0.query["offset"] } == ["5000"], "decided from the playhead of any video message")
+        send(ad, "video.progress", ["offset": 5000, "playhead": 7100])
+        _ = await beacons()
+        #expect(harness.server.beacons.filter { $0.event == "progress" }.count == 1, "a late report of the same checkpoint fires nothing")
     }
 
     @Test func videoEventsFireTheirBeaconsWithTheAdPlayhead() async throws {

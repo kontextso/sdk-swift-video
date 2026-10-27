@@ -594,12 +594,15 @@ public final class VideoAd {
                 recordImpression()
             }
             tracker.fire(event.rawValue)
+            tracker.fireProgress(upTo: playhead)
         case .progress(let offset, let playhead):
             tracker.adPlayhead = playhead
             tracker.fireProgress(upTo: max(offset, playhead))
         case .complete(let playhead):
             tracker.adPlayhead = playhead
             isCompleted = true
+            // Checkpoints before the end that the page never reported, then the end itself.
+            tracker.fireProgress(upTo: playhead)
             tracker.fire("complete")
             // The end card, when there is one, becomes visible now.
             tracker.fire("creativeView", part: "endCard")
