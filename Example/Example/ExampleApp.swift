@@ -4,13 +4,8 @@ import SwiftUI
 @main
 struct ExampleApp: App {
     init() {
-        // The example talks to sdk-video-mock-server running on this Mac (`pnpm dev` there); on a physical
-        // device replace localhost with the Mac's LAN address. With your own publisher token, drop `adServerURL`.
-        let configuration = KontextVideo.Configuration(
-            publisherToken: "example-debug",
-            logLevel: .debug,
-            adServerURL: URL(string: "http://localhost:5175")!
-        )
+        // The ad server's demo routes answer any token; put your own publisher token here.
+        let configuration = KontextVideo.Configuration(publisherToken: "example-debug", logLevel: .debug)
         KontextVideo.shared.initialize(with: configuration)
     }
 

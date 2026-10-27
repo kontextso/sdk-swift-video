@@ -49,9 +49,11 @@ is what happens on screen (the Notion hub's "Rendering" section), `Support/` is 
 xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
 ```
 
-## Running the example against the mock server
+## Running the example
 
-The example talks to `http://localhost:5175`, which is where the mock listens.
+The example talks to the ad server (`server.megabrain.co`, the SDK's default) with a demo token. To run it against
+the mock instead, pass `adServerURL: URL(string: "http://localhost:5175")!` in the `Configuration` in
+`Example/ExampleApp.swift` and start the mock:
 
 ```bash
 # In sdk-video-mock-server
@@ -69,7 +71,7 @@ calls `destroy()`. The whole integration is `Example/PlayerScreen.swift`.
 What to read afterwards:
 
 - The player's bottom line shows the last delegate callback.
-- The mock's `http://localhost:5175/log` lists every request and beacon, newest first, with the ad id, the query
+- Against the mock, `http://localhost:5175/log` lists every request and beacon, newest first, with the ad id, the query
   (macros already substituted) and a note (`first impression: burl would fire now`, `unknown event`, ...).
 - The SDK's log, including debug lines (the subsystem is `so.kontext.video`):
 

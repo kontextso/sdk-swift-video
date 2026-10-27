@@ -19,7 +19,8 @@ xcodebuild test  -scheme KontextVideoSDK -destination 'platform=iOS Simulator,OS
 ```
 
 `swift build` / `swift test` do not work on the host (UIKit, WebKit). The example (`Example/`, XcodeGen) talks to
-the mock server `sdk-video-mock-server` on `localhost:5175`: three videos, one per format, each shows its ad 3 s in. See
+the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: three videos, one per
+format, each shows its ad 3 s in. See
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Architecture
