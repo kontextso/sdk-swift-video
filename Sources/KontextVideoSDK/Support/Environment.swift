@@ -20,6 +20,10 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
+    /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
+    static var skAdNetwork: any SKAdNetworkManaging = KontextKitSKAdNetwork()
+    /// Presents the App Store product sheet an app-install ad's click opens.
+    static var storeProduct: any StoreProductManaging = KontextKitStoreProduct()
     /// The clock an ad's lifetime is measured on: seconds since an arbitrary point, monotonic, and still
     /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and an ad must
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
@@ -35,6 +39,8 @@ enum Environment {
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
+        skAdNetwork = KontextKitSKAdNetwork()
+        storeProduct = KontextKitStoreProduct()
         now = defaultNow
     }
 

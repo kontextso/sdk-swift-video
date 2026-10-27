@@ -102,6 +102,56 @@ struct DecodingTests {
         #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["ad": Fixtures.ad()]) }
     }
 
+    // MARK: Attribution
+
+    @Test func anAppInstallAdCarriesItsSKAdNetworkPayload() throws {
+        var ad = Fixtures.installAd(Fixtures.ad(), itunesItem: "1521454264")
+        ad["attribution"] = ["skan": Fixtures.skan(), "aak": ["jws": "eyJhbGciOiJFUzI1NiJ9.e30.sig"]]
+        let payload = try Fixtures.payload(ad)
+        let skan = try #require(payload.attribution?.skan)
+        #expect(skan.version == "4.0" && skan.network == "mp7rpxwdrx.adattributionkit")
+        #expect(skan.itunesItem == "1521454264" && skan.sourceApp == "6479835900" && skan.sourceIdentifier == "4021" && skan.campaign == nil)
+        #expect(skan.fidelities.map(\.fidelity) == [1, 0] && skan.hasFidelity1)
+        let viewThrough = skan.fidelities[1]
+        #expect(viewThrough.nonce == "3f2c1a9e-0000" && viewThrough.timestamp == "1790850000000" && viewThrough.signature == "MEUCIQ0")
+        #expect(payload.attribution?.aakJWS == "eyJhbGciOiJFUzI1NiJ9.e30.sig")
+        #expect(try Fixtures.descriptor(ad).skan == skan, "the descriptor hands it to the ad")
+        let raw = skan.rawDictionary()
+        #expect(raw["itunesItem"] as? String == "1521454264" && raw["sourceIdentifier"] as? String == "4021" && raw["campaign"] == nil)
+        #expect((raw["fidelities"] as? [[String: Any]])?.map { $0["fidelity"] as? Int } == [1, 0])
+    }
+
+    @Test func anAdWithoutAttributionHasNone() throws {
+        #expect(try Fixtures.payload(Fixtures.ad()).attribution == nil)
+        #expect(try Fixtures.descriptor(Fixtures.ad()).skan == nil)
+    }
+
+    @Test func numericSKAdNetworkIdsAreTakenAsStrings() throws {
+        var skan = Fixtures.skan()
+        skan["itunesItem"] = 1_521_454_264
+        skan["sourceApp"] = 6_479_835_900
+        skan["fidelities"] = [["fidelity": "1", "nonce": "n", "timestamp": 1_790_850_000_000, "signature": "s"]]
+        let decoded = try #require(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan]])).attribution?.skan)
+        #expect(decoded.itunesItem == "1521454264" && decoded.sourceApp == "6479835900")
+        let entry = try #require(decoded.fidelities.first)
+        #expect(decoded.fidelities.count == 1 && entry.fidelity == 1 && entry.timestamp == "1790850000000")
+    }
+
+    @Test func aMalformedSKAdNetworkPayloadDropsTheAttributionNotTheAd() throws {
+        var missingNetwork = Fixtures.skan()
+        missingNetwork["network"] = nil
+        var noFidelities = Fixtures.skan()
+        noFidelities["fidelities"] = []
+        var brokenFidelity = Fixtures.skan()
+        brokenFidelity["fidelities"] = [["fidelity": 1, "nonce": "n"]]
+        for skan in [missingNetwork, noFidelities, brokenFidelity, "not an object"] as [Any] {
+            let payload = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan]]))
+            #expect(payload.id == "ad-1" && payload.attribution?.skan == nil, "\(skan)")
+        }
+        let payload = try Fixtures.payload(Fixtures.ad(extra: ["attribution": "nonsense"]))
+        #expect(payload.id == "ad-1", "a broken attribution object does not fail the ad either")
+    }
+
     // MARK: AdPayload per format
 
     @Test func pauseAdWithSize() throws {

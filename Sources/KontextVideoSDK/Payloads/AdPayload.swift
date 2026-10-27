@@ -120,10 +120,12 @@ struct AdPayload: Decodable, Sendable {
     let rendering: Rendering
     let tracking: [TrackingEvent]
     let details: Details
+    /// Apple's install attribution; only an app-install ad carries it.
+    let attribution: Attribution?
     // Not read: `vastUrl` (for players that render VAST themselves) and, in the response, `nextRequestAt`.
 
     private enum CodingKeys: String, CodingKey {
-        case id, format, creative, trigger, price, expires, rendering, tracking
+        case id, format, creative, trigger, price, expires, rendering, tracking, attribution
         case position, sizes, duration, skipOffset
     }
 
@@ -143,6 +145,7 @@ struct AdPayload: Decodable, Sendable {
         price = try container.decode(Price.self, forKey: .price)
         expires = try container.decode(Int.self, forKey: .expires)
         tracking = try container.decode([TrackingEvent].self, forKey: .tracking)
+        attribution = try? container.decodeIfPresent(Attribution.self, forKey: .attribution)   // best effort: never fails the ad
 
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
         switch try trigger.decode(String.self, forKey: .kind) {

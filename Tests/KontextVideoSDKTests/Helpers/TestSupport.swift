@@ -56,6 +56,37 @@ final class RecordingDelegate: VideoAdDelegate {
     }
 }
 
+/// Records every SKAdNetwork call the SDK makes, in order; `init` names the advertised app.
+@MainActor
+final class RecordingSKAdNetwork: SKAdNetworkManaging {
+    private(set) var calls: [String] = []
+    /// What `initImpression` does before it returns; a test that wants it slow or failing sets it.
+    var onInit: (@MainActor () async throws -> Void)?
+
+    func initImpression(_ skan: Skan) async throws {
+        calls.append("init \(skan.itunesItem)")
+        try await onInit?()
+    }
+
+    func startImpression() async throws { calls.append("start") }
+    func endImpression() async throws { calls.append("end") }
+    func dispose() async throws { calls.append("dispose") }
+}
+
+/// Records the App Store sheets the SDK asked for; `result` is what each presentation answers.
+@MainActor
+final class RecordingStoreProduct: StoreProductManaging {
+    private(set) var presented: [Skan] = []
+    var result: Result<Bool, Error> = .success(true)
+
+    func present(_ skan: Skan) async throws -> Bool {
+        presented.append(skan)
+        return try result.get()
+    }
+}
+
+struct TestFailure: Error {}
+
 /// A window the tests can put views into. Made key and visible so WebKit treats the views as on screen.
 @MainActor
 final class TestWindow {
@@ -116,6 +147,8 @@ func sleepMs(_ ms: Int) async {
 struct SDKHarness {
     let server = StubServer()
     let player = TestPlayer()
+    let skAdNetwork = RecordingSKAdNetwork()
+    let storeProduct = RecordingStoreProduct()
     var configuration: KontextVideo.Configuration {
         KontextVideo.Configuration(publisherToken: "test-dev", logLevel: .none, adServerURL: server.baseURL)
     }
@@ -133,6 +166,8 @@ struct SDKHarness {
         Environment.keyWindow = { nil }
         Environment.consentDefaults = UserDefaults(suiteName: "KontextVideoSDKTests")!
         Environment.consentDefaults.removePersistentDomain(forName: "KontextVideoSDKTests")
+        Environment.skAdNetwork = skAdNetwork
+        Environment.storeProduct = storeProduct
     }
 
     /// Initializes the SDK and waits until `/config` answered. Also the moment WebKit is warmed up, so the
@@ -174,6 +209,7 @@ struct SDKHarness {
         VideoAd.dismissalTimeout = 0.05
         DebugReporter.interval = 0.1
         DebugReporter.shared.isEnabled = false
+        SKAdNetworkImpression.queue = nil
     }
 }
 

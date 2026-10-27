@@ -166,6 +166,8 @@ public final class VideoAd {
     }
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
+    /// Apple's install attribution of an app-install ad; `nil` for every other ad.
+    private(set) var skAdNetwork: SKAdNetworkImpression?
 
     /// Nothing is rendered here; `load()` does that. Expiry is checked at the next call, never by a timer.
     init(descriptor: AdDescriptor, owner: VideoAds) {
@@ -173,6 +175,7 @@ public final class VideoAd {
         self.owner = owner
         tracker = Tracker(adId: descriptor.id, entries: descriptor.tracking)
         tracker.contentPlayhead = { [weak owner] in owner?.playhead ?? 0 }
+        skAdNetwork = descriptor.skan.map { SKAdNetworkImpression(skan: $0, adId: descriptor.id) }
     }
 
     // MARK: Loading and rejecting
@@ -436,6 +439,8 @@ public final class VideoAd {
         Logger.info("ad \(id.prefix(8)): shown")
         DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
         startMeter()
+        // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
+        skAdNetwork?.start()
         if format != .linear {
             // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
             // `duration` runs on it, so both freeze in the background and resume on foreground.
@@ -560,6 +565,7 @@ public final class VideoAd {
         stopObservingActivity()
         meter?.stop()
         meter = nil
+        skAdNetwork?.end()
         loadedBridge?.hide()
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
         hostView?.removeFromSuperview()
@@ -614,6 +620,16 @@ public final class VideoAd {
         delegate?.videoAd(self, didEnd: reason)
     }
 
+    /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
+    /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
+    private func openClick(_ url: URL, fallback: URL?) {
+        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return open(url, fallback: fallback) }
+        Task { [weak self] in
+            if await skAdNetwork.presentStore() { return }
+            self?.open(url, fallback: fallback)
+        }
+    }
+
     /// Opens a URL the page asked for: the app store, a deep link, a web page. The fallback is tried when
     /// the first cannot be opened (an app that is not installed).
     private func open(_ url: URL, fallback: URL?) {
@@ -664,7 +680,7 @@ public final class VideoAd {
             // The end card selects its own `click` entries; anything else is the creative's.
             // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
             let fireId = tracker.fire("click", part: area == .endCard ? "endCard" : nil)
-            open(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
+            openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
             delegate?.videoAd(self, didClick: Click(url: url, area: area))
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.host ?? url.absoluteString)")

@@ -25,6 +25,8 @@ struct AdDescriptor {
     let frameURL: URL
     /// The beacons; the SDK fires each once.
     let tracking: [AdPayload.TrackingEvent]
+    /// The SKAdNetwork payload of an app-install ad; `nil` for every other ad.
+    let skan: Skan?
     /// `Environment.now()` at the first receipt: `expires` counts from here; a re-serve does not move it.
     let receivedAt: TimeInterval
     /// Seconds the ad lives from receipt.
@@ -41,6 +43,7 @@ struct AdDescriptor {
         case .frame(let url): frameURL = url
         }
         tracking = ad.tracking
+        skan = ad.attribution?.skan
         switch ad.details {
         case .overlay(let wirePosition, let wireSizes, let wireDuration):
             switch wirePosition {

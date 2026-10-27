@@ -136,6 +136,26 @@ enum Fixtures {
         try JSONDecoder().decode(AdPayload.self, from: JSONSerialization.data(withJSONObject: ad))
     }
 
+    /// The SKAdNetwork payload of an app-install ad, the Video API's example values; `fidelities` says
+    /// which entries the network signed (1: the click, 0: the view-through impression).
+    static func skan(itunesItem: String = "1521454264", fidelities: [Int] = [1, 0]) -> [String: Any] {
+        [
+            "version": "4.0",
+            "network": "mp7rpxwdrx.adattributionkit",
+            "itunesItem": itunesItem,
+            "sourceApp": "6479835900",
+            "sourceIdentifier": "4021",
+            "fidelities": fidelities.map { ["fidelity": $0, "nonce": "3f2c1a9e-000\($0)", "timestamp": "1790850000000", "signature": "MEUCIQ\($0)"] },
+        ]
+    }
+
+    /// `ad` with the attribution of an app-install ad whose advertised app is `itunesItem`.
+    static func installAd(_ ad: [String: Any], itunesItem: String, fidelities: [Int] = [1, 0]) -> [String: Any] {
+        var ad = ad
+        ad["attribution"] = ["skan": skan(itunesItem: itunesItem, fidelities: fidelities)]
+        return ad
+    }
+
     /// The answer as a bid takes it, received now.
     static func descriptor(_ ad: [String: Any]) throws -> AdDescriptor {
         AdDescriptor(payload: try payload(ad), receivedAt: Environment.now())
