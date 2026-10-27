@@ -66,6 +66,7 @@ final class Playback: ObservableObject {
     private let ads: VideoAds
     private var ad: VideoAd?
     private var loop: (any NSObjectProtocol)?
+    private var started = false
 
     init(video: Video) {
         self.video = video
@@ -78,8 +79,11 @@ final class Playback: ObservableObject {
         ads.trackPlayhead(of: player)
     }
 
-    /// The content starts and loops, the ad is prepared, and after 3 s the format's moment comes.
+    /// The content starts and loops, the ad is prepared, and after 3 s the format's moment comes. Once:
+    /// SwiftUI calls `onAppear` again when the linear ad's presentation is dismissed.
     func start() {
+        guard !started else { return }
+        started = true
         player.play()
         loop = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { [weak player] _ in
             player?.seek(to: .zero)
