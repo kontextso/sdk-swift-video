@@ -164,7 +164,7 @@ struct VideoAdsTests {
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
         let noFill = await error { try await ads.format(.pause) }
         guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
-        #expect(reason == "frequencyCap")
+        #expect(reason == .frequencyCap)
         #expect(held.invalidationReason == .expired)
         harness.serve(Fixtures.ad(id: "img-p10"))
         #expect(try await ads.format(.pause).id == "img-p10", "the next call asks again")
@@ -176,7 +176,7 @@ struct VideoAdsTests {
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled")))
         let noFill = await error { try await ads.format(.linear) }
         guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
-        #expect(reason == "formatNotEnabled")
+        #expect(reason == .formatNotEnabled)
     }
 
     @Test func anExpiredBidIsDroppedSilentlyBeforeTheNextRequest() async throws {
@@ -201,7 +201,7 @@ struct VideoAdsTests {
         advanceClock(by: 31)
         let late = await error { try await again.value }
         guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
-        #expect(reason == VideoAds.alreadyUsed)
+        #expect(reason == .alreadyUsed)
         #expect(ad.invalidationReason == .expired)
     }
 
@@ -365,7 +365,7 @@ struct VideoAdsTests {
             _ = try await pause.value
             Issue.record("expected noFill")
         } catch VideoAdError.noFill(let reason) {
-            #expect(reason == VideoAds.alreadyUsed, "a spent id is never accepted again")
+            #expect(reason == .alreadyUsed, "a spent id is never accepted again")
         }
         #expect(try await linear.value.id == "vid-l20", "other formats get their bids normally")
         #expect(await notUsedBeacons(expecting: 1).map(\.adId) == ["img-p20"], "one notice, from the reject")
@@ -387,7 +387,7 @@ struct VideoAdsTests {
             _ = try await again.value
             Issue.record("expected noFill")
         } catch VideoAdError.noFill(let reason) {
-            #expect(reason == VideoAds.alreadyUsed)
+            #expect(reason == .alreadyUsed)
         }
         #expect(ad.wasShown && !ad.hasEnded, "the ad on screen is untouched")
     }

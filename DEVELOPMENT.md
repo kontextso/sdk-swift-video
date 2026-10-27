@@ -107,7 +107,8 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - Nesting: a public type the app constructs nests under `KontextVideo` (`Configuration`, `Content`, `User`,
   `Regulatory`), so it never collides with the app's own `User` or `Content` and `.init(…)` works where the type
   is inferred; a public type the app reads off an ad nests under `VideoAd` (`Price`, `Click`, `EndReason`,
-  `RejectReason`). Internal types are top level: nesting protects app code from collisions, and internal
+  `RejectReason`); a type that exists only inside an error nests under `VideoAdError` (`NoFillReason`). Internal
+  types are top level: nesting protects app code from collisions, and internal
   types cannot collide. `AdFormat` is the one public top-level type: it names the formats everywhere and
   cannot realistically collide.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then here, then to `sdk-kotlin-video`.

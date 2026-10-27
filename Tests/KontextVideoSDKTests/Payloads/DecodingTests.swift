@@ -48,24 +48,30 @@ struct DecodingTests {
         ]])
         #expect(response.result(for: .linear)?.ads.map(\.id) == ["l1"])
         #expect(response.result(for: .overlay)?.ads.isEmpty == true)
-        #expect(response.result(for: .overlay)?.noFillReason == "frequencyCap")
+        #expect(response.result(for: .overlay)?.noFillReason == .frequencyCap)
         #expect(response.result(for: .pause)?.ads.map(\.id) == ["p1"])
         #expect(response.result(for: .overlay)?.format == .overlay)
     }
 
     @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
         let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.noFillEntry("temporaryError", format: "pause", nextRequestAt: 38_000)]])
-        #expect(response.result(for: .pause)?.noFillReason == "temporaryError")
+        #expect(response.result(for: .pause)?.noFillReason == .temporaryError)
     }
 
     @Test func adsResponseNoFillDefaults() throws {
         let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": []]]])
-        #expect(response.result(for: .pause)?.noFillReason == "unknown")
+        #expect(response.result(for: .pause)?.noFillReason == .unknown)
+    }
+
+    @Test func adsResponseNoFillReasonsTheSDKDoesNotKnowPassThrough() throws {
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.noFillEntry("brandNew", format: "pause")]])
+        #expect(response.result(for: .pause)?.noFillReason == .other("brandNew"))
+        #expect(response.result(for: .pause)?.noFillReason?.description == "brandNew", "the wire name survives for logs")
     }
 
     @Test func adsResponseReasonsOfTheWrongTypeReadUnknown() throws {
         let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [], "noFillReason": 7]]])
-        #expect(response.result(for: .pause)?.noFillReason == AdsResponse.unknownReason, "the answer is understood, the reason is not")
+        #expect(response.result(for: .pause)?.noFillReason == .unknown, "the answer is understood, the reason is not")
         guard case .disabled(let disabled) = try decode(AdsResponse.self, ["enabled": false, "disabledReason": ["x"]]) else { Issue.record("expected disabled"); return }
         #expect(disabled == AdsResponse.unknownReason)
     }

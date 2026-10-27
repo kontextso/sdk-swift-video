@@ -2,11 +2,9 @@
 /// its ads or its no-fill reason; or the kill switch. `nextRequestAt` (timed mode) is on the wire but
 /// not read: the SDK has no timed mode yet, every ad is shown at a moment the app picks.
 enum AdsResponse: Decodable, Sendable {
-    /// Stands in for a `noFillReason` or `disabledReason` the server left out or sent malformed; the
-    /// answer itself is still understood.
+    /// Stands in for a `disabledReason` the server left out or sent malformed; the answer itself is
+    /// still understood. (`NoFillReason.unknown` is the same for a no-fill.)
     static let unknownReason = "unknown"
-    /// The no-fill reason for a format with no configuration in the dashboard: the integration, not the moment.
-    static let formatNotEnabled = "formatNotEnabled"
 
     /// One per format. `ads` is a sequence, the first to be shown first; today a filled entry
     /// carries one. Decoded strictly on `format` and `ads` (they decide the answer), leniently on the reason.
@@ -14,7 +12,7 @@ enum AdsResponse: Decodable, Sendable {
         let format: AdFormat
         let ads: [AdPayload]
         /// Set exactly when `ads` is empty.
-        let noFillReason: String?
+        let noFillReason: VideoAdError.NoFillReason?
 
         private enum CodingKeys: String, CodingKey {
             case format, ads, noFillReason
@@ -24,7 +22,7 @@ enum AdsResponse: Decodable, Sendable {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             format = try container.decode(AdFormat.self, forKey: .format)
             ads = try container.decode([AdPayload].self, forKey: .ads)
-            noFillReason = ads.isEmpty ? (try? container.decodeIfPresent(String.self, forKey: .noFillReason)) ?? AdsResponse.unknownReason : nil
+            noFillReason = ads.isEmpty ? VideoAdError.NoFillReason(try? container.decodeIfPresent(String.self, forKey: .noFillReason)) : nil
         }
     }
 

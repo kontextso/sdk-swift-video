@@ -21,7 +21,7 @@ public final class VideoAds {
     /// The unshown ads, the spent ids and the ad on screen; a reference so `deinit` can reach it.
     private let state = State()
     /// The request in flight: every `format(_:)` meanwhile waits for it instead of sending another.
-    private var request: Task<[AdFormat: String], Error>?
+    private var request: Task<[AdFormat: VideoAdError.NoFillReason], Error>?
 
     /// Needs `initialize(with:)` to have been called; `/config` itself may still be in flight, requests
     /// wait for it.
@@ -45,7 +45,7 @@ public final class VideoAds {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
         let task = request ?? startRequest()
-        let noFill: [AdFormat: String]
+        let noFill: [AdFormat: VideoAdError.NoFillReason]
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let error) {
@@ -57,15 +57,15 @@ public final class VideoAds {
         }
         guard !isDestroyed else { throw VideoAdError.destroyed }
         if let ad = state.ads[format] { return ad }
-        throw VideoAdError.noFill(reason: noFill[format] ?? AdsResponse.unknownReason)
+        throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
     }
 
     /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()`.
     /// Expired ads are dropped first (silently; the server knows `expires`), so `held` lists valid ones.
-    private func startRequest() -> Task<[AdFormat: String], Error> {
+    private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
         for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
-        let task = Task { [weak self] () throws -> [AdFormat: String] in
+        let task = Task { [weak self] () throws -> [AdFormat: VideoAdError.NoFillReason] in
             defer { self?.request = nil }
             guard let self else { throw VideoAdError.destroyed }
             let response = try await send(held: held)
@@ -80,13 +80,13 @@ public final class VideoAds {
     /// unchanged (the re-served payload is ignored); a new id replaces it, as does a no-fill, because the
     /// server replaces a held bid only once it expired. An id the SDK already spent (shown or rejected
     /// while the request ran) is ignored for its format. Returns the no-fill reasons by format.
-    private func apply(_ response: AdsResponse) -> [AdFormat: String] {
-        var noFill: [AdFormat: String] = [:]
+    private func apply(_ response: AdsResponse) -> [AdFormat: VideoAdError.NoFillReason] {
+        var noFill: [AdFormat: VideoAdError.NoFillReason] = [:]
         for format in AdFormat.allCases {
             let current = state.ads[format]
             guard let ad = response.result(for: format)?.ads.first else {
                 current?.invalidate(.expired)
-                let reason = response.result(for: format)?.noFillReason ?? AdsResponse.unknownReason
+                let reason = response.result(for: format)?.noFillReason ?? .unknown
                 noFill[format] = reason
                 logNoFill(format, reason: reason)
                 continue
@@ -99,7 +99,7 @@ public final class VideoAds {
             current?.invalidate(.expired)
             if state.spentIds.contains(ad.id) {
                 Logger.debug("\(format) for \(content.id): ad \(ad.id.prefix(8)) was already used, ignored")
-                noFill[format] = Self.alreadyUsed
+                noFill[format] = .alreadyUsed
                 continue
             }
             Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
@@ -109,17 +109,14 @@ public final class VideoAds {
         return noFill
     }
 
-    /// The no-fill reason for a format whose answer is an id the SDK already used.
-    static let alreadyUsed = "alreadyUsed"
-
-    private func logNoFill(_ format: AdFormat, reason: String) {
+    private func logNoFill(_ format: AdFormat, reason: VideoAdError.NoFillReason) {
         // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
-        if reason == AdsResponse.formatNotEnabled {
+        if reason == .formatNotEnabled {
             Logger.error("\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))")
         } else {
             Logger.info("\(format) for \(content.id): no fill (\(reason))")
         }
-        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason)])
+        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason.description)])
     }
 
     /// Waits for `/config`, reads the ATT status, builds and sends the request. The kill switch in the
