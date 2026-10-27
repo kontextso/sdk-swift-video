@@ -142,6 +142,8 @@ public final class VideoAd {
     private(set) var isPresented = false
     /// `didEnd` was delivered. For a linear ad that is after its dismissal, so this lags `hasEnded`.
     private var finished = false
+    /// What broke, for the `didFail` that `end(.failed)` delivers first.
+    private var failure: VideoAdError?
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     /// Decides `viewable` / `notViewable` while the ad is on screen.
@@ -308,12 +310,13 @@ public final class VideoAd {
         linearController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
-        // The page is shown, and the beacons of that moment fire, once UIKit confirms the presentation:
-        // an ad UIKit refused must never record an impression.
+        // Reserved first, so a completion that runs at once finds the ad shown and the slot taken. The page is
+        // shown, and the beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit
+        // refused must never record an impression.
+        begin(presentNow: false)
         presenter.present(controller, animated: true) { [weak self] in
             self?.presented()
         }
-        begin(presentNow: false)
         // UIKit can refuse a presentation without an error (another one in progress); then the completion
         // never runs and the ad would hold the screen forever. After `presentationTimeout`: a controller
         // that never reached a window failed; one that did, without the completion, is taken as presented
@@ -327,13 +330,13 @@ public final class VideoAd {
                 try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
             }
             guard let self, !hasEnded, !isPresented else { return }
-            if controller.view.window != nil {
+            // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
+            if let window = controller.view.window, !window.isHidden, window.alpha > 0.01, Environment.isApplicationActive() {
                 Logger.warning("ad \(id.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
                 presented()
             } else {
                 Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
-                delegate?.videoAd(self, didFail: .presenterUnavailable)
-                end(.failed)
+                fail(.presenterUnavailable)
             }
         }
     }
@@ -416,9 +419,11 @@ public final class VideoAd {
         wasShown = true
         KontextVideo.shared.adOnScreen = self
         owner?.adDidBeginShowing(self)
-        Logger.info("ad \(id.prefix(8)): shown")
-        DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
-        if presentNow { presented() }
+        if presentNow {
+            presented()
+        } else {
+            Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
+        }
     }
 
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
@@ -428,6 +433,8 @@ public final class VideoAd {
         guard !hasEnded, !isPresented else { return }
         isPresented = true
         bridge.show()
+        Logger.info("ad \(id.prefix(8)): shown")
+        DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
         startMeter()
         if format != .linear {
             // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
@@ -534,10 +541,21 @@ public final class VideoAd {
         meter.start()
     }
 
+    /// The creative broke on screen, or never got there: `didFail` then `didEnd(.failed)`, in that order and
+    /// with that reason, whatever the app does inside `didFail` (a `destroy()` there changes nothing).
+    private func fail(_ error: VideoAdError) {
+        guard wasShown, !hasEnded else { return }
+        failure = error
+        end(.failed)
+    }
+
     /// The one terminal moment after a successful show. Idempotent.
     func end(_ reason: EndReason) {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
+        if reason == .failed, let failure {
+            delegate?.videoAd(self, didFail: failure)
+        }
         durationTask?.cancel()
         stopObservingActivity()
         meter?.stop()
@@ -636,8 +654,7 @@ public final class VideoAd {
                 continuation.resume(throwing: VideoAdError.creativeFailed(code: code))
             } else if wasShown {
                 Logger.warning("ad \(id.prefix(8)): creative failed after show, VAST error \(code)")
-                delegate?.videoAd(self, didFail: .creativeFailed(code: code))
-                end(.failed)
+                fail(.creativeFailed(code: code))
             } else {
                 // Died while waiting to be shown: the ad ends; `show` will throw.
                 invalidate(.creativeFailed(code: code))

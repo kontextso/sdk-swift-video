@@ -634,6 +634,27 @@ struct VideoAdTests {
         #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")
     }
 
+    @Test func aControllerOnScreenInAnInactiveAppIsNotTakenAsPresented() async throws {
+        VideoAd.presentationTimeout = 0.1
+        defer { VideoAd.presentationTimeout = 2; Environment.isApplicationActive = { true } }
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10f"))
+        try ad.show(from: window.root)
+        let controller = try #require(ad.linearController)
+        window.add(controller.view)
+        Environment.isApplicationActive = { false }   // backgrounded while the presentation was pending
+        #expect(await waitUntil(2) { delegate.endReasons == [.failed] }, "no evidence anyone saw it")
+        #expect(!(await beacons()).contains("creativeView"), "nothing recorded")
+    }
+
+    @Test func destroyingInsideDidFailKeepsTheFailedReason() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p14f"))
+        delegate.onFail = { _ in ads.destroy() }
+        try ad.show(in: harness.player.view)
+        send(ad, "ad.error", ["code": 405])
+        #expect(delegate.events == ["impression", "fail", "end:failed"], "didFail, then didEnd(.failed), whatever happened inside didFail")
+        #expect(ads.isDestroyed)
+    }
+
     @Test func aControllerOnScreenWhoseCompletionNeverCameIsTakenAsPresented() async throws {
         VideoAd.presentationTimeout = 0.1
         defer { VideoAd.presentationTimeout = 2 }

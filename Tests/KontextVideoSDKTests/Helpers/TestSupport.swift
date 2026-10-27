@@ -41,9 +41,13 @@ final class RecordingDelegate: VideoAdDelegate {
         clicks.append(click)
     }
 
+    /// What the app does inside `didFail`; a test that destroys from there sets it.
+    var onFail: ((VideoAd) -> Void)?
+
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError) {
         events.append("fail")
         failures.append(error)
+        onFail?(ad)
     }
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
