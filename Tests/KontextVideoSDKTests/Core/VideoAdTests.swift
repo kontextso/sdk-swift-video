@@ -51,6 +51,17 @@ struct VideoAdTests {
         return body
     }
 
+    /// `show(from:)` plus what UIKit's presentation completion does; the runner never completes a transition.
+    private func presentLinear(_ ad: VideoAd) throws {
+        try ad.show(from: window.root)
+        // The runner never completes a transition and keeps the controller's view out of the window
+        // meanwhile. Load that view (it takes the WebView), then put the WebView, the view the meter
+        // watches, on screen directly.
+        ad.linearController?.loadViewIfNeeded()
+        window.add(ad.bridge.webView)
+        ad.presented()
+    }
+
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
         ad.bridge.receive(message(type, extra, adId: ad.id), from: sender)
     }
@@ -237,7 +248,7 @@ struct VideoAdTests {
 
     @Test func aPagesCloseWithReasonCompleteEndsCompletedWithoutACloseBeacon() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i16"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         send(ad, "ad.close", ["reason": "complete"])
@@ -466,7 +477,7 @@ struct VideoAdTests {
 
     @Test func videoImpressionWaitsForTheFirstFrame() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i3"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         #expect(delegate.events.isEmpty, "no impression at show for a video")
         var fired = await beacons()
         #expect(fired.contains("creativeView") && !fired.contains("impression"))
@@ -480,7 +491,7 @@ struct VideoAdTests {
 
     @Test func aProgressCheckpointThePageSkippedStillFires() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "v9b"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.midpoint", ["playhead": 7000])   // the fixture's checkpoint is 5000; no video.progress at all
         _ = await beacons()
@@ -493,7 +504,7 @@ struct VideoAdTests {
 
     @Test func videoEventsFireTheirBeaconsWithTheAdPlayhead() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i4"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.firstQuartile", ["playhead": 2500])
         send(ad, "video.pause", ["playhead": 3000])
@@ -512,7 +523,7 @@ struct VideoAdTests {
 
     @Test func completeFiresCompleteAndTheEndCardsCreativeView() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i5"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         #expect(ad.isCompleted)
@@ -529,7 +540,7 @@ struct VideoAdTests {
     @Test func endCardClickUsesTheEndCardsEntry() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i6"))
         Environment.openURL = { _, completion in completion(true) }
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         ad.bridge.noteTouch()
@@ -541,7 +552,7 @@ struct VideoAdTests {
 
     @Test func skipEndsWithSkipped() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i7"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 6000])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
@@ -555,12 +566,13 @@ struct VideoAdTests {
 
     @Test func showFromPresentsFullScreenAndTheSDKDismissesAtTheEnd() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i9"))
-        try ad.show(from: window.root)
+        try ad.show(from: window.root)   // the real wiring: the controller holds the WebView
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
         let presented = try #require(window.root.presentedViewController as? LinearViewController)
         #expect(presented.modalPresentationStyle == .fullScreen)
         #expect(presented.view.subviews.first === ad.bridge.webView)
         #expect(presented.prefersStatusBarHidden)
+        ad.presented()   // UIKit's completion
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 1000])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
@@ -581,7 +593,7 @@ struct VideoAdTests {
 
     @Test func aMessageAfterTheEndChangesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "v9c"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 10_000])
         send(ad, "ad.close", ["reason": "close"])
@@ -614,9 +626,24 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10c"))
         try ad.show(from: window.root)
         #expect(ad.wasShown && KontextVideo.shared.adOnScreen === ad)
+        send(ad, "video.start", ["playhead": 0])   // a page that started anyway: dropped, it was never shown
         #expect(await waitUntil { delegate.endReasons == [.failed] })
-        #expect(delegate.events.contains("fail"))
+        #expect(delegate.events == ["fail", "end:failed"], "no impression for an ad nobody saw")
+        let fired = await beacons()
+        #expect(!fired.contains("impression") && !fired.contains("creativeView") && !fired.contains("start"), "nothing billable: \(fired)")
         #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")
+    }
+
+    @Test func aControllerOnScreenWhoseCompletionNeverCameIsTakenAsPresented() async throws {
+        VideoAd.presentationTimeout = 0.1
+        defer { VideoAd.presentationTimeout = 2 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10e"))
+        try ad.show(from: window.root)
+        let controller = try #require(ad.linearController)
+        window.add(controller.view)   // UIKit attached it, but the completion never runs
+        #expect(await waitUntil(2) { ad.isPresented })
+        let fired = await beacons()
+        #expect(delegate.endReasons.isEmpty && fired.contains("creativeView"), "presented, not failed: \(fired)")
     }
 
     @Test func aVideoIsViewableOnlyWhileItPlays() async throws {
@@ -647,12 +674,14 @@ struct VideoAdTests {
     }
 
     @Test func aVideoThatStartedBeforeTheLinearMeterExistsStillCountsAsPlaying() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10d"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10d"))
         try ad.show(from: window.root)
-        #expect(ad.meter == nil, "a linear ad's meter waits for the presentation")
+        #expect(ad.meter == nil && !ad.isPresented, "a linear ad's page and meter wait for the presentation")
         send(ad, "video.start", ["playhead": 0])
-        ad.startMeter()   // what the presentation completion does
-        #expect(ad.meter?.countsTime == true, "the start that came first is not forgotten")
+        #expect(!delegate.events.contains("impression"), "nothing from the page before UIKit confirmed")
+        ad.presented()   // what the presentation completion does
+        send(ad, "video.start", ["playhead": 0])
+        #expect(ad.meter?.countsTime == true && delegate.events.contains("impression"), "the start counts once the ad is presented")
     }
 
     @Test func destroyingFromInsideTheVideoImpressionCallbackFiresNothingAfterTheEnd() async throws {
@@ -709,7 +738,7 @@ struct VideoAdTests {
 
     @Test func aLinearAdsCloseBeforeCompleteIsASkip() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i15"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "ad.close", ["reason": "close"])
         #expect(await waitUntil { delegate.endReasons == [.skipped] }, "a close before the end is a skip")
@@ -726,7 +755,7 @@ struct VideoAdTests {
 
     @Test func dismissOnALinearAdThrowsWrongPresentation() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i19"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         do { try ad.dismiss() } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
         #expect(delegate.endReasons.isEmpty, "still on screen")
         send(ad, "video.skip", ["playhead": 1000])
@@ -735,7 +764,7 @@ struct VideoAdTests {
 
     @Test func dismissalFromOutsideIsInterrupted() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i12"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
         let presented = try #require(window.root.presentedViewController as? LinearViewController)
         // What viewDidDisappear sees when the presenter is dismissed underneath the ad.
@@ -750,7 +779,7 @@ struct VideoAdTests {
 
     @Test func destroyWhileAnLinearIsUpEndsWithDestroyedAndDismisses() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13"))
-        try ad.show(from: window.root)
+        try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
         let presented = try #require(window.root.presentedViewController as? LinearViewController)

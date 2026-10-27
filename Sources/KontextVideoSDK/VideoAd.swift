@@ -103,8 +103,8 @@ public final class VideoAd {
 
     /// `true` from a successful `show` on; an ad is shown at most once.
     public private(set) var wasShown = false
-    /// `true` once the ad began to end: nothing is on screen for the app any more. `didEnd` follows at once
-    /// for an overlay or pause ad, and once the dismissal finished for a linear ad.
+    /// `true` once the ad began to end. For an overlay or pause ad the creative is already gone and `didEnd`
+    /// follows at once; a linear ad may still be dismissing, and `didEnd` follows once that finished.
     public private(set) var hasEnded = false
     /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
@@ -136,9 +136,10 @@ public final class VideoAd {
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: UIView?
     /// The controller the SDK presented for a linear ad.
-    private var linearController: LinearViewController?
-    /// UIKit finished presenting the linear ad: the `present` completion ran.
-    private var presentationConfirmed = false
+    private(set) var linearController: LinearViewController?
+    /// The creative is on screen: the page was told to show, the beacons of that moment fired. At `show`
+    /// for an overlay or pause ad; for a linear ad once UIKit presented the controller.
+    private(set) var isPresented = false
     /// `didEnd` was delivered. For a linear ad that is after its dismissal, so this lags `hasEnded`.
     private var finished = false
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
@@ -307,19 +308,33 @@ public final class VideoAd {
         linearController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
+        // The page is shown, and the beacons of that moment fire, once UIKit confirms the presentation:
+        // an ad UIKit refused must never record an impression.
         presenter.present(controller, animated: true) { [weak self] in
-            self?.presentationConfirmed = true
-            self?.startMeter()
+            self?.presented()
         }
-        begin(startMeter: false)
+        begin(presentNow: false)
         // UIKit can refuse a presentation without an error (another one in progress); then the completion
-        // never runs, no meter watches the controller, and the ad would stay "on screen" forever.
+        // never runs and the ad would hold the screen forever. After `presentationTimeout`: a controller
+        // that never reached a window failed; one that did, without the completion, is taken as presented
+        // after a longer wait.
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.presentationTimeout * 1_000_000_000))
-            guard let self, !hasEnded, !presentationConfirmed, controller.view.window == nil else { return }
-            Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
-            delegate?.videoAd(self, didFail: .presenterUnavailable)
-            end(.failed)
+            let step = min(Self.presentationTimeout, 0.25)
+            let deadline = Environment.now() + Self.presentationTimeout
+            let cap = Environment.now() + Self.presentationTimeout * 5
+            while let ad = self, !ad.hasEnded, !ad.isPresented, Environment.now() < cap {
+                if Environment.now() >= deadline, controller.view.window == nil { break }
+                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
+            }
+            guard let self, !hasEnded, !isPresented else { return }
+            if controller.view.window != nil {
+                Logger.warning("ad \(id.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
+                presented()
+            } else {
+                Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
+                delegate?.videoAd(self, didFail: .presenterUnavailable)
+                end(.failed)
+            }
         }
     }
 
@@ -394,20 +409,26 @@ public final class VideoAd {
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
-    /// Presentation began: the page is told, the SDK retains the ad, the ad leaves its `VideoAds`'s unshown
-    /// ones; `show` returning is the app's signal.
-    private func begin(startMeter: Bool = true) {
+    /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
+    /// unshown ones; `show` returning is the app's signal. The creative itself goes on screen in
+    /// `presented()`: at once for an overlay or pause ad, once UIKit confirmed it for a linear ad.
+    private func begin(presentNow: Bool = true) {
         wasShown = true
         KontextVideo.shared.adOnScreen = self
         owner?.adDidBeginShowing(self)
-        bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
         DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
-        // Everything the ad needs while on screen is set up before anyone outside hears of it: the
-        // impression delegate below may end the ad on the spot, and `end()` must find all of it.
-        if startMeter {
-            self.startMeter()
-        }
+        if presentNow { presented() }
+    }
+
+    /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
+    /// fire. Everything the ad needs while on screen is set up before anyone outside hears of it: the
+    /// impression delegate at the end may end the ad on the spot, and `end()` must find all of it.
+    func presented() {
+        guard !hasEnded, !isPresented else { return }
+        isPresented = true
+        bridge.show()
+        startMeter()
         if format != .linear {
             // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
             // `duration` runs on it, so both freeze in the background and resume on foreground.
@@ -488,7 +509,7 @@ public final class VideoAd {
 
     /// Viewability: 50 % of the box on screen for 1 s (image) or 2 s (video) is `viewable`; the page
     /// hears every exposure change (`ad.exposure`) and pauses a video at 0.
-    func startMeter() {
+    private func startMeter() {
         guard !hasEnded, meter == nil else { return }
         let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: descriptor.creative == .video ? 2 : 1)
         // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
@@ -542,7 +563,13 @@ public final class VideoAd {
                     repeat {
                         try? await Task.sleep(nanoseconds: UInt64(min(Self.dismissalTimeout, 0.25) * 1_000_000_000))
                     } while Environment.now() < deadline || (controller.view.window != nil && Environment.now() < cap)
-                    self?.finish(reason)
+                    guard let self, !finished else { return }
+                    if controller.view.window != nil {
+                        // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
+                        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
+                        DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
+                    }
+                    finish(reason)
                 }
             }
         }
