@@ -1,3 +1,4 @@
+import AVFoundation
 import KontextKit
 import UIKit
 
@@ -92,22 +93,25 @@ struct AudioInfo: Encodable, Sendable {
     let volume: Int
     let muted: Bool
 
+    /// Read here, not through KontextKit's `AudioInfoProvider`: its `collect()` sets the shared audio
+    /// session's category (`.playback`, mixing with others) and activates it on the first call, which a
+    /// video SDK must never do to the app that plays the content. Back to KontextKit once it offers a read
+    /// without that side effect. `outputVolume` is the system volume; below 1 % counts as muted, as there.
     @MainActor
     static func current() -> AudioInfo {
-        let info = AudioInfoProvider.collect()
-        return AudioInfo(volume: info.volume, muted: info.muted)
+        let volume = AVAudioSession.sharedInstance().outputVolume
+        return AudioInfo(volume: Int((volume * 100).rounded()), muted: volume < 0.01)
     }
 }
 
-/// The `network` object of an ads request: only the user agent the SDK builds, as a browser would
-/// (`bundleId/version (model; iOS version) KontextVideo/version`).
+/// The `network` object of an ads request: the browser's user agent (`navigator.userAgent` of a WebView),
+/// as sdk-swift sends it. KontextKit evaluates it once per process and caches it; `nil` when WebKit could
+/// not answer.
 struct NetworkInfo: Encodable, Sendable {
-    let userAgent: String
+    let userAgent: String?
 
     @MainActor
-    static func current() -> NetworkInfo {
-        let app = AppInfo.current()
-        let hardware = HardwareInfo.current()
-        return NetworkInfo(userAgent: "\(app.bundleId)/\(app.version) (\(hardware.model); iOS \(UIDevice.current.systemVersion)) KontextVideo/\(SDKInfo.version)")
+    static func current() async -> NetworkInfo {
+        NetworkInfo(userAgent: await NetworkInfoProvider.collect().userAgent)
     }
 }

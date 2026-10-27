@@ -26,7 +26,7 @@ struct RequestTests {
         #expect((json["sdk"] as? [String: Any])?["name"] as? String == "sdk-swift-video")
         #expect((json["app"] as? [String: Any])?["bundleId"] is String)
         let device = json["device"] as? [String: Any]
-        #expect((device?["os"] as? [String: Any])?["name"] as? String == "ios")
+        #expect(["ios", "ipados", "tvos"].contains((device?["os"] as? [String: Any])?["name"] as? String ?? ""))
         #expect((device?["hardware"] as? [String: Any])?["brand"] as? String == "Apple")
         let attribution = json["attribution"] as? [String: Any]
         #expect(attribution?["skan"] is [String])
@@ -41,11 +41,11 @@ struct RequestTests {
 
     // MARK: AdsRequest
 
-    private func makeAdsRequest(playhead: TimeInterval = 12.345) -> AdsRequest {
+    private func makeAdsRequest(playhead: TimeInterval = 12.345) async -> AdsRequest {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
         KontextVideo.shared.variantId = "exp-b"
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
-        return AdsRequest.make(
+        return await AdsRequest.make(
             sdk: KontextVideo.shared,
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
@@ -56,8 +56,8 @@ struct RequestTests {
         )
     }
 
-    @Test func adsRequestBodyHasEveryField() throws {
-        let json = try Fixtures.encode(makeAdsRequest())
+    @Test func adsRequestBodyHasEveryField() async throws {
+        let json = try Fixtures.encode(await makeAdsRequest())
         #expect(json["adServerURL"] == nil, "where to send it is not part of the body")
         #expect(json["publisherToken"] as? String == "pub-dev")
         #expect(json["installId"] as? String == KontextVideo.installId)
@@ -85,9 +85,9 @@ struct RequestTests {
         #expect(device?["audio"] != nil)
     }
 
-    @Test func adsRequestOmitsIfaWhenNotAuthorized() throws {
-        var request = makeAdsRequest()
-        request = AdsRequest.make(
+    @Test func adsRequestOmitsIfaWhenNotAuthorized() async throws {
+        var request = await makeAdsRequest()
+        request = await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, status: .denied),
             content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0),
@@ -117,20 +117,20 @@ struct RequestTests {
 
     // MARK: Device facts
 
-    @Test func deviceFactsHaveTheWireShape() throws {
-        let device = try Fixtures.encode(AdsDevice.current())
+    @Test func deviceFactsHaveTheWireShape() async throws {
+        let device = try Fixtures.encode(await AdsDevice.current())
         let screen = device["screen"] as? [String: Any]
         #expect((screen?["width"] as? Int ?? 0) > 0)
         #expect((screen?["dpr"] as? Double ?? 0) >= 1)
         #expect(screen?["darkMode"] is Bool)
         let os = device["os"] as? [String: Any]
-        #expect(os?["name"] as? String == "ios")
+        #expect(["ios", "ipados", "tvos"].contains(os?["name"] as? String ?? ""), "the device's own idiom")
         #expect(os?["locale"] is String)
         #expect(os?["timezone"] is String)
         let hardware = device["hardware"] as? [String: Any]
         #expect(["phone", "tablet", "tv", "desktop", "other"].contains(hardware?["type"] as? String ?? ""))
         let userAgent = (device["network"] as? [String: Any])?["userAgent"] as? String
-        #expect(userAgent?.contains("KontextVideo/") == true)
+        #expect(userAgent?.hasPrefix("Mozilla/") == true, "the browser's user agent, as sdk-swift sends it: \(userAgent ?? "nil")")
     }
 
     // MARK: Privacy

@@ -75,6 +75,9 @@ public final class KontextVideo {
         Logger.level = configuration.logLevel
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
+        // The browser user agent every ads request carries: evaluated in a WebView once per process and
+        // cached by KontextKit. Started now so the first request does not wait for it.
+        Task { _ = await NetworkInfoProvider.collect() }
         initTask = Task {
             await fetchConfig(configuration: configuration)
             // Cancelled by `resetForTesting()`: the state is no longer this call's to report.

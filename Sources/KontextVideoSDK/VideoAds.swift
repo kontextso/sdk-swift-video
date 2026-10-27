@@ -93,7 +93,7 @@ public final class VideoAds {
         // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
         let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
         guard !isDestroyed else { throw VideoAdError.destroyed }
-        let request = AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
+        let request = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
                                       player: .make(playhead: playhead), sessionId: sessionId, held: held)
         Logger.debug("\(content.id): requesting at playhead \(request.player.playhead) ms, holding \(held.count)")
         DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(request.player.playhead))])

@@ -30,7 +30,7 @@ struct AdsRequest: Encodable, Sendable {
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, sessionId: String, held: [String]) -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -45,7 +45,7 @@ struct AdsRequest: Encodable, Sendable {
             regulatory: ConsentStorage.read(merging: sdk.regulatory),
             sdk: SDKInfo(),
             app: .current(),
-            device: .current(),
+            device: await .current(),
             player: player,
             video: content,
             sessionId: sessionId,
@@ -64,8 +64,8 @@ struct AdsDevice: Encodable, Sendable {
     let network: NetworkInfo
 
     @MainActor
-    static func current() -> AdsDevice {
-        AdsDevice(os: .current(), hardware: .current(), screen: .current(), power: .current(), audio: .current(), network: .current())
+    static func current() async -> AdsDevice {
+        AdsDevice(os: .current(), hardware: .current(), screen: .current(), power: .current(), audio: .current(), network: await .current())
     }
 }
 
