@@ -113,26 +113,39 @@ final class Tracker {
 
 extension Tracker {
     /// Why the SDK did not use a bid, for the `notUsed` beacon: the server closes the bid with this reason.
-    struct NotUsed: Equatable {
-        /// `notUsed` or `outbid` (the app's `reject`), `destroyed` (`VideoAds.destroy()`).
-        let reason: String
-        /// What won the publisher's own auction, when the app said so: the price and the network.
-        let winningPrice: Double?
-        let winner: String?
-
-        static let destroyed = NotUsed(reason: "destroyed", winningPrice: nil, winner: nil)
-
-        init(reason: String, winningPrice: Double?, winner: String?) {
-            self.reason = reason
-            self.winningPrice = winningPrice
-            self.winner = winner
-        }
+    enum NotUsed: Equatable {
+        /// The app's `reject()`: it did not use the ad.
+        case notUsed
+        /// The app's `reject(.outbid)`: another network won its auction, at this price, if it said so.
+        case outbid(winningPrice: Double?, winner: String?)
+        /// `VideoAds.destroy()` with the ad still held.
+        case destroyed
 
         init(_ rejection: VideoAd.RejectReason) {
             switch rejection {
-            case .notUsed: self.init(reason: "notUsed", winningPrice: nil, winner: nil)
-            case .outbid(let price, let winner): self.init(reason: "outbid", winningPrice: price, winner: winner)
+            case .notUsed: self = .notUsed
+            case .outbid(let price, let winner): self = .outbid(winningPrice: price, winner: winner)
             }
+        }
+
+        /// `[KONTEXT_REASON]`.
+        var reason: String {
+            switch self {
+            case .notUsed: return "notUsed"
+            case .outbid: return "outbid"
+            case .destroyed: return "destroyed"
+            }
+        }
+
+        /// `[KONTEXT_WINNINGPRICE]` and `[KONTEXT_WINNER]`: set only by `outbid`.
+        var winningPrice: Double? {
+            if case .outbid(let price, _) = self { return price }
+            return nil
+        }
+
+        var winner: String? {
+            if case .outbid(_, let winner) = self { return winner }
+            return nil
         }
     }
 }
