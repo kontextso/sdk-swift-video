@@ -93,6 +93,19 @@ struct TrackerTests {
         #expect(beacons[0].query["offset"] == "5000")
     }
 
+    @Test func progressFiresEveryCheckpointPassedOnceEachWithItsOwnFireId() async throws {
+        let entry = { (offset: Int) in
+            AdPayload.TrackingEvent(event: "progress", url: "https://ads.test/events/ad-1/progress?offset=\(offset)&fid=[KONTEXT_FIREID]", offset: offset, part: nil)
+        }
+        let tracker = Tracker(adId: "ad-1", entries: [entry(5000), entry(10_000), entry(15_000)])
+        tracker.fireProgress(upTo: 4999)
+        tracker.fireProgress(upTo: 10_200)   // the page skipped 5000 and rounded 10 000 up
+        tracker.fireProgress(upTo: 10_200)
+        let beacons = await fired()
+        #expect(beacons.map { $0.query["offset"] } == ["5000", "10000"], "both passed checkpoints, once each; 15 000 waits")
+        #expect(Set(beacons.map { $0.query["fid"] }).count == 2, "separate occurrences, separate fire ids")
+    }
+
     @Test func unknownEventsFireNothing() async throws {
         let tracker = try makeTracker(video: false)
         tracker.fire("rewind")

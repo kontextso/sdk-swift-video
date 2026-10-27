@@ -67,6 +67,17 @@ final class Tracker {
         }.resume()
     }
 
+    /// Fires every `progress` entry the ad video has passed (`offset` at or below `playheadMs`) and not fired
+    /// yet, each as its own occurrence. The page reports the checkpoint it saw; the SDK decides from the
+    /// playhead, as VAST players do, so a checkpoint the page skipped (a stall, a seek) or rounded differently
+    /// still fires.
+    func fireProgress(upTo playheadMs: Int) {
+        for entry in entries where entry.event == "progress" {
+            guard let offset = entry.offset, offset <= playheadMs else { continue }
+            fire("progress", offset: offset)
+        }
+    }
+
     /// The click-through with the beacon macros substituted, `[KONTEXT_FIREID]` with the click's own fire id:
     /// a redirect URL and the `click` beacon then arrive as one occurrence.
     func clickThrough(_ url: URL, fireId: String) -> URL {

@@ -596,7 +596,7 @@ public final class VideoAd {
             tracker.fire(event.rawValue)
         case .progress(let offset, let playhead):
             tracker.adPlayhead = playhead
-            tracker.fire("progress", offset: offset)
+            tracker.fireProgress(upTo: max(offset, playhead))
         case .complete(let playhead):
             tracker.adPlayhead = playhead
             isCompleted = true

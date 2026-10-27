@@ -476,6 +476,16 @@ struct VideoAdTests {
         #expect(delegate.events.filter { $0 == "impression" }.count == 1)
     }
 
+    @Test func aProgressCheckpointThePageSkippedStillFires() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "v9b"))
+        try ad.show(from: window.root)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.progress", ["offset": 7000, "playhead": 7000])   // the fixture's checkpoint is 5000
+        _ = await beacons()
+        let progress = harness.server.beacons.filter { $0.event == "progress" }
+        #expect(progress.map { $0.query["offset"] } == ["5000"], "decided from the playhead, not the page's number")
+    }
+
     @Test func videoEventsFireTheirBeaconsWithTheAdPlayhead() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i4"))
         try ad.show(from: window.root)
