@@ -36,6 +36,21 @@ public enum VideoAdError: Error, Sendable {
     /// and `reject()` throw it from then on.
     case invalidated(VideoAd.InvalidationReason)
 
+    /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
+    case notLoaded
+    /// The ad would have to be scaled below 50 % to fit the view (aspect ratio kept). The ad stays ready:
+    /// show it in a bigger view, or reject it.
+    case containerTooSmall(minimum: CGSize)
+    /// No view controller can present the linear ad right now: the one given is already presenting or
+    /// not on screen; with `show()`, there is no key window or its top controller is mid-transition. The ad
+    /// stays ready: try again later, or pass the right controller.
+    case presenterUnavailable
+    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad,
+    /// `dismiss()` on a linear ad. The ad stays as it was.
+    case wrongPresentation
+}
+
+extension VideoAdError {
     /// Why the server had nothing for a format: its reasons, the SDK's own `alreadyUsed`, and `other` for
     /// a reason this SDK version does not know, passed through unchanged.
     public enum NoFillReason: Sendable, Equatable, CustomStringConvertible {
@@ -89,18 +104,6 @@ public enum VideoAdError: Error, Sendable {
             }
         }
     }
-    /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
-    case notLoaded
-    /// The ad would have to be scaled below 50 % to fit the view (aspect ratio kept). The ad stays ready:
-    /// show it in a bigger view, or reject it.
-    case containerTooSmall(minimum: CGSize)
-    /// No view controller can present the linear ad right now: the one given is already presenting or
-    /// not on screen; with `show()`, there is no key window or its top controller is mid-transition. The ad
-    /// stays ready: try again later, or pass the right controller.
-    case presenterUnavailable
-    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad,
-    /// `dismiss()` on a linear ad. The ad stays as it was.
-    case wrongPresentation
 }
 
 extension VideoAdError: CustomStringConvertible, LocalizedError {
