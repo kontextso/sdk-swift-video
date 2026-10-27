@@ -156,6 +156,35 @@ struct DecodingTests {
         #expect(payload.id == "ad-1", "a broken attribution object does not fail the ad either")
     }
 
+    @Test func onlyFidelitiesZeroAndOneCount() throws {
+        var unsupportedOnly = Fixtures.skan(fidelities: [2])
+        #expect(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": unsupportedOnly]])).attribution?.skan == nil)
+        unsupportedOnly = Fixtures.skan(fidelities: [1, 2])
+        let kept = try #require(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": unsupportedOnly]])).attribution?.skan)
+        #expect(kept.fidelities.map(\.fidelity) == [1] && kept.hasFidelity1 && !kept.hasFidelity0)
+        let clickOnly = try #require(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": Fixtures.skan(fidelities: [1])]])).attribution?.skan)
+        #expect(clickOnly.hasFidelity1 && !clickOnly.hasFidelity0, "signed for the click only: valid")
+    }
+
+    @Test func anEmptyRequiredStringIsMissing() throws {
+        var emptySignature = Fixtures.skan()
+        emptySignature["fidelities"] = [["fidelity": 0, "nonce": "n", "timestamp": "1", "signature": ""]]
+        var emptyNetwork = Fixtures.skan()
+        emptyNetwork["network"] = ""
+        for skan in [emptySignature, emptyNetwork] {
+            let payload = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan]]))
+            #expect(payload.id == "ad-1" && payload.attribution?.skan == nil)
+        }
+        var emptyOptional = Fixtures.skan()
+        emptyOptional["campaign"] = ""
+        #expect(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": emptyOptional]])).attribution?.skan?.campaign == nil, "an empty optional is absent")
+    }
+
+    @Test func aMalformedSKANNextToAValidAAKKeepsTheJWS() throws {
+        let payload = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": "broken", "aak": ["jws": "eyJ.e30.sig"]]]))
+        #expect(payload.attribution?.skan == nil && payload.attribution?.aakJWS == "eyJ.e30.sig")
+    }
+
     // MARK: AdPayload per format
 
     @Test func pauseAdWithSize() throws {

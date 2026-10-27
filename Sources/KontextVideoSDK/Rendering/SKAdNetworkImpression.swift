@@ -25,9 +25,10 @@ final class SKAdNetworkImpression {
         self.adId = adId
     }
 
-    /// The creative is on screen: the `SKAdImpression` is registered and started. Once.
+    /// The creative is on screen: the `SKAdImpression` is registered and started. Once. A payload signed for
+    /// the click only (no fidelity-0 entry) registers nothing; its sheet still carries the attribution.
     func start() {
-        guard !started else { return }
+        guard !started, skan.hasFidelity0 else { return }
         started = true
         enqueue { [self] in
             do {

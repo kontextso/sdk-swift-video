@@ -1047,6 +1047,19 @@ struct VideoAdTests {
         #expect(harness.storeProduct.presented.count == 2, "the sheet was tried each time")
     }
 
+    @Test func anAdSignedForTheClickOnlyRegistersNoImpressionAndStillOpensTheSheet() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s15"), itunesItem: "s15", fidelities: [1]))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        try ad.show(in: harness.player.view)
+        ad.bridge.noteTouch()
+        send(ad, "ad.click", ["url": "https://apps.apple.com/app/id1"])
+        #expect(await waitUntil { harness.storeProduct.presented.count == 1 })
+        try ad.dismiss()
+        await sleepMs(60)
+        #expect(skanCalls.isEmpty && opened.isEmpty, "nothing to register, nothing to log; the sheet carries the attribution")
+    }
+
     @Test func aClickOnAnAdWithOnlyAViewThroughSignatureOpensTheURL() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s10"), itunesItem: "s10", fidelities: [0]))
         var opened: [URL] = []

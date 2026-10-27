@@ -60,7 +60,8 @@ struct Skan: Decodable, Sendable, Equatable {
     let sourceIdentifier: String?
     /// SKAdNetwork 3 and earlier: the campaign id.
     let campaign: String?
-    /// At least one entry; which fidelities the network signed.
+    /// At least one entry; which fidelities the network signed. Only 0 and 1 exist; an entry with another
+    /// value is dropped.
     let fidelities: [Fidelity]
 
     private enum CodingKeys: String, CodingKey {
@@ -75,10 +76,15 @@ struct Skan: Decodable, Sendable, Equatable {
         sourceApp = try container.requireStringCoercing(forKey: .sourceApp)
         sourceIdentifier = container.decodeStringCoercing(forKey: .sourceIdentifier)
         campaign = container.decodeStringCoercing(forKey: .campaign)
-        fidelities = try container.decode([Fidelity].self, forKey: .fidelities)
+        fidelities = try container.decode([Fidelity].self, forKey: .fidelities).filter { (0...1).contains($0.fidelity) }
         guard !fidelities.isEmpty else {
-            throw DecodingError.dataCorruptedError(forKey: .fidelities, in: container, debugDescription: "fidelities must have at least one entry")
+            throw DecodingError.dataCorruptedError(forKey: .fidelities, in: container, debugDescription: "fidelities must have at least one entry of fidelity 0 or 1")
         }
+    }
+
+    /// The network signed the view-through impression: an `SKAdImpression` can be registered.
+    var hasFidelity0: Bool {
+        fidelities.contains { $0.fidelity == 0 }
     }
 
     /// The network signed the click: a StoreKit product sheet can carry the attribution.
@@ -104,10 +110,11 @@ struct Skan: Decodable, Sendable, Equatable {
 }
 
 /// Per-field decoding that takes the expected JSON type first and coerces between a number and a string
-/// otherwise, so a numeric id the server sent as `42` instead of `"42"` does not fail the ad.
+/// otherwise, so a numeric id the server sent as `42` instead of `"42"` does not fail the ad. An empty
+/// string is missing: an empty signature, nonce or id attributes nothing.
 private extension KeyedDecodingContainer {
     func decodeStringCoercing(forKey key: Key) -> String? {
-        if let string = try? decode(String.self, forKey: key) { return string }
+        if let string = try? decode(String.self, forKey: key) { return string.isEmpty ? nil : string }
         if let int = try? decode(Int.self, forKey: key) { return String(int) }
         if let double = try? decode(Double.self, forKey: key) { return String(double) }
         return nil
