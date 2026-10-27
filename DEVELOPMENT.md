@@ -64,8 +64,8 @@ xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
 The home screen lists three videos, one per format. Opening one plays a bundled clip full screen, prepares that
-format's ad (`format` then `load`) and, 3 s in, shows it: the linear ad over the screen, the overlay inside the
-player, or a pause with the pause ad; a tap resumes, and the next pause gets its own ad. Leaving the screen
+format's ad (`format` then `load`). 3 s in, a linear ad shows over the screen or an overlay inside the player; a
+pause ad waits until the viewer taps to pause, a tap resumes, and the next pause gets its own ad. Leaving the screen
 calls `destroy()`. The whole integration is `Example/PlayerScreen.swift`.
 
 What to read afterwards:

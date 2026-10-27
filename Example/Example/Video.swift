@@ -14,7 +14,7 @@ struct Video: Identifiable {
         switch format {
         case .linear: return "A linear ad after 3 s"
         case .overlay: return "An overlay after 3 s"
-        case .pause: return "Pauses after 3 s with a pause ad, tap to resume"
+        case .pause: return "Tap to pause: a pause ad shows, tap again to resume"
         }
     }
 

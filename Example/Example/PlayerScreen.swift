@@ -79,8 +79,9 @@ final class Playback: ObservableObject {
         ads.trackPlayhead(of: player)
     }
 
-    /// The content starts and loops, the ad is prepared, and after 3 s the format's moment comes. Once:
-    /// SwiftUI calls `onAppear` again when the linear ad's presentation is dismissed.
+    /// The content starts and loops, the ad is prepared, and after 3 s a linear ad or an overlay shows; a pause
+    /// ad waits for the viewer's tap. Once: SwiftUI calls `onAppear` again when the linear ad's presentation is
+    /// dismissed.
     func start() {
         guard !started else { return }
         started = true
@@ -125,7 +126,7 @@ final class Playback: ObservableObject {
         switch video.format {
         case .linear: showLinear()
         case .overlay: showInPlayer()      // ends by itself after its duration
-        case .pause: pause()
+        case .pause: break                 // the viewer pauses; nothing happens on its own
         }
     }
 
