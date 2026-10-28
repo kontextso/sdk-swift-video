@@ -113,7 +113,7 @@ struct ModelEncodingTests {
     @Test func sdkInfoCarriesTheNameAndAReleaseVersion() throws {
         #expect(SDKInfo.name == "sdk-swift-video")
         // The release rule (RELEASING.md): MAJOR.MINOR.PATCH, digits only, no prerelease suffix, as the tag CI compares against.
-        #expect(SDKInfo.version.range(of: #"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"#, options: .regularExpression) != nil, SDKInfo.version)
+        #expect(SDKInfo.version.range(of: #"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"#, options: .regularExpression) != nil, "\(SDKInfo.version)")
         let json = try Fixtures.encode(SDKInfo())
         #expect(json["name"] as? String == "sdk-swift-video")
         #expect(json["version"] as? String == SDKInfo.version)
