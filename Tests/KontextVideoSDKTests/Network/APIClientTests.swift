@@ -32,6 +32,33 @@ struct APIClientTests {
         #expect(request.body?["hello"] as? String == "there")
     }
 
+    @Test func aSlowAnswerIsCutAtTheDeadlineNotOnlyWhenIdle() async {
+        var slow = StubServer.Response.json(["ok": true])
+        // The answer comes after 30 s, so only the deadline can end the request with a timeout; no wall-clock
+        // bound, which a loaded CI runner's starved main actor made meaningless (7.6 s for a 0.3 s cut).
+        slow.delay = 30
+        server.on("/v2/ping", slow)
+        let client = APIClient(baseURL: server.baseURL, session: server.makeSession(deadline: 0.3))
+        do {
+            let _: Reply = try await client.post("ping", body: Body(hello: "x"))
+            Issue.record("expected the deadline")
+        } catch let error as APIError {
+            guard case .transport(let urlError) = error else { Issue.record("expected transport, got \(error)"); return }
+            #expect(urlError.code == .timedOut, "cut at the deadline, long before the answer")
+        } catch {
+            Issue.record("unexpected \(error)")
+        }
+    }
+
+    @Test func theSDKsSessionIsItsOwnWithADeadlineAndNoCookiesOrCache() {
+        Environment.reset()
+        let configuration = Environment.session.configuration
+        #expect(Environment.session !== URLSession.shared)
+        #expect(configuration.timeoutIntervalForResource == APIClient.defaultTimeout)
+        #expect(configuration.httpCookieAcceptPolicy == .never && !configuration.httpShouldSetCookies)
+        #expect(configuration.urlCache == nil)
+    }
+
     @Test func clientErrorCarriesTheServersErrorBody() async {
         server.on("/v2/ping", .json(Fixtures.errors("invalidRequest", title: "video.id is required"), status: 400))
         do {

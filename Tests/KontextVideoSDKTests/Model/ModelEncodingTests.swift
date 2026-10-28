@@ -36,7 +36,44 @@ struct ModelEncodingTests {
             #expect(json["duration"] == nil, "\(seconds)")
             #expect(json["id"] as? String == "v", "the rest of the content still encodes")
         }
-        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 0))["duration"] as? Int == 0)
+        for seconds in [0, 0.0004] {
+            #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: seconds))["duration"] == nil, "under 1 ms is not a length: \(seconds)")
+        }
+        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 0.0005))["duration"] as? Int == 1)
+    }
+
+    @Test func episodeNumbersAndCountsBelowOneAndAnEmptySeriesAreLeftOut() throws {
+        for number in [0, -3] {
+            let json = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", episodeNumber: number, series: .init(id: "s", episodeCount: number)))
+            #expect(json["episodeNumber"] == nil && (json["series"] as? [String: Any])?["episodeCount"] == nil, "\(number)")
+            #expect((json["series"] as? [String: Any])?["id"] as? String == "s", "the series itself stays")
+        }
+        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", series: .init(id: "", title: "T")))["series"] == nil)
+        let valid = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", episodeNumber: 1, series: .init(id: "s", episodeCount: 1)))
+        #expect(valid["episodeNumber"] as? Int == 1 && (valid["series"] as? [String: Any])?["episodeCount"] as? Int == 1)
+    }
+
+    @Test func aUserSendsWhatIsSetAndLeavesEmptyStringsOut() throws {
+        let both = try Fixtures.encode(KontextVideo.User(id: "u1", email: "viewer@example.com", emailHash: "md5-or-anything", keywords: []))
+        #expect(both["id"] as? String == "u1" && both["email"] as? String == "viewer@example.com")
+        #expect(both["emailHash"] as? String == "md5-or-anything", "any hash function, sent as given")
+        #expect(both["keywords"] as? [String] == [])
+        let hashOnly = try Fixtures.encode(KontextVideo.User(emailHash: "abc"))
+        #expect(hashOnly.keys.sorted() == ["emailHash"])
+        let empty = KontextVideo.User(id: "", email: "", emailHash: "")
+        #expect(try Fixtures.encode(empty).isEmpty)
+        #expect(empty.emptyFields == ["id", "email", "emailHash"])
+        #expect(try Fixtures.encode(KontextVideo.User()).isEmpty)
+    }
+
+    @Test func theProblemsNameWhatThePublisherPassedWrong() {
+        let good = KontextVideo.Content(id: "v", language: "en", duration: 92, episodeNumber: 6)
+        #expect(good.missingRequired.isEmpty && good.leftOut.isEmpty)
+        let bad = KontextVideo.Content(id: "", language: "", duration: .nan, episodeNumber: 0, series: .init(id: "", episodeCount: 0))
+        #expect(bad.missingRequired == ["id is empty", "language is empty"])
+        #expect(bad.leftOut == ["duration nan s left out", "episodeNumber 0 left out", "series left out, its id is empty", "series.episodeCount 0 left out"])
+        let blank = KontextVideo.Content(id: " ", language: " ", series: .init(id: " "))
+        #expect(blank.missingRequired.isEmpty && blank.leftOut.isEmpty, "the schema's rule is non-empty, for every id alike")
     }
 
     @Test func contentDurationRoundsToNearestMillisecond() throws {

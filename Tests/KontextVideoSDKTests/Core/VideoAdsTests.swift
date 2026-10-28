@@ -225,6 +225,17 @@ struct VideoAdsTests {
         #expect(harness.adsRequests.count == 1)
     }
 
+    @Test func anEmptyIdOrLanguageStopsADebugBuildAndBadMetadataDoesNot() async {
+        _ = await harness.initialize()
+        var assertions: [String] = []
+        Environment.assertionFailure = { assertions.append($0) }
+        _ = harness.player.ads(for: .init(id: "v", language: "en", duration: .nan, episodeNumber: 0))
+        #expect(assertions.isEmpty, "metadata left out is a warning, not a programmer error")
+        _ = harness.player.ads(for: .init(id: "", language: "en"))
+        _ = harness.player.ads(for: .init(id: "v", language: ""))
+        #expect(assertions == ["KontextVideo.Content: id is empty", "KontextVideo.Content: language is empty"])
+    }
+
     @Test func beforeInitializeFormatThrowsNotInitialized() async {
         Environment.assertionFailure = { _ in }
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))

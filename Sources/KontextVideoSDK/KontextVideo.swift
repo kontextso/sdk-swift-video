@@ -36,7 +36,13 @@ public final class KontextVideo {
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
-    public var user: User?
+    public var user: User? {
+        didSet {
+            guard let empty = user?.emptyFields, !empty.isEmpty else { return }
+            if empty.contains("id") { Environment.assertionFailure("KontextVideo.User: id is empty") }
+            Logger.warning("user: \(empty.joined(separator: ", ")) empty, left out of the requests")
+        }
+    }
     /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
     /// The next ads request carries them; ads already loaded stay.
     public var regulatory: Regulatory?

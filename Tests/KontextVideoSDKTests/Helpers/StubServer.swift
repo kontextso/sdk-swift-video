@@ -107,16 +107,23 @@ final class StubServer: @unchecked Sendable {
     func install() {
         StubServer.current = self
         StubServer.servers[marker] = self
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubProtocol.self]
-        configuration.httpAdditionalHeaders = [StubServer.markerHeader: marker]
-        Environment.session = URLSession(configuration: configuration)
+        Environment.session = makeSession()
+    }
+
+    /// The SDK's own session policy with this server behind it; `deadline` shortens the overall bound.
+    @MainActor
+    func makeSession(deadline: TimeInterval = APIClient.defaultTimeout) -> URLSession {
+        let marker = marker
+        return Environment.makeSession(deadline: deadline) { configuration in
+            configuration.protocolClasses = [StubProtocol.self]
+            configuration.httpAdditionalHeaders = [StubServer.markerHeader: marker]
+        }
     }
 
     @MainActor
     static func uninstall() {
         current = nil
-        Environment.session = .shared
+        Environment.reset()
     }
 
     /// The server a request belongs to: the one its session was created for, else the current one.

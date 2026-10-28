@@ -28,6 +28,17 @@ public final class VideoAds {
     public init(content: KontextVideo.Content) {
         self.content = content
         KontextVideo.shared.requireInitialized("VideoAds(content:)")
+        // What the publisher passed wrong, said once here rather than as a server 400 later. An empty id or
+        // language makes every request fail: a programmer error, which stops a debug build. The rest is
+        // metadata the request leaves out.
+        let missing = content.missingRequired
+        if !missing.isEmpty {
+            Environment.assertionFailure("KontextVideo.Content: \(missing.joined(separator: ", "))")
+            Logger.error("content \(content.id): \(missing.joined(separator: ", ")); the server will refuse its requests")
+        }
+        if !content.leftOut.isEmpty {
+            Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
+        }
         Logger.debug("VideoAds created for video \(content.id)")
     }
 

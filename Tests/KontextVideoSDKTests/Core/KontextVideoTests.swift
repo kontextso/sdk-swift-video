@@ -51,6 +51,15 @@ struct KontextVideoTests {
         #expect(reported == nil, "and its completion never fires")
     }
 
+    @Test func anEmptyUserIdStopsADebugBuild() {
+        var assertions: [String] = []
+        Environment.assertionFailure = { assertions.append($0) }
+        sdk.user = KontextVideo.User(id: "u1", email: "")
+        #expect(assertions.isEmpty, "an empty email is left out with a warning")
+        sdk.user = KontextVideo.User(id: "")
+        #expect(assertions == ["KontextVideo.User: id is empty"])
+    }
+
     @Test func secondInitializeIsIgnored() async {
         _ = await harness.initialize()
         var completions = 0
