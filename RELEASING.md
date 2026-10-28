@@ -11,8 +11,8 @@ How to cut a release of the **Kontext Video SDK**. Replace `0.1.0` with the vers
 
 1. Checkout `main` and pull.
 2. Build the SDK and run the tests (commands in [DEVELOPMENT.md](DEVELOPMENT.md)).
-3. Run the example against the mock server (`--demo` runs every flow without touching the screen) and read the
-   mock's `/log`: every ad must end with its one `didEnd`, and the beacons must be the spec's.
+3. Run the example on a device against the ad server: open each of the three videos and watch its ad from
+   start to end. The status line under the title must show the impression, then the one `didEnd`.
 
 ## 2. Update the changelog
 
@@ -32,7 +32,8 @@ Short description of what changed and what integrators need to do.
 
 One place: `SDKInfo.version` in `Sources/KontextVideoSDK/Payloads/SDKInfo.swift`. The SDK sends it with every request,
 and CI refuses a release tag that does not match it. The docs page's
-`from: "0.1.0"` means "that version or newer" and stays as it is.
+`upToNextMinor(from: "0.1.0")` means "0.1.x, the patches only"; while the SDK is pre-1.0 a minor version may
+break, so the docs move to the new minor when it ships, after its notes are written.
 
 ```
 Sources/KontextVideoSDK/Payloads/SDKInfo.swift    static let version = "0.1.0"
