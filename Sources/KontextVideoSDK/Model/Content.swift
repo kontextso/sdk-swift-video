@@ -53,8 +53,9 @@ extension KontextVideo {
         /// IAB Content Taxonomy 3.0 ids.
         public let categories: [String]?
         public let description: String?
-        /// Seconds, sent as whole milliseconds. Left out of the request when it is not a length: NaN (as
-        /// `AVPlayerItem.duration.seconds` before the item is ready, or live), infinite, or under 1 ms.
+        /// Seconds, rounded to the nearest whole millisecond. Left out of the request when negative,
+        /// non-finite (NaN is what `AVPlayerItem.duration.seconds` gives before the item is ready, or for
+        /// live), beyond the representable range, or rounded to less than 1 ms.
         public let duration: TimeInterval?
         /// At least 1; anything else is left out of the request.
         public let episodeNumber: Int?
@@ -121,12 +122,15 @@ extension KontextVideo {
             }
         }
 
-        /// What the publisher passed that the server would refuse or the request leaves out, one phrase
-        /// each; `VideoAds(content:)` reports them. Empty when the content is valid.
-        var problems: [String] {
+        /// Required fields the publisher left empty: every request fails at the server. The rule is the
+        /// schema's, a non-empty string; `" "` passes, as it does there.
+        var missingRequired: [String] {
+            [id.isEmpty ? "id is empty" : nil, language.isEmpty ? "language is empty" : nil].compactMap { $0 }
+        }
+
+        /// Optional metadata the request leaves out because the server would refuse it, one phrase each.
+        var leftOut: [String] {
             var problems: [String] = []
-            if id.trimmingCharacters(in: .whitespaces).isEmpty { problems.append("id is empty") }
-            if language.trimmingCharacters(in: .whitespaces).isEmpty { problems.append("language is empty") }
             if let duration, durationMs == nil { problems.append("duration \(duration) s left out") }
             if let episodeNumber, episodeNumber < 1 { problems.append("episodeNumber \(episodeNumber) left out") }
             if let series, series.id.isEmpty { problems.append("series left out, its id is empty") }

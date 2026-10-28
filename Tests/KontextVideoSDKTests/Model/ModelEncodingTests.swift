@@ -54,10 +54,13 @@ struct ModelEncodingTests {
     }
 
     @Test func theProblemsNameWhatThePublisherPassedWrong() {
-        #expect(KontextVideo.Content(id: "v", language: "en", duration: 92, episodeNumber: 6).problems.isEmpty)
-        let bad = KontextVideo.Content(id: " ", language: "", duration: .nan, episodeNumber: 0, series: .init(id: "", episodeCount: 0))
-        #expect(bad.problems == ["id is empty", "language is empty", "duration nan s left out", "episodeNumber 0 left out",
-                                 "series left out, its id is empty", "series.episodeCount 0 left out"])
+        let good = KontextVideo.Content(id: "v", language: "en", duration: 92, episodeNumber: 6)
+        #expect(good.missingRequired.isEmpty && good.leftOut.isEmpty)
+        let bad = KontextVideo.Content(id: "", language: "", duration: .nan, episodeNumber: 0, series: .init(id: "", episodeCount: 0))
+        #expect(bad.missingRequired == ["id is empty", "language is empty"])
+        #expect(bad.leftOut == ["duration nan s left out", "episodeNumber 0 left out", "series left out, its id is empty", "series.episodeCount 0 left out"])
+        let blank = KontextVideo.Content(id: " ", language: " ", series: .init(id: " "))
+        #expect(blank.missingRequired.isEmpty && blank.leftOut.isEmpty, "the schema's rule is non-empty, for every id alike")
     }
 
     @Test func contentDurationRoundsToNearestMillisecond() throws {
