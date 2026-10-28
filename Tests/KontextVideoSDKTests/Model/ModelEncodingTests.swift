@@ -36,7 +36,28 @@ struct ModelEncodingTests {
             #expect(json["duration"] == nil, "\(seconds)")
             #expect(json["id"] as? String == "v", "the rest of the content still encodes")
         }
-        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 0))["duration"] as? Int == 0)
+        for seconds in [0, 0.0004] {
+            #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: seconds))["duration"] == nil, "under 1 ms is not a length: \(seconds)")
+        }
+        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", duration: 0.0005))["duration"] as? Int == 1)
+    }
+
+    @Test func episodeNumbersAndCountsBelowOneAndAnEmptySeriesAreLeftOut() throws {
+        for number in [0, -3] {
+            let json = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", episodeNumber: number, series: .init(id: "s", episodeCount: number)))
+            #expect(json["episodeNumber"] == nil && (json["series"] as? [String: Any])?["episodeCount"] == nil, "\(number)")
+            #expect((json["series"] as? [String: Any])?["id"] as? String == "s", "the series itself stays")
+        }
+        #expect(try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", series: .init(id: "", title: "T")))["series"] == nil)
+        let valid = try Fixtures.encode(KontextVideo.Content(id: "v", language: "en", episodeNumber: 1, series: .init(id: "s", episodeCount: 1)))
+        #expect(valid["episodeNumber"] as? Int == 1 && (valid["series"] as? [String: Any])?["episodeCount"] as? Int == 1)
+    }
+
+    @Test func theProblemsNameWhatThePublisherPassedWrong() {
+        #expect(KontextVideo.Content(id: "v", language: "en", duration: 92, episodeNumber: 6).problems.isEmpty)
+        let bad = KontextVideo.Content(id: " ", language: "", duration: .nan, episodeNumber: 0, series: .init(id: "", episodeCount: 0))
+        #expect(bad.problems == ["id is empty", "language is empty", "duration nan s left out", "episodeNumber 0 left out",
+                                 "series left out, its id is empty", "series.episodeCount 0 left out"])
     }
 
     @Test func contentDurationRoundsToNearestMillisecond() throws {

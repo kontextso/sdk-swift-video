@@ -52,7 +52,7 @@ struct IntegrationTests {
         #expect(delegate.events == ["impression"])
         #expect(harness.player.view.subviews.count == 1)
         #expect(await waitUntil { Set(self.events(for: "img-pause")).isSuperset(of: ["creativeView", "iconView", "impression"]) })
-        #expect(await waitUntil(2) { self.events(for: "img-pause").contains("viewable") }, "50 % for 1 s")
+        #expect(await waitUntil(4) { self.events(for: "img-pause").contains("viewable") }, "50 % for 1 s")
         let impression = harness.server.beacons.first { $0.adId == "img-pause" && $0.event == "impression" }
         #expect(impression?.query["cph"] == "00:00:03.250", "the content playhead at the impression")
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double

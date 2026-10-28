@@ -34,7 +34,7 @@ struct APIClientTests {
 
     @Test func aSlowAnswerIsCutAtTheDeadlineNotOnlyWhenIdle() async {
         var slow = StubServer.Response.json(["ok": true])
-        slow.delay = 1
+        slow.delay = 8   // far beyond the deadline, so a slow runner cannot blur the two
         server.on("/v2/ping", slow)
         let client = APIClient(baseURL: server.baseURL, session: server.makeSession(deadline: 0.3))
         let started = Date()
@@ -44,7 +44,7 @@ struct APIClientTests {
         } catch let error as APIError {
             guard case .transport(let urlError) = error else { Issue.record("expected transport, got \(error)"); return }
             #expect(urlError.code == .timedOut)
-            #expect(Date().timeIntervalSince(started) < 0.9, "cut at the deadline, not when the answer came")
+            #expect(Date().timeIntervalSince(started) < 6, "cut at the deadline, not when the answer came")
         } catch {
             Issue.record("unexpected \(error)")
         }
