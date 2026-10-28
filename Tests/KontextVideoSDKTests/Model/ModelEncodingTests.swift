@@ -53,6 +53,19 @@ struct ModelEncodingTests {
         #expect(valid["episodeNumber"] as? Int == 1 && (valid["series"] as? [String: Any])?["episodeCount"] as? Int == 1)
     }
 
+    @Test func aUserSendsWhatIsSetAndLeavesEmptyStringsOut() throws {
+        let both = try Fixtures.encode(KontextVideo.User(id: "u1", email: "viewer@example.com", emailHash: "md5-or-anything", keywords: []))
+        #expect(both["id"] as? String == "u1" && both["email"] as? String == "viewer@example.com")
+        #expect(both["emailHash"] as? String == "md5-or-anything", "any hash function, sent as given")
+        #expect(both["keywords"] as? [String] == [])
+        let hashOnly = try Fixtures.encode(KontextVideo.User(emailHash: "abc"))
+        #expect(hashOnly.keys.sorted() == ["emailHash"])
+        let empty = KontextVideo.User(id: "", email: "", emailHash: "")
+        #expect(try Fixtures.encode(empty).isEmpty)
+        #expect(empty.emptyFields == ["id", "email", "emailHash"])
+        #expect(try Fixtures.encode(KontextVideo.User()).isEmpty)
+    }
+
     @Test func theProblemsNameWhatThePublisherPassedWrong() {
         let good = KontextVideo.Content(id: "v", language: "en", duration: 92, episodeNumber: 6)
         #expect(good.missingRequired.isEmpty && good.leftOut.isEmpty)
