@@ -44,7 +44,8 @@ public final class KontextVideo {
         }
     }
     /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
-    /// The next ads request carries them; ads already loaded stay.
+    /// The next ads request carries them; ads already loaded stay. Setting it to `nil` clears your values
+    /// only: the SDK still reads the CMP's shared storage on every request.
     public var regulatory: Regulatory?
     /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
     public var variantId: String?
