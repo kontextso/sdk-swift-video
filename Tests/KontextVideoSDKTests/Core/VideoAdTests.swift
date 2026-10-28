@@ -21,6 +21,9 @@ struct VideoAdTests {
     }
 
     init() {
+        // Below the status bar and above the home indicator: the placement tests here assume a view with
+        // no safe-area insets; VideoAdPlacementTests covers the insets.
+        harness.player.view.frame.origin.y = 120
         window.add(harness.player.view)
     }
 

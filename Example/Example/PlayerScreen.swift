@@ -40,12 +40,16 @@ struct PlayerScreen: View {
             .padding(16)
         }
         .overlay(alignment: .bottomLeading) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(playback.video.title).font(.headline).foregroundStyle(.white)
-                Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
+            // The title gives way while an overlay or pause ad is up: the SDK puts it at the bottom of
+            // the player, inside the safe area.
+            if !playback.isShowingAdInPlayer {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playback.video.title).font(.headline).foregroundStyle(.white)
+                    Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 48)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 48)
         }
         .statusBarHidden()
         // Not onDisappear: the linear ad's full-screen presentation covers this view, and SwiftUI
@@ -59,6 +63,8 @@ struct PlayerScreen: View {
 final class Playback: ObservableObject {
     @Published private(set) var status = "preparing the ad"
     @Published private(set) var isPaused = false
+    /// An overlay or pause ad is on screen inside the player.
+    @Published private(set) var isShowingAdInPlayer = false
 
     let video: Video
     let playerView = PlayerLayerView()
@@ -149,6 +155,7 @@ final class Playback: ObservableObject {
         guard let ad, ad.isReady else { return }
         do {
             try ad.show(in: playerView)
+            isShowingAdInPlayer = true
         } catch {
             status = "show: \(error)"
         }
@@ -181,6 +188,7 @@ extension Playback: VideoAdDelegate {
     }
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
+        isShowingAdInPlayer = false
         status = "\(ad.format) ad ended: \(reason)"
         if ad === self.ad { self.ad = nil }
         switch ad.format {

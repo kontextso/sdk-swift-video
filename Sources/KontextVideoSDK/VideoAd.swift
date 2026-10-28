@@ -265,7 +265,7 @@ public final class VideoAd {
             throw VideoAdError.presenterUnavailable
         }
         let container = view
-        let host = UIView(frame: try frame(in: container.bounds))
+        let host = UIView(frame: try frame(in: container.bounds, safeArea: container.safeAreaInsets))
         host.autoresizingMask = descriptor.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, descriptor.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
         let webView = bridge.takeWebView()
         webView.frame = host.bounds
@@ -389,9 +389,13 @@ public final class VideoAd {
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
     /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
-    /// so a player that changed shape between `load` and `show` gets the size built for it.
-    private func frame(in bounds: CGRect) throws -> CGRect {
-        guard descriptor.position != .fullscreen, let defaultSize = descriptor.size else { return bounds }
+    /// so a player that changed shape between `load` and `show` gets the size built for it. A card or
+    /// strip stays inside the view's safe area: a full-screen player runs under the notch and the home
+    /// indicator, and an ad there is partly hidden and hard to tap. A full-screen pause ad fills the
+    /// whole view; its page keeps its own controls clear of those areas.
+    private func frame(in fullBounds: CGRect, safeArea: UIEdgeInsets) throws -> CGRect {
+        guard descriptor.position != .fullscreen, let defaultSize = descriptor.size else { return fullBounds }
+        let bounds = fullBounds.inset(by: safeArea)
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
@@ -410,8 +414,8 @@ public final class VideoAd {
             throw VideoAdError.containerTooSmall(minimum: minimum)
         }
         let scaled = CGSize(width: (nominal.width * scale).rounded(), height: (nominal.height * scale).rounded())
-        let x = ((bounds.width - scaled.width) / 2).rounded()
-        let y = descriptor.position == .top ? 0 : bounds.height - scaled.height
+        let x = (bounds.minX + (bounds.width - scaled.width) / 2).rounded()
+        let y = descriptor.position == .top ? bounds.minY : bounds.maxY - scaled.height
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
     }
 
