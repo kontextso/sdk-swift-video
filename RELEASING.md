@@ -2,9 +2,10 @@
 
 How to cut a release of the **Kontext Video SDK**. Replace `0.1.0` with the version at hand.
 
-> Versions have no `v` prefix: `0.1.0`. While the SDK is pre-1.0, a breaking change bumps the minor version
-> (`0.2.0`); after 1.0 it bumps the major. The SDK ships through Swift Package Manager only: CocoaPods trunk
-> stops accepting new versions on December 2, 2026.
+> Versions are `MAJOR.MINOR.PATCH`, digits only, no `v` prefix, no leading zeros, no prerelease suffix:
+> `0.1.0`, never `v0.1.0`, `0.01.0` or `0.2.0-rc1`. While the SDK is pre-1.0, a breaking change bumps the
+> minor version (`0.2.0`); after 1.0 it bumps the major. The SDK ships through Swift Package Manager only:
+> CocoaPods trunk stops accepting new versions on December 2, 2026.
 
 ## 1. Check main
 
@@ -47,7 +48,13 @@ git push origin main 0.1.0
 ```
 
 The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`. The push of the tag runs the
-`release-tag` CI job, which fails if the tag and `SDKInfo.version` differ.
+`release-tag` CI job, which fails if the tag and `SDKInfo.version` differ. It runs after the tag exists, so a
+failure means the tag is already public: delete it, fix the version, and cut it again, before anyone resolves it.
+
+```bash
+git push --delete origin 0.1.0 && git tag -d 0.1.0
+# fix SDKInfo.version, commit, then tag and push as above
+```
 
 ## 5. Verify
 
