@@ -20,6 +20,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>The advertising identifier lets advertisers recognize you, so you see more relevant ads.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

@@ -28,6 +28,7 @@ targets:
         CFBundleDisplayName: Kontext Video
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSUserTrackingUsageDescription: The advertising identifier lets advertisers recognize you, so you see more relevant ads.
         # Kontext's ad network id, so installs from the demo's app-install ads can be attributed.
         SKAdNetworkItems:
           - SKAdNetworkIdentifier: mp7rpxwdrx.adattributionkit
