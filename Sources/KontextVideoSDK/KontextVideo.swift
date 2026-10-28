@@ -23,15 +23,16 @@ public final class KontextVideo {
     /// The SDK's version, the same string it sends with every request. For your logs and crash reports.
     public nonisolated static let version = SDKInfo.version
 
-    /// Identifies this installation of the app. Created on first use and kept until the app is uninstalled.
-    public static var installId: String {
+    /// Identifies this installation of the app, sent with every request. Created on first use and kept until
+    /// the app is uninstalled. Internal: an app has no use for it, and must not reuse it as its own user id.
+    static var installId: String {
         InstallIdProvider.getOrCreate()
     }
 
     /// The configuration the SDK was initialised with, or `nil` before `initialize(with:)`.
-    public private(set) var configuration: Configuration?
-    /// Where `/config` got to. Readable at any time; `initialize(with:)`'s completion or `async` form delivers it too.
-    public private(set) var state: State = .notInitialized
+    private(set) var configuration: Configuration?
+    /// Where `/config` got to. Internal: the app gets it from `initialize(with:)`'s completion or `async` form.
+    private(set) var state: State = .notInitialized
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
@@ -43,7 +44,7 @@ public final class KontextVideo {
     public var variantId: String?
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
-    public var isInitialized: Bool {
+    var isInitialized: Bool {
         configuration != nil
     }
 
