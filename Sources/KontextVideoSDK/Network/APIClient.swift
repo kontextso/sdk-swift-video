@@ -8,9 +8,9 @@ struct APIClient: Sendable {
     let session: URLSession
 
     @MainActor
-    init(baseURL: URL) {
+    init(baseURL: URL, session: URLSession? = nil) {
         self.baseURL = baseURL
-        session = Environment.session
+        self.session = session ?? Environment.session
     }
 
     func post<Body: Encodable, Response: Decodable>(
@@ -28,6 +28,10 @@ struct APIClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
+            // Redirects are followed as URLSession does by default, the body included (a 307 or 308 re-sends
+            // the POST): deliberate. The base URL is ours and the routes do not redirect today; a redirect
+            // would be our own server's, for example a move behind a new host, and refusing it would turn
+            // that into an outage of every installed SDK.
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
             throw APIError.transport(error)

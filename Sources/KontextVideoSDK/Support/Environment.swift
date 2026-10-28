@@ -7,8 +7,25 @@ import WebKit
 /// default; `reset()` restores them all.
 @MainActor
 enum Environment {
-    /// The session every request and beacon goes through.
-    static var session: URLSession = .shared
+    /// The session every request and beacon goes through: the SDK's own, never the app's shared one.
+    static var session: URLSession = defaultSession
+
+    /// The SDK's session policy, in one place. Ephemeral and without cookies or a cache: nothing the
+    /// server sends is stored, and the app's own cookie store and cache are not touched. `deadline` bounds
+    /// a whole request: `URLRequest.timeoutInterval` is an idle timeout only, so a server that trickles
+    /// bytes would otherwise hold a request (and every `format()` call that joined it) for as long as it
+    /// likes; the session default is seven days. Tests build theirs here too, adding the stub protocol.
+    static func makeSession(deadline: TimeInterval = APIClient.defaultTimeout, configure: (URLSessionConfiguration) -> Void = { _ in }) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForResource = deadline
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configure(configuration)
+        return URLSession(configuration: configuration)
+    }
+
+    private static let defaultSession = makeSession()
     /// Where a loading WebView is parked so WebKit buffers its video, and where `show()` finds its presenter.
     static var keyWindow: @MainActor () -> UIWindow? = defaultKeyWindow
     /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
@@ -36,7 +53,7 @@ enum Environment {
     // Called by the tests, which the analyzer does not see.
     // swiftlint:disable:next unused_declaration
     static func reset() {
-        session = .shared
+        session = defaultSession
         keyWindow = defaultKeyWindow
         schemeHandlers = [:]
         openURL = defaultOpenURL
