@@ -101,6 +101,9 @@ struct DebugReporterTests {
         harness.server.on("/v2/debug", slow)
         DebugReporter.shared.event("first")
         #expect(await waitUntil(5) { !self.batches(named: "first").isEmpty })
+        // Only that batch is slow: the later one answers at once, so nothing is left in flight for the
+        // next test (the reporter is shared). A request takes its answer when it arrives.
+        harness.server.on("/v2/debug", .empty())
         for i in 0..<5 {
             DebugReporter.shared.event("later", state: ["i": .number(Double(i))])
         }
