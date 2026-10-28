@@ -236,6 +236,38 @@ struct VideoAdsTests {
         #expect(assertions == ["KontextVideo.Content: id is empty", "KontextVideo.Content: language is empty"])
     }
 
+    @Test func destroyWhileTheATTDialogIsUpReleasesTheWaiterAndTheDialogGoesOn() async {
+        let gate = Gate()
+        var prompts = 0
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        Environment.requestTrackingAuthorization = {
+            prompts += 1
+            while !gate.open { await sleepMs(5) }
+            return .authorized
+        }
+        await WebKitWarmup.ensure()
+        _ = await KontextVideo.shared.initialize(with: KontextVideo.Configuration(
+            publisherToken: "test-dev", requestTrackingAuthorization: true, logLevel: .none, adServerURL: harness.server.baseURL))
+        let first = harness.player.ads(for: .init(id: "v1", language: "en"))
+        let second = harness.player.ads(for: .init(id: "v2", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-att"))
+        let destroyed = Task { await error { try await first.format(.pause) } }
+        let other = Task { try? await second.format(.pause) }
+        #expect(await waitUntil { prompts == 1 })
+        first.destroy()
+        let failure = await destroyed.value
+        guard case .destroyed = failure else { Issue.record("expected destroyed, got \(String(describing: failure))"); return }
+        #expect(!gate.open, "released while the dialog is still up")
+        gate.open = true
+        #expect(await other.value?.id == "img-att", "the other video's request waited for the same dialog and went on")
+        #expect(prompts == 1)
+        #expect(harness.adsRequests.count == 1, "the destroyed video sent nothing")
+    }
+
+    final class Gate {
+        var open = false
+    }
+
     @Test func beforeInitializeFormatThrowsNotInitialized() async {
         Environment.assertionFailure = { _ in }
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))

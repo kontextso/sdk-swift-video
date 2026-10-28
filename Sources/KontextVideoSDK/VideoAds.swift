@@ -102,7 +102,13 @@ public final class VideoAds {
         }
         guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
         // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
-        let tracking = await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
+        let tracking: TrackingInfo
+        do {
+            tracking = try await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
+        } catch {
+            // Only `destroy()` cancels the request: its callers stop waiting for the dialog, which goes on.
+            throw VideoAdError.destroyed
+        }
         guard !isDestroyed else { throw VideoAdError.destroyed }
         let request = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
                                       player: .make(playhead: playhead), sessionId: sessionId, held: held)

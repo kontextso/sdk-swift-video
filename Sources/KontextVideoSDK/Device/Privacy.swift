@@ -13,9 +13,8 @@ struct IFA: Encodable, Sendable {
     // Read by the synthesized encoder only. swiftlint:disable:next unused_declaration
     let type = "idfa"
     /// Never `true` on iOS: since iOS 10 an opted-out device returns no id at all, so an id is always one
-    /// that may be used. Kept because the shared `IFA` type serves platforms that hand out an id together
-    /// with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs), where the id still works
-    /// for frequency capping and fraud but not for targeting.
+    /// that may be used. Sent because the API's `ifa` object has the field: other platforms' SDKs hand out
+    /// an id together with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs).
     // swiftlint:disable:next unused_declaration
     let limitAdTracking = false
 }
@@ -35,12 +34,16 @@ struct TrackingInfo: Sendable {
     /// ask Apple once and both get the viewer's answer. Apple does not keep a second request made while
     /// the dialog is up. Cleared when the dialog closes; the OS stays the authority on the status.
     @MainActor
-    private static var authorization: Task<ATTrackingManager.AuthorizationStatus, Never>?
+    private static var authorization: Task<ATTrackingManager.AuthorizationStatus, Error>?
 
-    /// Reads the current state. With `requestAuthorization`, shows the App Tracking Transparency dialog
-    /// first when the user has not answered yet (the app's Info.plist needs `NSUserTrackingUsageDescription`).
+    /// Reads the current state. With `requestAuthorization`, first requests App Tracking Transparency
+    /// authorization when the viewer has not answered yet (the app's Info.plist needs
+    /// `NSUserTrackingUsageDescription`). Apple decides whether the dialog appears: not while the app is
+    /// inactive or another permission dialog is up. The status then stays undetermined and a later request
+    /// asks again. Throws `CancellationError` when the calling task is cancelled while the dialog is up
+    /// (`destroy()` of its `VideoAds`); the dialog itself, and every other caller waiting on it, go on.
     @MainActor
-    static func current(requestAuthorization: Bool) async -> TrackingInfo {
+    static func current(requestAuthorization: Bool) async throws -> TrackingInfo {
         var status = Environment.trackingAuthorizationStatus()
         if requestAuthorization, status == .notDetermined {
             let task = authorization ?? Task {
@@ -48,7 +51,7 @@ struct TrackingInfo: Sendable {
                 return await Environment.requestTrackingAuthorization()
             }
             authorization = task
-            status = await task.value
+            status = try await awaitShared(task)
             Logger.info("ATT: \(name(of: status))")
         }
         var ifa: IFA?
@@ -73,10 +76,10 @@ struct TrackingInfo: Sendable {
 }
 
 /// The consent signals a consent management platform writes to `UserDefaults` under the IAB's shared
-/// keys (TCF v2, GPP, US Privacy), read by KontextKit's `ConsentDataProvider`. The CMP's values win:
-/// they are the live, authoritative consent, as AdMob and MAX read them with no override at all. What
-/// the publisher set on `KontextVideo.shared.regulatory` fills in what the CMP did not write (a
-/// publisher without an IAB-writing CMP passes consent by hand); `coppa` can only come from the publisher.
+/// keys (TCF v2, GPP, US Privacy), read by KontextKit's `ConsentDataProvider`. A usable CMP value
+/// wins: it is the live, authoritative consent, as AdMob and MAX read it with no override at all. What
+/// the publisher set on `KontextVideo.shared.regulatory` fills in where the CMP has none usable (a key it
+/// did not write, an empty or malformed one); `coppa` can only come from the publisher.
 enum ConsentStorage {
     @MainActor
     static func read(merging explicit: KontextVideo.Regulatory?, defaults: UserDefaults? = nil) -> KontextVideo.Regulatory? {
