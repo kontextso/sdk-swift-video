@@ -3,8 +3,9 @@ import KontextVideoSDK
 import SwiftUI
 import UIKit
 
-/// The full-screen player. The content plays in `playback.playerView`; the SDK places an overlay or a pause
-/// ad inside that view and presents a linear ad over the screen.
+/// The full-screen player. The content plays in `playback.playerView`. Overlay and pause ads go into
+/// `playback.adArea`, a transparent view over the video that ends above the episode's title, so the ad
+/// never covers it; the SDK presents a linear ad over the screen.
 struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var playback: Playback
@@ -16,13 +17,23 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             PlayerView(view: playback.playerView)
+                .ignoresSafeArea()
             if playback.isPaused {
                 Image(systemName: "play.fill")
                     .font(.system(size: 56))
                     .foregroundStyle(.white.opacity(0.8))
             }
+            VStack(alignment: .leading, spacing: 12) {
+                // Where the SDK puts overlay and pause ads: everything above the title.
+                AdAreaHost(view: playback.adArea)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(playback.video.title).font(.headline).foregroundStyle(.white)
+                    Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.bottom, 24)
         }
-        .ignoresSafeArea()
         .background(.black)
         .contentShape(Rectangle())
         .onTapGesture { playback.toggle() }
@@ -39,18 +50,6 @@ struct PlayerScreen: View {
             }
             .padding(16)
         }
-        .overlay(alignment: .bottomLeading) {
-            // The title gives way while an overlay or pause ad is up: the SDK puts it at the bottom of
-            // the player, inside the safe area.
-            if !playback.isShowingAdInPlayer {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(playback.video.title).font(.headline).foregroundStyle(.white)
-                    Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 48)
-            }
-        }
         .statusBarHidden()
         // Not onDisappear: the linear ad's full-screen presentation covers this view, and SwiftUI
         // reports that as a disappearance too.
@@ -63,11 +62,11 @@ struct PlayerScreen: View {
 final class Playback: ObservableObject {
     @Published private(set) var status = "preparing the ad"
     @Published private(set) var isPaused = false
-    /// An overlay or pause ad is on screen inside the player.
-    @Published private(set) var isShowingAdInPlayer = false
 
     let video: Video
     let playerView = PlayerLayerView()
+    /// The slot for overlay and pause ads, above the title.
+    let adArea = AdAreaView()
     private let player: AVPlayer
     private let ads: VideoAds
     private var ad: VideoAd?
@@ -154,8 +153,7 @@ final class Playback: ObservableObject {
     private func showInPlayer() {
         guard let ad, ad.isReady else { return }
         do {
-            try ad.show(in: playerView)
-            isShowingAdInPlayer = true
+            try ad.show(in: adArea)
         } catch {
             status = "show: \(error)"
         }
@@ -188,7 +186,6 @@ extension Playback: VideoAdDelegate {
     }
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
-        isShowingAdInPlayer = false
         status = "\(ad.format) ad ended: \(reason)"
         if ad === self.ad { self.ad = nil }
         switch ad.format {
@@ -214,6 +211,25 @@ struct PlayerView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         view.backgroundColor = .black
         view.clipsToBounds = true
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+/// A transparent area that holds an overlay or pause ad. Taps outside the ad go through to the player.
+final class AdAreaView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+}
+
+struct AdAreaHost: UIViewRepresentable {
+    let view: UIView
+
+    func makeUIView(context: Context) -> UIView {
+        view.backgroundColor = .clear
         return view
     }
 
