@@ -22,7 +22,10 @@ struct APIClient: Sendable {
         var request = URLRequest(url: baseURL.appendingPathComponent("v2/\(path)"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+        // Sorted keys: the same value always encodes to the same bytes, for logs and diffs.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        request.httpBody = try encoder.encode(body)
         request.timeoutInterval = timeout
 
         let data: Data

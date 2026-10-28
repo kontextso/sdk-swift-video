@@ -207,9 +207,10 @@ struct KontextVideoTests {
         let response = try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL))
         guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
         #expect(reportDebug)
-        let ids = harness.server.requests(to: "/v2/config").map { $0.body?["requestId"] as? String }
-        #expect(ids.count == 2)
-        #expect(ids[0] == ids[1], "a retry after a lost response sends the same id, so the server runs no second auction")
+        let bodies = harness.server.requests(to: "/v2/config").compactMap(\.body)
+        #expect(bodies.count == 2)
+        #expect(bodies[0]["requestId"] as? String != bodies[1]["requestId"] as? String, "each request its own trace id, the retry included")
+        #expect(bodies[0]["installId"] as? String == bodies[1]["installId"] as? String && bodies[1]["publisherToken"] as? String == "t", "the rest as it was")
     }
 
     @Test func configRequestDoesNotRetryAClientError() async {

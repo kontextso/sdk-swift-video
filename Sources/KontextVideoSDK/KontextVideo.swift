@@ -182,7 +182,7 @@ public final class KontextVideo {
         } catch let error as APIError where error.isRetryable {
             Logger.warning("/config failed (\(error)); retrying in \(configRetryDelay) s")
             try await Task.sleep(nanoseconds: UInt64(configRetryDelay * 1_000_000_000))
-            return try await client.post("config", body: request)
+            return try await client.post("config", body: request.retry())
         }
     }
 

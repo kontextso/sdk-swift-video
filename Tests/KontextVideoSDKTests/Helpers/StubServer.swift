@@ -25,6 +25,8 @@ final class StubServer: @unchecked Sendable {
     struct Recorded: @unchecked Sendable {
         let request: URLRequest
         let body: [String: Any]?
+        /// The bytes as sent.
+        var rawBody = Data()
         var path: String { request.url?.path ?? "" }
         var query: [String: String] {
             Dictionary(uniqueKeysWithValues: (URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
@@ -68,7 +70,7 @@ final class StubServer: @unchecked Sendable {
     fileprivate func handle(_ request: URLRequest) -> Response {
         let body = request.httpBody ?? request.httpBodyStream.map(Self.drain) ?? Data()
         let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
-        let recordedRequest = Recorded(request: request, body: parsed)
+        let recordedRequest = Recorded(request: request, body: parsed, rawBody: body)
         lock.lock()
         recorded.append(recordedRequest)
         let route = routes.last { $0.matches(request) }

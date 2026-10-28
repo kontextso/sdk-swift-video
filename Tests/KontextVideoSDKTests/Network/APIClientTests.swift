@@ -50,6 +50,17 @@ struct APIClientTests {
         }
     }
 
+    @Test func theSameValueEncodesToTheSameBytes() async throws {
+        struct Wide: Encodable { let zebra = 1, apple = 2, mango = [3], kiwi = ["b": 1, "a": 2] }
+        server.on("/v2/ping", .json(["ok": true]))
+        for _ in 0..<20 {
+            let _: Reply = try await client.post("ping", body: Wide())
+        }
+        let bodies = Set(server.requests.map(\.rawBody))
+        #expect(bodies.count == 1, "sorted keys: one byte sequence for one value")
+        #expect(bodies.first.flatMap { String(bytes: $0, encoding: .utf8) } == #"{"apple":2,"kiwi":{"a":2,"b":1},"mango":[3],"zebra":1}"#)
+    }
+
     @Test func theSDKsSessionIsItsOwnWithADeadlineAndNoCookiesOrCache() {
         Environment.reset()
         let configuration = Environment.session.configuration
