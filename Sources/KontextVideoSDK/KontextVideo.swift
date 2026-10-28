@@ -81,6 +81,11 @@ public final class KontextVideo {
         }
         self.configuration = configuration
         Logger.level = configuration.logLevel
+        if !configuration.problems.isEmpty {
+            // A configuration mistake: every request would fail. Stops a debug build here, not at a 400 later.
+            Environment.assertionFailure("KontextVideo.Configuration: \(configuration.problems.joined(separator: ", "))")
+            Logger.error("configuration: \(configuration.problems.joined(separator: ", ")); no ads will load")
+        }
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
         // The browser user agent every ads request carries: evaluated in a WebView once per process and

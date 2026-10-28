@@ -51,6 +51,17 @@ struct KontextVideoTests {
         #expect(reported == nil, "and its completion never fires")
     }
 
+    @Test func anUnusableConfigurationStopsADebugBuild() {
+        #expect(harness.configuration.problems.isEmpty)
+        #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: "http://localhost:5175")!).problems.isEmpty, "a local mock")
+        #expect(KontextVideo.Configuration(publisherToken: "").problems == ["publisherToken is empty"])
+        #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: "server.megabrain.co")!).problems.count == 1)
+        var assertions: [String] = []
+        Environment.assertionFailure = { assertions.append($0) }
+        sdk.initialize(with: KontextVideo.Configuration(publisherToken: "", adServerURL: harness.server.baseURL))
+        #expect(assertions == ["KontextVideo.Configuration: publisherToken is empty"])
+    }
+
     @Test func anEmptyUserIdStopsADebugBuild() {
         var assertions: [String] = []
         Environment.assertionFailure = { assertions.append($0) }
