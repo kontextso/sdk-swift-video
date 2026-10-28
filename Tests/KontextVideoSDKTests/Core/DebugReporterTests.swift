@@ -92,25 +92,29 @@ struct DebugReporterTests {
     }
 
     @Test func oneRequestAtATimeAndTheRestWaitForIt() async {
+        // Batches are told apart by the test's own event names, not by counting requests: the startup
+        // batch can land at any time on a slow runner.
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        await sleepMs(120)   // the config.response batch is out
-        let before = harness.server.requests(to: "/v2/debug").count
         var slow = StubServer.Response.empty()
-        slow.delay = 0.3
+        slow.delay = 3   // the first batch stays in flight while the test sends the rest
         harness.server.on("/v2/debug", slow)
         DebugReporter.shared.event("first")
-        await sleepMs(100)   // the first batch is in flight now, for 300 ms
+        #expect(await waitUntil(5) { !self.batches(named: "first").isEmpty })
         for i in 0..<5 {
             DebugReporter.shared.event("later", state: ["i": .number(Double(i))])
-            await sleepMs(20)
         }
-        #expect(harness.server.requests(to: "/v2/debug").count == before + 1, "no second request while the first is answered")
-        #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").count == before + 2 })
-        let second = harness.server.requests(to: "/v2/debug").last?.body?["events"] as? [[String: Any]]
-        #expect(second?.count == 5, "the events that arrived meanwhile left together, after")
-        await sleepMs(200)
-        #expect(harness.server.requests(to: "/v2/debug").count == before + 2, "and nothing more")
+        #expect(batches(named: "later").isEmpty, "no second request while the first is answered")
+        #expect(await waitUntil(10) { !self.batches(named: "later").isEmpty })
+        let later = batches(named: "later")
+        #expect(later.count == 1 && later.first?.count == 5, "the five left together, in one batch, after the first was answered")
+    }
+
+    /// The batches that carry an event called `name`, each as its list of events.
+    private func batches(named name: String) -> [[[String: Any]]] {
+        harness.server.requests(to: "/v2/debug")
+            .compactMap { $0.body?["events"] as? [[String: Any]] }
+            .filter { events in events.contains { $0["name"] as? String == name } }
     }
 
     @Test func theBufferKeepsTheNewestEventsOnly() async {
