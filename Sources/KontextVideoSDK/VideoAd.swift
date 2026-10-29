@@ -672,7 +672,7 @@ public final class VideoAd {
             // The beacon called the app's playhead provider, which may have ended the ad: the viewer's tap
             // still opens, but `didEnd` stays the last thing the app hears.
             guard !hasEnded else { return }
-            delegate?.videoAd(self, didClick: Click(url: url, area: area))
+            delegate?.videoAd(self, didClick: Click(area: area))
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(Logger.describe(url))")
             if purpose == "adChoices" {

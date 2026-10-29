@@ -72,7 +72,7 @@ struct PublicTypesTests {
         let ads = VideoAds(content: .init(id: "v", language: "en"))
         let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "d1")), owner: ads)
         delegate.videoAdDidRecordImpression(ad)
-        delegate.videoAd(ad, didClick: VideoAd.Click(url: URL(string: "https://x.test")!, area: .creative))
+        delegate.videoAd(ad, didClick: VideoAd.Click(area: .creative))
         delegate.videoAd(ad, didFail: .presenterUnavailable)
         delegate.videoAd(ad, didEnd: .completed)
     }
@@ -92,9 +92,8 @@ struct PublicTypesTests {
     @Test func endReasonsAndClicksAreEquatable() {
         #expect(VideoAd.EndReason.completed == .completed)
         #expect(VideoAd.EndReason.completed != .dismissed)
-        let url = URL(string: "https://x.test")!
-        #expect(VideoAd.Click(url: url, area: .creative) == VideoAd.Click(url: url, area: .creative))
-        #expect(VideoAd.Click(url: url, area: .creative) != VideoAd.Click(url: url, area: .other("creative")), "the page's label 'creative' is the creative, but the enum is honest about what it was given")
+        #expect(VideoAd.Click(area: .creative) == VideoAd.Click(area: .creative))
+        #expect(VideoAd.Click(area: .creative) != VideoAd.Click(area: .other("creative")), "the page's label 'creative' is the creative, but the enum is honest about what it was given")
         #expect(VideoAd.Click.Area(nil) == .creative && VideoAd.Click.Area("endCard") == .endCard && VideoAd.Click.Area("cta") == .other("cta"))
         #expect(VideoAd.InvalidationReason.creativeFailed(code: 1) != .creativeFailed(code: 2))
         #expect(VideoAd.RejectReason.outbid(winningPrice: 2) != .outbid())

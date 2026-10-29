@@ -1,5 +1,3 @@
-import Foundation
-
 /// The moments of an ad on screen, delivered on the main actor. Every method has an empty default, so
 /// implement the ones you need. The delegate is held weakly, as every Apple delegate.
 ///
@@ -28,7 +26,8 @@ public protocol VideoAdDelegate: AnyObject {
     func videoAdDidRecordImpression(_ ad: VideoAd)
     /// The viewer tapped the ad and the SDK took the click: it fired the click beacons and is opening the
     /// target (the URL, its fallback when the first cannot open, or the App Store sheet for an app-install
-    /// ad). Whether anything did open is not reported. `click.area` says where. Once per tap.
+    /// ad). Neither which target opened nor whether it did is reported, as with AdMob and MAX. `click.area`
+    /// says where the viewer tapped. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
     /// linear ad (`presenterUnavailable`). `didEnd(.failed)` follows once the ad is cleaned up (for a
@@ -48,7 +47,8 @@ public extension VideoAdDelegate {
 
 extension VideoAd {
     /// A tap on the ad. A struct rather than loose parameters so fields can be added without renaming the
-    /// delegate method.
+    /// delegate method. It carries no URL: the page's target is the advertiser's tracking link, often not
+    /// what opened (a fallback, the App Store sheet), and the SDK has already opened it.
     public struct Click: Sendable, Equatable {
         /// Where the viewer tapped.
         public enum Area: Sendable, Equatable {
@@ -69,9 +69,6 @@ extension VideoAd {
             }
         }
 
-        /// The target the page reported, as it reported it: before the SDK fills its tracking macros, and
-        /// not necessarily what opened (a fallback URL, or the App Store sheet for an app-install ad).
-        public let url: URL
         /// Where the viewer tapped.
         public let area: Area
     }

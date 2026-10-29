@@ -95,7 +95,7 @@ struct IntegrationTests {
         ad.bridge.noteTouch()
         await inPage(ad, "window.click('https://brand.test/offer', 'creative')")
         #expect(await waitUntil { opened.count == 1 })
-        #expect(delegate.clicks.first?.url.absoluteString == "https://brand.test/offer")
+        #expect(delegate.clicks.first?.area == .creative)
         #expect(await waitUntil { self.events(for: "img-click").contains("click") })
         try ad.dismiss()
     }
