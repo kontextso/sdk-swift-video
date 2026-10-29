@@ -377,17 +377,20 @@ struct VideoAdsTests {
 
     @Test func cancellingACallStopsOnlyItsWaitingTheRequestContinuesForTheOthers() async throws {
         let ads = await makeAds()
-        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p19"), "linear": Fixtures.linearAd(id: "vid-l19")], delay: 0.3)
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p19"), "linear": Fixtures.linearAd(id: "vid-l19")], delay: 2)
         let pause = Task { try await ads.format(.pause) }
-        let linear = Task { try await ads.format(.linear) }
-        await sleepMs(50)
-        let cancelledAt = Date()
+        var linearDone = false
+        let linear = Task { () throws -> VideoAd in
+            defer { linearDone = true }
+            return try await ads.format(.linear)
+        }
+        #expect(await waitUntil(5) { self.harness.adsRequests.count == 1 })
         pause.cancel()
         do {
             _ = try await pause.value
             Issue.record("expected CancellationError")
         } catch is CancellationError {
-            #expect(Date().timeIntervalSince(cancelledAt) < 0.2, "the cancelled call stops waiting at once")
+            #expect(!linearDone, "the cancelled call stopped while the request was still out")
         }
         #expect(try await linear.value.id == "vid-l19", "the other call still gets its bid")
         #expect(harness.adsRequests.count == 1)

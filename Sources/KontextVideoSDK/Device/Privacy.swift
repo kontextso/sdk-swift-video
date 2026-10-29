@@ -1,4 +1,3 @@
-import AdSupport
 import AppTrackingTransparency
 import Foundation
 import KontextKit
@@ -56,7 +55,7 @@ struct TrackingInfo: Sendable {
         }
         var ifa: IFA?
         if status == .authorized {
-            let id = ASIdentifierManager.shared().advertisingIdentifier.uuidString
+            let id = Environment.advertisingIdentifier().uuidString
             if id != "00000000-0000-0000-0000-000000000000" {
                 ifa = IFA(id: id)
             }

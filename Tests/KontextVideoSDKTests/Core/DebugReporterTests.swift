@@ -79,16 +79,39 @@ struct DebugReporterTests {
             .filter { events in events.contains { $0["name"] as? String == "tick" } }
     }
 
-    @Test func aFailedBatchIsLostQuietly() async {
+    @Test func aFailedBatchIsLostQuietlyAndTheNextOneGoesOut() async {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
-        harness.server.on("/v2/debug", .failure(.notConnectedToInternet))
         _ = await harness.initialize()
-        DebugReporter.shared.event("tick")
-        await sleepMs(200)
-        #expect(harness.server.requests(to: "/v2/debug").count >= 1)
-        DebugReporter.shared.event("tick")
+        harness.server.on("/v2/debug", .failure(.notConnectedToInternet))
+        DebugReporter.shared.event("lost-once")
+        #expect(await waitUntil(5) { !self.batches(named: "lost-once").isEmpty })
+        harness.server.on("/v2/debug", .empty())
+        DebugReporter.shared.event("after-the-loss")
+        #expect(await waitUntil(5) { !self.batches(named: "after-the-loss").isEmpty })
         await sleepMs(150)
-        #expect(DebugReporter.shared.isEnabled, "reporting stays on; a lost batch is lost")
+        #expect(batches(named: "lost-once").count == 1, "a failed batch is never sent again")
+        #expect(batches(named: "after-the-loss").count == 1, "the next event goes out once")
+        #expect(DebugReporter.shared.isEnabled, "reporting stays on")
+    }
+
+    @Test func debugReportsCarryNoneOfTheViewersData() async throws {
+        // Canaries in every private field, then a request and its answer, which report the most.
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        _ = await harness.initialize()
+        KontextVideo.shared.user = KontextVideo.User(id: "canary-user-id", email: "canary@viewer.test", emailHash: "canary-hash", keywords: ["canary-keyword"])
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(gdprConsent: "canary-tc-string", gpp: "canary-gpp", usPrivacy: "canary-usp")
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en", title: "canary-title"))
+        harness.serve(Fixtures.ad(id: "img-priv"))
+        _ = try await ads.format(.pause)
+        #expect(await waitUntil(5) { self.allNames().contains("ads.response") })
+        for body in harness.server.requests(to: "/v2/debug").compactMap(\.body) {
+            let text = try #require(String(bytes: JSONSerialization.data(withJSONObject: body), encoding: .utf8))
+            for canary in ["canary-user-id", "canary@viewer.test", "canary-hash", "canary-keyword", "canary-tc-string", "canary-gpp", "canary-usp", "canary-title"] {
+                #expect(!text.contains(canary), "\(canary) reached a debug report")
+            }
+            #expect(!text.contains("idfv") && !text.contains("email") && !text.contains("gdprConsent"), "never the forbidden fields")
+        }
+        ads.destroy()
     }
 
     @Test func oneRequestAtATimeAndTheRestWaitForIt() async {

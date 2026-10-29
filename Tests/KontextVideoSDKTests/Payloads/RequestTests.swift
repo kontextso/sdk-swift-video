@@ -1,3 +1,5 @@
+import AppTrackingTransparency
+import AVFoundation
 import Foundation
 @testable import KontextVideoSDK
 import Testing
@@ -171,6 +173,43 @@ struct RequestTests {
 
     final class Gate {
         var open = false
+    }
+
+    @Test func theIDFAIsSentOnlyWhenAuthorizedAndReal() async throws {
+        let real = UUID(uuidString: "6D92078A-8246-4BA4-AE5B-76104861E7DC")!
+        var prompts = 0
+        Environment.requestTrackingAuthorization = { prompts += 1; return .authorized }
+        Environment.advertisingIdentifier = { real }
+        defer { Environment.reset() }
+        for (status, name) in [(ATTrackingManager.AuthorizationStatus.denied, "denied"), (.restricted, "restricted"), (.notDetermined, "notDetermined")] {
+            Environment.trackingAuthorizationStatus = { status }
+            let info = try await TrackingInfo.current(requestAuthorization: false)
+            #expect(info.ifa == nil && info.attStatus == name, "\(name): no IDFA, even a real one")
+        }
+        Environment.trackingAuthorizationStatus = { .authorized }
+        #expect(try await TrackingInfo.current(requestAuthorization: false).ifa?.id == real.uuidString, "authorized: the IDFA as the OS gives it")
+        Environment.advertisingIdentifier = { UUID(uuidString: "00000000-0000-0000-0000-000000000000")! }
+        #expect(try await TrackingInfo.current(requestAuthorization: false).ifa == nil, "authorized but all zeros: no IDFA")
+        for status in [ATTrackingManager.AuthorizationStatus.authorized, .denied, .restricted] {
+            Environment.trackingAuthorizationStatus = { status }
+            _ = try await TrackingInfo.current(requestAuthorization: true)
+        }
+        #expect(prompts == 0, "an answered status never shows the dialog")
+    }
+
+    @Test func readingTheDeviceLeavesTheAppsAudioSessionAsItWas() async throws {
+        let session = AVAudioSession.sharedInstance()
+        let original = (session.category, session.mode, session.categoryOptions)
+        defer { try? session.setCategory(original.0, mode: original.1, options: original.2) }
+        try session.setCategory(.ambient, mode: .moviePlayback, options: [.duckOthers])
+        // As iOS reports it back (it normalizes the options), before the SDK reads anything.
+        let set = (session.category, session.mode, session.categoryOptions)
+        let audio = AudioInfo.current()
+        _ = await AdsDevice.current()
+        #expect(session.category == set.0 && session.mode == set.1 && session.categoryOptions == set.2, "the app's audio session is the app's")
+        #expect(set.0 == .ambient, "the app's own category was in place")
+        #expect((0...100).contains(audio.volume))
+        #expect(audio.muted == (audio.volume == 0) || audio.volume <= 1, "muted below 1 %")
     }
 
     @Test func consentStorageReadsTheIABKeys() {

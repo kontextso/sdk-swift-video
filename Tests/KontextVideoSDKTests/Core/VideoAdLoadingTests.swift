@@ -192,12 +192,16 @@ struct VideoAdLoadingTests {
     // MARK: Expiry
 
     @Test func expiryCountsFromTheFirstReceiptOnTheSDKsClock() async throws {
+        // A frozen clock: the boundary is exact, with no scheduling between the reads.
+        Environment.now = { 1000 }
         let fresh = try Fixtures.descriptor(Fixtures.ad(expires: 1000))
         #expect(fresh.isExpired == false)
-        advanceClock(by: 0.999)
-        #expect(fresh.isExpired == false)
-        advanceClock(by: 0.002)
-        #expect(fresh.isExpired)
+        Environment.now = { 1000.999 }
+        #expect(fresh.isExpired == false, "just before")
+        Environment.now = { 1001 }
+        #expect(fresh.isExpired, "exactly at the lifetime")
+        Environment.now = { 1001.001 }
+        #expect(fresh.isExpired, "just after")
         // The real clock is CLOCK_MONOTONIC, which keeps counting while the device sleeps; a test cannot
         // sleep the device, so it checks what it can: the clock advances and never goes backwards.
         Environment.reset()

@@ -34,11 +34,14 @@ struct APIClientTests {
 
     @Test func aSlowAnswerIsCutAtTheDeadlineNotOnlyWhenIdle() async {
         var slow = StubServer.Response.json(["ok": true])
-        // The answer comes after 30 s, so only the deadline can end the request with a timeout; no wall-clock
-        // bound, which a loaded CI runner's starved main actor made meaningless (7.6 s for a 0.3 s cut).
-        slow.delay = 30
+        // The answer comes after 3 s, inside the 10 s idle timeout: only the 0.3 s deadline can end the request
+        // with a timeout, and without it the request would succeed. No wall-clock bound, which a loaded CI
+        // runner's starved main actor made meaningless (7.6 s for a 0.3 s cut).
+        slow.delay = 3
         server.on("/v2/ping", slow)
-        let client = APIClient(baseURL: server.baseURL, session: server.makeSession(deadline: 0.3))
+        let session = server.makeSession(deadline: 0.3)
+        #expect(session.configuration.timeoutIntervalForResource == 0.3)
+        let client = APIClient(baseURL: server.baseURL, session: session)
         do {
             let _: Reply = try await client.post("ping", body: Body(hello: "x"))
             Issue.record("expected the deadline")

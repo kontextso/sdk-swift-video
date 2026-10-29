@@ -1,3 +1,4 @@
+import AdSupport
 import AppTrackingTransparency
 import Foundation
 import UIKit
@@ -43,6 +44,8 @@ enum Environment {
     /// App Tracking Transparency: the status now, and the dialog. Tests answer without the OS.
     static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
     static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = { await ATTrackingManager.requestTrackingAuthorization() }
+    /// The device's advertising identifier, all zeros unless ATT is authorized. Tests set a real one.
+    static var advertisingIdentifier: @MainActor () -> UUID = { ASIdentifierManager.shared().advertisingIdentifier }
     /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
     static var skAdNetwork: any SKAdNetworkManaging = KontextKitSKAdNetwork()
     /// Presents the App Store product sheet an app-install ad's click opens.
@@ -64,6 +67,7 @@ enum Environment {
         isApplicationActive = defaultIsApplicationActive
         isWindowActive = defaultIsWindowActive
         trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
+        advertisingIdentifier = { ASIdentifierManager.shared().advertisingIdentifier }
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
         skAdNetwork = KontextKitSKAdNetwork()
         storeProduct = KontextKitStoreProduct()
@@ -76,7 +80,8 @@ enum Environment {
 
     private static func defaultKeyWindow() -> UIWindow? {
         let delegateWindow = UIApplication.shared.delegate?.window.flatMap { $0 }
-        return keyWindow(in: UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }, delegateWindow: delegateWindow)
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.map { (state: $0.activationState, windows: $0.windows) }
+        return keyWindow(scenes: scenes, delegateWindow: delegateWindow)
     }
 
     /// The key window of the scene receiving events, else of a foreground scene that is not (an iPhone
@@ -85,20 +90,30 @@ enum Environment {
     /// `show(in:)` names the right one. A background scene's window cannot present anything the viewer
     /// sees. An app without scenes keeps its window on the app delegate, so with no window scene at all
     /// that one is used.
-    static func keyWindow(in scenes: [UIWindowScene], delegateWindow: UIWindow?) -> UIWindow? {
+    /// The scenes come as plain values (state and windows), so the choice can be tested: a test cannot make
+    /// window scenes in a chosen state. `isKey` is the window's `isKeyWindow`, a parameter for the same reason.
+    static func keyWindow(
+        scenes: [(state: UIScene.ActivationState, windows: [UIWindow])],
+        delegateWindow: UIWindow?,
+        isKey: (UIWindow) -> Bool = { $0.isKeyWindow }
+    ) -> UIWindow? {
         guard !scenes.isEmpty else { return delegateWindow }
-        let keyWindow = { (state: UIScene.ActivationState) in
-            scenes.filter { $0.activationState == state }.flatMap(\.windows).first { $0.isKeyWindow }
+        for state in [UIScene.ActivationState.foregroundActive, .foregroundInactive] {
+            if let window = scenes.filter({ $0.state == state }).flatMap(\.windows).first(where: isKey) { return window }
         }
-        return keyWindow(.foregroundActive) ?? keyWindow(.foregroundInactive)
+        return nil
     }
 
     /// Whether an ad in `window` can be seen: the app is active and so is the window's own scene. On an
     /// iPad one window can go to the background while another stays active, which the app-wide state alone
     /// does not show. A window without a scene (an app without scenes) follows the app.
     private static func defaultIsWindowActive(_ window: UIWindow) -> Bool {
-        guard isApplicationActive() else { return false }
-        return window.windowScene.map { $0.activationState == .foregroundActive } ?? true
+        isWindowActive(appActive: isApplicationActive(), sceneState: window.windowScene?.activationState)
+    }
+
+    /// The rule behind `isWindowActive`, over plain values; `sceneState` is `nil` for a window without a scene.
+    static func isWindowActive(appActive: Bool, sceneState: UIScene.ActivationState?) -> Bool {
+        appActive && (sceneState.map { $0 == .foregroundActive } ?? true)
     }
 
     private static func defaultOpenURL(_ url: URL, completion: @escaping @MainActor (Bool) -> Void) {
