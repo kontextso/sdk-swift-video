@@ -349,6 +349,31 @@ struct FrameBridgeTests {
         #expect(!local.isSameOrigin(URL(string: "http://localhost/x")!))
     }
 
+    @Test func aCommittedNavigationThatFailsWhileLoadingFailsTheAd() {
+        let (bridge, events) = makeBridge(isVideo: true)
+        bridge.load()
+        bridge.webView(bridge.webView, didFail: nil, withError: URLError(.networkConnectionLost))
+        guard case .error(let code)? = events.last else { Issue.record("expected an error"); return }
+        #expect(code == 400 && bridge.state == .ended)
+        #expect(bridge.failureUnderlying?.code == URLError.networkConnectionLost.rawValue)
+    }
+
+    @Test func navigationsStoppedOnPurposeDoNotFailTheAd() {
+        let (bridge, events) = makeBridge()
+        bridge.load()
+        bridge.webView(bridge.webView, didFail: nil, withError: URLError(.cancelled))
+        bridge.webView(bridge.webView, didFailProvisionalNavigation: nil, withError: NSError(domain: "WebKitErrorDomain", code: 102))
+        #expect(bridge.state == .loading && events.events.isEmpty)
+    }
+
+    @Test func aFailedNavigationAfterThePageIsReadyIsIgnored() {
+        let (bridge, events) = makeBridge()
+        shown(bridge)
+        let before = events.events.count
+        bridge.webView(bridge.webView, didFail: nil, withError: URLError(.networkConnectionLost))
+        #expect(bridge.state == .shown && events.events.count == before)
+    }
+
     @Test func aProcessTerminationWhileLiveFailsTheAd() {
         let (loading, loadingEvents) = makeBridge(isVideo: true)
         loading.load()
@@ -573,6 +598,8 @@ struct FrameBridgeTests {
         #expect(configuration.websiteDataStore.isPersistent == false)
         #expect(configuration.allowsInlineMediaPlayback)
         #expect(configuration.mediaTypesRequiringUserActionForPlayback.isEmpty)
+        #expect(configuration.allowsPictureInPictureMediaPlayback == false, "the ad never leaves for a PiP window")
+        #expect(configuration.allowsAirPlayForMediaPlayback == false, "nor for an AirPlay screen")
         #expect(configuration.preferences.javaScriptCanOpenWindowsAutomatically == false)
         #expect(bridge.webView.scrollView.isScrollEnabled == false)
         #expect(bridge.webView.allowsLinkPreview == false)

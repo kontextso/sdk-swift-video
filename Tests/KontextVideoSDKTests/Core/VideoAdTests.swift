@@ -231,14 +231,15 @@ struct VideoAdTests {
         #expect(pause.wasShown)
     }
 
-    @Test func anOverlaysClockFreezesWhileTheAppIsNotActive() async throws {
+    @Test func anOverlaysClockFreezesWhileItsSceneIsNotActive() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c", duration: 300))
         try ad.show(in: harness.player.view)
+        let scene = try #require(harness.player.view.window?.windowScene, "the clock follows the player window's scene")
         await sleepMs(100)
-        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.post(name: UIScene.willDeactivateNotification, object: scene)
         await sleepMs(400)
         #expect(delegate.endReasons.isEmpty, "frozen: 400 ms in the background did not count")
-        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)
         // A generous wait for the remaining ~200 ms: a loaded CI runner resumes tasks seconds late.
         #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
     }
@@ -247,9 +248,11 @@ struct VideoAdTests {
         Environment.isApplicationActive = { false }
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10d", duration: 150))
         try ad.show(in: harness.player.view)
+        let scene = try #require(harness.player.view.window?.windowScene)
         await sleepMs(300)
         #expect(delegate.endReasons.isEmpty)
-        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        Environment.isApplicationActive = { true }
+        NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)
         #expect(await waitUntil(5) { delegate.endReasons == [.completed] })
     }
 

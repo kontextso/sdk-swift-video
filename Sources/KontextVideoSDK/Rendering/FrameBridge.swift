@@ -64,6 +64,9 @@ final class FrameBridge: NSObject {
         configuration.websiteDataStore = .nonPersistent()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        // The ad plays where the SDK put it: never in a PiP window or on an AirPlay screen out of our measurement.
+        configuration.allowsPictureInPictureMediaPlayback = false
+        configuration.allowsAirPlayForMediaPlayback = false
         configuration.dataDetectorTypes = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -468,10 +471,28 @@ extension FrameBridge: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        guard state == .loading else { return }
+        loadFailed(error)
+    }
+
+    /// The page answered but failed while loading its content (a dropped connection mid-document).
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        loadFailed(error)
+    }
+
+    /// A navigation that failed before the page said `ad.loaded` fails the ad. A navigation we or WebKit
+    /// stopped on purpose (a refused or external link, one replaced by the next) is not a failure.
+    private func loadFailed(_ error: Error) {
+        guard state == .loading, !Self.isInterruption(error) else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
         failureUnderlying = ErrorReporter.Underlying(error)
         fail(.error(code: loadErrorCode), cause: .loadFailed)
+    }
+
+    /// `NSURLErrorCancelled`, and WebKit's "frame load interrupted by policy change" (102) after a `.cancel` decision.
+    static func isInterruption(_ error: Error) -> Bool {
+        let error = error as NSError
+        return (error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled)
+            || (error.domain == "WebKitErrorDomain" && error.code == 102)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

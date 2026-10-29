@@ -455,7 +455,7 @@ public final class VideoAd {
                 end(.completed)
             }
             self.clock = clock
-            clock.start()
+            clock.start(in: hostView?.window)
         }
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for

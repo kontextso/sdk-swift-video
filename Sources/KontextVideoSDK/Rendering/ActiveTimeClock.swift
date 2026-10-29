@@ -1,8 +1,9 @@
 import UIKit
 
-/// The time an overlay or pause ad spends on screen while the app is active: `overlayViewDuration` reports
-/// it, and an overlay's `duration` runs on it, so both freeze in the background and resume on return. It
-/// only counts and tells; the ad decides what an elapsed duration means.
+/// The time an overlay or pause ad spends on screen while its window's scene is active (the app, for a
+/// window without a scene): `overlayViewDuration` reports it, and an overlay's `duration` runs on it, so
+/// both freeze in the background, or while another window of the app has the screen, and resume on return.
+/// It only counts and tells; the ad decides what an elapsed duration means.
 @MainActor
 final class ActiveTimeClock {
     /// When the duration has run out on active time; called at most once, never after `stop()`.
@@ -33,19 +34,23 @@ final class ActiveTimeClock {
         accumulated + (since.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
     }
 
-    /// The ad is on screen: counts from now if the app is active, and follows the app's activity.
-    func start() {
+    /// The ad is on screen in `window`: counts from now if its scene is active, and follows that scene. The
+    /// app's own activity is followed only without a scene: when the app resigns, its scenes deactivate too.
+    func start(in window: UIWindow?) {
         guard !stopped, observers.isEmpty else { return }
+        let scene = window?.windowScene
         let center = NotificationCenter.default
+        let pauseName = scene == nil ? UIApplication.willResignActiveNotification : UIScene.willDeactivateNotification
+        let resumeName = scene == nil ? UIApplication.didBecomeActiveNotification : UIScene.didActivateNotification
         observers = [
-            center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            center.addObserver(forName: pauseName, object: scene, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.pause() }
             },
-            center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            center.addObserver(forName: resumeName, object: scene, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.resume() }
             },
         ]
-        if Environment.isApplicationActive() { resume() }
+        if window.map(Environment.isWindowActive) ?? Environment.isApplicationActive() { resume() }
     }
 
     /// The ad ended: the clock freezes for good and returns the active time it counted.
