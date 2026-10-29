@@ -79,9 +79,12 @@ final class FrameBridge: NSObject {
     /// in, or the window would keep it alive, invisible. The handler registered with WebKit is a weak
     /// proxy, so nothing retains the bridge itself and this is actually reached.
     deinit {
-        Logger.debug("frame \(adId.prefix(8)): released")
+        // Every property is read before anything captures `self`: a deinitializer may not touch stored
+        // state after that (Swift 6), and the logger's message is a closure.
         let webView = self.webView
         let timeout = loadTimeoutTask
+        let id = adId.prefix(8)
+        Logger.debug("frame \(id): released")
         let teardown: @MainActor () -> Void = {
             timeout?.cancel()
             webView.stopLoading()

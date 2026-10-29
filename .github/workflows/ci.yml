@@ -29,6 +29,12 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
             > xcodebuild.log 2>&1 || (tail -100 xcodebuild.log; exit 1)
+      - name: No compiler warnings in the SDK
+        # The analyzer does not fail on compiler warnings; a Swift 6 isolation warning is tomorrow's error.
+        run: |
+          if grep -E "Sources/KontextVideoSDK/.*: warning:" xcodebuild.log | sort -u | tee warnings.txt | grep -q .; then
+            echo "::error::compiler warnings in the SDK"; cat warnings.txt; exit 1
+          fi
       - name: Analyze
         run: swiftlint analyze --strict --compiler-log-path xcodebuild.log --reporter github-actions-logging
 

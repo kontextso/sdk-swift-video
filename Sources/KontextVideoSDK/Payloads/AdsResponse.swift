@@ -47,7 +47,12 @@ enum AdsResponse: Decodable, Sendable {
             self = .disabled(reason: (try? container.decodeIfPresent(String.self, forKey: .disabledReason)) ?? Self.unknownReason)
             return
         }
-        self = .formats(try container.decode([FormatResult].self, forKey: .formats))
+        let results = try container.decode([FormatResult].self, forKey: .formats)
+        // One entry per format: with two, which one counts would depend on their order.
+        guard Set(results.map(\.format)).count == results.count else {
+            throw DecodingError.dataCorruptedError(forKey: .formats, in: container, debugDescription: "a format is listed twice")
+        }
+        self = .formats(results)
     }
 
     /// The entry for one format, or `nil` when the server did not answer for it.

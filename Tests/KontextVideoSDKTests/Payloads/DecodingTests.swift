@@ -195,6 +195,15 @@ struct DecodingTests {
         _ = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "overlay", "ads": [stray]]]])
     }
 
+    @Test func aFormatListedTwiceFailsTheResponse() throws {
+        let noFill: [String: Any] = ["format": "pause", "ads": [], "noFillReason": "frequencyCap"]
+        let filled: [String: Any] = ["format": "pause", "ads": [Fixtures.ad()]]
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [noFill, filled]]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [filled, noFill]]) }
+        let once = try decode(AdsResponse.self, ["enabled": true, "formats": [filled, ["format": "overlay", "ads": []]]])
+        #expect(once.result(for: .pause)?.ads.count == 1)
+    }
+
     @Test func theFrameURLMustBeAbsoluteWithAHost() throws {
         for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1"] {
             #expect(try Fixtures.payload(Fixtures.ad(frameURL: ok)).rendering == .frame(URL(string: ok)!))
