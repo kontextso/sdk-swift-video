@@ -208,7 +208,8 @@ struct VideoAdSKAdNetworkTests {
         harness.storeProduct.onPresent = { while !gate.open { await sleepMs(5) } }
         harness.storeProduct.result = .success(false)
         var ad: VideoAd? = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s17"), itunesItem: "s17")).0
-        weak var released = ad
+        weak var released: VideoAd?   // assigned apart, so it builds on Swift 6.1 without a never-mutated warning
+        released = ad
         try ad?.show(in: harness.player.view)
         ad?.bridge.noteTouch()
         if let ad { send(ad, "ad.click", ["url": "https://apps.apple.com/app/id17"]) }
@@ -219,6 +220,18 @@ struct VideoAdSKAdNetworkTests {
         gate.open = true
         #expect(await waitUntil { opened.count == 1 }, "the sheet failed: the viewer's tap still opens the URL")
         #expect(opened.first?.absoluteString == "https://apps.apple.com/app/id17")
+    }
+
+    @Test func anImpressionEndsOnTheManagerItStartedOn() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s18"), itunesItem: "s18"))
+        try ad.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls == ["init s18", "start"] })
+        let other = RecordingSKAdNetwork()
+        Environment.skAdNetwork = other   // the next test's manager, say
+        try ad.dismiss()
+        #expect(await waitUntil { skanCalls == ["init s18", "start", "end", "dispose"] }, "start and end on the same manager")
+        await sleepMs(50)
+        #expect(other.calls.isEmpty, "the replacement hears nothing of it")
     }
 
     @Test func aFailedStartStillGetsItsEnd() async throws {

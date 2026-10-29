@@ -23,9 +23,14 @@ final class SKAdNetworkImpression {
     /// The last call queued, for the next one to wait on. Tests clear it.
     static var queue: Task<Void, Never>?
 
+    /// The manager this impression talks to, from creation to release: its start and its end reach the same
+    /// one, whatever replaces `Environment.skAdNetwork` meanwhile.
+    private let manager: any SKAdNetworkManaging
+
     init(skan: Skan, adId: String) {
         self.skan = skan
         self.adId = adId
+        manager = Environment.skAdNetwork
     }
 
     /// The creative is on screen: the `SKAdImpression` is registered and started. Once. A payload signed for
@@ -33,8 +38,6 @@ final class SKAdNetworkImpression {
     func start() {
         guard !started, skan.hasFidelity0 else { return }
         started = true
-        // The manager as it is now: queued work runs later, and must not reach whatever replaced it.
-        let manager = Environment.skAdNetwork
         enqueue { [self] in
             do {
                 try await manager.initImpression(skan)
@@ -54,7 +57,6 @@ final class SKAdNetworkImpression {
     func end() {
         guard started, !ended else { return }
         ended = true
-        let manager = Environment.skAdNetwork
         enqueue { [self] in
             guard registered else { return }
             registered = false
