@@ -71,8 +71,14 @@ final class Tracker {
     /// playhead, as VAST players do, so a checkpoint the page skipped (a stall, a seek) or rounded differently
     /// still fires.
     func fireProgress(upTo playheadMs: Int) {
-        for entry in entries where entry.event == "progress" {
-            guard let offset = entry.offset, offset <= playheadMs else { continue }
+        // Each checkpoint not fired yet, once, in order: a fired one is skipped instead of scanned again, and
+        // entries sharing an offset fire as one occurrence with one fire id.
+        let due = Set(entries.indices.compactMap { index -> Int? in
+            let entry = entries[index]
+            guard entry.event == "progress", !fired.contains(index), let offset = entry.offset, offset <= playheadMs else { return nil }
+            return offset
+        })
+        for offset in due.sorted() {
             fire("progress", offset: offset)
         }
     }
@@ -84,15 +90,19 @@ final class Tracker {
     }
 
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
-        template
+        // The content playhead read once, and only when a URL asks for it: its two names are one moment.
+        let contentMacros = ["[MEDIAPLAYHEAD]", "[CONTENTPLAYHEAD]", "%5BMEDIAPLAYHEAD%5D", "%5BCONTENTPLAYHEAD%5D"]
+        let content = contentMacros.contains { template.range(of: $0, options: .caseInsensitive) != nil }
+            ? Self.encode(Self.playhead(seconds: contentPlayhead())) : ""
+        return template
             // A macro may arrive with its brackets encoded (a click-through parsed into a `URL`); the end
             // re-encodes whatever is left, so a bracket that was never a macro comes out as it went in.
             .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
             .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
-            .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
-            .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: Self.encode(Self.playhead(seconds: contentPlayhead())))
+            .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: content)
+            .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: content)
             .replacingOccurrences(of: "[ADPLAYHEAD]", with: Self.encode(Self.playhead(seconds: TimeInterval(adPlayhead) / 1000)))
             .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
             .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
