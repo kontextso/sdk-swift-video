@@ -144,9 +144,9 @@ struct VideoAdTests {
         #expect(ad.isReady == false, "shown at most once")
         #expect(delegate.events == ["impression"], "an image counts at show")
         #expect(sent.first == "ad.show")
-        let host = try #require(harness.player.view.subviews.last)
-        #expect(host.subviews.first === ad.bridge.webView)
-        #expect(host.frame == CGRect(x: 85, y: 0, width: 220, height: 220), "300×300 scaled to the 220 pt height, centred")
+        let host = try #require(harness.player.view.subviews.last as? AdHostView)
+        #expect(host.content === ad.bridge.webView && host.frame == harness.player.view.bounds, "a transparent host over the player holds the creative")
+        #expect(adFrame(in: harness.player.view) == CGRect(x: 85, y: 0, width: 220, height: 220), "300×300 scaled to the 220 pt height, centred")
         let fired = await beacons()
         #expect(Set(fired).isSuperset(of: ["creativeView", "iconView", "impression"]))
         #expect(!fired.contains("overlayViewDuration"))
@@ -162,15 +162,15 @@ struct VideoAdTests {
     @Test func showPlacesABottomOverlayAtTheBottom() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o2"))
         try ad.show(in: harness.player.view)
-        let host = try #require(harness.player.view.subviews.last)
-        #expect(host.frame == CGRect(x: 35, y: 130, width: 320, height: 90))
+        let frame = try #require(adFrame(in: harness.player.view))
+        #expect(frame == CGRect(x: 35, y: 130, width: 320, height: 90))
     }
 
     @Test func fullscreenPauseAdFillsThePlayer() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6", position: "fullscreen", size: nil))
         try ad.show(in: harness.player.view)
-        let host = try #require(harness.player.view.subviews.last)
-        #expect(host.frame == harness.player.view.bounds)
+        let frame = try #require(adFrame(in: harness.player.view))
+        #expect(frame == harness.player.view.bounds)
     }
 
     @Test func showThrowsContainerTooSmallBelowHalfTheSizeAndTheAdStaysReady() async throws {
@@ -398,7 +398,7 @@ struct VideoAdTests {
         let (other, _, _) = try await makeAd(Fixtures.ad(id: "p7g", size: fixed, moreSizes: [scalable]))
         try other.show(in: harness.player.view)
         #expect(other.chosenSize == VideoAd.Size(width: 250, height: 250), "the variant that may shrink is used instead")
-        #expect(harness.player.view.subviews.last?.frame.height == 220)
+        #expect(adFrame(in: harness.player.view)?.height == 220)
         try other.dismiss()
     }
 
@@ -406,7 +406,7 @@ struct VideoAdTests {
         let fixed: [String: Any] = ["width": 200, "height": 200, "scalable": false, "maintainAspectRatio": true]
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p7h", size: fixed))
         try ad.show(in: harness.player.view)
-        let frame = try #require(harness.player.view.subviews.last?.frame)
+        let frame = try #require(adFrame(in: harness.player.view))
         #expect(frame.size == CGSize(width: 200, height: 200), "never enlarged, never shrunk")
         try ad.dismiss()
     }
@@ -423,7 +423,7 @@ struct VideoAdTests {
         try ad.show(in: landscape)
         #expect((ad.chosenSize ?? ad.descriptor.size) == VideoAd.Size(width: 728, height: 90), "the player turned out wide: the wide variant")
         #expect((shown?["size"] as? [String: Int]) == ["width": 728, "height": 90], "the page is told which variant")
-        #expect(try #require(landscape.subviews.last).frame == CGRect(x: 58, y: 300, width: 728, height: 90))
+        #expect(try #require(adFrame(in: landscape)) == CGRect(x: 58, y: 300, width: 728, height: 90))
         try ad.dismiss()
     }
 
@@ -432,7 +432,7 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13t", format: "overlay", position: "bottom", size: ["width": 600, "height": 100, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
         try ad.show(in: harness.player.view)   // 390 wide: 600×100 fits at 0.65, 728×90 at 0.54
         #expect((ad.chosenSize ?? ad.descriptor.size) == VideoAd.Size(width: 600, height: 100), "the variant with the best scale")
-        #expect(try #require(harness.player.view.subviews.last).frame.width == 390)
+        #expect(try #require(adFrame(in: harness.player.view)).width == 390)
         try ad.dismiss()
     }
 
@@ -828,6 +828,74 @@ struct VideoAdTests {
         #expect(fired.contains("start") && fired.contains("impression") && !fired.contains("firstQuartile"), "the start's own beacons, nothing after the end: \(fired)")
     }
 
+    @Test func aPlayheadProviderThatDestroysDuringShowGetsNoImpressionAfterDidEnd() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10p"))
+        var reads = 0
+        // The first beacon at show reads the playhead; the app's provider destroys the VideoAds there.
+        ads.playheadProvider = { [weak ads] in
+            reads += 1
+            if reads == 1 { ads?.destroy() }
+            return 0
+        }
+        try ad.show(in: harness.player.view)
+        #expect(reads >= 1, "the show's beacons read the app's provider")
+        #expect(delegate.events == ["end:destroyed"], "didEnd is the last and only call: \(delegate.events)")
+        #expect(KontextVideo.shared.adOnScreen == nil && ad.loadedBridge == nil)
+        #expect(!(await beacons()).contains("impression"), "nothing after the end")
+    }
+
+    @Test func aShowFromInsideTheContainersAddHookFindsTheSlotTaken() async throws {
+        let (first, firstDelegate, _) = try await makeAd(Fixtures.overlayAd(id: "o10r"))
+        let (second, secondDelegate, _) = try await makeAd(Fixtures.ad(id: "p10r"))
+        let reentrant = ReentrantView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        let other = UIView(frame: CGRect(x: 0, y: 300, width: 390, height: 220))
+        window.add(reentrant)
+        window.add(other)
+        var nested: Error?
+        reentrant.onAdd = { do { try second.show(in: other) } catch { nested = error } }
+        try first.show(in: reentrant)
+        guard case .anotherAdShowing? = nested as? VideoAdError else { Issue.record("expected anotherAdShowing, got \(String(describing: nested))"); return }
+        #expect(first.wasShown && !second.wasShown && second.isReady, "one ad on screen; the other stays ready")
+        #expect(firstDelegate.events == ["impression"] && secondDelegate.events.isEmpty)
+        #expect(other.subviews.isEmpty, "the refused show left nothing behind")
+        #expect(KontextVideo.shared.adOnScreen === first)
+        try first.dismiss()
+    }
+
+    @Test func aDestroyFromInsideTheContainersAddHookEndsTheAdWithNothingLeft() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o10d"))
+        let reentrant = ReentrantView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        window.add(reentrant)
+        reentrant.onAdd = { ads.destroy() }
+        try ad.show(in: reentrant)
+        #expect(ad.wasShown && ad.hasEnded)
+        #expect(delegate.events == ["end:destroyed"], "no impression for an ad that ended before it was on screen")
+        #expect(reentrant.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+        #expect(!(await beacons()).contains("impression"))
+    }
+
+    @Test func aSkipPastACheckpointFiresItOnce() async throws {
+        let (late, _, _) = try await makeAd(Fixtures.linearAd(id: "v10s"))
+        try presentLinear(late)
+        send(late, "video.start", ["playhead": 0])
+        send(late, "video.skip", ["playhead": 7_500])
+        send(late, "video.skip", ["playhead": 7_500])
+        #expect(await waitUntil(5) { self.harness.server.beacons.contains { $0.event == "skip" } })
+        let fired = await beacons()
+        #expect(fired.filter { $0 == "progress" }.count == 1, "the 5000 ms checkpoint the skip passed, once: \(fired)")
+        #expect(late.hasEnded)
+    }
+
+    @Test func aSkipBeforeTheCheckpointFiresNoProgress() async throws {
+        let (early, _, _) = try await makeAd(Fixtures.linearAd(id: "v10t"))
+        try presentLinear(early)
+        send(early, "video.start", ["playhead": 0])
+        send(early, "video.skip", ["playhead": 3_000])
+        #expect(await waitUntil(5) { self.harness.server.beacons.contains { $0.event == "skip" } })
+        let fired = await beacons()
+        #expect(!fired.contains("progress"), "the 5000 ms checkpoint was not reached: \(fired)")
+    }
+
     @Test func showInAViewThatIsNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10b"))
         let detached = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))
@@ -990,4 +1058,17 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.dismissed])
     }
 }
+}
+
+/// A player view that runs the app's code when the SDK adds its host, as an overridable UIKit hook can.
+@MainActor
+private final class ReentrantView: UIView {
+    var onAdd: (() -> Void)?
+
+    override func didAddSubview(_ subview: UIView) {
+        super.didAddSubview(subview)
+        let action = onAdd
+        onAdd = nil
+        action?()
+    }
 }

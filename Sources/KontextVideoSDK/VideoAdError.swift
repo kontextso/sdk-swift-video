@@ -45,12 +45,14 @@ public enum VideoAdError: Error, Sendable {
     /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
     case notLoaded
     /// No variant of the ad fits the view: it would have to shrink below 50 % (aspect ratio kept), or at
-    /// all for a creative marked not scalable. `minimum` is the smallest box that fits. The ad stays ready:
+    /// all for a creative marked not scalable. `minimum` is the smallest view that holds it, its safe area
+    /// included (the ad stays inside the safe area). The ad stays ready:
     /// show it in a bigger view, or reject it.
     case containerTooSmall(minimum: CGSize)
     /// Nothing on screen can hold the ad. Thrown by `show`: for a linear ad the view controller given is
     /// already presenting or not on screen, or with `show()` there is no key window or its top controller
-    /// is mid-transition; for an overlay or pause ad the view is not in a window. The ad stays ready: try
+    /// is mid-transition; for an overlay or pause ad the view is not in a window. In both, a view that is
+    /// hidden or transparent, or sits in a hidden or transparent ancestor or window, is not on screen. The ad stays ready: try
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable

@@ -251,7 +251,7 @@ struct VideoAdsTests {
     }
 
     @Test func destroyWhileTheATTDialogIsUpReleasesTheWaiterAndTheDialogGoesOn() async {
-        let gate = Gate()
+        let gate = DialogGate()
         var prompts = 0
         Environment.trackingAuthorizationStatus = { .notDetermined }
         Environment.requestTrackingAuthorization = {
@@ -278,7 +278,8 @@ struct VideoAdsTests {
         #expect(harness.adsRequests.count == 1, "the destroyed video sent nothing")
     }
 
-    final class Gate {
+    /// Holds the ATT dialog up until the test opens it; `StubServer.Gate` holds a server response.
+    final class DialogGate {
         var open = false
     }
 
@@ -380,7 +381,7 @@ struct VideoAdsTests {
     }
 
     @Test func switchedOffDuringTheATTDialogNothingLeaves() async {
-        let gate = Gate()
+        let gate = DialogGate()
         Environment.trackingAuthorizationStatus = { .notDetermined }
         Environment.requestTrackingAuthorization = {
             while !gate.open { await sleepMs(5) }

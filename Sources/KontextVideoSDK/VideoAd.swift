@@ -17,60 +17,6 @@ import UIKit
 /// ```
 @MainActor
 public final class VideoAd {
-    public struct Price: Sendable, Equatable {
-        public enum Precision: Sendable {
-            /// A DSP's clearing price.
-            case exact
-            /// Our own or house demand, a forecast.
-            case estimated
-        }
-
-        /// Per 1,000 impressions.
-        public let value: Double
-        /// ISO 4217.
-        public let currency: String
-        public let precision: Precision
-    }
-
-    /// The box a creative was built for, in points. The SDK scales it down to 50 % of this when the view
-    /// is smaller, and refuses to show below that. Internal: where and how big is the SDK's business.
-    struct Size: Sendable, Equatable {
-        let width: Int
-        let height: Int
-        /// `false`: built for exactly this size, never shown smaller.
-        var scalable = true
-    }
-
-    /// Where the server placed the ad.
-    enum Position: Sendable, Equatable {
-        case top
-        case bottom
-        case fullscreen
-    }
-
-    /// Why the app did not use an ad; the server tells the DSP.
-    public enum RejectReason: Sendable, Equatable {
-        /// The app does not use it, for any reason: the moment passed, the viewer left, the app's own choice.
-        case notUsed
-        /// Another network won the publisher's auction; `winningPrice` (CPM) and `winner` (the network, in
-        /// the app's own words: `"AppLovin MAX"`, `"AdMob"`) when the app knows them. DSPs use both.
-        case outbid(winningPrice: Double? = nil, winner: String? = nil)
-    }
-
-    /// Why an ad ended before it was shown. Found out at the next call (`format`, `load`, `show`,
-    /// `reject`), which throws it; nothing is delivered through the delegate.
-    public enum InvalidationReason: Sendable, Equatable {
-        /// The ad's lifetime ran out (or the server replaced it, which it does only after that).
-        case expired
-        /// The app called `reject()`.
-        case rejected
-        /// The `VideoAds` was destroyed.
-        case destroyed
-        /// The creative failed to load, or died while the ad waited to be shown (for example the web
-        /// content process was terminated). `code` is the VAST error code the SDK fired.
-        case creativeFailed(code: Int)
-    }
-
     /// The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     /// business at `show`; nothing of that is exposed.
     public var id: String { descriptor.id }
@@ -113,9 +59,6 @@ public final class VideoAd {
     /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
     public private(set) var isCompleted = false
 
-    /// Below this share of the nominal size the ad is not shown.
-    static let minimumScale: CGFloat = 0.5
-
     /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
     /// move it.
     let descriptor: AdDescriptor
@@ -136,7 +79,7 @@ public final class VideoAd {
     /// The `VideoAds` it belongs to; told when the ad leaves it, is shown, and ends.
     private(set) weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
-    private var hostView: UIView?
+    private var hostView: AdHostView?
     /// The controller the SDK presented for a linear ad.
     private(set) var linearController: LinearViewController?
     /// The creative is on screen: the page was told to show, the beacons of that moment fired. At `show`
@@ -258,25 +201,40 @@ public final class VideoAd {
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
-    /// (the view is not on screen) and `containerTooSmall` (the ad stays ready in both). Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it.
+    /// (the view is not in a window, or it, an ancestor or its window is hidden or transparent) and
+    /// `containerTooSmall` (the ad stays ready in both). Succeeds once the ad is on screen; from then until
+    /// `didEnd` the SDK retains it. The ad follows the view when it resizes or rotates: the same variant is
+    /// fitted again within the same limits, and a view that becomes too small for it ends it with
+    /// `.interrupted`.
     public func show(in view: UIView) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
-        guard view.window != nil else {
-            Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen")
+        guard AdPlacement.canBeSeen(view) else {
+            Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
             throw VideoAdError.presenterUnavailable
         }
         let container = view
-        let host = UIView(frame: try frame(in: container.bounds, safeArea: container.safeAreaInsets))
-        host.autoresizingMask = descriptor.position == .fullscreen ? [.flexibleWidth, .flexibleHeight] : [.flexibleLeftMargin, .flexibleRightMargin, descriptor.position == .top ? .flexibleBottomMargin : .flexibleTopMargin]
-        let webView = bridge.takeWebView()
-        webView.frame = host.bounds
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        host.addSubview(webView)
-        container.addSubview(host)
-        hostView = host
+        let area = CGRect(origin: .zero, size: container.bounds.size)
+        let adFrame = try frame(in: area, safeArea: container.safeAreaInsets)
+        let host = AdHostView(frame: container.bounds, content: bridge.takeWebView())
+        host.content.frame = adFrame
+        host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
+        host.onUnfit = { [weak self] in
+            // Not inside UIKit's layout pass: ending removes the view being laid out.
+            Task { @MainActor [weak self] in
+                guard let self, !hasEnded else { return }
+                Logger.warning("ad \(id.prefix(8)): the view became too small for the ad; ended as interrupted")
+                end(.interrupted)
+            }
+        }
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
-        begin()
+        // Reserved, and the host known, before UIKit runs any of the app's code: adding a subview calls the
+        // container's overridable hooks, which may show another ad (it finds the slot taken) or destroy this
+        // ad's `VideoAds` (the end finds the host and removes it).
+        hostView = host
+        reserve()
+        container.addSubview(host)
+        presented()
     }
 
     /// Presents a linear ad full screen. From `viewController` when given, which must be on screen
@@ -293,14 +251,14 @@ public final class VideoAd {
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
-            guard viewController.view.window != nil, viewController.presentedViewController == nil,
+            guard AdPlacement.canBeSeen(viewController.view), viewController.presentedViewController == nil,
                   !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
                 throw VideoAdError.presenterUnavailable
             }
             presenter = viewController
         } else {
-            guard let top = Self.topViewController() else {
+            guard let top = Self.topViewController(), AdPlacement.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
                 throw VideoAdError.presenterUnavailable
             }
@@ -318,7 +276,8 @@ public final class VideoAd {
         // Reserved first, so a completion that runs at once finds the ad shown and the slot taken. The page is
         // shown, and the beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit
         // refused must never record an impression.
-        begin(presentNow: false)
+        reserve()
+        Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
         presenter.present(controller, animated: true) { [weak self] in
             self?.presented()
         }
@@ -398,45 +357,42 @@ public final class VideoAd {
     private func frame(in fullBounds: CGRect, safeArea: UIEdgeInsets) throws -> CGRect {
         guard descriptor.position != .fullscreen, let defaultSize = descriptor.size else { return fullBounds }
         let bounds = fullBounds.inset(by: safeArea)
-        func fit(_ candidate: Size) -> CGFloat {
-            min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
-        }
-        // How far a variant may shrink: to 50 %, or not at all when the creative is not scalable.
-        func minimumScale(_ candidate: Size) -> CGFloat { candidate.scalable ? Self.minimumScale : 1 }
+        let fit = { (candidate: Size) in AdPlacement.scale(toFit: candidate, in: bounds) }
         let unscaled = descriptor.sizes.filter { fit($0) >= 1 }
-        let usable = descriptor.sizes.filter { fit($0) >= minimumScale($0) }
+        let usable = descriptor.sizes.filter { fit($0) >= AdPlacement.smallestScale(of: $0) }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
             ?? usable.max { fit($0) < fit($1) }
             ?? descriptor.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
-        let nominal = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
-        let scale = fit(size)
-        guard scale >= minimumScale(size) else {
-            let minimum = CGSize(width: (nominal.width * minimumScale(size)).rounded(.up), height: (nominal.height * minimumScale(size)).rounded(.up))
+        guard let frame = AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea) else {
+            // The view, safe area included: a view this big holds the ad.
+            let smallest = AdPlacement.smallestScale(of: size)
+            let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
+                                 height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
             Logger.warning("ad \(id.prefix(8)): view \(Int(bounds.width))×\(Int(bounds.height)) is too small for the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
             chosenSize = nil
             throw VideoAdError.containerTooSmall(minimum: minimum)
         }
-        let scaled = CGSize(width: (nominal.width * scale).rounded(), height: (nominal.height * scale).rounded())
-        let x = (bounds.minX + (bounds.width - scaled.width) / 2).rounded()
-        let y = descriptor.position == .top ? bounds.minY : bounds.maxY - scaled.height
-        return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
+        return frame
+    }
+
+    /// The chosen variant fitted again to a view that resized or rotated: the page was told that variant,
+    /// so only its scale changes. `nil` when it no longer fits.
+    private func refit(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
+        guard descriptor.position != .fullscreen, let size = chosenSize else { return fullBounds }
+        return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea)
     }
 
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
-    /// unshown ones; `show` returning is the app's signal. The creative itself goes on screen in
-    /// `presented()`: at once for an overlay or pause ad, once UIKit confirmed it for a linear ad.
-    private func begin(presentNow: Bool = true) {
+    /// unshown ones; `show` returning is the app's signal. Before any of the app's code can run, so a show
+    /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
+    /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
+    private func reserve() {
         wasShown = true
         KontextVideo.shared.adOnScreen = self
         owner?.adDidBeginShowing(self)
-        if presentNow {
-            presented()
-        } else {
-            Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
-        }
     }
 
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
@@ -462,12 +418,18 @@ public final class VideoAd {
         // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
         // was refused, waits for the viewer's tap as long as it takes; the SDK keeps no start timer, it
         // could not tell the two apart.
+        // Every beacon may call the app's playhead provider, which may end the ad: nothing more after that.
+        guard !hasEnded else { return }
         tracker.fire("creativeView")
+        guard !hasEnded else { return }
         tracker.fire("iconView")
+        guard !hasEnded else { return }
         if descriptor.creative != .video {
             recordImpression()
         }
     }
+
+    // MARK: Time on screen
 
     /// The buyer's NonLinear `duration`, counted on active time only. `dismiss()` ends it earlier.
     private func startDurationClock() {
@@ -521,11 +483,15 @@ public final class VideoAd {
         activityObservers = []
     }
 
+    // MARK: Measurement
+
     private func recordImpression() {
-        guard !impressionRecorded else { return }
+        guard !impressionRecorded, !hasEnded else { return }
         impressionRecorded = true
         tracker.fire("impression")
         Logger.info("ad \(id.prefix(8)): impression")
+        // The beacon called the app's playhead provider, which may have ended the ad: `didEnd` stays last.
+        guard !hasEnded else { return }
         delegate?.videoAdDidRecordImpression(self)
     }
 
@@ -555,6 +521,8 @@ public final class VideoAd {
         self.meter = meter
         meter.start()
     }
+
+    // MARK: Ending
 
     /// The creative broke on screen, or never got there: `didFail` then `didEnd(.failed)`, in that order and
     /// with that reason, whatever the app does inside `didFail` (a `destroy()` there changes nothing).
@@ -630,6 +598,8 @@ public final class VideoAd {
         delegate?.videoAd(self, didEnd: reason)
     }
 
+    // MARK: Clicks
+
     /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
     /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
     private func openClick(_ url: URL, fallback: URL?) {
@@ -650,6 +620,8 @@ public final class VideoAd {
             }
         }
     }
+
+    // MARK: The page's events
 
     /// Resolves when the page reported `ad.loaded`; throws `creativeFailed` when it failed or timed out
     /// first, the invalidation when the ad ended meanwhile (rejected, destroyed). Called once, by the load
@@ -692,6 +664,9 @@ public final class VideoAd {
             // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
             let fireId = tracker.fire("click", part: area == .endCard ? "endCard" : nil)
             openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
+            // The beacon called the app's playhead provider, which may have ended the ad: the viewer's tap
+            // still opens, but `didEnd` stays the last thing the app hears.
+            guard !hasEnded else { return }
             delegate?.videoAd(self, didClick: Click(url: url, area: area))
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(Logger.describe(url))")
@@ -722,6 +697,8 @@ public final class VideoAd {
             }
         case .skip(let playhead):
             tracker.adPlayhead = playhead
+            // Checkpoints the video passed before the skip that the page never reported, then the skip.
+            tracker.fireProgress(upTo: playhead)
             tracker.fire("skip")
             end(.skipped)
         case .video(let event, let playhead):
@@ -755,6 +732,8 @@ public final class VideoAd {
             Logger.info("ad \(id.prefix(8)): complete")
         }
     }
+
+    // MARK: Ending before show
 
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
     /// a `load()` in flight throws. For an ad on screen nothing happens; `destroy()` ends that one with

@@ -104,6 +104,14 @@ final class RecordingStoreProduct: StoreProductManaging {
 
 struct TestFailure: Error {}
 
+/// Where an overlay or pause ad's creative sits in `player`, in its coordinates: the host covers the
+/// whole player and holds the creative at its place.
+@MainActor
+func adFrame(in player: UIView) -> CGRect? {
+    guard let host = player.subviews.last as? AdHostView else { return nil }
+    return host.convert(host.content.frame, to: player)
+}
+
 /// A window the tests can put views into. Made key and visible so WebKit treats the views as on screen.
 @MainActor
 final class TestWindow {
