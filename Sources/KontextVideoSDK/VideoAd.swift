@@ -410,13 +410,18 @@ public final class VideoAd {
     /// Runs `work` with the content playhead read once, before it. The app's playhead provider is the one
     /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
     /// every beacon inside uses that value, so no app code runs in the middle of a state change. Nested calls
-    /// share the outer read; nothing is read when no URL asks for it.
+    /// share the outer read; nothing is read when no URL asks for it (`urls`: those the operation brings,
+    /// a click's destinations). While the provider runs, the last value is the frozen one: an operation the
+    /// provider starts reads nothing more, so a provider that ends the ad cannot recurse.
     @discardableResult
-    func withContentPlayhead<T>(_ work: () throws -> T) rethrows -> T {
-        guard tracker.frozenContentPlayhead == nil, tracker.readsContentPlayhead else { return try work() }
-        let playhead = tracker.contentPlayhead()
-        tracker.frozenContentPlayhead = playhead
+    func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
+        let asked = tracker.readsContentPlayhead || urls.contains { Tracker.asksForContentPlayhead($0.absoluteString) }
+        guard tracker.frozenContentPlayhead == nil, asked else { return try work() }
+        tracker.frozenContentPlayhead = tracker.lastContentPlayhead
         defer { tracker.frozenContentPlayhead = nil }
+        let playhead = tracker.contentPlayhead()
+        tracker.lastContentPlayhead = playhead
+        tracker.frozenContentPlayhead = playhead
         return try work()
     }
 
@@ -625,7 +630,10 @@ public final class VideoAd {
 
     /// What the page reports, mapped to the beacons and the delegate.
     private func handle(_ event: FrameEvent) {
-        withContentPlayhead { handleNow(event) }
+        // A click brings its own URLs, which may ask for the playhead though no tracking entry does.
+        var urls: [URL] = []
+        if case .click(let url, let fallbackUrl, _) = event { urls = [url] + (fallbackUrl.map { [$0] } ?? []) }
+        withContentPlayhead(alsoFor: urls) { handleNow(event) }
     }
 
     private func handleNow(_ event: FrameEvent) {

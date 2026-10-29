@@ -99,6 +99,42 @@ struct VideoAdReentrancyTests {
         #expect(opened.isEmpty, "a click on an ad the app destroyed first opens nothing")
     }
 
+    @Test func aProviderThatEndsTheAdOnEveryReadIsReadOnce() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o11r"))
+        try ad.show(in: harness.player.view)
+        var reads = 0
+        ads.playheadProvider = { [weak ad] in
+            reads += 1
+            if reads < 20 { try? ad?.dismiss() }   // bounded only so a regression fails instead of overflowing the stack
+            return 0
+        }
+        try ad.dismiss()
+        #expect(reads == 1, "the provider's own dismiss reads nothing more: \(reads) reads")
+        #expect(delegate.events == ["impression", "end:dismissed"], "ended once: \(delegate.events)")
+    }
+
+    @Test func aClickWhoseURLsAloneAskForThePlayheadReadsItOnce() async throws {
+        let tracking = Fixtures.tracking(video: false, adId: "p11u").map { entry -> [String: Any] in
+            var entry = entry
+            entry["url"] = (entry["url"] as? String ?? "").replacingOccurrences(of: "&cph=[MEDIAPLAYHEAD]", with: "")
+            return entry
+        }
+        let (ad, _, ads) = try await makeAd(Fixtures.ad(id: "p11u", extra: ["tracking": tracking]))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(false) }   // the first fails: the fallback opens too
+        try ad.show(in: harness.player.view)
+        var reads = 0
+        ads.playheadProvider = {
+            reads += 1
+            return TimeInterval(reads)   // advances on every read
+        }
+        ad.bridge.noteTouch()
+        send(ad, "ad.click", ["url": "https://brand.test/a?cph=[MEDIAPLAYHEAD]", "fallbackUrl": "https://brand.test/b?cph=[MEDIAPLAYHEAD]"])
+        #expect(await waitUntil { opened.count == 2 })
+        let playheads = opened.compactMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "cph" }?.value }
+        #expect(reads == 1 && playheads == ["00:00:01.000", "00:00:01.000"], "one read for the click and its fallback: \(reads), \(playheads)")
+    }
+
     // MARK: Unparking
 
     @Test func aDestroyFromTheParkingWindowsHookWhileShowingEndsTheAdWithNothingShown() async throws {

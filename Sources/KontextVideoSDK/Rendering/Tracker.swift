@@ -16,6 +16,8 @@ final class Tracker {
     /// The content playhead read before the operation now running; every beacon of it uses this value and
     /// calls no app code. `nil` outside an operation: a beacon then reads `contentPlayhead` itself.
     var frozenContentPlayhead: TimeInterval?
+    /// The last value the app's provider gave; what an operation started from inside the provider uses.
+    var lastContentPlayhead: TimeInterval = 0
     /// Whether any URL asks for the content playhead; when none does, nobody reads it.
     let readsContentPlayhead: Bool
 
