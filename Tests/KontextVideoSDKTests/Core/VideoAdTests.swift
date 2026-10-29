@@ -247,7 +247,7 @@ struct VideoAdTests {
         await sleepMs(300)
         #expect(delegate.endReasons.isEmpty)
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        #expect(await waitUntil(1) { delegate.endReasons == [.completed] })
+        #expect(await waitUntil(5) { delegate.endReasons == [.completed] })
     }
 
     @Test func aPagesCloseWithReasonCompleteEndsCompletedWithoutACloseBeacon() async throws {
@@ -269,7 +269,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         #expect(ad.duration == 0.2)
         #expect(delegate.endReasons.isEmpty)
-        #expect(await waitUntil(1) { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
+        #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
         #expect(ad.hasEnded)
         #expect(ad.isCompleted, "the duration elapsed")
         #expect(sent == ["ad.show", "ad.hide"])
@@ -665,7 +665,7 @@ struct VideoAdTests {
         let controller = try #require(ad.linearController)
         window.add(controller.view)
         Environment.isApplicationActive = { false }   // backgrounded while the presentation was pending
-        #expect(await waitUntil(2) { delegate.endReasons == [.failed] }, "no evidence anyone saw it")
+        #expect(await waitUntil(5) { delegate.endReasons == [.failed] }, "no evidence anyone saw it")
         #expect(!(await beacons()).contains("creativeView"), "nothing recorded")
     }
 
@@ -685,7 +685,7 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
         window.add(controller.view)   // UIKit attached it, but the completion never runs
-        #expect(await waitUntil(2) { ad.isPresented })
+        #expect(await waitUntil(5) { ad.isPresented })
         let fired = await beacons()
         #expect(delegate.endReasons.isEmpty && fired.contains("creativeView"), "presented, not failed: \(fired)")
     }

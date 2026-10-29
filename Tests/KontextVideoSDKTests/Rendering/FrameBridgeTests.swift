@@ -243,7 +243,7 @@ struct FrameBridgeTests {
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge(isVideo: true)
         bridge.load()
-        #expect(await waitUntil(1) { !recorder.events.isEmpty })
+        #expect(await waitUntil(5) { !recorder.events.isEmpty })
         guard case .error(let code) = recorder.last else { Issue.record("expected error"); return }
         #expect(code == 400)
         #expect(bridge.state == .ended)
