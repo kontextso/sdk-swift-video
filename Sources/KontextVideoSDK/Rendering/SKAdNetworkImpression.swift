@@ -98,9 +98,14 @@ final class SKAdNetworkImpression {
         }
     }
 
+    /// Logged in full on the device; the debug event and the fault report carry the error's domain and code
+    /// only, since its text can carry anything.
     private func report(_ step: String, _ error: Error) {
         Logger.warning("ad \(adId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
-        DebugReporter.shared.event("ad.skanFailed", adId: adId, level: .warning, state: ["step": .string(step), "error": .string("\(error)")])
+        let underlying = ErrorReporter.Underlying(error)
+        DebugReporter.shared.event("ad.skanFailed", adId: adId, level: .warning,
+                                   state: ["step": .string(step), "domain": .string(underlying.domain), "code": .number(Double(underlying.code))])
+        ErrorReporter.shared.report(.skanFailed, stage: .attribution, adId: adId, underlying: underlying, detail: step)
     }
 }
 

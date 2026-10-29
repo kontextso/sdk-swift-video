@@ -24,9 +24,25 @@ final class FrameBridge: NSObject {
     /// not links to anywhere. iOS refuses the latter itself; the SDK's policy says so.
     static let refusedSchemes: Set<String> = ["intent", "javascript", "data", "file", "blob", "about"]
 
+    /// Why the bridge failed: several causes fire the same VAST code, and the error report keeps them apart.
+    enum FailureCause: Sendable {
+        /// The page reported `ad.error`.
+        case page
+        /// No `ad.loaded` within `loadTimeout` of active time.
+        case loadTimeout
+        /// The page itself could not be loaded (network, an error status, a refused response).
+        case loadFailed
+        /// WebKit's content process for the page ended; the callback does not say why.
+        case processTerminated
+    }
+
     let adId: String
     let webView: WKWebView
     private(set) var state: State = .loading
+    /// Set as the bridge fails, before the `.error` event goes out.
+    private(set) var failureCause: FailureCause?
+    /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
+    private var reportedProtocolViolation = false
     var onEvent: ((FrameEvent) -> Void)?
 
     private let url: URL
@@ -116,7 +132,7 @@ final class FrameBridge: NSObject {
             }
             guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
-            fail(.error(code: loadErrorCode))
+            fail(.error(code: loadErrorCode), cause: .loadTimeout)
         }
     }
 
@@ -242,6 +258,7 @@ final class FrameBridge: NSObject {
               body["adId"] as? String == adId,
               let type = body["type"] as? String else {
             Logger.debug("frame \(adId.prefix(8)): malformed message dropped")
+            reportProtocolViolation("envelope")
             return
         }
         Logger.debug("frame \(adId.prefix(8)): ← \(type)")
@@ -287,6 +304,7 @@ final class FrameBridge: NSObject {
             // A checkpoint in whole milliseconds within a day; anything else would fire every checkpoint early.
             guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, raw == raw.rounded(), (0...86_400_000).contains(raw) else {
                 Logger.debug("frame \(adId.prefix(8)): video.progress with a malformed offset dropped")
+                reportProtocolViolation("progress.offset")
                 return
             }
             onEvent?(.progress(offset: Int(raw), playhead: playhead))
@@ -295,7 +313,7 @@ final class FrameBridge: NSObject {
             onEvent?(.video(event, playhead: playhead))
         case "ad.error":
             guard state == .loading || state == .loaded || state == .shown else { return }
-            fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)))
+            fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)), cause: .page)
         default:
             Logger.debug("frame \(adId.prefix(8)): unknown message \(type) dropped")
         }
@@ -373,10 +391,21 @@ final class FrameBridge: NSObject {
     }
 
     /// Terminal with an error; after the end nothing is reported any more.
-    private func fail(_ event: FrameEvent) {
+    private func fail(_ event: FrameEvent, cause: FailureCause) {
         guard state != .ended else { return }
+        failureCause = cause
         end()
         onEvent?(event)
+    }
+
+    /// The page broke the message contract: a fault of the frame page, reported once per ad. Only a message
+    /// from the ad's own page, before the end, can be one. A message from another frame, one after the end, or
+    /// one of an unknown type is not: creatives post messages of their own, late messages are expected, and a
+    /// newer page may send types this SDK does not know yet.
+    private func reportProtocolViolation(_ detail: String) {
+        guard !reportedProtocolViolation else { return }
+        reportedProtocolViolation = true
+        ErrorReporter.shared.report(.protocolViolation, stage: state == .shown ? .playback : .load, adId: adId, detail: detail)
     }
 
     /// Terminal: the page is stopped and nothing is accepted or sent any more.
@@ -439,12 +468,12 @@ extension FrameBridge: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard state == .loading else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
-        fail(.error(code: loadErrorCode))
+        fail(.error(code: loadErrorCode), cause: .loadFailed)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Logger.warning("frame \(adId.prefix(8)): web content process terminated")
-        fail(.error(code: state == .loading ? loadErrorCode : 405))
+        fail(.error(code: state == .loading ? loadErrorCode : 405), cause: .processTerminated)
     }
 }
 

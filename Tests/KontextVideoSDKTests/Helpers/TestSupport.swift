@@ -202,6 +202,7 @@ struct SDKHarness {
         server.on("/v2/config", .json(Fixtures.initEnabled()))
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
+        server.on("/v2/error", .empty())
         KontextVideo.configRetryDelay = 0.01
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
         Environment.isApplicationActive = { true }
@@ -257,6 +258,9 @@ struct SDKHarness {
         VideoAd.dismissalTimeout = 0.05
         DebugReporter.interval = 0.1
         DebugReporter.shared.isEnabled = false
+        ErrorReporter.interval = 0.01
+        ErrorReporter.retryDelay = 30
+        ErrorReporter.maxRetryDelay = 300
         SKAdNetworkImpression.queue = nil
     }
 }

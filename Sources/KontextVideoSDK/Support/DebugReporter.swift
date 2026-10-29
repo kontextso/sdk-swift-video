@@ -78,12 +78,37 @@ final class DebugReporter {
     private var buffer: [Event] = []
     private var flushTask: Task<Void, Never>?
 
+    /// One event in the short history every error report carries: what the SDK did just before.
+    struct Moment: Encodable, Sendable {
+        /// Seconds before the error, so negative.
+        let at: Double
+        let name: String
+        let adId: String?
+        let state: [String: Value]?
+    }
+
+    /// The last events, kept whether or not the server asked for the debug log: the history of an error report.
+    static let historyLength = 30
+    private var history: [(time: TimeInterval, name: String, adId: String?, state: [String: Value]?)] = []
+
+    /// Tests only, with the shared instance reset.
+    func clearHistory() {
+        history.removeAll()
+    }
+
+    /// The recent events, each timed relative to `now`.
+    func recentHistory(before now: TimeInterval = Environment.now()) -> [Moment] {
+        history.map { Moment(at: (($0.time - now) * 1000).rounded() / 1000, name: $0.name, adId: $0.adId, state: $0.state) }
+    }
+
     private init() {}
 
     /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
     /// device console, in the same shape, whether or not the server asked for it.
     func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: Value]? = nil) {
         Logger.debug(Self.line(name, adId: adId, state: state))
+        history.append((Environment.now(), name, adId, state))
+        if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
         guard isEnabled else { return }
         buffer.append(Event(createdAt: Self.timestamp.string(from: Date()), name: name, adId: adId, level: level, state: state))
         if buffer.count > Self.maxBuffered { buffer.removeFirst(buffer.count - Self.maxBuffered) }

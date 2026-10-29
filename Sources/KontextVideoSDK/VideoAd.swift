@@ -322,6 +322,8 @@ public final class VideoAd {
                 presented()
             } else {
                 Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
+                ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                            recovery: .adEndedFailed)
                 fail(.presenterUnavailable)
             }
         }
@@ -568,6 +570,8 @@ public final class VideoAd {
                         // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
                         Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
                         DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
+                        ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                                    recovery: .didEndDelivered)
                     }
                     finish(reason)
                 }
@@ -647,6 +651,7 @@ public final class VideoAd {
             loadContinuation = nil
         case .error(let code):
             tracker.fire("error", errorCode: code)
+            reportCreativeError(vastCode: code)
             if let continuation = loadContinuation {
                 loadContinuation = nil
                 Logger.warning("ad \(id.prefix(8)): creative failed to load, VAST error \(code)")
@@ -734,6 +739,20 @@ public final class VideoAd {
     }
 
     // MARK: Ending before show
+
+    /// The creative's error as a fault report. The bridge says why it failed: the page, a load timeout, a page
+    /// that could not load, or a terminated web process all fire the same VAST codes.
+    private func reportCreativeError(vastCode: Int) {
+        let code: ErrorReporter.Code
+        switch loadedBridge?.failureCause ?? .page {
+        case .page: code = .creativeFailed
+        case .loadTimeout: code = .loadTimeout
+        case .loadFailed: code = .frameLoadFailed
+        case .processTerminated: code = .processTerminated
+        }
+        ErrorReporter.shared.report(code, stage: wasShown ? .playback : .load, sessionId: owner?.sessionId, adId: id, vastCode: vastCode,
+                                    recovery: wasShown ? .adEndedFailed : .adDroppedBeforeShow)
+    }
 
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
     /// a `load()` in flight throws. For an ad on screen nothing happens; `destroy()` ends that one with

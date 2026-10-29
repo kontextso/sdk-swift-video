@@ -85,6 +85,11 @@ public final class KontextVideo {
             // A configuration mistake: every request would fail. Stops a debug build here, not at a 400 later.
             Environment.assertionFailure("KontextVideo.Configuration: \(configuration.problems.joined(separator: ", "))")
             Logger.error("configuration: \(configuration.problems.joined(separator: ", ")); no ads will load")
+            // An unusable configuration still tries `/config`; a server that answers wants to hear about it.
+            if configuration.publisherToken.isEmpty { ErrorReporter.shared.report(.emptyToken, stage: .integration) }
+            if configuration.problems.contains(where: { $0.hasPrefix("adServerURL") }) {
+                ErrorReporter.shared.report(.badServerURL, stage: .integration)
+            }
         }
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
@@ -140,6 +145,8 @@ public final class KontextVideo {
         guard !isInitialized else { return true }
         Environment.assertionFailure("KontextVideo: call initialize(with:) before \(call)")
         Logger.error("\(call) called before initialize(with:); no ads will load")
+        // Kept in memory: it leaves if the app initializes later and `/config` turns the reports on.
+        ErrorReporter.shared.report(.notInitialized, stage: .integration, detail: call)
         return false
     }
 
@@ -165,6 +172,8 @@ public final class KontextVideo {
         adOnScreen = nil
         reportDebug = false
         DebugReporter.shared.isEnabled = false
+        DebugReporter.shared.clearHistory()
+        ErrorReporter.shared.resetForTesting()
         Logger.level = .warning
     }
 
@@ -193,9 +202,10 @@ public final class KontextVideo {
             // Cancelled meanwhile (`resetForTesting()`): the answer belongs to a state that was reset.
             guard !Task.isCancelled else { return }
             switch response {
-            case .enabled(let reportDebug):
+            case .enabled(let reportDebug, let reportErrors):
                 self.reportDebug = reportDebug
                 DebugReporter.shared.isEnabled = reportDebug
+                ErrorReporter.shared.configure(enabled: reportErrors)
                 DebugReporter.shared.event("config.response", state: ["enabled": true])
                 state = .enabled
                 Logger.info("Enabled")
@@ -205,12 +215,17 @@ public final class KontextVideo {
                 Task { _ = await NetworkInfo.current() }
             case .disabled(let reason):
                 state = .disabled(reason: reason)
+                ErrorReporter.shared.configure(enabled: false)
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {
             guard !Task.isCancelled else { return }
             state = .failed
             Logger.error("/config failed, no ads until it succeeds: \(error)")
+            // Waits in memory: it leaves once a later `/config` turns the reports on.
+            let fields = ErrorReporter.fields(for: error)
+            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, httpStatus: fields.httpStatus,
+                                        underlying: fields.underlying, detail: fields.detail)
         }
     }
 }

@@ -259,7 +259,7 @@ struct KontextVideoTests {
         KontextVideo.configRetryDelay = 0.001
         let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
         let response = try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL))
-        guard case .enabled(let reportDebug) = response else { Issue.record("expected enabled"); return }
+        guard case .enabled(let reportDebug, _) = response else { Issue.record("expected enabled"); return }
         #expect(reportDebug)
         let bodies = harness.server.requests(to: "/v2/config").compactMap(\.body)
         #expect(bodies.count == 2)

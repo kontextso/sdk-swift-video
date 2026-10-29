@@ -118,8 +118,10 @@ enum Fixtures {
         ["format": ad["format"] as? String ?? "pause", "ads": [ad]]
     }
 
-    static func initEnabled(reportDebug: Bool = false) -> [String: Any] {
-        ["enabled": true, "reportDebug": reportDebug]
+    static func initEnabled(reportDebug: Bool = false, reportErrors: Bool? = nil) -> [String: Any] {
+        var body: [String: Any] = ["enabled": true, "reportDebug": reportDebug]
+        if let reportErrors { body["reportErrors"] = reportErrors }
+        return body
     }
 
     static func disabled(_ reason: String = "publisherDisabled") -> [String: Any] {

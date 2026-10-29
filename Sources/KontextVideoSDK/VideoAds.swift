@@ -21,6 +21,9 @@ public final class VideoAds {
 
     /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
     let sessionId = UUID().uuidString.lowercased()
+    /// The id of the latest ads request this object sent, `nil` before the first. Quote it to Kontext when an
+    /// ad or a no-fill looks wrong: the server finds the request by it.
+    public private(set) var lastRequestId: String?
     /// The unshown ads, the spent ids and the ad on screen; a reference so `deinit` can reach it.
     private let state = State()
     /// The request in flight: every `format(_:)` meanwhile waits for it instead of sending another.
@@ -41,6 +44,7 @@ public final class VideoAds {
         if !missing.isEmpty {
             Environment.assertionFailure("KontextVideo.Content: \(missing.joined(separator: ", "))")
             Logger.error("content \(content.id): \(missing.joined(separator: ", ")); the server will refuse its requests")
+            ErrorReporter.shared.report(.badContent, stage: .integration, sessionId: sessionId, detail: missing.joined(separator: ","))
         }
         if !content.leftOut.isEmpty {
             Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
@@ -95,6 +99,11 @@ public final class VideoAds {
         throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
     }
 
+    /// Whether an unshown ad is held: what a failed request leaves the app with.
+    private var holdsAds: Bool {
+        !state.ads.isEmpty
+    }
+
     /// `destroyed` after `destroy()`; `disabled` once any video's response switched the SDK off meanwhile.
     private func checkStillUsable() throws {
         guard !isDestroyed else { throw VideoAdError.destroyed }
@@ -145,6 +154,7 @@ public final class VideoAds {
                                              player: .make(playhead: playhead), sessionId: sessionId, held: held)
             // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
             try owner().checkStillUsable()
+            try owner().lastRequestId = body.requestId
             Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
             DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
 
@@ -153,7 +163,13 @@ public final class VideoAds {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
             } catch {
                 try owner().checkStillUsable()
-                Logger.error("\(content.id): request failed, \(error)")
+                Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
+                // Once per request, here in the request every caller shares, not once per waiting caller.
+                let fields = ErrorReporter.fields(for: error)
+                let decoding = (error as? APIError)?.isDecoding ?? false
+                ErrorReporter.shared.report(decoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
+                                            sessionId: sessionId, httpStatus: fields.httpStatus, underlying: fields.underlying,
+                                            detail: fields.detail, recovery: try owner().holdsAds ? .heldAdsKept : .noAd)
                 throw VideoAdError.request(error)
             }
             return try owner().receive(response)
