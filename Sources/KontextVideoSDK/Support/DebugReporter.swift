@@ -100,16 +100,15 @@ final class DebugReporter {
     static let historyKeys: Set<String> = ["held", "playhead", "format", "filled", "reason", "enabled", "code", "durationMs", "step", "domain"]
 
     /// The recent events, each timed relative to `now`, reduced for an error report: listed state keys only,
-    /// strings and ids capped at `ErrorReporter.maxFieldLength`.
+    /// strings and ids capped at `ErrorReporter.maxFieldLength` UTF-8 bytes.
     func recentHistory(before now: TimeInterval = Environment.now()) -> [Moment] {
-        let cap = ErrorReporter.maxFieldLength
         return history.map { entry in
             let state = entry.state?.filter { Self.historyKeys.contains($0.key) }.mapValues { value -> Value in
-                if case .string(let text) = value { return .string(String(text.prefix(cap))) }
+                if case .string(let text) = value { return .string(ErrorReporter.capped(text)) }
                 return value
             }
-            return Moment(at: ((entry.time - now) * 1000).rounded() / 1000, name: String(entry.name.prefix(cap)),
-                          adId: entry.adId.map { String($0.prefix(cap)) }, state: state?.isEmpty == true ? nil : state)
+            return Moment(at: ((entry.time - now) * 1000).rounded() / 1000, name: ErrorReporter.capped(entry.name),
+                          adId: entry.adId.map(ErrorReporter.capped), state: state?.isEmpty == true ? nil : state)
         }
     }
 

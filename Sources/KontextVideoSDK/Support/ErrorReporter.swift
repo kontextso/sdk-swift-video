@@ -62,7 +62,7 @@ final class ErrorReporter {
 
         init(_ error: Error) {
             let error = error as NSError
-            domain = String(error.domain.prefix(ErrorReporter.maxFieldLength))
+            domain = ErrorReporter.capped(error.domain)
             code = error.code
         }
     }
@@ -128,9 +128,23 @@ final class ErrorReporter {
     /// memory or upload size.
     static let maxBufferedBytes = 256 * 1024
     static let maxBatchBytes = 64 * 1024
-    /// Characters kept of every string field: ids, `detail`, the underlying error's domain, history names
-    /// and values.
+    /// UTF-8 bytes kept of every string field: ids, `detail`, the underlying error's domain, history names
+    /// and values. Bytes, not characters: one character can carry any number of combining marks.
     nonisolated static let maxFieldLength = 64
+
+    /// `text` cut to `maxFieldLength` UTF-8 bytes, at a Unicode scalar boundary so it stays valid text.
+    nonisolated static func capped(_ text: String) -> String {
+        guard text.utf8.count > maxFieldLength else { return text }
+        var scalars = String.UnicodeScalarView()
+        var bytes = 0
+        for scalar in text.unicodeScalars {
+            let size = String(scalar).utf8.count
+            guard bytes + size <= maxFieldLength else { break }
+            scalars.append(scalar)
+            bytes += size
+        }
+        return String(scalars)
+    }
 
     private(set) var mode = Mode.pending
     private(set) var buffer: [Report] = []
@@ -179,7 +193,7 @@ final class ErrorReporter {
         recovery: Recovery? = nil
     ) {
         guard mode != .off else { return }
-        let cap = { (text: String?) in text.map { String($0.prefix(Self.maxFieldLength)) } }
+        let cap = { (text: String?) in text.map(Self.capped) }
         let report = Report(
             id: UUID().uuidString.lowercased(),
             createdAt: Self.timestamp.string(from: Date()),
@@ -197,6 +211,12 @@ final class ErrorReporter {
         )
         Logger.debug("error report \(code.rawValue)\(adId.map { " ad=\($0.prefix(8))" } ?? "")")
         let size = (try? JSONEncoder().encode(report).count) ?? 0
+        // Every field is capped, so this cannot happen; if it ever does, the report goes rather than the budgets.
+        guard size <= Self.maxBatchBytes else {
+            Logger.debug("error report \(code.rawValue) of \(size) bytes dropped, over the batch budget")
+            dropped += 1
+            return
+        }
         buffer.append(report)
         sizes.append(size)
         bufferedBytes += size
