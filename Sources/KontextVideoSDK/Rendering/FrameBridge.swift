@@ -283,8 +283,13 @@ final class FrameBridge: NSObject {
             guard state == .shown else { return }
             onEvent?(.complete(playhead: playhead))
         case "video.progress":
-            guard state == .shown, let offset = (body["offset"] as? NSNumber)?.intValue else { return }
-            onEvent?(.progress(offset: offset, playhead: playhead))
+            guard state == .shown else { return }
+            // A checkpoint in whole milliseconds within a day; anything else would fire every checkpoint early.
+            guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, raw == raw.rounded(), (0...86_400_000).contains(raw) else {
+                Logger.debug("frame \(adId.prefix(8)): video.progress with a malformed offset dropped")
+                return
+            }
+            onEvent?(.progress(offset: Int(raw), playhead: playhead))
         case let type where type.hasPrefix("video."):
             guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))) else { return }
             onEvent?(.video(event, playhead: playhead))
@@ -298,13 +303,13 @@ final class FrameBridge: NSObject {
 
     /// The viewer touched the WebView; a URL may be opened for `touchWindow` seconds.
     func noteTouch() {
-        lastTouchAt = ProcessInfo.processInfo.systemUptime
+        lastTouchAt = Environment.now()
     }
 
     /// One tap opens one URL: the touch is spent by the first click, open or navigation it authorized, so a
     /// page that reports a tap and also navigates on it does not open twice.
     private func consumeTouch() -> Bool {
-        guard ProcessInfo.processInfo.systemUptime - lastTouchAt <= Self.touchWindow else { return false }
+        guard Environment.now() - lastTouchAt <= Self.touchWindow else { return false }
         lastTouchAt = -.infinity
         return true
     }
@@ -318,14 +323,16 @@ final class FrameBridge: NSObject {
     /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
     /// explicit 443 in the URL and the origin's 0 are the same origin.
     func isFrameOrigin(_ sender: Sender) -> Bool {
-        guard sender.scheme == url.scheme, sender.host == url.host else { return false }
+        guard sender.scheme.lowercased() == url.scheme?.lowercased(), sender.host.lowercased() == url.host?.lowercased() else { return false }
         let expected = Self.effectivePort(of: url)
         return sender.port == expected || (sender.port == 0 && expected == Self.defaultPort(for: url.scheme))
     }
 
-    /// Whether `target` is in the page's origin, with the default port and an explicit one the same.
+    /// Whether `target` is in the page's origin, with the default port and an explicit one the same. Scheme
+    /// and host compare without case, as browsers canonicalize them; Foundation keeps the case as written.
     func isSameOrigin(_ target: URL) -> Bool {
-        target.scheme == url.scheme && target.host == url.host && Self.effectivePort(of: target) == Self.effectivePort(of: url)
+        target.scheme?.lowercased() == url.scheme?.lowercased() && target.host?.lowercased() == url.host?.lowercased()
+            && Self.effectivePort(of: target) == Self.effectivePort(of: url)
     }
 
     private static func effectivePort(of url: URL) -> Int {
@@ -333,7 +340,34 @@ final class FrameBridge: NSObject {
     }
 
     private static func defaultPort(for scheme: String?) -> Int {
-        scheme == "https" ? 443 : (scheme == "http" ? 80 : 0)
+        switch scheme?.lowercased() {
+        case "https": return 443
+        case "http": return 80
+        default: return 0
+        }
+    }
+
+    /// What a top-level navigation may do. While the page loads: its own origin (redirects included) and
+    /// `about:blank`; anything else is a click the page could not report. Once it is ready the document
+    /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
+    /// the same origin, is refused, or the creative and its close control would vanish under an ad still
+    /// shown. A subframe (the creative's own iframe) navigates freely.
+    enum NavigationDecision: Equatable {
+        case allow, cancel, external
+    }
+
+    func navigationDecision(to target: URL, isMainFrame: Bool, current: URL?) -> NavigationDecision {
+        guard isMainFrame else { return .allow }
+        let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
+        if state == .loading { return ours ? .allow : .external }
+        if let current, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
+        return ours ? .cancel : .external
+    }
+
+    private static func withoutFragment(_ url: URL) -> String {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.fragment = nil
+        return components?.string ?? url.absoluteString
     }
 
     /// Terminal with an error; after the end nothing is reported any more.
@@ -382,13 +416,13 @@ extension FrameBridge: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
-        if navigationAction.targetFrame?.isMainFrame == false {
+        switch navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false, current: webView.url) {
+        case .allow:
             decisionHandler(.allow)
-        } else if isSameOrigin(target) {
-            decisionHandler(.allow)
-        } else if target.absoluteString == "about:blank" {
-            decisionHandler(.allow)
-        } else {
+        case .cancel:
+            Logger.warning("frame \(adId.prefix(8)): the page tried to replace itself after it was ready; refused")
+            decisionHandler(.cancel)
+        case .external:
             decisionHandler(.cancel)
             externalNavigation(to: target)
         }

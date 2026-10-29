@@ -587,6 +587,18 @@ struct VideoAdTests {
         #expect(harness.server.beacons.filter { $0.event == "progress" }.count == 1, "a late report of the same checkpoint fires nothing")
     }
 
+    @Test func aMalformedProgressOffsetFiresNoCheckpointEarly() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "v9c"))
+        try presentLinear(ad)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.progress", ["offset": 1e300, "playhead": 0])
+        _ = await beacons()
+        #expect(harness.server.beacons.filter { $0.event == "progress" }.isEmpty, "the 5 s checkpoint does not fire at 0")
+        send(ad, "video.progress", ["offset": 5000, "playhead": 5000])
+        _ = await beacons()
+        #expect(harness.server.beacons.filter { $0.event == "progress" }.map { $0.query["offset"] } == ["5000"], "valid checkpoints still fire")
+    }
+
     @Test func videoEventsFireTheirBeaconsWithTheAdPlayhead() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i4"))
         try presentLinear(ad)

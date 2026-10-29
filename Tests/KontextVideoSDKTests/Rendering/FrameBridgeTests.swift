@@ -349,6 +349,92 @@ struct FrameBridgeTests {
         #expect(!local.isSameOrigin(URL(string: "http://localhost/x")!))
     }
 
+    @Test func aProcessTerminationWhileLiveFailsTheAd() {
+        let (loading, loadingEvents) = makeBridge(isVideo: true)
+        loading.load()
+        loading.webViewWebContentProcessDidTerminate(loading.webView)
+        guard case .error(let code)? = loadingEvents.last else { Issue.record("expected an error"); return }
+        #expect(code == 400 && loading.state == .ended, "before it loaded: the load error code")
+        let (shownBridge, shownEvents) = makeBridge()
+        shown(shownBridge)
+        shownBridge.webViewWebContentProcessDidTerminate(shownBridge.webView)
+        guard case .error(let late)? = shownEvents.last else { Issue.record("expected an error"); return }
+        #expect(late == 405 && shownBridge.state == .ended, "on screen: 405")
+    }
+
+    @Test func aTouchTooLongAgoAuthorizesNothing() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        let before = recorder.events.count
+        bridge.noteTouch()
+        advanceClock(by: FrameBridge.touchWindow + 0.5)
+        bridge.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
+        bridge.externalNavigation(to: URL(string: "https://brand.test")!)
+        #expect(recorder.events.count == before, "an expired touch opens nothing")
+        bridge.noteTouch()
+        advanceClock(by: FrameBridge.touchWindow - 0.1)
+        bridge.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
+        #expect(recorder.events.count == before + 1, "a touch within the window still does")
+    }
+
+    @Test func aMalformedProgressOffsetIsDropped() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        let before = recorder.events.count
+        for offset in [1e300, -5, 2.5, Double.infinity, 86_400_001] as [Double] {
+            bridge.receive(message("video.progress", ["offset": offset, "playhead": 0]), from: main)
+        }
+        bridge.receive(message("video.progress", ["offset": "5000", "playhead": 0]), from: main)
+        #expect(recorder.events.count == before, "no progress event from a malformed offset")
+        bridge.receive(message("video.progress", ["offset": 5000, "playhead": 5000]), from: main)
+        guard case .progress(let offset, _)? = recorder.last else { Issue.record("expected progress"); return }
+        #expect(offset == 5000, "a valid checkpoint still works")
+    }
+
+    @Test func originsCompareWithoutCase() {
+        let (bridge, _) = makeBridge(url: URL(string: "HTTPS://Server.Kontext.SO/frame/ad-1")!)
+        #expect(bridge.isFrameOrigin(main), "WebKit reports the canonical lowercase origin")
+        #expect(bridge.isSameOrigin(URL(string: "https://server.kontext.so:443/next")!))
+        let (local, _) = makeBridge(url: URL(string: "HTTP://LOCALHOST:5175/frame/ad-1")!)
+        #expect(local.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
+        #expect(local.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        let (plain, _) = makeBridge(url: URL(string: "HTTP://LOCALHOST/frame/ad-1")!)
+        #expect(plain.isSameOrigin(URL(string: "http://localhost:80/x")!), "the default port, whatever the scheme's case")
+        #expect(!bridge.isSameOrigin(URL(string: "https://other.kontext.so/x")!) && !bridge.isSameOrigin(URL(string: "http://server.kontext.so/x")!), "a different host or scheme is still another origin")
+        #expect(!bridge.isSameOrigin(URL(string: "https://server.kontext.so:8443/x")!), "and a different port")
+    }
+
+    @Test func navigationsBeforeAndAfterThePageIsReady() {
+        let (bridge, _) = makeBridge()
+        let page = URL(string: "https://server.kontext.so/frame/ad-1")!
+        let decide = { (target: String, mainFrame: Bool) in bridge.navigationDecision(to: URL(string: target)!, isMainFrame: mainFrame, current: page) }
+        // Loading: its own origin (redirects) and about:blank go through; elsewhere is a click.
+        #expect(decide("https://server.kontext.so/frame/ad-1/v2", true) == .allow)
+        #expect(decide("about:blank", true) == .allow)
+        #expect(decide("https://brand.test/", true) == .external)
+        shown(bridge)
+        // Ready: the document stays.
+        #expect(decide("https://server.kontext.so/frame/ad-1#endcard", true) == .allow, "a fragment, within the document")
+        #expect(decide("https://server.kontext.so/frame/other", true) == .cancel, "a same-origin page would replace the creative")
+        #expect(decide("about:blank", true) == .cancel, "and so would a blank page")
+        #expect(decide("https://brand.test/", true) == .external)
+        #expect(decide("https://anything.test/creative", false) == .allow, "the creative's own iframe navigates freely")
+    }
+
+    @Test func aParkedBridgeReleasedWithoutAnEndLeavesNothingInTheWindow() {
+        let window = TestWindow()
+        defer { window.tearDown() }
+        Environment.parkingWindow = { window.window }
+        let webViews = { window.window.subviews.filter { $0 is WKWebView }.count }
+        let before = webViews()
+        do {
+            let (bridge, _) = makeBridge()
+            bridge.load()
+            #expect(webViews() == before + 1, "parked while it loads")
+        }
+        #expect(webViews() == before, "dropping the bridge takes its WebView out of the window")
+    }
+
     @Test func aProcessTerminationAfterTheEndReportsNothing() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)
