@@ -37,6 +37,8 @@ public final class VideoAd {
     struct Size: Sendable, Equatable {
         let width: Int
         let height: Int
+        /// `false`: built for exactly this size, never shown smaller.
+        var scalable = true
     }
 
     /// Where the server placed the ad.
@@ -388,7 +390,7 @@ public final class VideoAd {
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
-    /// below 50 %. Picks the variant first (the largest that fits without scaling, else the best scale),
+    /// below 50 %, and not at all for a variant marked not scalable. Picks the variant first (the largest that fits without scaling, else the best scale),
     /// so a player that changed shape between `load` and `show` gets the size built for it. A card or
     /// strip stays inside the view's safe area: a full-screen player runs under the notch and the home
     /// indicator, and an ad there is partly hidden and hard to tap. A full-screen pause ad fills the
@@ -399,17 +401,21 @@ public final class VideoAd {
         func fit(_ candidate: Size) -> CGFloat {
             min(1, bounds.width / CGFloat(candidate.width), bounds.height / CGFloat(candidate.height))
         }
+        // How far a variant may shrink: to 50 %, or not at all when the creative is not scalable.
+        func minimumScale(_ candidate: Size) -> CGFloat { candidate.scalable ? Self.minimumScale : 1 }
         let unscaled = descriptor.sizes.filter { fit($0) >= 1 }
+        let usable = descriptor.sizes.filter { fit($0) >= minimumScale($0) }
         let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
+            ?? usable.max { fit($0) < fit($1) }
             ?? descriptor.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
         let nominal = CGSize(width: CGFloat(size.width), height: CGFloat(size.height))
         let scale = fit(size)
-        guard scale >= Self.minimumScale else {
-            let minimum = CGSize(width: (nominal.width * Self.minimumScale).rounded(.up), height: (nominal.height * Self.minimumScale).rounded(.up))
-            Logger.warning("ad \(id.prefix(8)): view \(Int(bounds.width))×\(Int(bounds.height)) is below 50 % of the ad's \(size.width)×\(size.height); the ad stays ready")
+        guard scale >= minimumScale(size) else {
+            let minimum = CGSize(width: (nominal.width * minimumScale(size)).rounded(.up), height: (nominal.height * minimumScale(size)).rounded(.up))
+            Logger.warning("ad \(id.prefix(8)): view \(Int(bounds.width))×\(Int(bounds.height)) is too small for the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
             chosenSize = nil
             throw VideoAdError.containerTooSmall(minimum: minimum)
         }

@@ -50,11 +50,11 @@ struct AdDescriptor {
             case .top: position = .top
             case .bottom: position = .bottom
             }
-            sizes = wireSizes.map { VideoAd.Size(width: $0.width, height: $0.height) }
+            sizes = wireSizes.map { VideoAd.Size(width: $0.width, height: $0.height, scalable: $0.scalable) }
             duration = wireDuration.map { TimeInterval($0) / 1000 }
             skipOffset = nil
         case .pause(let wirePosition, let wireSizes):
-            sizes = wireSizes.map { VideoAd.Size(width: $0.width, height: $0.height) }
+            sizes = wireSizes.map { VideoAd.Size(width: $0.width, height: $0.height, scalable: $0.scalable) }
             switch wirePosition {
             case .top: position = .top
             case .bottom: position = .bottom

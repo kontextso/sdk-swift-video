@@ -379,6 +379,25 @@ struct VideoAdTests {
         #expect(ovd >= 100 && ovd <= onScreenMs + 20, "[KONTEXT_VIEWDURATION] is ms on screen: \(ovd) of \(onScreenMs)")
     }
 
+    @Test func aCreativeThatMayNotShrinkIsNeverShownSmaller() async throws {
+        // The player is 390×220: a scalable 300×300 would show at 73 %, this one may not.
+        let fixed: [String: Any] = ["width": 300, "height": 300, "scalable": false, "maintainAspectRatio": true]
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p7f", size: fixed))
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected a throw")
+        } catch VideoAdError.containerTooSmall(let minimum) {
+            #expect(minimum == CGSize(width: 300, height: 300), "its own size is the minimum")
+        }
+        #expect(ad.isReady && !ad.wasShown)
+        let scalable: [String: Any] = ["width": 250, "height": 250, "scalable": true, "maintainAspectRatio": true]
+        let (other, _, _) = try await makeAd(Fixtures.ad(id: "p7g", size: fixed, moreSizes: [scalable]))
+        try other.show(in: harness.player.view)
+        #expect(other.chosenSize == VideoAd.Size(width: 250, height: 250), "the variant that may shrink is used instead")
+        #expect(harness.player.view.subviews.last?.frame.height == 220)
+        try other.dismiss()
+    }
+
     @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {
         let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p13s", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))

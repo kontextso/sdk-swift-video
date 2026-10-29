@@ -220,11 +220,29 @@ struct DecodingTests {
         #expect(once.result(for: .pause)?.ads.count == 1)
     }
 
+    @Test func clearlyBrokenAdsAreRefused() throws {
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(id: "")) }
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(expires: 0)) }
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(expires: -5)) }
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.overlayAd(duration: -1)) }
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.linearAd(skipOffset: -1)) }
+        #expect(try Fixtures.payload(Fixtures.linearAd(skipOffset: 0)).id == "ad-i", "a Close from the start is fine")
+    }
+
+    @Test func aSizeSaysWhetherItMayShrink() throws {
+        let fixed = try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250, "scalable": false]))
+        guard case .pause(_, let sizes) = fixed.details else { Issue.record("expected pause"); return }
+        #expect(sizes == [AdPayload.Size(width: 300, height: 250, scalable: false)])
+        let unsaid = try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250]))
+        guard case .pause(_, let defaulted) = unsaid.details else { Issue.record("expected pause"); return }
+        #expect(defaulted.first?.scalable == true, "absent is scalable")
+    }
+
     @Test func theFrameURLMustBeAbsoluteWithAHost() throws {
         for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1"] {
             #expect(try Fixtures.payload(Fixtures.ad(frameURL: ok)).rendering == .frame(URL(string: ok)!))
         }
-        for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank"] {
+        for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "file://localhost/etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank"] {
             #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
         }
     }

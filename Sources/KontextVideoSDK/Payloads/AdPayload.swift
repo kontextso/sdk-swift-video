@@ -42,7 +42,8 @@ struct AdPayload: Decodable, Sendable {
         let precision: Precision
     }
 
-    /// One beacon of the ad. The SDK fires every entry once, when its moment happens; the page never does.
+    /// One beacon of the ad. The SDK fires every entry once, when its moment happens, except `click`,
+    /// `pause`, `resume`, `mute` and `unmute`, which fire on every occurrence; the page never fires any.
     struct TrackingEvent: Decodable, Sendable, Equatable {
         /// A VAST event name: `impression`, `creativeView`, `start`, `complete`, `close`, ... The SDK ignores names it does not know.
         let event: String
@@ -54,28 +55,45 @@ struct AdPayload: Decodable, Sendable {
     }
 
     /// The nominal box the creative was built for, in points; the VAST NonLinear attributes. Both sides
-    /// positive, or the geometry at `show` is nonsense.
+    /// positive, or the geometry at `show` is nonsense. `scalable: false` (VAST) means built for exactly
+    /// this size: the SDK never shrinks it. `maintainAspectRatio` is not read: the SDK always keeps the
+    /// ratio, and `false` only permits stretching, it never requires it.
     struct Size: Decodable, Sendable, Equatable {
         let width: Int
         let height: Int
+        /// May be shown smaller; absent is `true`.
+        let scalable: Bool
 
-        init(width: Int, height: Int) {
+        init(width: Int, height: Int, scalable: Bool = true) {
             self.width = width
             self.height = height
+            self.scalable = scalable
         }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             width = try container.decode(Int.self, forKey: .width)
             height = try container.decode(Int.self, forKey: .height)
+            scalable = try container.decodeIfPresent(Bool.self, forKey: .scalable) ?? true
             guard width > 0, height > 0 else {
                 throw DecodingError.dataCorruptedError(forKey: .width, in: container, debugDescription: "a size must be positive")
             }
         }
 
         private enum CodingKeys: String, CodingKey {
-            case width, height
+            case width, height, scalable
         }
+    }
+
+    /// Schemes a frame page never comes from: local files and inline content.
+    private static let refusedFrameSchemes: Set<String> = ["file", "javascript", "data", "blob", "about"]
+
+    /// An optional count of milliseconds, refused when negative (a negative overlay duration would end the
+    /// overlay the moment it shows).
+    private static func nonNegative(_ key: CodingKeys, in container: KeyedDecodingContainer<CodingKeys>) throws -> Int? {
+        let value = try container.decodeIfPresent(Int.self, forKey: key)
+        if let value, value < 0 { throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) must not be negative") }
+        return value
     }
 
     /// `sizes`, at least one entry, the first built for the request's player.
@@ -140,10 +158,13 @@ struct AdPayload: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        guard !id.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "the ad id is empty") }
         format = try container.decode(AdFormat.self, forKey: .format)
         creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)
         expires = try container.decode(Int.self, forKey: .expires)
+        // An ad that is expired on arrival is not an ad the server meant to give.
+        guard expires > 0 else { throw DecodingError.dataCorruptedError(forKey: .expires, in: container, debugDescription: "expires must be positive") }
         tracking = try container.decode([TrackingEvent].self, forKey: .tracking)
         attribution = try? container.decodeIfPresent(Attribution.self, forKey: .attribution)   // best effort: never fails the ad
 
@@ -160,10 +181,10 @@ struct AdPayload: Decodable, Sendable {
         let rendering = try container.nestedContainer(keyedBy: RenderingKeys.self, forKey: .rendering)
         switch try rendering.decode(String.self, forKey: .kind) {
         case "frame":
-            // A page to load: absolute, with a scheme and a host. A relative path or a `javascript:`, `data:`,
-            // `file:` or `blob:` value is not a page of ours.
+            // A page to load: absolute, with a scheme and a host, and not a scheme that loads something
+            // local or inline (`file://localhost/...` has a host, so the host alone does not rule it out).
             let url = try rendering.decode(URL.self, forKey: .url)
-            guard url.scheme != nil, let host = url.host, !host.isEmpty else {
+            guard let scheme = url.scheme?.lowercased(), !Self.refusedFrameSchemes.contains(scheme), let host = url.host, !host.isEmpty else {
                 throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be absolute with a host")
             }
             self.rendering = .frame(url)
@@ -176,7 +197,7 @@ struct AdPayload: Decodable, Sendable {
             details = .overlay(
                 position: try container.decode(OverlayPosition.self, forKey: .position),
                 sizes: try Self.sizes(from: container),
-                duration: try container.decodeIfPresent(Int.self, forKey: .duration)
+                duration: try Self.nonNegative(.duration, in: container)
             )
         case .pause:
             let position = try container.decode(PausePosition.self, forKey: .position)
@@ -184,7 +205,7 @@ struct AdPayload: Decodable, Sendable {
         case .linear:
             details = .linear(
                 duration: try container.decode(Int.self, forKey: .duration),
-                skipOffset: try container.decodeIfPresent(Int.self, forKey: .skipOffset)
+                skipOffset: try Self.nonNegative(.skipOffset, in: container)
             )
         }
     }
