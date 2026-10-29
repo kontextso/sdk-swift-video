@@ -334,7 +334,7 @@ public final class VideoAd {
             }
             guard let self, !hasEnded, !isPresented else { return }
             // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
-            if let window = controller.view.window, !window.isHidden, window.alpha > 0.01, Environment.isApplicationActive() {
+            if let window = controller.view.window, !window.isHidden, window.alpha > 0.01, Environment.isWindowActive(window) {
                 Logger.warning("ad \(id.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
                 presented()
             } else {

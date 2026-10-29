@@ -11,6 +11,22 @@ extension SerialSuites {
 struct SupportTests {
     // MARK: VideoAdError
 
+    @Test func anAppWithoutScenesFindsItsWindowOnTheAppDelegate() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(Environment.keyWindow(in: [], delegateWindow: window) === window)
+        #expect(Environment.keyWindow(in: [], delegateWindow: nil) == nil)
+    }
+
+    @Test func aWindowIsActiveOnlyWhenTheAppAndItsSceneAre() {
+        let window = TestWindow().window
+        defer { Environment.reset() }
+        Environment.isApplicationActive = { false }
+        #expect(!Environment.isWindowActive(window), "an inactive app shows nothing, whatever the scene")
+        Environment.isApplicationActive = { true }
+        let sceneActive = window.windowScene.map { $0.activationState == .foregroundActive } ?? true
+        #expect(Environment.isWindowActive(window) == sceneActive, "then the window's own scene decides")
+    }
+
     @Test func aDisabledLevelNeverBuildsItsMessage() {
         let previous = Logger.level
         defer { Logger.level = previous }

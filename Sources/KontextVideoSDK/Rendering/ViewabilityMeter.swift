@@ -95,7 +95,8 @@ final class ViewabilityMeter {
             return
         }
         detachedTicks = 0
-        let inWindow = Environment.isApplicationActive() ? Self.visibleRect(of: view, in: window) : .null
+        // The ad's own scene, not the app: an iPad window in the background shows nothing.
+        let inWindow = Environment.isWindowActive(window) ? Self.visibleRect(of: view, in: window) : .null
         // Back in the view's own coordinates before comparing areas: an ancestor's transform (a scaled-down
         // player) shrinks the window rectangle, not the share of the ad that can be seen.
         let visible = inWindow.isNull ? .null : view.convert(inWindow, from: window).intersection(view.bounds)

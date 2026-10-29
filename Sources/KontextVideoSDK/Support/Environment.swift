@@ -38,6 +38,8 @@ enum Environment {
     static var consentDefaults: UserDefaults = .standard
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
+    /// Whether the scene of a given window is active, for the viewability of an ad in it.
+    static var isWindowActive: @MainActor (UIWindow) -> Bool = defaultIsWindowActive
     /// App Tracking Transparency: the status now, and the dialog. Tests answer without the OS.
     static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
     static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = { await ATTrackingManager.requestTrackingAuthorization() }
@@ -60,6 +62,7 @@ enum Environment {
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
+        isWindowActive = defaultIsWindowActive
         trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
         skAdNetwork = KontextKitSKAdNetwork()
@@ -71,16 +74,31 @@ enum Environment {
         TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
     }
 
-    /// The key window of the scene receiving events, else of a foreground scene that is not (an iPhone
-    /// while a system alert is up, the ATT dialog included). Active first: `connectedScenes` is a set, and
-    /// an iPad with two foreground windows must not get whichever comes first. A background scene's
-    /// window cannot present anything the viewer sees.
     private static func defaultKeyWindow() -> UIWindow? {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let delegateWindow = UIApplication.shared.delegate?.window.flatMap { $0 }
+        return keyWindow(in: UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }, delegateWindow: delegateWindow)
+    }
+
+    /// The key window of the scene receiving events, else of a foreground scene that is not (an iPhone
+    /// while a system alert is up, the ATT dialog included). Active first: `connectedScenes` is a set.
+    /// Best effort with two active scenes (iPad): either may be the player's, and `show(from:)` or
+    /// `show(in:)` names the right one. A background scene's window cannot present anything the viewer
+    /// sees. An app without scenes keeps its window on the app delegate, so with no window scene at all
+    /// that one is used.
+    static func keyWindow(in scenes: [UIWindowScene], delegateWindow: UIWindow?) -> UIWindow? {
+        guard !scenes.isEmpty else { return delegateWindow }
         let keyWindow = { (state: UIScene.ActivationState) in
             scenes.filter { $0.activationState == state }.flatMap(\.windows).first { $0.isKeyWindow }
         }
         return keyWindow(.foregroundActive) ?? keyWindow(.foregroundInactive)
+    }
+
+    /// Whether an ad in `window` can be seen: the app is active and so is the window's own scene. On an
+    /// iPad one window can go to the background while another stays active, which the app-wide state alone
+    /// does not show. A window without a scene (an app without scenes) follows the app.
+    private static func defaultIsWindowActive(_ window: UIWindow) -> Bool {
+        guard isApplicationActive() else { return false }
+        return window.windowScene.map { $0.activationState == .foregroundActive } ?? true
     }
 
     private static func defaultOpenURL(_ url: URL, completion: @escaping @MainActor (Bool) -> Void) {
