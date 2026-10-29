@@ -152,7 +152,21 @@ struct SupportTests {
         #expect(built == 1, ".none builds nothing")
     }
 
+    @Test func anEnabledLevelBuildsItsMessageOnce() {
+        let previous = Logger.level
+        defer { Logger.level = previous }
+        Logger.level = .debug
+        var built = 0
+        func message() -> String { built += 1; return "level \(Logger.level)" }   // reads the level: no lock held while building
+        Logger.error(message())
+        Logger.warning(message())
+        Logger.info(message())
+        Logger.debug(message())
+        #expect(built == 4, "each message once, every level on")
+    }
+
     @Test func aURLIsLoggedAsItsSchemeAndHostOnly() {
+        #expect(Logger.describe(URL(string: "https://user:secret@brand.test:8443/p?uid=1#frag")!) == "https://brand.test", "no credentials, port, path, query or fragment")
         #expect(Logger.describe(URL(string: "https://brand.test/offer?uid=42&sig=abc")!) == "https://brand.test")
         #expect(Logger.describe(URL(string: "brandapp://offer/7?token=x")!) == "brandapp://offer")
         #expect(Logger.describe(URL(string: "mailto:viewer@example.com")!) == "mailto:")

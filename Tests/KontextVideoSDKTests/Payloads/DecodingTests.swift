@@ -364,6 +364,63 @@ struct DecodingTests {
 
     // MARK: ErrorResponse
 
+    // MARK: Edges
+
+    @Test func aConfigAnswerNeedsABooleanEnabledAndToleratesTheRest() throws {
+        for body in [[:], ["enabled": NSNull()], ["enabled": "true"], ["enabled": 1]] as [[String: Any]] {
+            #expect(throws: DecodingError.self, "\(body)") { try decode(ConfigResponse.self, body) }
+        }
+        for reportDebug in [NSNull(), "yes", 1] as [Any] {
+            guard case .enabled(let flag) = try decode(ConfigResponse.self, ["enabled": true, "reportDebug": reportDebug]) else { Issue.record("expected enabled"); continue }
+            #expect(flag == false, "a malformed reportDebug is off: \(reportDebug)")
+        }
+        for reason in [NSNull(), 42] as [Any] {
+            guard case .disabled(let text) = try decode(ConfigResponse.self, ["enabled": false, "disabledReason": reason]) else { Issue.record("expected disabled"); continue }
+            #expect(text == "unknown", "\(reason)")
+        }
+        guard case .disabled(let future) = try decode(ConfigResponse.self, ["enabled": false, "disabledReason": "aReasonFromTheFuture"]) else { Issue.record("expected disabled"); return }
+        #expect(future == "aReasonFromTheFuture", "an unknown reason passes through")
+    }
+
+    @Test func anAdsAnswerEdges() throws {
+        // Disabled wins without reading formats, even malformed ones.
+        guard case .disabled = try decode(AdsResponse.self, ["enabled": false, "disabledReason": "publisherDisabled", "formats": "junk"]) else { Issue.record("expected disabled"); return }
+        // A filled entry ignores a contradictory no-fill reason.
+        let filled = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad()], "noFillReason": "frequencyCap"]]])
+        #expect(filled.result(for: .pause)?.noFillReason == nil && filled.result(for: .pause)?.ads.count == 1)
+        // A malformed or mismatched second ad fails the response, although only the first is used today.
+        var broken = Fixtures.ad(id: "ad-2")
+        broken["sizes"] = []
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), broken]]]]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), Fixtures.overlayAd()]]]]) }
+    }
+
+    @Test func adPayloadEdges() throws {
+        var estimated = Fixtures.ad()
+        estimated["price"] = ["model": "cpm", "value": 3.25, "currency": "EUR", "precision": "estimated"]
+        let descriptor = try Fixtures.descriptor(estimated)
+        #expect(descriptor.price == VideoAd.Price(value: 3.25, currency: "EUR", precision: .estimated))
+        #expect(try Fixtures.payload(Fixtures.overlayAd(duration: 0)).id == "ad-o", "a zero duration is valid")
+        for bad in ["FILE://localhost/etc/passwd", "JavaScript://x/alert(1)", "Data://x/y"] {
+            #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
+        }
+        #expect(throws: DecodingError.self, "a scalable flag of the wrong type is a malformed size") {
+            try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250, "scalable": "no"]))
+        }
+    }
+
+    @Test func anErrorItemIsSummarizedByTitleThenDetailThenCode() throws {
+        let decodeItems = { (items: [[String: Any]]) in try self.decode(ErrorResponse.self, ["errors": items]).errors.map(\.summary) }
+        #expect(try decodeItems([["title": "T", "detail": "D", "code": "C"]]) == ["T"])
+        #expect(try decodeItems([["detail": "D", "code": "C"]]) == ["D"], "detail when there is no title")
+        #expect(try decodeItems([["code": "C"]]) == ["C"])
+        #expect(try decodeItems([["title": "", "detail": "D"]]) == [""], "an empty title is shown as it is: the server's bug made visible")
+        #expect(try decodeItems([[:]]) == [nil])
+        #expect(throws: DecodingError.self, "a non-object entry fails the body; the client then reports the status alone") {
+            try self.decode(ErrorResponse.self, ["errors": [["title": "T"], "junk"]])
+        }
+    }
+
     @Test func errorResponseNeedsOnlyTheCode() throws {
         let response = try decode(ErrorResponse.self, ["errors": [["code": "invalidRequest"]]])
         #expect(response.errors.first?.code == "invalidRequest")

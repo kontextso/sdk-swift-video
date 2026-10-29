@@ -196,7 +196,7 @@ struct KontextVideoTests {
 
     // MARK: The /config retry
 
-    @Test func configRequestRetriesOnceOnARetryableFailureWithTheSameRequestId() async throws {
+    @Test func configRequestRetriesOnceOnARetryableFailureUnderANewRequestId() async throws {
         var calls = 0
         harness.server.on("/v2/config") { _ in
             calls += 1

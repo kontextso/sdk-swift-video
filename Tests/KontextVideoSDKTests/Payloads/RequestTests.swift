@@ -35,6 +35,16 @@ struct RequestTests {
         #expect(attribution?["aak"] is [String])
     }
 
+    @Test func aConfigRetryIsTheSameRequestUnderANewId() throws {
+        let request = ConfigRequest.make(configuration: configuration, installId: "install-1")
+        var original = try Fixtures.encode(request)
+        var retry = try Fixtures.encode(request.retry())
+        #expect(original["requestId"] as? String != retry["requestId"] as? String)
+        original["requestId"] = nil
+        retry["requestId"] = nil
+        #expect(NSDictionary(dictionary: original) == NSDictionary(dictionary: retry), "everything else exactly as first read")
+    }
+
     @Test func eachConfigRequestHasItsOwnId() {
         let a = ConfigRequest.make(configuration: configuration, installId: "i")
         let b = ConfigRequest.make(configuration: configuration, installId: "i")
@@ -85,6 +95,31 @@ struct RequestTests {
         #expect((device?["network"] as? [String: Any])?["userAgent"] is String)
         #expect((device?["power"] as? [String: Any])?["lowPowerMode"] is Bool, "the server derives click-to-play from it")
         #expect(device?["audio"] != nil)
+    }
+
+    @Test func anAdsRequestCarriesExactlyWhatWasSetAndNothingElse() async throws {
+        KontextVideo.shared.user = nil
+        KontextVideo.shared.variantId = nil
+        KontextVideo.shared.regulatory = nil
+        let bare = try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration,
+            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+        ))
+        #expect((bare["ifa"] as? [String: Any])?["id"] as? String == "6D92078A-8246-4BA4-AE5B-76104861E7DC", "the IDFA as given")
+        #expect(bare["user"] == nil && bare["variantId"] == nil, "nothing the app did not set")
+        let again = try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+        ))
+        #expect(bare["requestId"] as? String != again["requestId"] as? String, "a new id per request")
+        KontextVideo.shared.user = KontextVideo.User(id: "later")
+        let later = try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
+            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+        ))
+        #expect((later["user"] as? [String: Any])?["id"] as? String == "later", "a change reaches the next request")
+        KontextVideo.shared.user = nil
     }
 
     @Test func adsRequestOmitsIfaWhenNotAuthorized() async throws {
