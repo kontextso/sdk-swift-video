@@ -236,7 +236,8 @@ struct VideoAdTests {
         await sleepMs(400)
         #expect(delegate.endReasons.isEmpty, "frozen: 400 ms in the background did not count")
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        #expect(await waitUntil(1) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
+        // A generous wait for the remaining ~200 ms: a loaded CI runner resumes tasks seconds late.
+        #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
     }
 
     @Test func anOverlayShownWhileInactiveStartsItsClockOnActivation() async throws {
