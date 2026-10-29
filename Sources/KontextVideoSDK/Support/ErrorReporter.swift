@@ -124,11 +124,19 @@ final class ErrorReporter {
     static let maxBuffered = 200
     /// Reports in one request.
     static let maxBatch = 50
-    /// Characters kept of a free-form field (`detail`, the underlying error's domain).
+    /// Encoded bytes of the reports waiting, and of the reports in one request: the counts alone do not bound
+    /// memory or upload size.
+    static let maxBufferedBytes = 256 * 1024
+    static let maxBatchBytes = 64 * 1024
+    /// Characters kept of every string field: ids, `detail`, the underlying error's domain, history names
+    /// and values.
     nonisolated static let maxFieldLength = 64
 
     private(set) var mode = Mode.pending
     private(set) var buffer: [Report] = []
+    /// The encoded size of each waiting report, in `buffer`'s order, and their sum.
+    private var sizes: [Int] = []
+    private var bufferedBytes = 0
     /// Reports dropped for room and not yet sent in a batch.
     private(set) var dropped = 0
     /// The batch that did not leave yet, retried as it is.
@@ -171,27 +179,31 @@ final class ErrorReporter {
         recovery: Recovery? = nil
     ) {
         guard mode != .off else { return }
+        let cap = { (text: String?) in text.map { String($0.prefix(Self.maxFieldLength)) } }
         let report = Report(
             id: UUID().uuidString.lowercased(),
             createdAt: Self.timestamp.string(from: Date()),
             code: code.rawValue,
             stage: stage,
-            requestId: requestId,
-            sessionId: sessionId,
-            adId: adId,
+            requestId: cap(requestId),
+            sessionId: cap(sessionId),
+            adId: cap(adId),
             vastCode: vastCode,
             httpStatus: httpStatus,
             underlying: underlying,
-            detail: detail.map { String($0.prefix(Self.maxFieldLength)) },
+            detail: cap(detail),
             recovery: recovery,
             history: DebugReporter.shared.recentHistory()
         )
         Logger.debug("error report \(code.rawValue)\(adId.map { " ad=\($0.prefix(8))" } ?? "")")
+        let size = (try? JSONEncoder().encode(report).count) ?? 0
         buffer.append(report)
-        if buffer.count > Self.maxBuffered {
-            let excess = buffer.count - Self.maxBuffered
-            buffer.removeFirst(excess)
-            dropped += excess
+        sizes.append(size)
+        bufferedBytes += size
+        while buffer.count > Self.maxBuffered || (bufferedBytes > Self.maxBufferedBytes && buffer.count > 1) {
+            buffer.removeFirst()
+            bufferedBytes -= sizes.removeFirst()
+            dropped += 1
         }
         if mode == .on { scheduleFlush(after: Self.interval) }
     }
@@ -237,6 +249,8 @@ final class ErrorReporter {
         flushTask = nil
         mode = .pending
         buffer.removeAll()
+        sizes.removeAll()
+        bufferedBytes = 0
         dropped = 0
         pendingBatch = nil
         failures = 0
@@ -247,6 +261,8 @@ final class ErrorReporter {
         flushTask?.cancel()
         flushTask = nil
         buffer.removeAll()
+        sizes.removeAll()
+        bufferedBytes = 0
         dropped = 0
         pendingBatch = nil
     }
@@ -279,8 +295,17 @@ final class ErrorReporter {
             batch = pendingBatch
         } else {
             guard !buffer.isEmpty else { return true }
-            let reports = Array(buffer.prefix(Self.maxBatch))
-            buffer.removeFirst(reports.count)
+            // Up to `maxBatch` reports and `maxBatchBytes`, at least one: a single report is bounded by its fields.
+            var count = 0
+            var bytes = 0
+            while count < min(buffer.count, Self.maxBatch), count == 0 || bytes + sizes[count] <= Self.maxBatchBytes {
+                bytes += sizes[count]
+                count += 1
+            }
+            let reports = Array(buffer.prefix(count))
+            buffer.removeFirst(count)
+            sizes.removeFirst(count)
+            bufferedBytes -= bytes
             batch = Batch(id: UUID().uuidString.lowercased(), dropped: dropped, reports: reports)
             dropped = 0
             pendingBatch = batch

@@ -230,6 +230,75 @@ struct ErrorReporterTests {
         #expect(!raw.contains("user-secret-2"), "never the error's text")
     }
 
+    // MARK: Bounds and accuracy
+
+    @Test func aNoFillReasonTheSDKDoesNotKnowNeverLeavesTheDevice() async throws {
+        await enableReports()
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
+        let free = "contact secret@example.com at https://evil.test/x"
+        harness.server.on("/v2/video/ads", .json(Fixtures.noFill(free)))
+        _ = try? await ads.format(.pause)
+        reporter.report(.skanFailed, stage: .attribution, detail: "start")   // any fault after it carries the history
+        #expect(await waitUntil { !self.reports("skan.failed").isEmpty })
+        let raw = String(bytes: try #require(harness.server.requests(to: "/v2/error").last).rawBody, encoding: .utf8) ?? ""
+        #expect(!raw.contains("secret@example.com") && !raw.contains("evil.test"), "the server's free text stays on the device")
+        let history = (reports("skan.failed").first?["history"] as? [[String: Any]]) ?? []
+        let reasons = history.compactMap { ($0["state"] as? [String: Any])?["reason"] as? String }
+        #expect(reasons.contains("other"), "an unknown reason is \"other\": \(reasons)")
+    }
+
+    @Test func longIdsAreCappedAndABatchStaysWithinItsByteBudget() async throws {
+        await enableReports()
+        let long = String(repeating: "a", count: 10_000)
+        for index in 0..<60 {
+            reporter.report(.skanFailed, stage: .attribution, requestId: long, sessionId: long, adId: "\(index)" + long, detail: long)
+        }
+        #expect(await waitUntil { self.reports().count == 60 })
+        #expect(reports().allSatisfy { report in
+            ["requestId", "sessionId", "adId", "detail"].allSatisfy { ((report[$0] as? String)?.count ?? 0) <= ErrorReporter.maxFieldLength }
+        }, "every string capped")
+        let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
+        #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes + 1024 }, "each request within the budget plus its envelope: \(sizes)")
+    }
+
+    @Test func aFailedConfigRetryIsReportedWithTheIdOfTheAttemptThatFailed() async throws {
+        harness.server.on("/v2/config", .failure(.timedOut))
+        _ = await harness.initialize()
+        let attempts = harness.server.requests(to: "/v2/config").compactMap { $0.body?["requestId"] as? String }
+        #expect(attempts.count == 2 && attempts[0] != attempts[1], "the first attempt and its retry")
+        #expect(reporter.buffer.first?.requestId == attempts.last, "the retry failed last; its id is the one reported")
+    }
+
+    @Test func anExpiredHeldAdIsNotCountedAsKept() async throws {
+        await enableReports()
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-er-x", expires: 30_000))
+        _ = try await ads.format(.pause)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var failing = StubServer.Response.json(Fixtures.errors("internal", status: 500), status: 500)
+        failing.gate = gate
+        harness.server.on("/v2/video/ads", failing)
+        let call = Task { try? await ads.format(.pause) }
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
+        advanceClock(by: 31)   // the held ad expires while the request is out
+        gate.open()
+        #expect(await call.value == nil, "no valid ad to fall back to")
+        #expect(await waitUntil { !self.reports("ads.request_failed").isEmpty })
+        #expect(reports("ads.request_failed").first?["recovery"] as? String == "no_ad")
+    }
+
+    @Test func aPageThatCannotLoadCarriesTheSystemErrorsDomainAndCode() async throws {
+        await enableReports()
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
+        let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p-er-l")), owner: ads)
+        ad.bridge.load()
+        ad.bridge.webView(ad.bridge.webView, didFailProvisionalNavigation: nil, withError: URLError(.cannotFindHost))
+        #expect(await waitUntil { !self.reports("frame.load_failed").isEmpty })
+        let underlying = reports("frame.load_failed").first?["underlying"] as? [String: Any]
+        #expect(underlying?["domain"] as? String == NSURLErrorDomain && underlying?["code"] as? Int == URLError.cannotFindHost.rawValue)
+    }
+
     // MARK: Integration mistakes
 
     @Test func integrationMistakesAreReportedOnceTheServerAllowsIt() async throws {

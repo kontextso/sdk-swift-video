@@ -183,21 +183,28 @@ public final class KontextVideo {
     /// before anything runs, the race is accepted, not fixed).
     nonisolated(unsafe) static var configRetryDelay: TimeInterval = 2
 
-    static func sendConfigRequest(_ request: ConfigRequest, client: APIClient) async throws -> ConfigResponse {
+    /// `attempt` hears the `requestId` of each request as it leaves, so a failure is reported with the id of
+    /// the attempt that failed.
+    static func sendConfigRequest(_ request: ConfigRequest, client: APIClient,
+                                  attempt: (String) -> Void = { _ in }) async throws -> ConfigResponse {
         do {
+            attempt(request.requestId)
             return try await client.post("config", body: request)
         } catch let error as APIError where error.isRetryable {
             Logger.warning("/config failed (\(error)); retrying in \(configRetryDelay) s")
             try await Task.sleep(nanoseconds: UInt64(configRetryDelay * 1_000_000_000))
-            return try await client.post("config", body: request.retry())
+            let retry = request.retry()
+            attempt(retry.requestId)
+            return try await client.post("config", body: retry)
         }
     }
 
     private func fetchConfig(configuration: Configuration) async {
         let client = APIClient(baseURL: configuration.adServerURL)
         let request = ConfigRequest.make(configuration: configuration, installId: Self.installId)
+        var lastRequestId = request.requestId
         do {
-            let response = try await Self.sendConfigRequest(request, client: client)
+            let response = try await Self.sendConfigRequest(request, client: client) { lastRequestId = $0 }
             // Cancelled meanwhile (`resetForTesting()`): the answer belongs to a state that was reset.
             guard !Task.isCancelled else { return }
             switch response {
@@ -223,7 +230,7 @@ public final class KontextVideo {
             Logger.error("/config failed, no ads until it succeeds: \(error)")
             // Waits in memory: it leaves once a later `/config` turns the reports on.
             let failure = ErrorReporter.RequestFailure(error)
-            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: failure)
+            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: lastRequestId, failure: failure)
         }
     }
 }

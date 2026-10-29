@@ -750,8 +750,9 @@ public final class VideoAd {
         case .loadFailed: code = .frameLoadFailed
         case .processTerminated: code = .processTerminated
         }
+        let recovery: ErrorReporter.Recovery = wasShown ? .adEndedFailed : .adDroppedBeforeShow
         ErrorReporter.shared.report(code, stage: wasShown ? .playback : .load, sessionId: owner?.sessionId, adId: id, vastCode: vastCode,
-                                    recovery: wasShown ? .adEndedFailed : .adDroppedBeforeShow)
+                                    underlying: loadedBridge?.failureUnderlying, recovery: recovery)
     }
 
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,

@@ -41,6 +41,8 @@ final class FrameBridge: NSObject {
     private(set) var state: State = .loading
     /// Set as the bridge fails, before the `.error` event goes out.
     private(set) var failureCause: FailureCause?
+    /// The system error behind a page that could not load, as a domain and a code.
+    private(set) var failureUnderlying: ErrorReporter.Underlying?
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
     private var reportedProtocolViolation = false
     var onEvent: ((FrameEvent) -> Void)?
@@ -468,6 +470,7 @@ extension FrameBridge: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard state == .loading else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
+        failureUnderlying = ErrorReporter.Underlying(error)
         fail(.error(code: loadErrorCode), cause: .loadFailed)
     }
 

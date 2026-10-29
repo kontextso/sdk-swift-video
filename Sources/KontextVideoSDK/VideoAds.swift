@@ -99,9 +99,9 @@ public final class VideoAds {
         throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
     }
 
-    /// Whether an unshown ad is held: what a failed request leaves the app with.
+    /// Whether a valid unshown ad is held: what a failed request leaves the app with (an expired one is not).
     private var holdsAds: Bool {
-        !state.ads.isEmpty
+        state.ads.values.contains { !$0.descriptor.isExpired }
     }
 
     /// `destroyed` after `destroy()`; `disabled` once any video's response switched the SDK off meanwhile.
@@ -230,7 +230,10 @@ public final class VideoAds {
         } else {
             Logger.info("\(format) for \(content.id): no fill (\(reason))")
         }
-        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(reason.description)])
+        // A reason this SDK does not know is the server's free text: "other" leaves the device, the text does not.
+        let knownReason: String
+        if case .other = reason { knownReason = "other" } else { knownReason = reason.description }
+        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(knownReason)])
     }
 
     // MARK: Playhead

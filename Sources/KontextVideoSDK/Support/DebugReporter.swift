@@ -96,9 +96,21 @@ final class DebugReporter {
         history.removeAll()
     }
 
-    /// The recent events, each timed relative to `now`.
+    /// The state keys an error report's history may carry; anything else stays on the device.
+    static let historyKeys: Set<String> = ["held", "playhead", "format", "filled", "reason", "enabled", "code", "durationMs", "step", "domain"]
+
+    /// The recent events, each timed relative to `now`, reduced for an error report: listed state keys only,
+    /// strings and ids capped at `ErrorReporter.maxFieldLength`.
     func recentHistory(before now: TimeInterval = Environment.now()) -> [Moment] {
-        history.map { Moment(at: (($0.time - now) * 1000).rounded() / 1000, name: $0.name, adId: $0.adId, state: $0.state) }
+        let cap = ErrorReporter.maxFieldLength
+        return history.map { entry in
+            let state = entry.state?.filter { Self.historyKeys.contains($0.key) }.mapValues { value -> Value in
+                if case .string(let text) = value { return .string(String(text.prefix(cap))) }
+                return value
+            }
+            return Moment(at: ((entry.time - now) * 1000).rounded() / 1000, name: String(entry.name.prefix(cap)),
+                          adId: entry.adId.map { String($0.prefix(cap)) }, state: state?.isEmpty == true ? nil : state)
+        }
     }
 
     private init() {}
