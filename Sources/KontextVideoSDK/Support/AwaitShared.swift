@@ -3,9 +3,10 @@
 /// cancelled stops waiting immediately (`CancellationError`) without cancelling the task or affecting the
 /// other callers. Starting, storing and cancelling the work is the owner's job (`VideoAds.request`,
 /// `VideoAd.loading`); this is only the joining half. A plain `task.value` would keep a cancelled caller
-/// waiting until the task finished.
+/// waiting until the task finished. Works for a task that cannot fail too (`/config`'s): only the
+/// caller's cancellation throws then.
 @MainActor
-func awaitShared<T: Sendable>(_ task: Task<T, Error>) async throws -> T {
+func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>) async throws -> T {
     let waiter = Waiter<T>()
     return try await withTaskCancellationHandler {
         try await withCheckedThrowingContinuation { continuation in
@@ -14,7 +15,7 @@ func awaitShared<T: Sendable>(_ task: Task<T, Error>) async throws -> T {
                 return
             }
             waiter.continuation = continuation
-            Task { @MainActor in waiter.resume(with: await task.result) }
+            Task { @MainActor in waiter.resume(with: await task.result.mapError { $0 as Error }) }
         }
     } onCancel: {
         Task { @MainActor in waiter.resume(with: .failure(CancellationError())) }

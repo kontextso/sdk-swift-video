@@ -12,8 +12,8 @@ public final class KontextVideo {
         case enabled
         /// The server switched the SDK off. Final for this app launch.
         case disabled(reason: String)
-        /// `/config` failed twice, usually a bad network at launch. No ads until a later `/config` succeeds:
-        /// every ads request retries it first, whenever it comes.
+        /// `/config` failed: a failure that may clear (no network, a 5xx, a 429) twice, or a 4xx or a malformed
+        /// answer once. No ads until a later `/config` succeeds: every ads request retries it first.
         case failed
     }
 
@@ -109,13 +109,15 @@ public final class KontextVideo {
     }
 
     /// Whether ads may be requested now: waits while `/config` is in flight, retries it first after a
-    /// failure, and answers `false` when the SDK is off.
-    func waitUntilEnabled() async -> Bool {
+    /// failure, and answers `false` when the SDK is off. Every caller waits for the same `/config`; a
+    /// cancelled caller (a destroyed `VideoAds`) stops waiting at once with `CancellationError`, and
+    /// `/config` goes on for the others.
+    func waitUntilEnabled() async throws -> Bool {
         if state == .failed {
             retryConfig()
         }
-        if state == .initializing {
-            await initTask?.value
+        if state == .initializing, let initTask {
+            try await awaitShared(initTask)
         }
         return state == .enabled
     }
@@ -169,9 +171,9 @@ public final class KontextVideo {
         Logger.level = .warning
     }
 
-    /// `/config`'s one retry: after a failure that may clear (no network, a 5xx, a 429), the same request
-    /// is sent again after `configRetryDelay` seconds, with the same `requestId` so the server replays
-    /// rather than registers twice. A 4xx or a malformed answer is not retried. A constant in spirit; a
+    /// `/config`'s one retry: after a failure that may clear (no network, a 5xx, a 429), the request is
+    /// sent again after `configRetryDelay` seconds, under a new `requestId` (each request its own trace
+    /// id). A 4xx or a malformed answer is not retried. A constant in spirit; a
     /// variable so the tests can shrink the wait (`nonisolated(unsafe)`: a global the test harness writes
     /// before anything runs, the race is accepted, not fixed).
     nonisolated(unsafe) static var configRetryDelay: TimeInterval = 2

@@ -216,19 +216,21 @@ struct SDKHarness {
     }
 
     /// Answers every ads request with `ad` for its own format and a no-fill for the others.
-    func serve(_ ad: [String: Any], delay: TimeInterval = 0) {
+    func serve(_ ad: [String: Any], delay: TimeInterval = 0, gate: StubServer.Gate? = nil) {
         server.on("/v2/video/ads") { _ in
             var response = StubServer.Response.json(Fixtures.adsResponse(ad))
             response.delay = delay
+            response.gate = gate
             return response
         }
     }
 
     /// Answers every ads request with one entry per format: `entries` by format name, a no-fill for the rest.
-    func serve(formats entries: [String: [String: Any]], delay: TimeInterval = 0) {
+    func serve(formats entries: [String: [String: Any]], delay: TimeInterval = 0, gate: StubServer.Gate? = nil) {
         server.on("/v2/video/ads") { _ in
             var response = StubServer.Response.json(Fixtures.adsResponse(formats: entries))
             response.delay = delay
+            response.gate = gate
             return response
         }
     }

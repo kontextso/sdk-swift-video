@@ -195,10 +195,13 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p13", expires: 30_000))
         let ad = try await ads.format(.pause)
-        harness.serve(Fixtures.ad(id: "img-p13"), delay: 0.3)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(Fixtures.ad(id: "img-p13"), gate: gate)
         let again = Task { try await ads.format(.pause) }
-        await sleepMs(50)
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         advanceClock(by: 31)
+        gate.open()
         let late = await error { try await again.value }
         guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
         #expect(reason == .alreadyUsed)
@@ -215,6 +218,17 @@ struct VideoAdsTests {
         #expect(try await ads.format(.pause) === held)
         let nothing = await error { try await ads.format(.linear) }
         guard case .request = nothing else { Issue.record("expected request, got \(String(describing: nothing))"); return }
+    }
+
+    @Test func aFailedRequestLeavesNothingBehindAndTheNextCallSendsAFreshOne() async throws {
+        let ads = await makeAds()
+        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        let failure = await error { try await ads.format(.pause) }
+        guard case .request = failure else { Issue.record("expected request, got \(String(describing: failure))"); return }
+        harness.serve(Fixtures.ad(id: "img-after-failure"))
+        #expect(try await ads.format(.pause).id == "img-after-failure", "the failed request is not reused")
+        #expect(harness.adsRequests.count == 2)
+        #expect(harness.adsRequests[1].body?["held"] as? [String] == [])
     }
 
     @Test func serverErrorsAreRequestErrorsNeverRetried() async {
@@ -285,27 +299,46 @@ struct VideoAdsTests {
         #expect(harness.server.requests(to: "/v2/config").count > configs, "format() retried /config")
     }
 
-    @Test func destroyWhileWaitingForInitThrowsDestroyed() async {
-        var config = StubServer.Response.failure(.timedOut)
-        config.delay = 0.2
+    @Test func destroyWhileWaitingForInitThrowsDestroyedAtOnceAndTheOthersShareOneConfig() async throws {
+        await WebKitWarmup.ensure()
+        let gate = StubServer.Gate()
+        // A safety net: without the fix the destroyed call would hang until /config answers.
+        Task { await sleepMs(3000); gate.open() }
+        var config = StubServer.Response.json(Fixtures.initEnabled())
+        config.gate = gate
         harness.server.on("/v2/config", config)
-        let ads = await makeAds()
-        let call = Task { try await ads.format(.pause) }
-        await sleepMs(50)
-        ads.destroy()
+        KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
+        let destroyed = harness.player.ads(for: .init(id: "v1", language: "en"))
+        let other = harness.player.ads(for: .init(id: "v2", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-init"))
+        let call = Task { try await destroyed.format(.pause) }
+        let otherCall = Task { try await other.format(.pause) }
+        await sleepMs(20)
+        destroyed.destroy()
         let result = await call.result
         guard case .failure(VideoAdError.destroyed) = result else { Issue.record("expected destroyed, got \(result)"); return }
+        #expect(!gate.isOpen, "it finished while /config was still out")
+        gate.open()
+        #expect(try await otherCall.value.id == "img-init", "the other video still waits for /config and gets its ad")
+        #expect(harness.server.requests(to: "/v2/config").count == 1)
+        #expect(harness.adsRequests.count == 1, "the destroyed video sent nothing")
     }
 
     @Test func formatWaitsForInitInFlight() async throws {
         await WebKitWarmup.ensure()
+        let gate = StubServer.Gate()
+        defer { gate.open() }
         var config = StubServer.Response.json(Fixtures.initEnabled())
-        config.delay = 0.2
+        config.gate = gate
         harness.server.on("/v2/config", config)
         KontextVideo.shared.initialize(with: harness.configuration, completion: nil)
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))
         harness.serve(Fixtures.ad(id: "img-p15"))
-        #expect(try await ads.format(.pause).id == "img-p15")
+        let call = Task { try await ads.format(.pause) }
+        await sleepMs(20)
+        #expect(harness.adsRequests.isEmpty, "nothing leaves before /config answers")
+        gate.open()
+        #expect(try await call.value.id == "img-p15")
     }
 
     // MARK: The kill switch
@@ -346,6 +379,63 @@ struct VideoAdsTests {
         }
     }
 
+    @Test func switchedOffDuringTheATTDialogNothingLeaves() async {
+        let gate = Gate()
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        Environment.requestTrackingAuthorization = {
+            while !gate.open { await sleepMs(5) }
+            return .authorized
+        }
+        await WebKitWarmup.ensure()
+        _ = await KontextVideo.shared.initialize(with: KontextVideo.Configuration(
+            publisherToken: "test-dev", requestTrackingAuthorization: true, logLevel: .none, adServerURL: harness.server.baseURL))
+        let ads = harness.player.ads(for: .init(id: "v", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-att-off"))
+        let call = Task { await error { try await ads.format(.pause) } }
+        await sleepMs(30)
+        // Another video's response switches the SDK off while this one's dialog is up.
+        KontextVideo.shared.disable(reason: "publisherDisabled")
+        gate.open = true
+        let failure = await call.value
+        guard case .disabled(let reason) = failure else { Issue.record("expected disabled, got \(String(describing: failure))"); return }
+        #expect(reason == "publisherDisabled")
+        #expect(harness.adsRequests.isEmpty, "no request after the kill switch")
+    }
+
+    @Test func switchedOffWhileTheResponseWasOutItsAdsAreNeverHeld() async throws {
+        let ads = await makeAds()
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(Fixtures.ad(id: "img-late"), gate: gate)
+        let call = Task { await error { try await ads.format(.pause) } }
+        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
+        KontextVideo.shared.disable(reason: "publisherDisabled")
+        gate.open()
+        let failure = await call.value
+        guard case .disabled(let reason) = failure else { Issue.record("expected disabled, got \(String(describing: failure))"); return }
+        #expect(reason == "publisherDisabled")
+        ads.destroy()
+        #expect(await notUsedBeacons().isEmpty, "the late ad was never held: destroy has nothing to notify")
+    }
+
+    @Test func switchedOffWhileAFailingRequestWasOutTheHeldAdDoesNotComeBack() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-held-off"))
+        _ = try await ads.format(.pause)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var failing = StubServer.Response.failure(.timedOut)
+        failing.gate = gate
+        harness.server.on("/v2/video/ads", failing)
+        let call = Task { await error { try await ads.format(.pause) } }
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
+        KontextVideo.shared.disable(reason: "publisherDisabled")
+        gate.open()
+        let failure = await call.value
+        guard case .disabled(let reason) = failure else { Issue.record("expected disabled, not the held ad, got \(String(describing: failure))"); return }
+        #expect(reason == "publisherDisabled")
+    }
+
     @Test func aDisabledConfigThrowsDisabled() async {
         harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
         let ads = await makeAds()
@@ -358,10 +448,15 @@ struct VideoAdsTests {
 
     @Test func callsMadeWhileARequestRunsShareIt() async throws {
         let ads = await makeAds()
-        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p17"), "linear": Fixtures.linearAd(id: "vid-l17")], delay: 0.15)
-        async let pause = ads.format(.pause)
-        async let linear = ads.format(.linear)
-        let (p, l) = try await (pause, linear)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p17"), "linear": Fixtures.linearAd(id: "vid-l17")], gate: gate)
+        let pause = Task { try await ads.format(.pause) }
+        let linear = Task { try await ads.format(.linear) }
+        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
+        await sleepMs(20)
+        gate.open()
+        let (p, l) = try await (pause.value, linear.value)
         #expect(p.id == "img-p17")
         #expect(l.id == "vid-l17")
         #expect(harness.adsRequests.count == 1, "one request for both")
@@ -377,7 +472,9 @@ struct VideoAdsTests {
 
     @Test func cancellingACallStopsOnlyItsWaitingTheRequestContinuesForTheOthers() async throws {
         let ads = await makeAds()
-        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p19"), "linear": Fixtures.linearAd(id: "vid-l19")], delay: 2)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p19"), "linear": Fixtures.linearAd(id: "vid-l19")], gate: gate)
         let pause = Task { try await ads.format(.pause) }
         var linearDone = false
         let linear = Task { () throws -> VideoAd in
@@ -392,6 +489,7 @@ struct VideoAdsTests {
         } catch is CancellationError {
             #expect(!linearDone, "the cancelled call stopped while the request was still out")
         }
+        gate.open()
         #expect(try await linear.value.id == "vid-l19", "the other call still gets its bid")
         #expect(harness.adsRequests.count == 1)
         #expect(try await ads.format(.pause).id == "img-p19", "the cancelled call's bid was kept")
@@ -401,12 +499,15 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")])
         let ad = try await ads.format(.pause)
-        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")], delay: 0.2)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-p20"), "linear": Fixtures.linearAd(id: "vid-l20")], gate: gate)
         let pause = Task { try await ads.format(.pause) }
         let linear = Task { try await ads.format(.linear) }
-        await sleepMs(50)
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         #expect(Set(harness.adsRequests.last?.body?["held"] as? [String] ?? []) == ["img-p20", "vid-l20"], "the request listed it before the reject")
         try ad.reject()
+        gate.open()
         do {
             _ = try await pause.value
             Issue.record("expected noFill")
@@ -425,10 +526,13 @@ struct VideoAdsTests {
         harness.serve(Fixtures.ad(id: "img-p21"))
         let ad = try await ads.format(.pause)
         try await ad.load()
-        harness.serve(Fixtures.ad(id: "img-p21"), delay: 0.2)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(Fixtures.ad(id: "img-p21"), gate: gate)
         let again = Task { try await ads.format(.pause) }
-        await sleepMs(50)
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         try ad.show(in: harness.player.view)
+        gate.open()
         do {
             _ = try await again.value
             Issue.record("expected noFill")
@@ -472,15 +576,17 @@ struct VideoAdsTests {
 
     @Test func destroyDuringARequestThrowsDestroyedAndIgnoresTheLateResponse() async throws {
         let ads = await makeAds()
-        harness.serve(Fixtures.ad(id: "img-p23"), delay: 0.3)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(Fixtures.ad(id: "img-p23"), gate: gate)
         let pending = Task { try await ads.format(.pause) }
-        await sleepMs(50)
+        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
         ads.destroy()
         do {
             _ = try await pending.value
             Issue.record("expected destroyed")
         } catch VideoAdError.destroyed {}
-        await sleepMs(350)
+        gate.open()
         #expect(await notUsedBeacons().isEmpty, "the late bids were never held; the server closes them at expiry")
     }
 
@@ -493,6 +599,22 @@ struct VideoAdsTests {
         #expect(ad.invalidationReason == .destroyed)
         #expect(ad.isReady == false)
         #expect(await notUsedBeacons(expecting: 1).map(\.reason) == ["destroyed"])
+    }
+
+    @Test func releasingTheVideoAdsMidRequestFreesItTheRequestDoesNotKeepItAlive() async throws {
+        var ads: VideoAds? = await makeAds()
+        weak var released = ads
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        harness.serve(Fixtures.ad(id: "img-released"), gate: gate)
+        let call = Task { [ads] in _ = try? await ads?.format(.pause) }
+        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
+        // The caller stops waiting; the app drops its reference while the response is still out.
+        call.cancel()
+        await call.value
+        ads = nil
+        #expect(await waitUntil { released == nil }, "released while the request was out: its deinit cancels the request")
+        #expect(!gate.isOpen)
     }
 
     // MARK: Playhead
@@ -521,8 +643,10 @@ struct VideoAdsTests {
     @Test func aTrackedPlayerIsHeldWeakly() async {
         let ads = await makeAds()
         var player: AVPlayer? = AVPlayer()
+        weak var released = player
         ads.trackPlayhead(of: player!)
         player = nil
+        #expect(released == nil, "the provider does not keep the player")
         #expect(ads.playhead == 0)
     }
 }

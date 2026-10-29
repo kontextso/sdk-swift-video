@@ -60,78 +60,97 @@ public final class VideoAds {
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let error) {
-            // Destroyed between the failure and this caller's turn: the held ads are gone, and the app asked for that.
-            guard !isDestroyed else { throw VideoAdError.destroyed }
+            // Destroyed or switched off between the failure and this caller's turn: no held ad comes back.
+            try checkStillUsable()
             if let held = state.ads[format], !held.descriptor.isExpired {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
             }
             throw VideoAdError.request(error)
         }
-        guard !isDestroyed else { throw VideoAdError.destroyed }
+        try checkStillUsable()
         if let ad = state.ads[format] { return ad }
         throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
     }
 
-    /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()`.
-    /// Expired ads are dropped first (silently; the server knows `expires`), so `held` lists valid ones.
+    /// `destroyed` after `destroy()`; `disabled` once any video's response switched the SDK off meanwhile.
+    private func checkStillUsable() throws {
+        guard !isDestroyed else { throw VideoAdError.destroyed }
+        if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
+    }
+
+    /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()` or the
+    /// `VideoAds`' release. It holds its owner weakly and only between its waits, so releasing the object
+    /// mid-request reaches `deinit`, which cancels it. Expired ads are dropped first (silently; the server
+    /// knows `expires`), so `held` lists valid ones.
     private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
         for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
+        let content = content, sessionId = sessionId
         let task = Task { [weak self] () throws -> [AdFormat: VideoAdError.NoFillReason] in
             defer { self?.request = nil }
-            guard let self else { throw VideoAdError.destroyed }
-            let response = try await send(held: held)
-            guard !isDestroyed else { throw VideoAdError.destroyed }
-            return apply(response)
+            /// The owner, for one synchronous step; `destroyed` once it was destroyed or released.
+            @MainActor func owner() throws -> VideoAds {
+                guard let self, !self.isDestroyed else { throw VideoAdError.destroyed }
+                return self
+            }
+            let enabled: Bool
+            do {
+                enabled = try await KontextVideo.shared.waitUntilEnabled()
+            } catch {
+                // Only `destroy()` or the release cancels the request: it stops waiting for `/config`, which goes on.
+                throw VideoAdError.destroyed
+            }
+            // Destroyed while waiting: `destroyed`, whatever `/config` said meanwhile.
+            _ = try owner()
+            guard enabled else {
+                Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
+                if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
+                throw VideoAdError.initializationFailed
+            }
+            guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
+            // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
+            let tracking: TrackingInfo
+            do {
+                tracking = try await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
+            } catch {
+                // Its callers stop waiting for the dialog, which goes on.
+                throw VideoAdError.destroyed
+            }
+            let playhead = try owner().playhead
+            let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
+                                             player: .make(playhead: playhead), sessionId: sessionId, held: held)
+            // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
+            try owner().checkStillUsable()
+            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
+            DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
+
+            let response: AdsResponse
+            do {
+                response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
+            } catch {
+                try owner().checkStillUsable()
+                Logger.error("\(content.id): request failed, \(error)")
+                throw VideoAdError.request(error)
+            }
+            return try owner().receive(response)
         }
         request = task
         return task
     }
 
-    /// Waits for `/config`, reads the ATT status, builds and sends the request. The kill switch in the
-    /// answer switches the whole SDK off and drops every ad, with no notices: the server knows.
-    private func send(held: [String]) async throws -> AdsResponse {
-        let enabled = await KontextVideo.shared.waitUntilEnabled()
-        // Destroyed while waiting: `destroyed`, whatever `/config` said meanwhile.
-        guard !isDestroyed else { throw VideoAdError.destroyed }
-        guard enabled else {
-            Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
-            if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
-            throw VideoAdError.initializationFailed
-        }
-        guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
-        // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
-        let tracking: TrackingInfo
-        do {
-            tracking = try await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
-        } catch {
-            // Only `destroy()` cancels the request: its callers stop waiting for the dialog, which goes on.
-            throw VideoAdError.destroyed
-        }
-        guard !isDestroyed else { throw VideoAdError.destroyed }
-        let request = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                      player: .make(playhead: playhead), sessionId: sessionId, held: held)
-        Logger.debug("\(content.id): requesting at playhead \(request.player.playhead) ms, holding \(held.count)")
-        DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(request.player.playhead))])
-
-        let response: AdsResponse
-        do {
-            response = try await APIClient(baseURL: request.adServerURL).post("video/ads", body: request)
-        } catch {
-            // Only `destroy()` cancels the request.
-            if isDestroyed { throw VideoAdError.destroyed }
-            Logger.error("\(content.id): request failed, \(error)")
-            throw VideoAdError.request(error)
-        }
-        guard !isDestroyed else { throw VideoAdError.destroyed }
+    /// The answer, for a `VideoAds` still in use. The kill switch in it switches the whole SDK off and
+    /// drops every ad, with no notices: the server knows. Switched off meanwhile by another video's
+    /// response: the answer is dropped, the ads it carries are never held.
+    private func receive(_ response: AdsResponse) throws -> [AdFormat: VideoAdError.NoFillReason] {
         if case .disabled(let reason) = response {
             KontextVideo.shared.disable(reason: reason)
             // The reason is never seen: load() and show throw `.disabled` first.
             for ad in Array(state.ads.values) { ad.invalidate(.destroyed) }
             throw VideoAdError.disabled(reason: reason)
         }
-        return response
+        try checkStillUsable()
+        return apply(response)
     }
 
     /// Follows the server for every format, whatever the SDK's own clock says: the same id keeps the bid

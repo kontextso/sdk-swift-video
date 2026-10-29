@@ -13,6 +13,8 @@ final class StubServer: @unchecked Sendable {
         var body = Data()
         var error: Error?
         var delay: TimeInterval = 0
+        /// Held until the test opens it: for races, instead of guessing a delay. The request is recorded at once.
+        var gate: Gate?
 
         static func json(_ object: Any, status: Int = 200) -> Response {
             Response(status: status, body: try! JSONSerialization.data(withJSONObject: object))
@@ -20,6 +22,32 @@ final class StubServer: @unchecked Sendable {
 
         static func empty(_ status: Int = 204) -> Response { Response(status: status) }
         static func failure(_ code: URLError.Code) -> Response { Response(status: 0, error: URLError(code)) }
+    }
+
+    /// Holds gated responses until `open()`; opening twice, or a response that arrives after, delivers at once.
+    final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var opened = false
+        private var waiting: [() -> Void] = []
+
+        var isOpen: Bool { lock.withLock { opened } }
+
+        func open() {
+            let released: [() -> Void] = lock.withLock {
+                opened = true
+                defer { waiting = [] }
+                return waiting
+            }
+            released.forEach { DispatchQueue.global().async(execute: $0) }
+        }
+
+        fileprivate func whenOpen(_ work: @escaping () -> Void) {
+            let now: Bool = lock.withLock {
+                if !opened { waiting.append(work) }
+                return opened
+            }
+            if now { DispatchQueue.global().async(execute: work) }
+        }
     }
 
     struct Recorded: @unchecked Sendable {
@@ -164,7 +192,9 @@ final class StubProtocol: URLProtocol {
             client?.urlProtocol(self, didLoad: response.body)
             client?.urlProtocolDidFinishLoading(self)
         }
-        if response.delay > 0 {
+        if let gate = response.gate {
+            gate.whenOpen(deliver)
+        } else if response.delay > 0 {
             DispatchQueue.global().asyncAfter(deadline: .now() + response.delay, execute: deliver)
         } else {
             deliver()

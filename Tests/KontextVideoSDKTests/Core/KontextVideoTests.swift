@@ -88,45 +88,45 @@ struct KontextVideoTests {
         #expect(Logger.level == .none)
     }
 
-    @Test func disabledByInitIsFinalForTheLaunch() async {
+    @Test func disabledByInitIsFinalForTheLaunch() async throws {
         harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
         let state = await harness.initialize()
         #expect(state == .disabled(reason: "publisherDisabled"))
-        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(try await sdk.waitUntilEnabled() == false)
     }
 
-    @Test func failedInitAfterTheRetryIsFailed() async {
+    @Test func failedInitAfterTheRetryIsFailed() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         let state = await harness.initialize()
         #expect(state == .failed)
         #expect(harness.server.requests(to: "/v2/config").count == 2, "one retry")
-        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(try await sdk.waitUntilEnabled() == false)
     }
 
-    @Test func waitUntilEnabledWaitsForInitInFlight() async {
+    @Test func waitUntilEnabledWaitsForInitInFlight() async throws {
         harness.server.on("/v2/config") { _ in StubServer.Response(status: 200, body: try! JSONSerialization.data(withJSONObject: Fixtures.initEnabled()), delay: 0.15) }
         sdk.initialize(with: harness.configuration, completion: nil)
         let started = Date()
-        let enabled = await sdk.waitUntilEnabled()
+        let enabled = try await sdk.waitUntilEnabled()
         #expect(enabled)
         #expect(Date().timeIntervalSince(started) >= 0.1)
     }
 
-    @Test func aFailedInitIsRetriedByTheNextRequestAtOnce() async {
+    @Test func aFailedInitIsRetriedByTheNextRequestAtOnce() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         _ = await harness.initialize()
         #expect(harness.server.requests(to: "/v2/config").count == 2, "10 s timeout, one retry")
         harness.server.on("/v2/config", .json(Fixtures.initEnabled()))
-        #expect(await sdk.waitUntilEnabled(), "waitUntilEnabled retries a failed /config itself, no waiting period")
+        #expect(try await sdk.waitUntilEnabled(), "waitUntilEnabled retries a failed /config itself, no waiting period")
         #expect(sdk.state == .enabled)
         #expect(harness.server.requests(to: "/v2/config").count == 3)
     }
 
-    @Test func everyRequestRetriesAFailedInitAgain() async {
+    @Test func everyRequestRetriesAFailedInitAgain() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         _ = await harness.initialize()
-        #expect(await sdk.waitUntilEnabled() == false)
-        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(try await sdk.waitUntilEnabled() == false)
+        #expect(try await sdk.waitUntilEnabled() == false)
         #expect(harness.server.requests(to: "/v2/config").count == 6, "two more attempts, each with its own retry")
         #expect(sdk.state == .failed)
     }
@@ -141,11 +141,51 @@ struct KontextVideoTests {
         #expect(sdk.state == .enabled)
     }
 
-    @Test func disableFromAnAdsResponseIsTheSameKillSwitch() async {
+    @Test func theCompletionRunsExactlyOnceForEveryOutcome() async throws {
+        KontextVideo.configRetryDelay = 0.001
+        let outcomes: [(StubServer.Response, KontextVideo.State)] = [
+            (.json(Fixtures.initEnabled()), .enabled),
+            (.json(Fixtures.disabled("publisherDisabled")), .disabled(reason: "publisherDisabled")),
+            (.failure(.timedOut), .failed),
+        ]
+        for (response, expected) in outcomes {
+            sdk.resetForTesting()
+            harness.server.on("/v2/config", response)
+            var reported: [KontextVideo.State] = []
+            sdk.initialize(with: harness.configuration) { reported.append($0) }
+            #expect(await waitUntil { !reported.isEmpty })
+            // A failed /config is retried by the next request; the retry belongs to that request, not to initialize.
+            _ = try await sdk.waitUntilEnabled()
+            await sleepMs(50)
+            #expect(reported == [expected], "\(expected)")
+        }
+    }
+
+    @Test func aCancelledWaiterStopsWaitingForConfigAndTheOthersShareOneConfig() async throws {
+        let gate = StubServer.Gate()
+        var config = StubServer.Response.json(Fixtures.initEnabled())
+        config.gate = gate
+        harness.server.on("/v2/config", config)
+        sdk.initialize(with: harness.configuration, completion: nil)
+        // A safety net: without the fix the cancelled waiter would hang until /config answers.
+        Task { await sleepMs(3000); gate.open() }
+        let cancelled = Task { try await KontextVideo.shared.waitUntilEnabled() }
+        let other = Task { try await KontextVideo.shared.waitUntilEnabled() }
+        await sleepMs(20)
+        cancelled.cancel()
+        let result = await cancelled.result
+        guard case .failure(is CancellationError) = result else { Issue.record("expected CancellationError, got \(result)"); return }
+        #expect(!gate.isOpen, "it stopped waiting while /config was still out")
+        gate.open()
+        #expect(try await other.value, "the other waiter still gets the answer")
+        #expect(harness.server.requests(to: "/v2/config").count == 1, "one /config for everyone")
+    }
+
+    @Test func disableFromAnAdsResponseIsTheSameKillSwitch() async throws {
         _ = await harness.initialize()
         sdk.disable(reason: "appVersionDisabled")
         #expect(sdk.state == .disabled(reason: "appVersionDisabled"))
-        #expect(await sdk.waitUntilEnabled() == false)
+        #expect(try await sdk.waitUntilEnabled() == false)
     }
 
     @Test func reportDebugEnablesTheReporter() async {
