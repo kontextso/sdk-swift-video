@@ -98,11 +98,18 @@ final class StubServer: @unchecked Sendable {
 
     // MARK: Installation
 
-    nonisolated(unsafe) static var current: StubServer?
+    /// The server installed last. Read from URL-loading threads while the main thread installs the next
+    /// one, so every access goes through `registryLock`: an unguarded dictionary here crashed the test host.
+    static var current: StubServer? {
+        get { registryLock.withLock { storedCurrent } }
+        set { registryLock.withLock { storedCurrent = newValue } }
+    }
+    nonisolated(unsafe) private static var storedCurrent: StubServer?
     /// Every installed server by its marker, so a request made on an older session (a beacon a previous
     /// test's `VideoAds` fires from `deinit`, on a background thread) reaches its own server, never the
-    /// one the next test installed meanwhile.
+    /// one the next test installed meanwhile. Guarded by `registryLock`.
     nonisolated(unsafe) private static var servers: [String: StubServer] = [:]
+    private static let registryLock = NSLock()
     private static let markerHeader = "X-Kontext-Stub"
     private let marker = UUID().uuidString
 
@@ -110,7 +117,7 @@ final class StubServer: @unchecked Sendable {
     @MainActor
     func install() {
         StubServer.current = self
-        StubServer.servers[marker] = self
+        StubServer.registryLock.withLock { StubServer.servers[marker] = self }
         Environment.session = makeSession()
     }
 
@@ -132,8 +139,8 @@ final class StubServer: @unchecked Sendable {
 
     /// The server a request belongs to: the one its session was created for, else the current one.
     fileprivate static func server(for request: URLRequest) -> StubServer? {
-        if let marker = request.value(forHTTPHeaderField: markerHeader), let server = servers[marker] { return server }
-        return current
+        let marker = request.value(forHTTPHeaderField: markerHeader)
+        return registryLock.withLock { marker.flatMap { servers[$0] } ?? storedCurrent }
     }
 }
 
