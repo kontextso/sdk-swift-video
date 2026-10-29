@@ -247,5 +247,137 @@ struct ViewabilityMeterTests {
         await sleepMs(50)
         #expect(sink.verdict == .viewable)
     }
+
+    // MARK: Controlled sampling: a frozen clock and ticks driven by hand
+
+    /// A clock the test moves; the meter's timer is set so far apart that only the test's ticks count.
+    final class Clock {
+        var now: TimeInterval = 1000
+    }
+
+    private func frozen() -> Clock {
+        let clock = Clock()
+        Environment.now = { clock.now }
+        ViewabilityMeter.interval = 10_000
+        return clock
+    }
+
+    @Test func theDwellCountsToTheBoundaryExactly() async {
+        defer { window.tearDown() }
+        let clock = frozen()
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()   // the first tick, at 1000
+        clock.now = 1000.999
+        meter.tick()
+        #expect(sink.verdict == nil, "just before")
+        clock.now = 1001
+        meter.tick()
+        #expect(sink.verdict == .viewable, "exactly at the dwell")
+    }
+
+    @Test func aPauseBetweenTwoTicksRestartsTheDwell() async {
+        defer { window.tearDown() }
+        let clock = frozen()
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 2)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()            // playing from 1000
+        clock.now = 1001.05
+        meter.countsTime = false // paused...
+        clock.now = 1001.10
+        meter.countsTime = true  // ...and playing again before any tick saw the pause
+        clock.now = 1002
+        meter.tick()
+        #expect(sink.verdict == nil, "two seconds since the start, but not two continuous seconds of playback")
+        clock.now = 1003.999
+        meter.tick()
+        #expect(sink.verdict == nil)
+        clock.now = 1004
+        meter.tick()
+        #expect(sink.verdict == .viewable, "two seconds from the first tick after the pause")
+    }
+
+    @Test func aRotatedViewHalfOffTheWindowIsMeasuredOnItsShape() async {
+        defer { window.tearDown() }
+        let clock = frozen()
+        // A 100×100 square turned 45°, its center 20 points beyond the window's left edge: a quarter of it
+        // (25.7 %) is on screen. Its bounding box would claim three quarters.
+        let view = makeView(CGRect(x: 0, y: 0, width: 100, height: 100))
+        view.center = CGPoint(x: -20, y: 400)
+        view.transform = CGAffineTransform(rotationAngle: .pi / 4)
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        let share = sink.exposures.last ?? -1
+        #expect(share >= 0.25 && share <= 0.27, "\(share)")
+        clock.now += 5
+        meter.tick()
+        #expect(sink.verdict == nil, "never viewable at a quarter")
+    }
+
+    @Test func aRotatedAncestorThatClipsIsMeasuredOnItsShape() async {
+        defer { window.tearDown() }
+        _ = frozen()
+        // A clipping container turned 45°, holding a view twice its size: what shows is the container's
+        // diamond, a quarter of the view.
+        let container = UIView(frame: CGRect(x: 150, y: 350, width: 100, height: 100))
+        container.clipsToBounds = true
+        container.transform = CGAffineTransform(rotationAngle: .pi / 4)
+        window.add(container)
+        let view = UIView(frame: CGRect(x: -50, y: -50, width: 200, height: 200))
+        container.addSubview(view)
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        let share = sink.exposures.last ?? -1
+        #expect(share >= 0.24 && share <= 0.26, "\(share)")
+    }
+
+    @Test func justUnderHalfRoundsToHalfForThePageButNeverQualifies() async {
+        defer { window.tearDown() }
+        let clock = frozen()
+        // 99.2 of 200 points wide on screen: 49.6 %.
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 300.8, y: 0, width: 200, height: 100)), requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        #expect(sink.exposures.last == 0.5, "reported rounded")
+        clock.now += 10
+        meter.tick()
+        #expect(sink.verdict == nil, "the rule compares the real share")
+    }
+
+    @Test func anInactiveAdWindowInAnActiveAppIsNotExposed() async {
+        defer { window.tearDown() }
+        _ = frozen()
+        Environment.isApplicationActive = { true }
+        Environment.isWindowActive = { _ in false }
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        #expect(sink.exposures.last == 0)
+    }
+
+    @Test func aZeroSizedViewOrATransparentWindowIsNotExposed() async {
+        defer { window.tearDown() }
+        _ = frozen()
+        let empty = ViewabilityMeter(view: makeView(.zero), requiredSeconds: 1)
+        defer { empty.stop() }
+        let emptySink = attach(empty)
+        empty.start()
+        #expect(emptySink.exposures.last == 0)
+        window.window.alpha = 0
+        let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        #expect(sink.exposures.last == 0)
+        window.window.alpha = 1
+    }
 }
 }
