@@ -79,6 +79,10 @@ final class Playback: ObservableObject {
     private var ad: VideoAd?
     private var loop: (any NSObjectProtocol)?
     private var started = false
+    /// The viewer left: nothing restarts the content or shows an ad any more, whatever ends afterwards.
+    private var leaving = false
+    /// Prepares the ad and shows it 3 s in; cancelled when the viewer leaves first.
+    private var startTask: Task<Void, Never>?
 
     init(video: Video) {
         self.video = video
@@ -102,15 +106,20 @@ final class Playback: ObservableObject {
             player?.seek(to: .zero)
             player?.play()
         }
-        Task {
+        startTask = Task {
             await prepare()
             try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled, !leaving else { return }
             moment()
         }
     }
 
     /// Leaving the screen: the content stops and every ad of this video ends; the server hears of the unused ones.
+    /// `destroy()` delivers `didEnd(.destroyed)` for an ad on screen, so `leaving` is set first: that `didEnd`
+    /// must not restart the content of a screen the viewer has left.
     func stop() {
+        leaving = true
+        startTask?.cancel()
         player.pause()
         if let loop { NotificationCenter.default.removeObserver(loop) }
         ads.destroy()
@@ -195,9 +204,11 @@ extension Playback: VideoAdDelegate {
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
         status = "\(ad.format) ad ended: \(reason)"
         if ad === self.ad { self.ad = nil }
+        // The screen decides playback, not the ad: after the viewer left (`.destroyed` from stop()), nothing resumes.
+        guard !leaving else { return }
         switch ad.format {
         case .linear:
-            player.play()                  // every way it ends lands here
+            player.play()                  // the content paused for the ad; every other way it ends lands here
         case .pause:
             if reason == .resumed { resume() }   // the viewer tapped Resume on the ad itself
         case .overlay:
