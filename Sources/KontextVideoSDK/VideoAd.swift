@@ -374,7 +374,10 @@ public final class VideoAd {
     /// whole view; its page keeps its own controls clear of those areas.
     private func frame(in fullBounds: CGRect, safeArea: UIEdgeInsets) throws -> CGRect {
         guard descriptor.position != .fullscreen, let defaultSize = descriptor.size else { return fullBounds }
-        let bounds = fullBounds.inset(by: safeArea)
+        guard let bounds = AdPlacement.room(in: fullBounds, safeArea: safeArea) else {
+            chosenSize = nil
+            throw tooSmall(for: defaultSize, room: nil, safeArea: safeArea)
+        }
         let fit = { (candidate: Size) in AdPlacement.scale(toFit: candidate, in: bounds) }
         let unscaled = descriptor.sizes.filter { fit($0) >= 1 }
         let usable = descriptor.sizes.filter { fit($0) >= AdPlacement.smallestScale(of: $0) }
@@ -385,15 +388,21 @@ public final class VideoAd {
         chosenSize = size
         if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
         guard let frame = AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea) else {
-            // The view, safe area included: a view this big holds the ad.
-            let smallest = AdPlacement.smallestScale(of: size)
-            let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
-                                 height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
-            Logger.warning("ad \(id.prefix(8)): view \(Int(bounds.width))×\(Int(bounds.height)) is too small for the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
             chosenSize = nil
-            throw VideoAdError.containerTooSmall(minimum: minimum)
+            throw tooSmall(for: size, room: bounds, safeArea: safeArea)
         }
         return frame
+    }
+
+    /// `containerTooSmall` with the view that holds `size`, safe area and insets included. `room` is what
+    /// they left of the view, `nil` when they left nothing.
+    private func tooSmall(for size: Size, room: CGRect?, safeArea: UIEdgeInsets) -> VideoAdError {
+        let smallest = AdPlacement.smallestScale(of: size)
+        let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
+                             height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
+        let view = room.map { "view \(Int($0.width))×\(Int($0.height)) is too small for" } ?? "the safe area and insets leave no room for"
+        Logger.warning("ad \(id.prefix(8)): \(view) the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
+        return VideoAdError.containerTooSmall(minimum: minimum)
     }
 
     /// The chosen variant fitted again to a view that resized or rotated: the page was told that variant,

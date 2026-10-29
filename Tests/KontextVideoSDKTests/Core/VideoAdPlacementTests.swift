@@ -205,6 +205,52 @@ struct VideoAdPlacementTests {
         }
     }
 
+    @Test func insetsThatLeaveNoWidthOrNoHeightAreTooSmall() async throws {
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.add(player)
+        // 390 − 600 and 844 − 1000: inverted rectangles, whose `CGRect.width`/`height` read 210 and 156.
+        for (id, insets) in [("o-in-w", UIEdgeInsets(top: 0, left: 300, bottom: 0, right: 300)),
+                             ("o-in-h", UIEdgeInsets(top: 500, left: 0, bottom: 500, right: 0))] {
+            let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: id))
+            do {
+                try ad.show(in: player, insets: insets)
+                Issue.record("\(id): expected containerTooSmall")
+            } catch VideoAdError.containerTooSmall {}
+            #expect(ad.isReady && player.subviews.isEmpty, "\(id): nothing shown, the ad stays ready")
+        }
+    }
+
+    @Test func hugeFiniteInsetsAreTooSmallAndNeverTrap() async throws {
+        let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o-in-x", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
+        Logger.level = .debug   // after initialize, which sets its own: the size and dimension logs are built
+        defer { Logger.level = .warning }
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.add(player)
+        for insets in [UIEdgeInsets(top: 0, left: 1e20, bottom: 0, right: 0), UIEdgeInsets(top: 1e20, left: 0, bottom: 0, right: 0),
+                       UIEdgeInsets(top: 0, left: 0, bottom: .greatestFiniteMagnitude, right: .greatestFiniteMagnitude)] {
+            do {
+                try ad.show(in: player, insets: insets)
+                Issue.record("expected containerTooSmall for \(insets)")
+            } catch VideoAdError.containerTooSmall {}
+        }
+        #expect(ad.isReady)
+    }
+
+    @Test func resizingUntilTheInsetsLeaveNoRoomEndsTheAd() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-in-z"))   // 320×90, may shrink to 160×45
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        window.add(player)
+        try ad.show(in: player, insets: UIEdgeInsets(top: 0, left: 300, bottom: 0, right: 300))
+        #expect(adFrame(in: player)?.width == 244, "the 244 points between the insets")
+        player.frame.size = CGSize(width: 100, height: 390)   // 100 − 600: an inverted 500-point rectangle
+        player.layoutIfNeeded()
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
+        #expect(player.subviews.isEmpty)
+    }
+
     @Test func aNegativeOrNonFiniteInsetCountsAsZero() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-in-n"))
         let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))

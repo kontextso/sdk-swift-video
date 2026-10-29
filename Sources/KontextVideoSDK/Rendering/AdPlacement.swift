@@ -10,13 +10,23 @@ enum AdPlacement {
 
     /// Where `size` goes inside `fullBounds` less `safeArea`; `nil` when it does not fit.
     static func frame(of size: VideoAd.Size, at position: VideoAd.Position?, in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
-        let bounds = fullBounds.inset(by: safeArea)
+        guard let bounds = room(in: fullBounds, safeArea: safeArea) else { return nil }
         let scale = scale(toFit: size, in: bounds)
         guard scale >= smallestScale(of: size) else { return nil }
         let scaled = CGSize(width: (CGFloat(size.width) * scale).rounded(), height: (CGFloat(size.height) * scale).rounded())
         let x = (bounds.minX + (bounds.width - scaled.width) / 2).rounded()
         let y = position == .top ? bounds.minY : bounds.maxY - scaled.height
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
+    }
+
+    /// What `safeArea` leaves of `fullBounds`; `nil` when it leaves no area. Insets wider or taller than the
+    /// view make an inverted rectangle, whose `width` and `height` `CGRect` reads as positive: checked here
+    /// on the raw arithmetic, finite too, so a huge inset never reaches a size or a log.
+    static func room(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
+        let width = fullBounds.size.width - safeArea.left - safeArea.right
+        let height = fullBounds.size.height - safeArea.top - safeArea.bottom
+        guard width.isFinite, height.isFinite, width > 0, height > 0 else { return nil }
+        return CGRect(x: fullBounds.origin.x + safeArea.left, y: fullBounds.origin.y + safeArea.top, width: width, height: height)
     }
 
     /// The scale at which `size` fits `bounds`, at most 1: never enlarged.
