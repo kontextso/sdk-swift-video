@@ -129,6 +129,17 @@ struct APIClientTests {
         }
     }
 
+    @Test func theRetryRuleAtItsBoundaries() {
+        let statuses: [(Int, Bool)] = [(400, false), (428, false), (429, true), (430, false), (499, false), (500, true), (503, true), (599, true), (600, false), (0, false)]
+        for (status, retryable) in statuses {
+            #expect(APIError.http(status: status, errors: []).isRetryable == retryable, "HTTP \(status)")
+        }
+        #expect(!APIError.transport(URLError(.cancelled)).isRetryable, "a cancelled request is not sent again")
+        #expect(APIError.transport(URLError(.serverCertificateUntrusted)).isRetryable, "a captive portal's certificate clears on the next network")
+        #expect(APIError.transport(URLError(.timedOut)).isRetryable)
+        #expect(!APIError.decoding(URLError(.cannotDecodeContentData)).isRetryable)
+    }
+
     @Test func transportFailureIsRetryable() async {
         server.on("/v2/ping", .failure(.notConnectedToInternet))
         do {
@@ -182,11 +193,12 @@ struct APIClientTests {
     @Test func aTaskCancelledBeforePostSendsNothing() async {
         server.on("/v2/ping", .json(["ok": true]))
         let client = self.client
+        // The task cancels itself and calls `post` with no await in between, so only `post`'s own check can
+        // stop the request.
         let task = Task { () throws -> Reply in
-            try await Task.sleep(nanoseconds: 50_000_000)
+            withUnsafeCurrentTask { $0?.cancel() }
             return try await client.post("ping", body: Body(hello: "x"))
         }
-        task.cancel()
         do {
             _ = try await task.value
             Issue.record("expected a throw")

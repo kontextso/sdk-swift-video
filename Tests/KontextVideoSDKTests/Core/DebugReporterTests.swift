@@ -110,7 +110,12 @@ struct DebugReporterTests {
         #expect(batches(named: "later").isEmpty, "no second request while the first is answered")
         #expect(await waitUntil(10) { !self.batches(named: "later").isEmpty })
         let later = batches(named: "later")
-        #expect(later.count == 1 && later.first?.count == 5, "the five left together, in one batch, after the first was answered")
+        #expect(later.count == 1 && later.first?.count == 5, "the five left together, in one batch")
+        // Started only after the first was answered (3 s): a lower bound, which a slow runner cannot break.
+        let started = { (name: String) in self.harness.server.requests(to: "/v2/debug").first { ($0.body?["events"] as? [[String: Any]])?.contains { $0["name"] as? String == name } == true }?.receivedAt }
+        if let first = started("first"), let second = started("later") {
+            #expect(second.timeIntervalSince(first) >= 2.9, "the second request waited for the first answer: \(second.timeIntervalSince(first)) s")
+        }
     }
 
     /// The batches that carry an event called `name`, each as its list of events.

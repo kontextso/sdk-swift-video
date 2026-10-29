@@ -27,6 +27,8 @@ final class StubServer: @unchecked Sendable {
         let body: [String: Any]?
         /// The bytes as sent.
         var rawBody = Data()
+        /// When the request reached the server.
+        var receivedAt = Date()
         var path: String { request.url?.path ?? "" }
         var query: [String: String] {
             Dictionary(uniqueKeysWithValues: (URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })

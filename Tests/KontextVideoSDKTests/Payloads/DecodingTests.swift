@@ -174,12 +174,29 @@ struct DecodingTests {
         #expect(attribution.aakJWS == "j")
     }
 
+    @Test func badEntriesBeforeAndBetweenGoodOnesAreSkipped() throws {
+        var skan = Fixtures.skan()
+        skan["fidelities"] = [
+            NSNull(), 7, ["fidelity": 1, "nonce": "n"],              // null, a scalar, a malformed supported entry
+            ["fidelity": 0, "nonce": "a", "timestamp": "1", "signature": "s"],
+            "junk", ["fidelity": 2, "nonce": "b", "timestamp": "1", "signature": "t"],
+            ["fidelity": 1, "nonce": "c", "timestamp": "1", "signature": "u"],
+        ]
+        let attribution = try #require(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan, "aak": ["jws": "j"]]])).attribution)
+        #expect(attribution.skan?.fidelities.map(\.fidelity) == [0, 1], "both good entries survive, whatever comes before them")
+        #expect(attribution.skan?.fidelities.last?.nonce == "c")
+        #expect(attribution.aakJWS == "j")
+    }
+
     @Test func theSameFidelityTwiceDropsThePayload() throws {
         var skan = Fixtures.skan()
         skan["fidelities"] = [["fidelity": 0, "nonce": "a", "timestamp": "1", "signature": "s"], ["fidelity": 0, "nonce": "b", "timestamp": "1", "signature": "t"]]
         let attribution = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan, "aak": ["jws": "j"]]])).attribution
         #expect(attribution?.skan == nil, "which one signs would depend on the order")
         #expect(attribution?.aakJWS == "j")
+        var clickTwice = Fixtures.skan()
+        clickTwice["fidelities"] = [["fidelity": 1, "nonce": "a", "timestamp": "1", "signature": "s"], ["fidelity": 1, "nonce": "b", "timestamp": "1", "signature": "t"]]
+        #expect(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": clickTwice]])).attribution?.skan == nil, "fidelity 1 twice too")
     }
 
     @Test func anEmptyRequiredStringIsMissing() throws {

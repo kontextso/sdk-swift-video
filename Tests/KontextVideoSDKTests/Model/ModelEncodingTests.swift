@@ -28,6 +28,21 @@ struct ModelEncodingTests {
         #expect(json["episodeNumber"] as? Int == 6)
         #expect((json["series"] as? [String: Any])?["episodeCount"] as? Int == 40)
         #expect((json["series"] as? [String: Any])?["title"] as? String == "S")
+        // The whole object, so no field can drop out unnoticed.
+        let expected: [String: Any] = [
+            "id": "100001-6", "language": "pt-BR", "mediaRating": "explicit", "url": "https://p.test/ep/6",
+            "title": "Episode 6", "categories": ["640"], "description": "d", "duration": 92_400, "episodeNumber": 6,
+            "keywords": ["love"], "genre": "romance",
+            "series": ["id": "100001", "title": "S", "description": "sd", "episodeCount": 40],
+        ]
+        #expect(NSDictionary(dictionary: json) == NSDictionary(dictionary: expected), "\(json)")
+    }
+
+    @Test func aUserIsSentExactlyAsGiven() throws {
+        let user = KontextVideo.User(id: "U-42", email: "  Viewer.Name@Example.COM ", emailHash: "AbC123==", keywords: ["Romance", " CEO "])
+        let json = try Fixtures.encode(user)
+        let expected: [String: Any] = ["id": "U-42", "email": "  Viewer.Name@Example.COM ", "emailHash": "AbC123==", "keywords": ["Romance", " CEO "]]
+        #expect(NSDictionary(dictionary: json) == NSDictionary(dictionary: expected), "no trimming, no lowercasing: \(json)")
     }
 
     @Test func aDurationThatIsNotADurationIsLeftOut() throws {

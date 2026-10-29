@@ -202,6 +202,42 @@ struct RequestTests {
         #expect(regulatory?.coppa == true, "coppa only ever comes from the publisher")
     }
 
+    @Test func consentPrecedenceForEveryField() {
+        let defaults = UserDefaults(suiteName: "consent-matrix")!
+        defaults.removePersistentDomain(forName: "consent-matrix")
+        let publisher = KontextVideo.Regulatory(gdpr: false, gdprConsent: "PUB-TC", coppa: false, gpp: "PUB-GPP", gppSid: [9], usPrivacy: "1NNN")
+
+        // The CMP wrote nothing: every field from the publisher, explicit false included.
+        let fallback = ConsentStorage.read(merging: publisher, defaults: defaults)
+        #expect(fallback == publisher, "absent CMP values: the publisher's, false kept as false")
+
+        // The CMP wrote valid values that conflict: each CMP value wins; coppa stays the publisher's.
+        defaults.set(1, forKey: "IABTCF_gdprApplies")
+        defaults.set("CMP-TC", forKey: "IABTCF_TCString")
+        defaults.set("CMP-GPP", forKey: "IABGPP_HDR_GppString")
+        defaults.set("2_7", forKey: "IABGPP_GppSID")
+        defaults.set("1YNN", forKey: "IABUSPrivacy_String")
+        let cmp = ConsentStorage.read(merging: publisher, defaults: defaults)
+        #expect(cmp == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", coppa: false, gpp: "CMP-GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+
+        // Clearing the publisher's values leaves the CMP's in place.
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults) == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", gpp: "CMP-GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+
+        // The CMP's values become unusable: each field falls back to the publisher's.
+        defaults.set("yes", forKey: "IABTCF_gdprApplies")
+        defaults.set("", forKey: "IABTCF_TCString")
+        defaults.set("", forKey: "IABGPP_HDR_GppString")
+        defaults.set("x_y", forKey: "IABGPP_GppSID")
+        defaults.set("", forKey: "IABUSPrivacy_String")
+        #expect(ConsentStorage.read(merging: publisher, defaults: defaults) == publisher, "unusable CMP values: the publisher's")
+
+        // The CMP changes between requests: the next read sees the new value.
+        defaults.set(0, forKey: "IABTCF_gdprApplies")
+        defaults.set("3", forKey: "IABGPP_GppSID")
+        let changed = ConsentStorage.read(merging: publisher, defaults: defaults)
+        #expect(changed?.gdpr == false && changed?.gppSid == [3])
+    }
+
     @Test func consentStorageReadsGdprAppliesAsCMPsWriteIt() {
         let defaults = UserDefaults(suiteName: "consent-test-5")!
         defaults.removePersistentDomain(forName: "consent-test-5")
