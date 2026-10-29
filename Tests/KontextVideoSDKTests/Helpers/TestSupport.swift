@@ -64,6 +64,7 @@ final class RecordingSKAdNetwork: SKAdNetworkManaging {
     var onInit: (@MainActor () async throws -> Void)?
     var onStart: (@MainActor () async throws -> Void)?
     var onEnd: (@MainActor () async throws -> Void)?
+    var onDispose: (@MainActor () async throws -> Void)?
 
     func initImpression(_ skan: Skan) async throws {
         calls.append("init \(skan.itunesItem)")
@@ -80,7 +81,10 @@ final class RecordingSKAdNetwork: SKAdNetworkManaging {
         try await onEnd?()
     }
 
-    func dispose() async throws { calls.append("dispose") }
+    func dispose() async throws {
+        calls.append("dispose")
+        try await onDispose?()
+    }
 }
 
 /// Records the App Store sheets the SDK asked for; `result` is what each presentation answers.
@@ -88,9 +92,12 @@ final class RecordingSKAdNetwork: SKAdNetworkManaging {
 final class RecordingStoreProduct: StoreProductManaging {
     private(set) var presented: [Skan] = []
     var result: Result<Bool, Error> = .success(true)
+    /// What the presentation does before it answers; a test that holds the sheet loading sets it.
+    var onPresent: (@MainActor () async -> Void)?
 
     func present(_ skan: Skan) async throws -> Bool {
         presented.append(skan)
+        await onPresent?()
         return try result.get()
     }
 }

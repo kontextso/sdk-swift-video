@@ -161,6 +161,66 @@ struct VideoAdSKAdNetworkTests {
         #expect(skanCalls == ["init s12", "end", "dispose"], "no start for an ad already gone; the end releases it")
     }
 
+    @Test func anAdThatEndsOnceRegistrationIsUnderwayIsNeverStarted() async throws {
+        // The same, with registration proven to be inside the manager before the ad ends.
+        let gate = Gate()
+        var entered = false
+        harness.skAdNetwork.onInit = { entered = true; while !gate.open { await sleepMs(5) } }
+        let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s12b"), itunesItem: "s12b"))
+        try ad.show(in: harness.player.view)
+        #expect(await waitUntil { entered })
+        try ad.dismiss()
+        gate.open = true
+        #expect(await waitUntil { skanCalls.count == 3 })
+        await sleepMs(30)
+        #expect(skanCalls == ["init s12b", "end", "dispose"])
+    }
+
+    @Test func everyFailureIsReportedWithItsStepAndAd() async throws {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        harness.skAdNetwork.onStart = { throw TestFailure() }
+        harness.skAdNetwork.onEnd = { throw TestFailure() }
+        harness.skAdNetwork.onDispose = { throw TestFailure() }
+        let (first, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s16a"), itunesItem: "s16a"))
+        try first.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls.count == 2 })
+        try first.dismiss()
+        #expect(await waitUntil { skanCalls.count == 4 })
+        // A failed dispose does not block the next ad.
+        harness.skAdNetwork.onStart = nil
+        let (second, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s16b"), itunesItem: "s16b"))
+        try second.show(in: harness.player.view)
+        #expect(await waitUntil { skanCalls == ["init s16a", "start", "end", "dispose", "init s16b", "start"] })
+        let failures = {
+            self.harness.server.requests(to: "/v2/debug").compactMap { $0.body?["events"] as? [[String: Any]] }.flatMap { $0 }
+                .filter { $0["name"] as? String == "ad.skanFailed" }
+        }
+        #expect(await waitUntil(5) { failures().count == 3 })
+        #expect(failures().compactMap { ($0["state"] as? [String: Any])?["step"] as? String } == ["start", "end", "dispose"], "each failure once, with its step")
+        #expect(failures().compactMap { $0["adId"] as? String } == ["s16a", "s16a", "s16a"], "and the ad it belongs to")
+        try second.dismiss()
+    }
+
+    @Test func aClickWhoseSheetIsLoadingWhenTheAdEndsIsStillHonored() async throws {
+        let gate = Gate()
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        harness.storeProduct.onPresent = { while !gate.open { await sleepMs(5) } }
+        harness.storeProduct.result = .success(false)
+        var ad: VideoAd? = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s17"), itunesItem: "s17")).0
+        weak var released = ad
+        try ad?.show(in: harness.player.view)
+        ad?.bridge.noteTouch()
+        if let ad { send(ad, "ad.click", ["url": "https://apps.apple.com/app/id17"]) }
+        #expect(await waitUntil { harness.storeProduct.presented.count == 1 })
+        try ad?.dismiss()   // the ad ends while the sheet is still loading, and is released
+        ad = nil
+        #expect(await waitUntil { released == nil }, "the ad is gone")
+        gate.open = true
+        #expect(await waitUntil { opened.count == 1 }, "the sheet failed: the viewer's tap still opens the URL")
+        #expect(opened.first?.absoluteString == "https://apps.apple.com/app/id17")
+    }
+
     @Test func aFailedStartStillGetsItsEnd() async throws {
         harness.skAdNetwork.onStart = { throw TestFailure() }
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s13"), itunesItem: "s13"))

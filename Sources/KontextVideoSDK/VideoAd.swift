@@ -633,16 +633,17 @@ public final class VideoAd {
     /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
     /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
     private func openClick(_ url: URL, fallback: URL?) {
-        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return open(url, fallback: fallback) }
-        Task { [weak self] in
+        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return Self.open(url, fallback: fallback) }
+        // The viewer's tap is honored even if the ad ends while the sheet loads: the URL opens when it fails.
+        Task {
             if await skAdNetwork.presentStore() { return }
-            self?.open(url, fallback: fallback)
+            Self.open(url, fallback: fallback)
         }
     }
 
     /// Opens a URL the page asked for: the app store, a deep link, a web page. The fallback is tried when
     /// the first cannot be opened (an app that is not installed).
-    private func open(_ url: URL, fallback: URL?) {
+    private static func open(_ url: URL, fallback: URL?) {
         Environment.openURL(url) { opened in
             if !opened, let fallback {
                 Environment.openURL(fallback) { _ in }
@@ -697,7 +698,7 @@ public final class VideoAd {
             if purpose == "adChoices" {
                 tracker.fire("iconClick")
             }
-            open(url, fallback: nil)
+            Self.open(url, fallback: nil)
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(). The reason is
             // the gesture, the same in every format; `isCompleted` says whether the video ran to its
