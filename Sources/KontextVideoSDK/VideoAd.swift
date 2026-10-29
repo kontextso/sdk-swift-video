@@ -201,7 +201,7 @@ public final class VideoAd {
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
-    /// (the view is not in a window, or it, an ancestor or its window is hidden or transparent) and
+    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent) and
     /// `containerTooSmall` (the ad stays ready in both). Succeeds once the ad is on screen; from then until
     /// `didEnd` the SDK retains it. The ad follows the view when it resizes or rotates: the same variant is
     /// fitted again within the same limits, and a view that becomes too small for it ends it with
@@ -234,6 +234,13 @@ public final class VideoAd {
         hostView = host
         reserve()
         container.addSubview(host)
+        // The hook may also have taken the player off screen without ending anything: the ad committed, but
+        // nobody can see it, so it ends at once, with no impression.
+        if !hasEnded, !AdPlacement.canBeSeen(host) {
+            Logger.warning("ad \(id.prefix(8)): the view left the screen as the ad was added; ended as interrupted")
+            end(.interrupted)
+            return
+        }
         presented()
     }
 

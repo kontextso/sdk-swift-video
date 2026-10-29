@@ -52,7 +52,8 @@ public enum VideoAdError: Error, Sendable {
     /// Nothing on screen can hold the ad. Thrown by `show`: for a linear ad the view controller given is
     /// already presenting or not on screen, or with `show()` there is no key window or its top controller
     /// is mid-transition; for an overlay or pause ad the view is not in a window. In both, a view that is
-    /// hidden or transparent, or sits in a hidden or transparent ancestor or window, is not on screen. The ad stays ready: try
+    /// hidden, transparent or without an area, or sits in a hidden or transparent ancestor or window, is not
+    /// on screen. The ad stays ready: try
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable

@@ -29,10 +29,11 @@ enum AdPlacement {
         size.scalable ? minimumScale : 1
     }
 
-    /// Whether the viewer could see `view`: in a window, and neither it, an ancestor nor the window hidden
-    /// or transparent. What covers it is not known here; the meter measures that once the ad is shown.
+    /// Whether the viewer could see `view`: in a window, with an area, and neither it, an ancestor nor the
+    /// window hidden or transparent. What covers it is not known here; the meter measures that once the ad
+    /// is shown.
     static func canBeSeen(_ view: UIView) -> Bool {
-        guard view.window != nil else { return false }
+        guard view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return false }
         var node: UIView? = view
         while let current = node {
             if current.isHidden || current.alpha <= 0.01 { return false }

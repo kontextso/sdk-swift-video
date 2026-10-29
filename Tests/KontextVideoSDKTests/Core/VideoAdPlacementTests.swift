@@ -91,6 +91,10 @@ struct VideoAdPlacementTests {
         hiddenWindow.add(inHiddenWindow)
         hiddenWindow.window.isHidden = true
         refused(ad, inHiddenWindow, "in a hidden window")
+        let (fullscreen, _, _) = try await makeAd(Fixtures.ad(id: "p10z", position: "fullscreen", size: nil))
+        let empty = UIView(frame: .zero)
+        window.add(empty)
+        refused(fullscreen, empty, "a view without an area, for an ad that fills it")
         #expect(delegate.events.isEmpty, "no impression")
 
         let (linear, _, _) = try await makeAd(Fixtures.linearAd(id: "v10h"))

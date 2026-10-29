@@ -604,7 +604,8 @@ struct VideoAdsTests {
 
     @Test func releasingTheVideoAdsMidRequestFreesItTheRequestDoesNotKeepItAlive() async throws {
         var ads: VideoAds? = await makeAds()
-        weak var released = ads
+        weak var released: VideoAds?
+        released = ads
         let gate = StubServer.Gate()
         defer { gate.open() }
         harness.serve(Fixtures.ad(id: "img-released"), gate: gate)
@@ -644,7 +645,8 @@ struct VideoAdsTests {
     @Test func aTrackedPlayerIsHeldWeakly() async {
         let ads = await makeAds()
         var player: AVPlayer? = AVPlayer()
-        weak var released = player
+        weak var released: AVPlayer?
+        released = player
         ads.trackPlayhead(of: player!)
         player = nil
         #expect(released == nil, "the provider does not keep the player")

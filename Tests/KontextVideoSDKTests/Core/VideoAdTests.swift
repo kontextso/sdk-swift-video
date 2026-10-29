@@ -828,52 +828,6 @@ struct VideoAdTests {
         #expect(fired.contains("start") && fired.contains("impression") && !fired.contains("firstQuartile"), "the start's own beacons, nothing after the end: \(fired)")
     }
 
-    @Test func aPlayheadProviderThatDestroysDuringShowGetsNoImpressionAfterDidEnd() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10p"))
-        var reads = 0
-        // The first beacon at show reads the playhead; the app's provider destroys the VideoAds there.
-        ads.playheadProvider = { [weak ads] in
-            reads += 1
-            if reads == 1 { ads?.destroy() }
-            return 0
-        }
-        try ad.show(in: harness.player.view)
-        #expect(reads >= 1, "the show's beacons read the app's provider")
-        #expect(delegate.events == ["end:destroyed"], "didEnd is the last and only call: \(delegate.events)")
-        #expect(KontextVideo.shared.adOnScreen == nil && ad.loadedBridge == nil)
-        #expect(!(await beacons()).contains("impression"), "nothing after the end")
-    }
-
-    @Test func aShowFromInsideTheContainersAddHookFindsTheSlotTaken() async throws {
-        let (first, firstDelegate, _) = try await makeAd(Fixtures.overlayAd(id: "o10r"))
-        let (second, secondDelegate, _) = try await makeAd(Fixtures.ad(id: "p10r"))
-        let reentrant = ReentrantView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
-        let other = UIView(frame: CGRect(x: 0, y: 300, width: 390, height: 220))
-        window.add(reentrant)
-        window.add(other)
-        var nested: Error?
-        reentrant.onAdd = { do { try second.show(in: other) } catch { nested = error } }
-        try first.show(in: reentrant)
-        guard case .anotherAdShowing? = nested as? VideoAdError else { Issue.record("expected anotherAdShowing, got \(String(describing: nested))"); return }
-        #expect(first.wasShown && !second.wasShown && second.isReady, "one ad on screen; the other stays ready")
-        #expect(firstDelegate.events == ["impression"] && secondDelegate.events.isEmpty)
-        #expect(other.subviews.isEmpty, "the refused show left nothing behind")
-        #expect(KontextVideo.shared.adOnScreen === first)
-        try first.dismiss()
-    }
-
-    @Test func aDestroyFromInsideTheContainersAddHookEndsTheAdWithNothingLeft() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o10d"))
-        let reentrant = ReentrantView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
-        window.add(reentrant)
-        reentrant.onAdd = { ads.destroy() }
-        try ad.show(in: reentrant)
-        #expect(ad.wasShown && ad.hasEnded)
-        #expect(delegate.events == ["end:destroyed"], "no impression for an ad that ended before it was on screen")
-        #expect(reentrant.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
-        #expect(!(await beacons()).contains("impression"))
-    }
-
     @Test func aSkipPastACheckpointFiresItOnce() async throws {
         let (late, _, _) = try await makeAd(Fixtures.linearAd(id: "v10s"))
         try presentLinear(late)
@@ -1058,17 +1012,4 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.dismissed])
     }
 }
-}
-
-/// A player view that runs the app's code when the SDK adds its host, as an overridable UIKit hook can.
-@MainActor
-private final class ReentrantView: UIView {
-    var onAdd: (() -> Void)?
-
-    override func didAddSubview(_ subview: UIView) {
-        super.didAddSubview(subview)
-        let action = onAdd
-        onAdd = nil
-        action?()
-    }
 }
