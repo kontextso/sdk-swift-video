@@ -124,7 +124,7 @@ final class FrameBridge: NSObject {
     /// WebView sits in the key window, invisible and inert, at the size the ad will have. Removed on show
     /// (the ad's own view takes it) and on end.
     private func parkOffscreen() {
-        guard webView.window == nil, let window = Environment.keyWindow() else { return }
+        guard webView.window == nil, let window = Environment.parkingWindow() else { return }
         webView.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: window.bounds.height)
         webView.alpha = 0
         webView.isUserInteractionEnabled = false

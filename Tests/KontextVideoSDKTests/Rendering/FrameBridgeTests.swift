@@ -446,6 +446,13 @@ struct FrameBridgeTests {
         #expect(bridge.webView.superview == nil, "nothing stays in the window after the ad is gone")
     }
 
+    @Test func pagesParkInTheKeyWindowUnlessToldOtherwise() {
+        let window = TestWindow()
+        defer { window.tearDown() }
+        Environment.keyWindow = { window.window }
+        #expect(Environment.parkingWindow() === window.window, "by default the parking window is the key window")
+    }
+
     @Test func withoutAKeyWindowLoadStillWorks() {
         Environment.keyWindow = { nil }
         let (bridge, _) = makeBridge()

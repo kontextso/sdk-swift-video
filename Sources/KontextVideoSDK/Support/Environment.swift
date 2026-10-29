@@ -27,8 +27,12 @@ enum Environment {
     }
 
     private static let defaultSession = makeSession()
-    /// Where a loading WebView is parked so WebKit buffers its video, and where `show()` finds its presenter.
+    /// Where `show()` finds its presenter, and what the request reports as the player when nothing else says.
     static var keyWindow: @MainActor () -> UIWindow? = defaultKeyWindow
+    /// Where a loading WebView is parked so WebKit runs its page and buffers its video: the key window.
+    /// Separate from `keyWindow` only so the tests can give pages a window without changing what the
+    /// requests report or where a linear ad is presented.
+    static var parkingWindow: @MainActor () -> UIWindow? = { keyWindow() }
     /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
     static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
     /// Opens a URL the page asked for; the completion says whether it could.
@@ -60,6 +64,7 @@ enum Environment {
     static func reset() {
         session = defaultSession
         keyWindow = defaultKeyWindow
+        parkingWindow = { keyWindow() }
         schemeHandlers = [:]
         openURL = defaultOpenURL
         assertionFailure = { Swift.assertionFailure($0) }

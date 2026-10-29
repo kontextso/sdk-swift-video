@@ -128,6 +128,24 @@ final class TestWindow {
     }
 }
 
+/// One visible window for the whole run where the bridge parks loading pages. Never made key, so it does
+/// not take key status from the windows the tests present in.
+@MainActor
+enum ParkingWindow {
+    static let window: UIWindow = {
+        let window: UIWindow
+        if let scene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+            window = UIWindow(windowScene: scene)
+        } else {
+            window = UIWindow(frame: .zero)
+        }
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        window.windowLevel = .normal - 1
+        window.isHidden = false
+        return window
+    }()
+}
+
 /// Moves the SDK's clock forward by `seconds` from now: what expiry tests use instead of waiting, so a
 /// slow runner cannot change the outcome. `SDKHarness.reset()` puts the real clock back.
 @MainActor
@@ -174,6 +192,9 @@ struct SDKHarness {
         Environment.isApplicationActive = { true }
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }
+        // Pages load in a window, as in an app: WebKit deprioritizes the web process of a WebView outside
+        // any window, and on a loaded CI runner a page then missed its 30 s load limit.
+        Environment.parkingWindow = { ParkingWindow.window }
         Environment.consentDefaults = UserDefaults(suiteName: "KontextVideoSDKTests")!
         Environment.consentDefaults.removePersistentDomain(forName: "KontextVideoSDKTests")
         Environment.skAdNetwork = skAdNetwork
