@@ -604,6 +604,25 @@ struct VideoAdsTests {
         #expect(await notUsedBeacons().isEmpty, "the late bids were never held; the server closes them at expiry")
     }
 
+    @Test func releasingAVideoAdsThatStillHoldsAdsWarnsOnTheConsole() async throws {
+        var ads: VideoAds? = await makeAds()
+        Logger.level = .warning
+        defer { Logger.level = .warning }
+        var warnings: [String] = []
+        Logger.sink = { level, message in if level == .warning, message.contains("released while holding") { warnings.append(message) } }
+        harness.serve(Fixtures.ad(id: "img-rel-w"))
+        let ad = try await ads!.format(.pause)
+        ads = nil   // the app kept the ad, not its VideoAds
+        #expect(ad.invalidationReason == .destroyed)
+        #expect(warnings.count == 1, "one warning: \(warnings)")
+        let destroyed = harness.player.ads(for: .init(id: "ep-2", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-rel-d"))
+        _ = try await destroyed.format(.pause)
+        destroyed.destroy()   // destroyed first, then released: nothing held, nothing to say
+        await sleepMs(20)
+        #expect(warnings.count == 1)
+    }
+
     @Test func releasingTheVideoAdsDoesWhatDestroyDoes() async throws {
         var ads: VideoAds? = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p24"))

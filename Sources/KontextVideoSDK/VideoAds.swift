@@ -274,10 +274,11 @@ public final class VideoAds {
 
     // MARK: Destroying
 
-    /// Releases the video's ads. Call it when the viewer leaves the video. Every held ad, loaded or not,
-    /// is dropped with a `notUsed` beacon (`destroyed`) and its WebView released; `load()` and `show` on
-    /// them throw `destroyed`; the ad on screen ends with `didEnd(.destroyed)`; a `format()` or `load()` in
-    /// flight throws `destroyed`. Calling it twice does nothing; afterwards `format()` throws `destroyed`.
+    /// Releases the video's ads. Call it when the viewer leaves the video. Every valid held ad, loaded or
+    /// not, is dropped with a `notUsed` beacon (`destroyed`) and its WebView released; one that expired leaves
+    /// silently, as the server knows `expires`. `load()` and `show` on them throw `destroyed`; the ad on
+    /// screen ends with `didEnd(.destroyed)`; a `format()` or `load()` in flight throws `destroyed`. Calling
+    /// it twice does nothing; afterwards `format()` throws `destroyed`.
     public func destroy() {
         guard !isDestroyed else { return }
         isDestroyed = true
@@ -291,12 +292,18 @@ public final class VideoAds {
     }
 
     /// Releasing the object does what `destroy()` does, best effort: the beacons leave if the process lives.
+    /// Released while it still holds ads, it says so on the console: the usual cause is a `VideoAds` the app
+    /// did not keep (a local variable, a SwiftUI view struct) while it kept the ads.
     deinit {
         let request = self.request
         let state = self.state
         let observer = memoryWarningObserver
+        let contentId = content.id
         let teardown: @MainActor () -> Void = {
             request?.cancel()
+            if !state.ads.isEmpty {
+                Logger.warning("VideoAds for video \(contentId) was released while holding \(state.ads.count) ad(s); they were ended as destroyed. Keep the VideoAds alive while you use its ads.")
+            }
             state.endAll()
             observer.map(NotificationCenter.default.removeObserver)
         }
