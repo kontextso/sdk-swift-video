@@ -174,8 +174,12 @@ final class ViewabilityMeter {
         for index in clipper.indices {
             guard !output.isEmpty else { break }
             let edgeStart = clipper[index], edgeEnd = clipper[(index + 1) % clipper.count]
-            let inside = { (point: CGPoint) in
-                sign * ((edgeEnd.x - edgeStart.x) * (point.y - edgeStart.y) - (edgeEnd.y - edgeStart.y) * (point.x - edgeStart.x)) >= 0
+            // Split into typed steps: one expression was too much for the Swift 6.1 type checker (Xcode 16.4).
+            let edge = CGVector(dx: edgeEnd.x - edgeStart.x, dy: edgeEnd.y - edgeStart.y)
+            let inside = { (point: CGPoint) -> Bool in
+                let along: CGFloat = edge.dx * (point.y - edgeStart.y)
+                let across: CGFloat = edge.dy * (point.x - edgeStart.x)
+                return sign * (along - across) >= 0
             }
             let input = output
             output = []
