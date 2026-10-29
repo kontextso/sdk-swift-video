@@ -11,6 +11,30 @@ extension SerialSuites {
 struct SupportTests {
     // MARK: VideoAdError
 
+    @Test func aDisabledLevelNeverBuildsItsMessage() {
+        let previous = Logger.level
+        defer { Logger.level = previous }
+        var built = 0
+        func message() -> String { built += 1; return "m" }
+        Logger.level = .warning
+        Logger.debug(message())
+        Logger.info(message())
+        #expect(built == 0, "debug and info are off at .warning")
+        Logger.warning(message())
+        #expect(built == 1)
+        Logger.level = .none
+        Logger.error(message())
+        #expect(built == 1, ".none builds nothing")
+    }
+
+    @Test func aURLIsLoggedAsItsSchemeAndHostOnly() {
+        #expect(Logger.describe(URL(string: "https://brand.test/offer?uid=42&sig=abc")!) == "https://brand.test")
+        #expect(Logger.describe(URL(string: "brandapp://offer/7?token=x")!) == "brandapp://offer")
+        #expect(Logger.describe(URL(string: "mailto:viewer@example.com")!) == "mailto:")
+        #expect(Logger.describe(URL(string: "javascript:alert(document.cookie)")!) == "javascript:")
+        #expect(Logger.describe(URL(string: "relative/path")!) == "(no scheme)")
+    }
+
     @Test func everyErrorReadsAsASentence() {
         let cases: [(VideoAdError, String)] = [
             (.notInitialized, "KontextVideo.shared.initialize(with:) was not called"),

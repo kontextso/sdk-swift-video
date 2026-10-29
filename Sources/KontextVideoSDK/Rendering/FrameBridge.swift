@@ -254,11 +254,11 @@ final class FrameBridge: NSObject {
         case "ad.click", "ad.open":
             guard state == .shown, let raw = body["url"] as? String, let url = Self.url(raw) else { return }
             guard Self.isAllowed(url) else {
-                Logger.warning("frame \(adId.prefix(8)): \(type) to \(raw) dropped, scheme refused")
+                Logger.warning("frame \(adId.prefix(8)): \(type) to \(Logger.describe(url)) dropped, scheme refused")
                 return
             }
             guard consumeTouch() else {
-                Logger.warning("frame \(adId.prefix(8)): \(type) to \(url.host ?? raw) dropped, no touch before it")
+                Logger.warning("frame \(adId.prefix(8)): \(type) to \(Logger.describe(url)) dropped, no touch before it")
                 return
             }
             if type == "ad.click" {
@@ -364,7 +364,7 @@ final class FrameBridge: NSObject {
     /// without one it is a forced redirect and goes nowhere.
     func externalNavigation(to target: URL) {
         guard state == .shown, Self.isAllowed(target), consumeTouch() else {
-            Logger.warning("frame \(adId.prefix(8)): navigation to \(target.host ?? target.absoluteString) cancelled")
+            Logger.warning("frame \(adId.prefix(8)): navigation to \(Logger.describe(target)) cancelled")
             return
         }
         onEvent?(.click(url: target, fallbackUrl: nil, area: .creative))
