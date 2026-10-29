@@ -431,9 +431,18 @@ extension FrameBridge: WKUIDelegate {
         completionHandler()
     }
 
+    // The iOS 18 SDK declares this one handler without the main-actor attribute the alert and prompt
+    // handlers have; the iOS 26 SDK adds it. A signature that misses is never called (WebKit then answers
+    // `false` itself), so each SDK gets its own.
+    #if compiler(>=6.2)
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable (Bool) -> Void) {
         completionHandler(false)
     }
+    #else
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        completionHandler(false)
+    }
+    #endif
 
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable (String?) -> Void) {
         completionHandler(nil)
