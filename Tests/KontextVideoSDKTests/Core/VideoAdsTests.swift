@@ -576,6 +576,18 @@ struct VideoAdsTests {
         #expect(await notUsedBeacons().count == 2)
     }
 
+    @Test func destroyNotifiesValidHeldAdsOnlyAnExpiredOneLeavesSilently() async throws {
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-d-old", expires: 30_000), "overlay": Fixtures.overlayAd(id: "img-d-new")])
+        let old = try await ads.format(.pause)
+        let fresh = try await ads.format(.overlay)
+        advanceClock(by: 31)   // the pause ad expired and nothing called the SDK since
+        ads.destroy()
+        #expect(old.invalidationReason == .expired && fresh.invalidationReason == .destroyed)
+        #expect(await notUsedBeacons(expecting: 1).map(\.adId) == ["img-d-new"], "one notice, for the valid ad")
+        #expect(await notUsedBeacons().count == 1, "none for the expired one: the server knows expires")
+    }
+
     @Test func destroyDuringARequestThrowsDestroyedAndIgnoresTheLateResponse() async throws {
         let ads = await makeAds()
         let gate = StubServer.Gate()

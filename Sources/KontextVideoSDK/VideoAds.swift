@@ -320,9 +320,14 @@ extension VideoAds {
         /// The ad of this `VideoAds` on screen. `KontextVideo.adOnScreen` retains it too.
         var showing: VideoAd?
 
-        /// `destroy()`: every held ad gets its `notUsed` beacon and ends; the ad on screen ends.
+        /// `destroy()`: every valid held ad gets its `notUsed` beacon and ends; the ad on screen ends. A held ad
+        /// that expired meanwhile leaves silently, as everywhere else: the server knows `expires`.
         func endAll() {
             for ad in Array(ads.values) {
+                if ad.descriptor.isExpired {
+                    ad.invalidate(.expired)
+                    continue
+                }
                 ad.withContentPlayhead {
                     ad.invalidate(.destroyed)
                     ad.tracker.fire("notUsed", notUsed: .destroyed)
