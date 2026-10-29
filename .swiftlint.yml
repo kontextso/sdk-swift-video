@@ -43,7 +43,6 @@ disabled_rules:
   - type_name
   - nesting
   - todo
-  - orphaned_doc_comment
   # Tests legitimately use try! / as! / !. The force-* rules have no per-path excludes, so they are off globally.
   - force_cast
   - force_try

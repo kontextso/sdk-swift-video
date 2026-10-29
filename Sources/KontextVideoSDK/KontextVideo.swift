@@ -160,8 +160,7 @@ public final class KontextVideo {
     }
 
     /// Back to the state before `initialize(with:)`. Tests only: the shared instance is process-wide.
-    // swiftlint:disable:next unused_declaration
-    func resetForTesting() {
+    func resetForTesting() { // swiftlint:disable:this unused_declaration
         initTask?.cancel()
         initTask = nil
         configuration = nil

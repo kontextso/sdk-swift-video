@@ -65,6 +65,3 @@ fastlane/test_output
 .claude/settings.local.json
 .claude/worktrees/
 
-# Local secrets for the example apps. See ExampleSecrets.swift.example
-# and DEVELOPMENT.md.
-ExampleSecrets.swift

@@ -54,10 +54,10 @@ enum Environment {
     static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = { await ATTrackingManager.requestTrackingAuthorization() }
     /// The device's advertising identifier, all zeros unless ATT is authorized. Tests set a real one.
     static var advertisingIdentifier: @MainActor () -> UUID = { ASIdentifierManager.shared().advertisingIdentifier }
-    /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
     /// The browser's user agent, `navigator.userAgent` of a WebView; KontextKit evaluates it in WebKit and
     /// caches it once it has one.
     static var userAgent: @MainActor () async -> String? = { await NetworkInfoProvider.collect().userAgent }
+    /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
     static var skAdNetwork: any SKAdNetworkManaging = KontextKitSKAdNetwork()
     /// Presents the App Store product sheet an app-install ad's click opens.
     static var storeProduct: any StoreProductManaging = KontextKitStoreProduct()

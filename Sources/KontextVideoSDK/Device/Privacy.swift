@@ -14,8 +14,7 @@ struct IFA: Encodable, Sendable {
     /// Never `true` on iOS: since iOS 10 an opted-out device returns no id at all, so an id is always one
     /// that may be used. Sent because the API's `ifa` object has the field: other platforms' SDKs hand out
     /// an id together with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs).
-    // swiftlint:disable:next unused_declaration
-    let limitAdTracking = false
+    let limitAdTracking = false // swiftlint:disable:this unused_declaration
 }
 
 /// What the request says about tracking: the ATT status and, when authorized, the IDFA.

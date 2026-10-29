@@ -53,7 +53,7 @@ xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simu
 
 The example talks to the ad server (`server.megabrain.co`, the SDK's default) with a demo token. To run it against
 the mock instead, pass `adServerURL: URL(string: "http://localhost:5175")!` in the `Configuration` in
-`Example/ExampleApp.swift` and start the mock:
+`Example/Example/ExampleApp.swift` and start the mock:
 
 ```bash
 # In sdk-video-mock-server
