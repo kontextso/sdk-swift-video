@@ -29,6 +29,18 @@ enum AdPlacement {
         size.scalable ? minimumScale : 1
     }
 
+    /// The app's insets with a negative or non-finite side counted as zero.
+    static func cleaned(_ insets: UIEdgeInsets) -> UIEdgeInsets {
+        let side = { (value: CGFloat) in value.isFinite ? max(0, value) : 0 }
+        return UIEdgeInsets(top: side(insets.top), left: side(insets.left), bottom: side(insets.bottom), right: side(insets.right))
+    }
+
+    /// The safe area with the app's insets added on every side.
+    static func adding(_ insets: UIEdgeInsets, to safeArea: UIEdgeInsets) -> UIEdgeInsets {
+        UIEdgeInsets(top: safeArea.top + insets.top, left: safeArea.left + insets.left,
+                     bottom: safeArea.bottom + insets.bottom, right: safeArea.right + insets.right)
+    }
+
     /// Whether the viewer could see `view`: in a window, with an area, and neither it, an ancestor nor the
     /// window hidden or transparent. What covers it is not known here; the meter measures that once the ad
     /// is shown.

@@ -155,6 +155,65 @@ struct VideoAdPlacementTests {
         try ad.dismiss()
     }
 
+    // MARK: The app's insets
+
+    @Test func insetsAddToTheSafeAreaForAStripAndACard() async throws {
+        let notch = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+        let (strip, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-in-b"))
+        let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: notch)
+        window.add(player)
+        try strip.show(in: player, insets: UIEdgeInsets(top: 0, left: 0, bottom: 80, right: 0))
+        #expect(adFrame(in: player) == CGRect(x: 35, y: 844 - 34 - 80 - 90, width: 320, height: 90), "80 points above the safe area's bottom")
+        try strip.dismiss()
+        let (card, _, _) = try await makeAd(Fixtures.ad(id: "p-in-t"))
+        try card.show(in: player, insets: UIEdgeInsets(top: 20, left: 0, bottom: 0, right: 0))
+        #expect(adFrame(in: player) == CGRect(x: 45, y: 59 + 20, width: 300, height: 300), "20 points below the safe area's top")
+        try card.dismiss()
+    }
+
+    @Test func aFullscreenPauseAdIgnoresTheInsets() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-in-f", position: "fullscreen", size: nil))
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.add(player)
+        try ad.show(in: player, insets: UIEdgeInsets(top: 40, left: 10, bottom: 80, right: 10))
+        #expect(adFrame(in: player) == player.bounds)
+        try ad.dismiss()
+    }
+
+    @Test func theInsetsStayThroughAResize() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-in-r"))
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        window.add(player)
+        try ad.show(in: player, insets: UIEdgeInsets(top: 0, left: 0, bottom: 50, right: 0))
+        #expect(adFrame(in: player) == CGRect(x: 262, y: 390 - 50 - 90, width: 320, height: 90))
+        player.frame.size = CGSize(width: 390, height: 220)
+        player.layoutIfNeeded()
+        #expect(adFrame(in: player) == CGRect(x: 35, y: 220 - 50 - 90, width: 320, height: 90), "still 50 points above the bottom")
+        try ad.dismiss()
+    }
+
+    @Test func theMinimumOfContainerTooSmallIncludesTheInsets() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-in-m"))   // 300×300, may shrink to 150×150
+        let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 200, height: 200), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))
+        window.add(player)
+        let insets = UIEdgeInsets(top: 0, left: 0, bottom: 20, right: 0)
+        do {
+            try ad.show(in: player, insets: insets)
+            Issue.record("expected containerTooSmall")
+        } catch VideoAdError.containerTooSmall(let minimum) {
+            #expect(minimum == CGSize(width: 150, height: 150 + 59 + 34 + 20))
+        }
+    }
+
+    @Test func aNegativeOrNonFiniteInsetCountsAsZero() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-in-n"))
+        let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))
+        window.add(player)
+        try ad.show(in: player, insets: UIEdgeInsets(top: -10, left: .nan, bottom: .infinity, right: -5))
+        #expect(adFrame(in: player) == CGRect(x: 35, y: 844 - 34 - 90, width: 320, height: 90))
+        try ad.dismiss()
+    }
+
     @Test func aFullscreenPauseAdFillsThePlayerEvenUnderTheSafeArea() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6f", position: "fullscreen", size: nil))
         let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))

@@ -84,6 +84,8 @@ public final class VideoAd {
     private(set) weak var owner: VideoAds?
     /// The view the SDK put into the player's view for an overlay or pause ad.
     private var hostView: AdHostView?
+    /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too.
+    private var extraInsets = UIEdgeInsets.zero
     /// The controller the SDK presented for a linear ad.
     private(set) var linearController: LinearViewController?
     /// The creative is on screen: the page was told to show, the beacons of that moment fired. At `show`
@@ -204,11 +206,17 @@ public final class VideoAd {
     /// `didEnd` the SDK retains it. The ad follows the view when it resizes or rotates: the same variant is
     /// fitted again within the same limits, and a view that becomes too small for it ends it with
     /// `.interrupted`.
-    public func show(in view: UIView) throws {
-        try withContentPlayhead { try showInline(in: view) }
+    ///
+    /// `insets` keep an overlay or a pause card clear of your own controls: they add to the view's safe area,
+    /// as UIKit's `additionalSafeAreaInsets` do, so `bottom: 80` places a bottom strip 80 points above the
+    /// safe area's edge. Kept while the ad is shown, through resizes and rotations, and counted in
+    /// `containerTooSmall`'s minimum. A full-screen pause ad ignores them: it fills the view. A negative or
+    /// non-finite value counts as zero.
+    public func show(in view: UIView, insets: UIEdgeInsets = .zero) throws {
+        try withContentPlayhead { try showInline(in: view, insets: insets) }
     }
 
-    private func showInline(in view: UIView) throws {
+    private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
         guard AdPlacement.canBeSeen(view) else {
@@ -217,7 +225,8 @@ public final class VideoAd {
         }
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
-        let adFrame = try frame(in: area, safeArea: container.safeAreaInsets)
+        extraInsets = AdPlacement.cleaned(insets)
+        let adFrame = try frame(in: area, safeArea: AdPlacement.adding(extraInsets, to: container.safeAreaInsets))
         // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
@@ -276,7 +285,7 @@ public final class VideoAd {
             }
             presenter = viewController
         } else {
-            guard let top = Self.topViewController(), AdPlacement.canBeSeen(top.view) else {
+            guard let top = LinearViewController.topPresenter(), AdPlacement.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
                 throw VideoAdError.presenterUnavailable
             }
@@ -336,21 +345,6 @@ public final class VideoAd {
     /// app waiting, and a dismissal still running must not be reported over.
     static var dismissalTimeout: TimeInterval = 1
 
-    /// The key window's root controller, followed through what it presents to the top, as the peers do
-    /// (AdMob 11, MAX). `nil` when there is no key window or the top controller cannot present: it is
-    /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that
-    /// can, and the ad goes over it, as a peer's would.
-    static func topViewController() -> UIViewController? {
-        guard var controller = Environment.keyWindow()?.rootViewController else { return nil }
-        while let presented = controller.presentedViewController, !presented.isBeingDismissed {
-            controller = presented
-        }
-        // Still presenting (its modal is mid-dismissal), or mid-transition itself: UIKit would refuse.
-        guard controller.view.window != nil, controller.presentedViewController == nil,
-              !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
-        return controller
-    }
-
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
     /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again. For an
     /// overlay with a `duration` this is the way to end it earlier (the content ended, a seek); left alone,
@@ -406,7 +400,7 @@ public final class VideoAd {
     /// so only its scale changes. `nil` when it no longer fits.
     private func refit(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
         guard descriptor.position != .fullscreen, let size = chosenSize else { return fullBounds }
-        return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea)
+        return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: AdPlacement.adding(extraInsets, to: safeArea))
     }
 
     /// Runs `work` with the content playhead read once, before it. The app's playhead provider is the one

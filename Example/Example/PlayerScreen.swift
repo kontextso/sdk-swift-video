@@ -4,8 +4,8 @@ import SwiftUI
 import UIKit
 
 /// The full-screen player. The content plays in `playback.playerView`. Overlay and pause ads go into
-/// `playback.adArea`, a transparent view over the video that ends above the episode's title, so the ad
-/// never covers it; the SDK presents a linear ad over the screen.
+/// `playback.adArea`, a transparent view over the video, shown with a bottom inset as tall as the episode's
+/// title, so the ad never covers it; the SDK presents a linear ad over the screen.
 struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var playback: Playback
@@ -23,16 +23,21 @@ struct PlayerScreen: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.white.opacity(0.8))
             }
-            VStack(alignment: .leading, spacing: 12) {
-                // Where the SDK puts overlay and pause ads: everything above the title.
+            ZStack(alignment: .bottomLeading) {
+                // Where the SDK puts overlay and pause ads: the whole player area. `show(in:insets:)` keeps the
+                // ad above the title, with the title's height as the bottom inset.
                 AdAreaHost(view: playback.adArea)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(playback.video.title).font(.headline).foregroundStyle(.white)
                     Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
                 }
                 .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+                .background(GeometryReader { proxy in Color.clear.preference(key: TitleHeight.self, value: proxy.size.height) })
             }
-            .padding(.bottom, 24)
+            .onPreferenceChange(TitleHeight.self) { height in
+                Task { @MainActor in playback.adInsets = UIEdgeInsets(top: 0, left: 0, bottom: height + 12, right: 0) }
+            }
         }
         .background(.black)
         .contentShape(Rectangle())
@@ -65,8 +70,10 @@ final class Playback: ObservableObject {
 
     let video: Video
     let playerView = PlayerLayerView()
-    /// The slot for overlay and pause ads, above the title.
+    /// Where overlay and pause ads go: the whole player area.
     let adArea = AdAreaView()
+    /// Keeps an overlay or pause ad above the title: the title's height, set by the screen.
+    var adInsets = UIEdgeInsets.zero
     private let player: AVPlayer
     private let ads: VideoAds
     private var ad: VideoAd?
@@ -153,7 +160,7 @@ final class Playback: ObservableObject {
     private func showInPlayer() {
         guard let ad, ad.isReady else { return }
         do {
-            try ad.show(in: adArea)
+            try ad.show(in: adArea, insets: adInsets)
         } catch {
             status = "show: \(error)"
         }
@@ -215,6 +222,15 @@ struct PlayerView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+/// The height of the title block at the bottom of the screen, for the ad's bottom inset.
+private struct TitleHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 /// A transparent area that holds an overlay or pause ad. Taps outside the ad go through to the player.

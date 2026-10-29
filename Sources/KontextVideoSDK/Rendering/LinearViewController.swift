@@ -52,3 +52,20 @@ final class LinearViewController: UIViewController {
         onInterrupted?()
     }
 }
+
+extension LinearViewController {
+    /// The key window's root controller, followed through what it presents to the top, as the peers do
+    /// (AdMob 11, MAX). `nil` when there is no key window or the top controller cannot present: it is
+    /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that
+    /// can, and the ad goes over it, as a peer's would.
+    static func topPresenter() -> UIViewController? {
+        guard var controller = Environment.keyWindow()?.rootViewController else { return nil }
+        while let presented = controller.presentedViewController, !presented.isBeingDismissed {
+            controller = presented
+        }
+        // Still presenting (its modal is mid-dismissal), or mid-transition itself: UIKit would refuse.
+        guard controller.view.window != nil, controller.presentedViewController == nil,
+              !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
+        return controller
+    }
+}
