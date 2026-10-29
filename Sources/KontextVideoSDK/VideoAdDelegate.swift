@@ -3,25 +3,36 @@ import Foundation
 /// The moments of an ad on screen, delivered on the main actor. Every method has an empty default, so
 /// implement the ones you need. The delegate is held weakly, as every Apple delegate.
 ///
-/// Nothing is delivered before `show`: an ad that can no longer be shown says so when
-/// `load()` or `show` throws. The guarantee: `show` either throws or the ad is on screen; then the
-/// impression (at most once, maybe never) and any interactions; then exactly one terminal `videoAd(_:didEnd:)`,
-/// whoever ended it (the viewer, the creative, the system, or the app with `dismiss()` or `destroy()`).
-/// Resume your content in `didEnd`, whatever the reason. There is no "did show" callback: `show`
-/// returning is that signal. `didEnd` is delivered once: for an overlay or pause ad synchronously, even
-/// from inside your own `dismiss()` or `destroy()` call; for a linear ad once its dismissal animation
-/// finished (as AdMob's and MAX's "dismissed" callbacks), so presenting your next screen from it is safe.
-/// Either way the resume logic lives in `didEnd` alone.
+/// Nothing is delivered before `show`: an ad that can no longer be shown says so when `load()` or `show`
+/// throws. `show` either throws, and nothing happened, or the presentation is accepted: an overlay or
+/// pause ad is on screen when it returns (an image or HTML creative's impression may even arrive inside
+/// `show(in:)`); a linear ad has asked UIKit to present it, which can still fail, as `didFail` then says.
+/// After that: the impression (at most once, maybe never) and any interactions; then exactly one terminal
+/// `videoAd(_:didEnd:)`, whoever ended it (the viewer, the creative, the system, or the app with `dismiss()`
+/// or `destroy()`). There is no "did show" callback: `show` returning is that signal.
+///
+/// Put the clean-up after an ad in `didEnd`, and decide playback there from the format, the reason and
+/// whether that content is still current: a linear ad's end is normally where the content resumes; a
+/// pause ad closed with ✕ (`.closed`) leaves the content paused, Resume (`.resumed`) means play; after
+/// `.destroyed` the viewer has usually left. `didEnd` is delivered once: for an overlay or pause ad
+/// synchronously, even from inside your own `dismiss()` or `destroy()` call; for a linear ad once its
+/// dismissal finished (as AdMob's and MAX's "dismissed" callbacks), so the next screen can be presented
+/// from it. Should UIKit never finish that dismissal, `didEnd` still comes after a bounded wait.
 @MainActor
 public protocol VideoAdDelegate: AnyObject {
     // After a successful show: the impression and interactions, in no guaranteed order; didEnd last
 
-    /// The impression was counted: at `show` for an image, at the first frame of the ad video for a video
-    /// (usually under a second after `show` returned; if it never comes, `didFail` then `didEnd(.failed)`).
+    /// The impression was counted: when an image or HTML creative is shown, at the first frame of the ad
+    /// video for a video. It may never come: the ad can end before (skipped, dismissed, destroyed,
+    /// interrupted, failed).
     func videoAdDidRecordImpression(_ ad: VideoAd)
-    /// The viewer tapped the ad; the SDK opened `click.url`. `click.area` says where. Once per tap.
+    /// The viewer tapped the ad and the SDK took the click: it fired the click beacons and is opening the
+    /// target (the URL, its fallback when the first cannot open, or the App Store sheet for an app-install
+    /// ad). Whether anything did open is not reported. `click.area` says where. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
-    /// The creative failed or stalled after presentation began. `didEnd(.failed)` follows right away.
+    /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
+    /// linear ad (`presenterUnavailable`). `didEnd(.failed)` follows once the ad is cleaned up (for a
+    /// linear ad, after its dismissal).
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
     /// Presentation is over. Exactly once per successful `show`.
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason)
@@ -57,7 +68,8 @@ extension VideoAd {
             }
         }
 
-        /// What the SDK opened.
+        /// The target the page reported, as it reported it: before the SDK fills its tracking macros, and
+        /// not necessarily what opened (a fallback URL, or the App Store sheet for an app-install ad).
         public let url: URL
         /// Where the viewer tapped.
         public let area: Area
@@ -77,7 +89,8 @@ extension VideoAd {
         case closed
         /// The viewer tapped Resume on a full-screen pause ad.
         case resumed
-        /// The creative failed or stalled; `didFail` came first.
+        /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
+        /// linear ad; `didFail` came first.
         case failed
         /// The presentation disappeared for a reason the SDK did not cause: the presenting view controller
         /// was dismissed under a linear ad, the view holding an overlay or pause ad left the window (the
