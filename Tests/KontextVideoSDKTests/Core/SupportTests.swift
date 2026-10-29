@@ -183,7 +183,7 @@ struct SupportTests {
             (.noFill(reason: .noAdMatch), "no fill (noAdMatch)"),
             (.noFill(reason: .other("brandNew")), "no fill (brandNew)"),
             (.anotherAdShowing, "another ad is on screen; show this one after it ended"),
-            (.creativeFailed(code: 400), "the creative failed to load (VAST error 400)"),
+            (.creativeFailed(code: 400), "the creative failed (VAST error 400)"),
             (.alreadyShown, "the ad was already shown"),
             (.invalidated(.expired), "the ad ended before it was shown (expired)"),
             (.notLoaded, "the ad is not loaded yet; call load() first"),
@@ -196,8 +196,34 @@ struct SupportTests {
             #expect(error.errorDescription == expected)
             #expect("\(error)" == expected, "string interpolation uses the description")
         }
-        let request = VideoAdError.request(URLError(.timedOut))
-        #expect(request.description.hasPrefix("request failed: "))
+        struct Underlying: Error, CustomStringConvertible { var description: String { "the server said no" } }
+        let request = VideoAdError.request(Underlying())
+        for text in [request.description, request.errorDescription, "\(request)"] {
+            #expect(text == "request failed: the server said no", "the underlying error is kept: \(String(describing: text))")
+        }
+    }
+
+    @Test func aMinimumSizeIsDescribedWithoutATrap() {
+        let describe = { (width: CGFloat, height: CGFloat) in VideoAdError.containerTooSmall(minimum: CGSize(width: width, height: height)).description }
+        #expect(describe(150, 75) == "the view is too small for the ad; at least 150×75 points are needed")
+        #expect(describe(150.5, 75) == "the view is too small for the ad; at least 150.5×75 points are needed")
+        #expect(describe(.nan, .infinity).contains("nan×inf"), "non-finite: shown as it is")
+        #expect(describe(CGFloat(Int.max), 1).contains("×1 points"), "beyond Int: no trap")
+    }
+
+    @Test func everyNoFillReasonMapsFromTheWireAndBack() {
+        let known: [(String, VideoAdError.NoFillReason)] = [
+            ("noAdMatch", .noAdMatch), ("contentUnsafe", .contentUnsafe), ("formatNotEnabled", .formatNotEnabled),
+            ("frequencyCap", .frequencyCap), ("geoRestricted", .geoRestricted), ("temporaryError", .temporaryError),
+            ("alreadyUsed", .alreadyUsed), ("unknown", .unknown),
+        ]
+        for (wire, reason) in known {
+            #expect(VideoAdError.NoFillReason(wire) == reason, "\(wire)")
+            #expect(reason.description == wire, "and back: \(wire)")
+        }
+        #expect(VideoAdError.NoFillReason(nil) == .unknown, "absent is unknown")
+        #expect(VideoAdError.NoFillReason("aReasonFromTheFuture") == .other("aReasonFromTheFuture"), "an unknown reason is kept")
+        #expect(VideoAdError.NoFillReason.other("aReasonFromTheFuture").description == "aReasonFromTheFuture")
     }
 
     // MARK: VideoAdDelegate

@@ -63,6 +63,8 @@ struct AdPayload: Decodable, Sendable {
         let height: Int
         /// May be shown smaller; absent is `true`.
         let scalable: Bool
+        /// The largest side a creative may have, in points.
+        static let maxSide = 10_000
 
         init(width: Int, height: Int, scalable: Bool = true) {
             self.width = width
@@ -75,8 +77,9 @@ struct AdPayload: Decodable, Sendable {
             width = try container.decode(Int.self, forKey: .width)
             height = try container.decode(Int.self, forKey: .height)
             scalable = try container.decodeIfPresent(Bool.self, forKey: .scalable) ?? true
-            guard width > 0, height > 0 else {
-                throw DecodingError.dataCorruptedError(forKey: .width, in: container, debugDescription: "a size must be positive")
+            // Positive, and no larger than any screen could be: an absurd size would only produce absurd geometry.
+            guard (1...Self.maxSide).contains(width), (1...Self.maxSide).contains(height) else {
+                throw DecodingError.dataCorruptedError(forKey: .width, in: container, debugDescription: "a size must be positive and at most \(Self.maxSide) points")
             }
         }
 

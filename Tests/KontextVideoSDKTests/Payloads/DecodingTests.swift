@@ -246,6 +246,13 @@ struct DecodingTests {
         #expect(try Fixtures.payload(Fixtures.linearAd(skipOffset: 0)).id == "ad-i", "a Close from the start is fine")
     }
 
+    @Test func anAbsurdSizeIsRefused() {
+        for side in [10_001, Int.max] {
+            #expect(throws: DecodingError.self, "\(side)") { try Fixtures.payload(Fixtures.ad(size: ["width": side, "height": 250])) }
+        }
+        #expect(throws: Never.self) { try Fixtures.payload(Fixtures.ad(size: ["width": 10_000, "height": 250])) }
+    }
+
     @Test func aSizeSaysWhetherItMayShrink() throws {
         let fixed = try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250, "scalable": false]))
         guard case .pause(_, let sizes) = fixed.details else { Issue.record("expected pause"); return }

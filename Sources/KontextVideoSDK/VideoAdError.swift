@@ -1,7 +1,13 @@
 import Foundation
 
-/// Why a call could not do its job. Thrown, never delivered through the delegate: a thrown error means
-/// nothing happened on screen and nothing was fired.
+/// Why the SDK could not do its job, reached two ways.
+///
+/// - Thrown by a call (`format`, `load`, `show`, `reject`, `dismiss`): that call did not happen. Nothing is
+///   shown; the only beacon a failed call fires is a failed `load()`'s VAST `error`. Whether the ad stays
+///   usable is said per case.
+/// - Delivered through `videoAd(_:didFail:)`, after a `show` that was accepted: the ad broke on screen
+///   (`creativeFailed`), or UIKit never presented a linear ad (`presenterUnavailable`). `didEnd(.failed)`
+///   follows and the ad is over.
 public enum VideoAdError: Error, Sendable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion; a release build
     /// gets this error instead, and works once `initialize` runs.
@@ -20,9 +26,9 @@ public enum VideoAdError: Error, Sendable {
     /// The request failed: no network, a timeout, a server error, an unexpected answer. Thrown only when
     /// the SDK holds no valid ad for the format; otherwise `format()` returns that one.
     case request(Error)
-    /// The creative did not load: the frame page failed or did not report `ad.loaded` within 10 s
-    /// of active time. `code` is the VAST error code the SDK fired (400 for a video, 500 otherwise, or the
-    /// page's own).
+    /// The creative failed. Thrown by `load()` when the frame page failed or did not report `ad.loaded`
+    /// within 10 s of active time; delivered through `didFail` when it broke on screen. `code` is the VAST
+    /// error code the SDK fired (400 for a video, 500 otherwise, 405 after show, or the page's own).
     case creativeFailed(code: Int)
 
     // `show`, `reject`, `dismiss`
@@ -38,13 +44,15 @@ public enum VideoAdError: Error, Sendable {
 
     /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
     case notLoaded
-    /// The ad would have to be scaled below 50 % to fit the view (aspect ratio kept). The ad stays ready:
+    /// No variant of the ad fits the view: it would have to shrink below 50 % (aspect ratio kept), or at
+    /// all for a creative marked not scalable. `minimum` is the smallest box that fits. The ad stays ready:
     /// show it in a bigger view, or reject it.
     case containerTooSmall(minimum: CGSize)
-    /// Nothing on screen can hold the ad right now. Linear: the view controller given is already presenting
-    /// or not on screen; with `show()`, there is no key window or its top controller is mid-transition.
-    /// Overlay and pause: the view is not in a window. The ad stays ready: try again later, or pass the
-    /// right view or controller.
+    /// Nothing on screen can hold the ad. Thrown by `show`: for a linear ad the view controller given is
+    /// already presenting or not on screen, or with `show()` there is no key window or its top controller
+    /// is mid-transition; for an overlay or pause ad the view is not in a window. The ad stays ready: try
+    /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
+    /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable
     /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad,
     /// `dismiss()` on a linear ad. The ad stays as it was.
@@ -123,7 +131,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .request(let error):
             return "request failed: \(error)"
         case .creativeFailed(let code):
-            return "the creative failed to load (VAST error \(code))"
+            return "the creative failed (VAST error \(code))"
         case .alreadyShown:
             return "the ad was already shown"
         case .anotherAdShowing:
@@ -133,7 +141,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .notLoaded:
             return "the ad is not loaded yet; call load() first"
         case .containerTooSmall(let minimum):
-            return "the view is too small for the ad; at least \(Int(minimum.width))×\(Int(minimum.height)) points are needed"
+            return "the view is too small for the ad; at least \(Self.points(minimum.width))×\(Self.points(minimum.height)) points are needed"
         case .presenterUnavailable:
             return "no view controller can present the ad now"
         case .wrongPresentation:
@@ -142,4 +150,9 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
     }
 
     public var errorDescription: String? { description }
+
+    /// A dimension for the description, never a trap: whole points as an integer, anything else as it is.
+    private static func points(_ value: CGFloat) -> String {
+        Int(exactly: value).map(String.init) ?? "\(value)"
+    }
 }
