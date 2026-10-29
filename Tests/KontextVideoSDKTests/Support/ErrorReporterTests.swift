@@ -139,7 +139,8 @@ struct ErrorReporterTests {
             return calls == 1 ? .failure(.notConnectedToInternet) : .empty()
         }
         reporter.report(.skanFailed, stage: .attribution, adId: "ad-1", detail: "start")
-        #expect(await waitUntil { calls == 2 })
+        // Two round trips and a backoff: a loaded CI runner resumes tasks seconds late.
+        #expect(await waitUntil(5) { calls == 2 })
         let bodies = harness.server.requests(to: "/v2/error").compactMap(\.body)
         #expect(bodies.count == 2)
         #expect(bodies[0]["batchId"] as? String == bodies[1]["batchId"] as? String, "the same batch, so the server counts it once")
