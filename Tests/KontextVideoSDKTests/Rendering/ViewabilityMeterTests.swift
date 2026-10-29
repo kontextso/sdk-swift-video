@@ -284,9 +284,9 @@ struct ViewabilityMeterTests {
         let sink = attach(meter)
         meter.start()            // playing from 1000
         clock.now = 1001.05
-        meter.countsTime = false // paused...
+        meter.countsTime = false  // paused...
         clock.now = 1001.10
-        meter.countsTime = true  // ...and playing again before any tick saw the pause
+        meter.countsTime = true   // ...and playing again before any tick saw the pause
         clock.now = 1002
         meter.tick()
         #expect(sink.verdict == nil, "two seconds since the start, but not two continuous seconds of playback")

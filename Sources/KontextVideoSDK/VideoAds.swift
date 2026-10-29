@@ -88,7 +88,8 @@ public final class VideoAds {
     private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
         for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
-        let content = content, sessionId = sessionId
+        let content = content
+        let sessionId = sessionId
         let task = Task { [weak self] () throws -> [AdFormat: VideoAdError.NoFillReason] in
             defer { self?.request = nil }
             /// The owner, for one synchronous step; `destroyed` once it was destroyed or released.
