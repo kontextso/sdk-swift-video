@@ -30,7 +30,7 @@ sdk-swift-video/
 │   └── PrivacyInfo.xcprivacy
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
-├── .github/workflows/ci.yml the three CI jobs (see CI)
+├── .github/workflows/ci.yml the four CI jobs (see CI)
 ├── Package.swift            SPM manifest; KontextKit pinned exact
 ├── CLAUDE.md                project context for Claude Code
 └── CHANGELOG.md, RELEASING.md
@@ -91,7 +91,8 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - The lifecycle, in one line: `load` returns a ready ad; `show` either throws or presentation begins; then zero or
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
-- The page never fires a beacon; `Tracker` fires every entry once, from the places in `VideoAd.handle(_:)`.
+- The page never fires a beacon; `Tracker` fires every entry once, except `click`, `pause`, `resume`, `mute` and
+  `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView
   invisibly in the key window and hands it over with `takeWebView()` at show.
 - Every public class is `@MainActor`; `deinit`s hop to the main actor for their cleanup.
@@ -111,7 +112,8 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   types cannot collide. `AdFormat` is the one public top-level type: it names the formats everywhere and
   cannot realistically collide.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then here, then to `sdk-kotlin-video`.
-- No linter yet; `xcodebuild` warnings are the signal and the build is kept at zero.
+- SwiftLint (`.swiftlint.yml`, stricter limits relaxed for `Tests/`) and `swiftlint analyze` run in CI, and CI fails
+  on any compiler warning in `Sources/`; the commands are in AGENTS.md.
 
 ## Tests
 
@@ -149,22 +151,25 @@ Rules the suites follow:
   `Support/Environment.swift`, and production never sets them.
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
 - Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the ad clock. A test that sleeps to
-  let something expire is flaky on a slow runner and goes against the suite's budget, about 45 s in all.
+  let something expire is flaky on a slow runner and goes against the suite's budget, about 60 s in all.
 - The stub server routes each session's requests to the server that created it, so a beacon a previous test's
   `VideoAds` fires from `deinit` never lands in the next test's recordings.
 
-What the package runner cannot do, and where it is covered instead: there is no `UIWindowScene`, so UIKit never
-completes a modal transition (`present` never calls back), and the ATT dialog cannot appear. The linear ad
+What the test runner cannot do, and where it is covered instead: its windows belong to a scene, but UIKit never
+completes a modal transition there (`present` never calls back), and the ATT dialog cannot appear (the tests
+answer through `Environment`'s ATT seams). The linear ad
 tests therefore assert what the SDK asked UIKit to do and drive the controller's disappearance decision directly;
 the example app against the mock covers the real presentation and dismissal.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and pull request, on `macos-15` with Xcode 16.4:
+`.github/workflows/ci.yml` runs on pushes to `main`, on tags and on pull requests, on `macos-15` with Xcode 16.4:
 
+- **SwiftLint**: `swiftlint lint --strict`, a clean build whose log must hold no compiler warning in
+  `Sources/KontextVideoSDK` (the compiler's notes are printed when it does), then `swiftlint analyze --strict`.
 - **Example app**: `xcodegen generate` and a build of `Example/` against the local SDK. It is what catches a
   public API change that breaks a real integration.
-- **Test**: `xcodebuild test` on the SDK target, iPhone 16 / iOS 18.5.
+- **Test**: `xcodebuild test` on the SDK target, iPhone 16 / iOS 18.5. A test-host restart counts as a failure.
 - **Release tag matches SDKInfo.version**: on a tag push only; fails when the tag and `SDKInfo.version` differ.
 
 ## Cross-SDK consistency
