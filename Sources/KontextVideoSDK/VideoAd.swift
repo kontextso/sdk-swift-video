@@ -548,7 +548,7 @@ public final class VideoAd {
         // show in the app. Not a linear ad covered full screen: UIKit removes its view until the cover goes.
         meter.onDetached = { [weak self] in
             guard let self, !hasEnded else { return }
-            if let controller = linearController, Environment.isCovered(controller) { return Logger.info("ad \(id.prefix(8)): covered; zero exposure") }
+            if let controller = linearController, Environment.isCovered(controller) { return }   // asked again each tick
             Logger.warning("ad \(id.prefix(8)): its view left the window; ended as interrupted")
             end(.interrupted)
         }

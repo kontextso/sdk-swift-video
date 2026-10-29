@@ -70,9 +70,8 @@ struct ViewabilityMeterTests {
         #expect(await waitUntil(5) { sink.verdict == .viewable })
         view.removeFromSuperview()
         #expect(await waitUntil(5) { sink.exposures.last == 0 }, "the page still hears exposure after the verdict")
-        #expect(await waitUntil(5) { detached == 1 })
-        await sleepMs(100)
-        #expect(detached == 1, "reported once")
+        #expect(await waitUntil(5) { detached >= 1 })
+        #expect(await waitUntil(5) { detached >= 3 }, "reported on every tick while it stays out")
         meter.stop()
     }
 

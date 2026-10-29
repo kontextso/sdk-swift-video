@@ -24,7 +24,8 @@ final class ViewabilityMeter {
     var onVerdict: ((Verdict) -> Void)?
     /// The view left the window and did not come back within one interval: the app removed what the ad
     /// sits in, or covered it (UIKit takes a full-screen-covered controller's view out of the window).
-    /// Once per absence: after the view is back, a new absence is reported again.
+    /// On every tick while it stays out, from the second: an owner that waits out a cover hears again once
+    /// the cover is gone and the view did not come back.
     var onDetached: (() -> Void)?
 
     private(set) var verdict: Verdict?
@@ -37,9 +38,8 @@ final class ViewabilityMeter {
     private var lastTick: TimeInterval?
     private var lastPercentage = -1.0
     private var lastVisible = CGRect.null
-    /// Ticks in a row that found no window; the second one reports the detachment.
+    /// Ticks in a row that found no window; from the second one on, each reports the detachment.
     private var detachedTicks = 0
-    private var detachedReported = false
     /// `stop()` was called: measuring never resumes, whatever `start()` says afterwards.
     private var stopped = false
     /// Whether exposure counts towards the dwell right now. The owner turns it off while a video creative
@@ -95,14 +95,12 @@ final class ViewabilityMeter {
             exposedSince = nil
             // One tick of grace: a view re-parented within the same turn of the run loop is not gone.
             detachedTicks += 1
-            if view != nil, detachedTicks >= 2, !detachedReported {
-                detachedReported = true
+            if view != nil, detachedTicks >= 2 {
                 onDetached?()
             }
             return
         }
         detachedTicks = 0
-        detachedReported = false
         // The ad's own scene, not the app: an iPad window in the background shows nothing.
         let (percentage, visible) = Environment.isWindowActive(window) ? Self.exposure(of: view, in: window) : (0, .null)
         report(percentage, visible: visible.isNull ? .zero : visible)

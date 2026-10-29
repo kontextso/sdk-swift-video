@@ -515,6 +515,20 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.skipped], "one terminal callback")
     }
 
+    @Test func aCoveredLinearAdWhoseViewNeverReturnsEndsWhenTheCoverGoes() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i32"))
+        try presentLinear(ad)
+        var covered = true
+        Environment.isCovered = { _ in covered }
+        ad.bridge.webView.removeFromSuperview()
+        await sleepMs(300)
+        #expect(delegate.endReasons.isEmpty, "covered: it waits")
+        covered = false   // the cover went, and the presentation with it: the view never comes back
+        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "noticed at the next tick")
+        await sleepMs(100)
+        #expect(delegate.endReasons == [.interrupted], "once")
+    }
+
     @Test func aLinearAdWhoseViewLeavesWithNothingCoveringItIsInterrupted() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i31"))
         try presentLinear(ad)
