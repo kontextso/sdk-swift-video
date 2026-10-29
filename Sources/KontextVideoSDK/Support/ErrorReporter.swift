@@ -198,13 +198,37 @@ final class ErrorReporter {
 
     /// An ads or `/config` request's failure as the report's fields: an HTTP status, or the transport
     /// error's domain and code with `network`.
-    static func fields(for error: Error) -> (httpStatus: Int?, underlying: Underlying?, detail: String?) {
-        switch error as? APIError {
-        case .http(let status, _)?: return (status, nil, nil)
-        case .transport(let urlError)?: return (nil, Underlying(urlError), "network")
-        case .decoding(let decoding)?: return (nil, Underlying(decoding), nil)
-        case nil: return (nil, Underlying(error), nil)
+    struct RequestFailure: Sendable {
+        let httpStatus: Int?
+        let underlying: Underlying?
+        let detail: String?
+
+        init(_ error: Error) {
+            switch error as? APIError {
+            case .http(let status, _)?:
+                httpStatus = status
+                underlying = nil
+                detail = nil
+            case .transport(let urlError)?:
+                httpStatus = nil
+                underlying = Underlying(urlError)
+                detail = "network"
+            case .decoding(let decoding)?:
+                httpStatus = nil
+                underlying = Underlying(decoding)
+                detail = nil
+            case nil:
+                httpStatus = nil
+                underlying = Underlying(error)
+                detail = nil
+            }
         }
+    }
+
+    /// A failed ads or `/config` request.
+    func report(_ code: Code, stage: Stage, requestId: String, sessionId: String? = nil, failure: RequestFailure, recovery: Recovery? = nil) {
+        report(code, stage: stage, requestId: requestId, sessionId: sessionId, httpStatus: failure.httpStatus,
+               underlying: failure.underlying, detail: failure.detail, recovery: recovery)
     }
 
     /// Back to the state before any `/config`. Tests only: the shared instance is process-wide.

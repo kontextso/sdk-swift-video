@@ -222,9 +222,8 @@ public final class KontextVideo {
             state = .failed
             Logger.error("/config failed, no ads until it succeeds: \(error)")
             // Waits in memory: it leaves once a later `/config` turns the reports on.
-            let fields = ErrorReporter.fields(for: error)
-            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, httpStatus: fields.httpStatus,
-                                        underlying: fields.underlying, detail: fields.detail)
+            let failure = ErrorReporter.RequestFailure(error)
+            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: failure)
         }
     }
 }
