@@ -95,6 +95,10 @@ struct ErrorReporterTests {
         #expect(report["sessionId"] as? String == ads.sessionId && report["recovery"] as? String == "no_ad")
         let history = (report["history"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
         #expect(history.contains("ads.request"), "what happened just before: \(history)")
+        let moment = try #require((report["history"] as? [[String: Any]])?.first { $0["name"] as? String == "ads.request" })
+        let createdAt = try #require(moment["createdAt"] as? String)
+        #expect(createdAt.hasSuffix("Z") && createdAt.contains("T") && createdAt.contains("."), "ISO 8601 with milliseconds in UTC: \(createdAt)")
+        #expect(moment["at"] == nil, "a date, not seconds before the error")
     }
 
     @Test func anAnswerThatBreaksTheContractIsADecodeFailure() async {

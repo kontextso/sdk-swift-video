@@ -80,8 +80,8 @@ final class DebugReporter {
 
     /// One event in the short history every error report carries: what the SDK did just before.
     struct Moment: Encodable, Sendable {
-        /// Seconds before the error, so negative.
-        let at: Double
+        /// When it happened: device time, ISO 8601 with milliseconds in UTC, as the event and the report write it.
+        let createdAt: String
         let name: String
         let adId: String?
         let state: [String: Value]?
@@ -89,7 +89,7 @@ final class DebugReporter {
 
     /// The last events, kept whether or not the server asked for the debug log: the history of an error report.
     static let historyLength = 30
-    private var history: [(time: TimeInterval, name: String, adId: String?, state: [String: Value]?)] = []
+    private var history: [(createdAt: String, name: String, adId: String?, state: [String: Value]?)] = []
 
     /// Tests only, with the shared instance reset.
     func clearHistory() {
@@ -99,15 +99,15 @@ final class DebugReporter {
     /// The state keys an error report's history may carry; anything else stays on the device.
     static let historyKeys: Set<String> = ["held", "playhead", "format", "filled", "reason", "enabled", "code", "durationMs", "step", "domain"]
 
-    /// The recent events, each timed relative to `now`, reduced for an error report: listed state keys only,
-    /// strings and ids capped at `ErrorReporter.maxFieldLength` UTF-8 bytes.
-    func recentHistory(before now: TimeInterval = Environment.now()) -> [Moment] {
+    /// The recent events, reduced for an error report: listed state keys only, strings and ids capped at
+    /// `ErrorReporter.maxFieldLength` UTF-8 bytes.
+    func recentHistory() -> [Moment] {
         return history.map { entry in
             let state = entry.state?.filter { Self.historyKeys.contains($0.key) }.mapValues { value -> Value in
                 if case .string(let text) = value { return .string(ErrorReporter.capped(text)) }
                 return value
             }
-            return Moment(at: ((entry.time - now) * 1000).rounded() / 1000, name: ErrorReporter.capped(entry.name),
+            return Moment(createdAt: entry.createdAt, name: ErrorReporter.capped(entry.name),
                           adId: entry.adId.map(ErrorReporter.capped), state: state?.isEmpty == true ? nil : state)
         }
     }
@@ -118,10 +118,12 @@ final class DebugReporter {
     /// device console, in the same shape, whether or not the server asked for it.
     func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: Value]? = nil) {
         Logger.debug(Self.line(name, adId: adId, state: state))
-        history.append((Environment.now(), name, adId, state))
+        // One timestamp for both: the history entry and the debug event are the same moment.
+        let createdAt = Self.timestamp.string(from: Date())
+        history.append((createdAt, name, adId, state))
         if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
         guard isEnabled else { return }
-        buffer.append(Event(createdAt: Self.timestamp.string(from: Date()), name: name, adId: adId, level: level, state: state))
+        buffer.append(Event(createdAt: createdAt, name: name, adId: adId, level: level, state: state))
         if buffer.count > Self.maxBuffered { buffer.removeFirst(buffer.count - Self.maxBuffered) }
         scheduleFlush()
     }
