@@ -487,6 +487,41 @@ struct VideoAdTests {
         #expect(!fired.contains("click"))
     }
 
+    @Test func aLinearAdCoveredByAnotherScreenWaitsAndEndsOnceLater() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i30"))
+        var exposures: [Double] = []
+        ad.bridge.onSend = { type, payload in if type == "ad.exposure", let value = payload["exposedPercentage"] as? Double { exposures.append(value) } }
+        try presentLinear(ad)
+        send(ad, "video.start", ["playhead": 0])
+        // Covered: another controller presented over the ad (the runner cannot finish that presentation, so
+        // the check is told), and UIKit takes the ad's view out of the window.
+        var covered = true
+        Environment.isCovered = { _ in covered }
+        ad.bridge.webView.removeFromSuperview()
+        exposures.removeAll()
+        await sleepMs(300)   // many meter ticks with the view out of the window
+        #expect(delegate.endReasons.isEmpty, "no didEnd while covered")
+        #expect(!exposures.isEmpty && exposures.allSatisfy { $0 == 0 }, "zero exposure while covered: \(exposures)")
+        // Uncovered: the view is back and the ad goes on.
+        covered = false
+        window.add(ad.bridge.webView)
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 0 } == true }, "exposed again")
+        send(ad, "video.firstQuartile", ["playhead": 2500])
+        #expect(!ad.hasEnded, "still running")
+        // A genuine end later: exactly one didEnd.
+        send(ad, "video.skip", ["playhead": 3000])
+        #expect(await waitUntil(5) { delegate.endReasons == [.skipped] })
+        await sleepMs(100)
+        #expect(delegate.endReasons == [.skipped], "one terminal callback")
+    }
+
+    @Test func aLinearAdWhoseViewLeavesWithNothingCoveringItIsInterrupted() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i31"))
+        try presentLinear(ad)
+        ad.bridge.webView.removeFromSuperview()
+        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "the app took it away")
+    }
+
     @Test func anOpenForAnotherPurposeOpensTheURLAndFiresNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16b"))
         var opened: [URL] = []

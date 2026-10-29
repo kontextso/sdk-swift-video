@@ -41,6 +41,9 @@ enum Environment {
     static var assertionFailure: (String) -> Void = { Swift.assertionFailure($0) }
     /// Where the IAB consent keys are read from.
     static var consentDefaults: UserDefaults = .standard
+    /// Whether a controller has another presented over it: a full-screen cover takes its view out of the
+    /// window, which is not the ad's end.
+    static var isCovered: @MainActor (UIViewController) -> Bool = { $0.presentedViewController != nil }
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
     /// Whether the scene of a given window is active, for the viewability of an ad in it.
@@ -71,6 +74,7 @@ enum Environment {
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
         isWindowActive = defaultIsWindowActive
+        isCovered = { $0.presentedViewController != nil }
         trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
         advertisingIdentifier = { ASIdentifierManager.shared().advertisingIdentifier }
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }

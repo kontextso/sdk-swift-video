@@ -544,11 +544,11 @@ public final class VideoAd {
             self?.tracker.fire(verdict.rawValue)
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
-        // The app took the view away under the ad (navigated off without dismiss()): the ad is gone
-        // from the screen, so it ends, as a linear ad does when its controller is dismissed from outside.
-        // Otherwise it would stay the ad on screen and block every show in the app.
+        // The app took the view away (navigated off without dismiss()): the ad ends, or it would block every
+        // show in the app. Not a linear ad covered full screen: UIKit removes its view until the cover goes.
         meter.onDetached = { [weak self] in
-            guard let self else { return }
+            guard let self, !hasEnded else { return }
+            if let controller = linearController, Environment.isCovered(controller) { return Logger.info("ad \(id.prefix(8)): covered; zero exposure") }
             Logger.warning("ad \(id.prefix(8)): its view left the window; ended as interrupted")
             end(.interrupted)
         }

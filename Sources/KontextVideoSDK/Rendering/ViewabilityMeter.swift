@@ -23,7 +23,8 @@ final class ViewabilityMeter {
     /// The verdict, once.
     var onVerdict: ((Verdict) -> Void)?
     /// The view left the window and did not come back within one interval: the app removed what the ad
-    /// sits in. Once.
+    /// sits in, or covered it (UIKit takes a full-screen-covered controller's view out of the window).
+    /// Once per absence: after the view is back, a new absence is reported again.
     var onDetached: (() -> Void)?
 
     private(set) var verdict: Verdict?
@@ -95,6 +96,7 @@ final class ViewabilityMeter {
             return
         }
         detachedTicks = 0
+        detachedReported = false
         // The ad's own scene, not the app: an iPad window in the background shows nothing.
         let inWindow = Environment.isWindowActive(window) ? Self.visibleRect(of: view, in: window) : .null
         // Back in the view's own coordinates before comparing areas: an ancestor's transform (a scaled-down

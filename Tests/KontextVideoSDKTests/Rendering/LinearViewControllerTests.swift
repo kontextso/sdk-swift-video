@@ -31,7 +31,23 @@ struct LinearViewControllerTests {
         let (controller, interruptions) = makeController()
         controller.isEndingByAd = true
         controller.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
-        #expect(interruptions() == 0)
+        controller.viewDisappeared(isBeingDismissed: false, isMovingFromParent: false, hasPresenter: false)
+        controller.viewDisappeared(isBeingDismissed: false, isMovingFromParent: true, hasPresenter: true)
+        #expect(interruptions() == 0, "whatever UIKit reports while the ad ends itself")
+    }
+
+    @Test func uiKitsDisappearanceCallbackReachesTheDecision() {
+        // The real `viewDidDisappear`, through UIKit's appearance transition: a controller with no presenter
+        // that disappears is an interruption. Deleting the override makes this fail.
+        let (controller, interruptions) = makeController()
+        controller.loadViewIfNeeded()
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        #expect(interruptions() == 1)
+        controller.isEndingByAd = true
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.endAppearanceTransition()
+        #expect(interruptions() == 1, "not while the ad ends itself")
     }
 
     @Test func presentsFullScreenWithTheWebViewFillingIt() {
