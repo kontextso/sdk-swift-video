@@ -166,6 +166,22 @@ struct DecodingTests {
         #expect(clickOnly.hasFidelity1 && !clickOnly.hasFidelity0, "signed for the click only: valid")
     }
 
+    @Test func anEntryThatDoesNotDecodeIsDroppedAndTheRestKept() throws {
+        var skan = Fixtures.skan()
+        skan["fidelities"] = [["fidelity": 0, "nonce": "n", "timestamp": "1", "signature": "s"], ["fidelity": 2], "junk"]
+        let attribution = try #require(try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan, "aak": ["jws": "j"]]])).attribution)
+        #expect(attribution.skan?.fidelities.map(\.fidelity) == [0], "the fidelity 0 survives a future entry in another shape")
+        #expect(attribution.aakJWS == "j")
+    }
+
+    @Test func theSameFidelityTwiceDropsThePayload() throws {
+        var skan = Fixtures.skan()
+        skan["fidelities"] = [["fidelity": 0, "nonce": "a", "timestamp": "1", "signature": "s"], ["fidelity": 0, "nonce": "b", "timestamp": "1", "signature": "t"]]
+        let attribution = try Fixtures.payload(Fixtures.ad(extra: ["attribution": ["skan": skan, "aak": ["jws": "j"]]])).attribution
+        #expect(attribution?.skan == nil, "which one signs would depend on the order")
+        #expect(attribution?.aakJWS == "j")
+    }
+
     @Test func anEmptyRequiredStringIsMissing() throws {
         var emptySignature = Fixtures.skan()
         emptySignature["fidelities"] = [["fidelity": 0, "nonce": "n", "timestamp": "1", "signature": ""]]

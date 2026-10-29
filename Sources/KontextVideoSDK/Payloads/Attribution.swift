@@ -25,7 +25,8 @@ struct Attribution: Decodable, Sendable, Equatable {
 /// The SKAdNetwork payload of an app-install ad, as the ad network signed it. Passed through to Apple's
 /// APIs: the fidelity-0 entry registers the view-through impression (`SKAdImpression`), the fidelity-1
 /// entry signs the App Store product sheet a click opens. The names and types are the Video API's; the
-/// decoder coerces a numeric id the server sent as a number, so `42` and `"42"` both pass.
+/// decoder coerces a numeric id the server sent as a number, so `42` and `"42"` both pass. A decoded
+/// `Skan` is a candidate, checked for shape only: Apple verifies the signatures, and may still refuse it.
 struct Skan: Decodable, Sendable, Equatable {
     struct Fidelity: Decodable, Sendable, Equatable {
         /// 0 for a view-through impression, 1 for a StoreKit-rendered surface.
@@ -60,8 +61,10 @@ struct Skan: Decodable, Sendable, Equatable {
     let sourceIdentifier: String?
     /// SKAdNetwork 3 and earlier: the campaign id.
     let campaign: String?
-    /// At least one entry; which fidelities the network signed. Only 0 and 1 exist; an entry with another
-    /// value is dropped.
+    /// Which fidelities the network signed: at least one, each of 0 and 1 at most once. An entry with
+    /// another value, or one that does not decode, is dropped and the rest kept, so a future fidelity in a
+    /// new shape does not cost the install its attribution. The same fidelity twice drops the payload:
+    /// which one signs would depend on the order.
     let fidelities: [Fidelity]
 
     private enum CodingKeys: String, CodingKey {
@@ -76,9 +79,14 @@ struct Skan: Decodable, Sendable, Equatable {
         sourceApp = try container.requireStringCoercing(forKey: .sourceApp)
         sourceIdentifier = container.decodeStringCoercing(forKey: .sourceIdentifier)
         campaign = container.decodeStringCoercing(forKey: .campaign)
-        fidelities = try container.decode([Fidelity].self, forKey: .fidelities).filter { (0...1).contains($0.fidelity) }
+        fidelities = try container.decode([Lenient<Fidelity>].self, forKey: .fidelities)
+            .compactMap(\.value)
+            .filter { (0...1).contains($0.fidelity) }
         guard !fidelities.isEmpty else {
             throw DecodingError.dataCorruptedError(forKey: .fidelities, in: container, debugDescription: "fidelities must have at least one entry of fidelity 0 or 1")
+        }
+        guard Set(fidelities.map(\.fidelity)).count == fidelities.count else {
+            throw DecodingError.dataCorruptedError(forKey: .fidelities, in: container, debugDescription: "a fidelity is listed twice")
         }
     }
 
@@ -109,9 +117,19 @@ struct Skan: Decodable, Sendable, Equatable {
     }
 }
 
+/// One array element that may not decode: `nil` then, and the array goes on.
+private struct Lenient<Wrapped: Decodable>: Decodable {
+    let value: Wrapped?
+
+    init(from decoder: Decoder) throws {
+        value = try? Wrapped(from: decoder)
+    }
+}
+
 /// Per-field decoding that takes the expected JSON type first and coerces between a number and a string
-/// otherwise, so a numeric id the server sent as `42` instead of `"42"` does not fail the ad. An empty
-/// string is missing: an empty signature, nonce or id attributes nothing.
+/// otherwise, so a numeric id the server sent as `42` instead of `"42"` does not fail the ad. It applies
+/// to every string field, the signatures and nonces included; a coerced signature is harmless, Apple's
+/// check refuses it later. An empty string is missing: an empty signature, nonce or id attributes nothing.
 private extension KeyedDecodingContainer {
     func decodeStringCoercing(forKey key: Key) -> String? {
         if let string = try? decode(String.self, forKey: key) { return string.isEmpty ? nil : string }
