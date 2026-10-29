@@ -34,6 +34,8 @@ struct TrackingInfo: Sendable {
     /// the dialog is up. Cleared when the dialog closes; the OS stays the authority on the status.
     @MainActor
     private static var authorization: Task<ATTrackingManager.AuthorizationStatus, Error>?
+    /// The app was told once that it never asked for tracking authorization; once per launch is enough.
+    @MainActor static var warnedAboutUnaskedTracking = false
 
     /// Reads the current state. With `requestAuthorization`, first requests App Tracking Transparency
     /// authorization when the viewer has not answered yet (the app's Info.plist needs
@@ -52,6 +54,11 @@ struct TrackingInfo: Sendable {
             authorization = task
             status = try await awaitShared(task)
             Logger.info("ATT: \(name(of: status))")
+        } else if status == .notDetermined, !warnedAboutUnaskedTracking {
+            // A publisher who forgot both their own dialog and the SDK's option sends every request without
+            // the IDFA; said once, at the first request, where a developer looks.
+            warnedAboutUnaskedTracking = true
+            Logger.warning("App Tracking Transparency not answered yet: the IDFA is not sent until the app asks, or set requestTrackingAuthorization: true.")
         }
         var ifa: IFA?
         if status == .authorized {

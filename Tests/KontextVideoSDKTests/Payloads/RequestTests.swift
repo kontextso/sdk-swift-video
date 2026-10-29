@@ -206,6 +206,22 @@ struct RequestTests {
         #expect(prompts == 2, "the shared task was cleared, a later request asks again")
     }
 
+    @Test func anAppThatNeverAskedForTrackingIsWarnedOnceAtTheFirstRequest() async throws {
+        Environment.trackingAuthorizationStatus = { .authorized }
+        _ = try await TrackingInfo.current(requestAuthorization: false)
+        #expect(!TrackingInfo.warnedAboutUnaskedTracking, "answered: nothing to say")
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        Environment.requestTrackingAuthorization = { .denied }
+        _ = try await TrackingInfo.current(requestAuthorization: true)
+        #expect(!TrackingInfo.warnedAboutUnaskedTracking, "the SDK asks itself: nothing to say")
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        _ = try await TrackingInfo.current(requestAuthorization: false)
+        #expect(TrackingInfo.warnedAboutUnaskedTracking, "nobody asked: the warning is given")
+        // Once per launch: the flag stays set, so the next requests say nothing more.
+        _ = try await TrackingInfo.current(requestAuthorization: false)
+        #expect(TrackingInfo.warnedAboutUnaskedTracking)
+    }
+
     final class Gate {
         var open = false
     }
