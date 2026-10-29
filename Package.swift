@@ -8,8 +8,8 @@ let package = Package(
         .library(name: "KontextVideoSDK", targets: ["KontextVideoSDK"]),
     ],
     dependencies: [
-        // Pre-1.0 KontextKit: pin exact, the same version sdk-swift uses.
-        .package(url: "https://github.com/kontextso/kontextkit-ios.git", exact: "0.3.0"),
+        // Pre-1.0 KontextKit: pin exact; a minor release may break.
+        .package(url: "https://github.com/kontextso/kontextkit-ios.git", exact: "0.4.0"),
     ],
     targets: [
         .target(

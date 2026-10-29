@@ -1,6 +1,3 @@
-// Needed for `AVAudioSession`, which the analyzer files under AVFAudio (iOS 14.5+; AVFoundation covers 14.0).
-// swiftlint:disable:next unused_import
-import AVFoundation
 import KontextKit
 
 /// The `os` object of a request. KontextKit's names are the API's: `ios`, `ipados`, `tvos`.
@@ -94,14 +91,12 @@ struct AudioInfo: Encodable, Sendable {
     let volume: Int
     let muted: Bool
 
-    /// Read here, not through KontextKit's `AudioInfoProvider`: its `collect()` sets the shared audio
-    /// session's category (`.playback`, mixing with others) and activates it on the first call, which a
-    /// video SDK must never do to the app that plays the content. Back to KontextKit once it offers a read
-    /// without that side effect. `outputVolume` is the system volume; below 1 % counts as muted, as there.
+    /// KontextKit's read of the system volume, below 1 % counted as muted. A read only since KontextKit
+    /// 0.4.0: it leaves the shared audio session, which belongs to the app's player, as the app set it.
     @MainActor
     static func current() -> AudioInfo {
-        let volume = AVAudioSession.sharedInstance().outputVolume
-        return AudioInfo(volume: Int((volume * 100).rounded()), muted: volume < 0.01)
+        let info = AudioInfoProvider.collect()
+        return AudioInfo(volume: info.volume, muted: info.muted)
     }
 }
 
