@@ -32,7 +32,7 @@ sdk-swift-video/
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
 ├── .github/workflows/ci.yml the four CI jobs (see CI)
 ├── Package.swift            SPM manifest; KontextKit pinned exact
-├── CLAUDE.md                project context for Claude Code
+├── AGENTS.md                guidance for coding agents (CLAUDE.md only imports it)
 └── CHANGELOG.md, RELEASING.md
 ```
 
