@@ -15,6 +15,9 @@ final class ViewabilityMeter {
 
     /// How often the box is measured. A constant in spirit; a variable so the tests can shrink it.
     static var interval: TimeInterval = 0.25
+    /// A gap between ticks shorter than this is a scheduling hiccup, not a stall: two intervals in production
+    /// (0.25 s each), and still half a second when a test shrinks the interval to a few milliseconds.
+    static let shortestStall: TimeInterval = 0.5
     /// The MRC rule's share: at least half the box on screen, for `requiredSeconds` without a break.
     static let threshold: Double = 0.5
 
@@ -88,7 +91,7 @@ final class ViewabilityMeter {
     /// One measurement. Internal so tests can drive it with a frozen clock; the timer calls it otherwise.
     func tick() {
         let now = Environment.now()
-        let stalled = lastTick.map { now - $0 > Self.interval * 2 } ?? false
+        let stalled = lastTick.map { now - $0 > max(Self.interval * 2, Self.shortestStall) } ?? false
         lastTick = now
         guard let view, let window = view.window else {
             report(0, visible: .zero)
