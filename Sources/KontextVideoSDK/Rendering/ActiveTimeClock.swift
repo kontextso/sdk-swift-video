@@ -5,7 +5,7 @@ import UIKit
 /// only counts and tells; the ad decides what an elapsed duration means.
 @MainActor
 final class ActiveTimeClock {
-    /// When the duration has run out on active time; called once, never after `stop()`.
+    /// When the duration has run out on active time; called at most once, never after `stop()`.
     private let onElapsed: () -> Void
     /// The overlay's `duration`, seconds; `nil` when nothing should end the ad on time.
     private let duration: TimeInterval?
@@ -15,6 +15,8 @@ final class ActiveTimeClock {
     /// Active time before the current stretch, seconds.
     private var accumulated: TimeInterval = 0
     private var stopped = false
+    /// The duration ran out and `onElapsed` was called: it never runs again, whatever the app's activity does.
+    private var expired = false
     /// Waits out the rest of the duration during an active stretch.
     private(set) var timer: Task<Void, Never>?
     /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
@@ -75,12 +77,13 @@ final class ActiveTimeClock {
     }
 
     private func startTimer() {
-        guard timer == nil, let duration else { return }
+        guard timer == nil, !expired, let duration else { return }
         // Clamped to a day: a nonsense server value must not trap the `UInt64` conversion.
         let remaining = min(max(0, duration - elapsed), 86_400)
         timer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            guard let self, !Task.isCancelled, !stopped else { return }
+            guard let self, !Task.isCancelled, !stopped, !expired else { return }
+            expired = true
             onElapsed()
         }
     }

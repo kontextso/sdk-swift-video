@@ -464,18 +464,17 @@ extension FrameBridge: WKUIDelegate {
         decisionHandler(.deny)
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable () -> Void) {
-        completionHandler()
-    }
+    // The page's dialogs are answered at once, as dismissed. All three in their `async` form: the
+    // completion-handler forms' closure types differ between the iOS 18 and iOS 26 SDKs, and a signature
+    // that misses is never called (the CI warnings gate catches it on Xcode 16.4).
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async {}
 
-    // The `async` form of the same method: the completion-handler form's closure type differs between the
-    // iOS 18 and iOS 26 SDKs, and a signature that misses is never called.
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async -> Bool {
         false
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor @Sendable (String?) -> Void) {
-        completionHandler(nil)
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo) async -> String? {
+        nil
     }
 }
 
