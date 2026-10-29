@@ -119,6 +119,7 @@ extension VideoAdError {
 }
 
 extension VideoAdError: CustomStringConvertible, LocalizedError {
+    /// A sentence for logs and crash reports: what went wrong and, where it helps, what to do.
     public var description: String {
         switch self {
         case .notInitialized:
@@ -152,6 +153,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         }
     }
 
+    /// The same sentence as `description`, for `localizedDescription`. English only.
     public var errorDescription: String? { description }
 
     /// A dimension for the description, never a trap: whole points as an integer, anything else as it is.

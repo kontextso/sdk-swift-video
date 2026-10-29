@@ -17,6 +17,7 @@ extension KontextVideo {
         /// The viewer's interests, in the publisher's own words.
         public let keywords: [String]?
 
+        /// Set what you know; every field may stay `nil`.
         public init(
             id: String? = nil,
             email: String? = nil,

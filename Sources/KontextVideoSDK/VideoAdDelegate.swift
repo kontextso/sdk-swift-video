@@ -38,6 +38,7 @@ public protocol VideoAdDelegate: AnyObject {
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason)
 }
 
+/// Empty defaults: implement only the moments you need.
 public extension VideoAdDelegate {
     func videoAdDidRecordImpression(_ ad: VideoAd) {}
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {}

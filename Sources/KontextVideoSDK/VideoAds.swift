@@ -6,6 +6,7 @@ import Foundation
 /// Call `destroy()` when the viewer leaves the video; releasing the object does the same, best effort.
 @MainActor
 public final class VideoAds {
+    /// The video these ads are for, as passed at creation; every request carries it.
     public let content: KontextVideo.Content
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false

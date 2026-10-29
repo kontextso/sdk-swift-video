@@ -17,10 +17,14 @@ import UIKit
 /// ```
 @MainActor
 public final class VideoAd {
-    /// The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
-    /// business at `show`; nothing of that is exposed.
+    // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
+    // business at `show`; nothing of that is exposed.
+
+    /// The server's id of this ad: unique per auction win, the same while the server re-serves it.
     public var id: String { descriptor.id }
+    /// Which moment the ad is for: `.pause`, `.overlay` or `.linear`.
     public var format: AdFormat { descriptor.format }
+    /// What the ad pays, for the app's own auction against other networks.
     public var price: Price { descriptor.price }
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
@@ -97,18 +101,9 @@ public final class VideoAd {
     /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
     /// video starts: a linear ad's meter waits for the presentation to finish.
     private var videoPlaying = false
-    /// Removes an overlay when its `duration` elapses; the app runs no timer.
-    private(set) var durationTask: Task<Void, Never>?
-    /// When the current stretch of active time on screen began; `nil` while the app is not active.
-    private var activeSince: TimeInterval?
-    /// Active time on screen before the current stretch, seconds.
-    private var activeAccumulated: TimeInterval = 0
-    /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
-    nonisolated(unsafe) private(set) var activityObservers: [any NSObjectProtocol] = []
-    /// Seconds the ad has been on screen while the app was active.
-    var activeTimeOnScreen: TimeInterval {
-        activeAccumulated + (activeSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)
-    }
+    /// Time on screen while the app is active, for an overlay or pause ad; it also ends an overlay whose
+    /// `duration` elapsed. Made when the ad is presented.
+    private(set) var clock: ActiveTimeClock?
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
@@ -415,10 +410,14 @@ public final class VideoAd {
         // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
         skAdNetwork?.start()
         if format != .linear {
-            // Time on screen while the app is active: `overlayViewDuration` reports it, and an overlay's
-            // `duration` runs on it, so both freeze in the background and resume on foreground.
-            observeActivity()
-            if Environment.isApplicationActive() { beginActiveStretch() }
+            let clock = ActiveTimeClock(duration: format == .overlay ? duration : nil, adId: id) { [weak self] in
+                guard let self, !hasEnded else { return }
+                Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
+                isCompleted = true
+                end(.completed)
+            }
+            self.clock = clock
+            clock.start()
         }
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for
@@ -434,60 +433,6 @@ public final class VideoAd {
         if descriptor.creative != .video {
             recordImpression()
         }
-    }
-
-    // MARK: Time on screen
-
-    /// The buyer's NonLinear `duration`, counted on active time only. `dismiss()` ends it earlier.
-    private func startDurationClock() {
-        guard durationTask == nil, !hasEnded, let duration else { return }
-        // Clamped to a day: a nonsense server value must not trap the `UInt64` conversion.
-        let remaining = min(max(0, duration - activeTimeOnScreen), 86_400)
-        durationTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            guard let self, !Task.isCancelled, !hasEnded else { return }
-            Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration) s on screen elapsed")
-            isCompleted = true
-            end(.completed)
-        }
-    }
-
-    private func applicationDidResignActive() {
-        if let since = activeSince {
-            activeAccumulated += ProcessInfo.processInfo.systemUptime - since
-            activeSince = nil
-        }
-        durationTask?.cancel()
-        durationTask = nil
-        Logger.debug("ad \(id.prefix(8)): clock frozen at \(activeAccumulated) s on screen")
-    }
-
-    private func applicationDidBecomeActive() {
-        guard !hasEnded, activeSince == nil else { return }
-        beginActiveStretch()
-    }
-
-    /// The app is active and the ad on screen: the clocks run from now.
-    private func beginActiveStretch() {
-        activeSince = ProcessInfo.processInfo.systemUptime
-        if format == .overlay, duration != nil { startDurationClock() }
-    }
-
-    private func observeActivity() {
-        let center = NotificationCenter.default
-        activityObservers = [
-            center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.applicationDidResignActive() }
-            },
-            center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.applicationDidBecomeActive() }
-            },
-        ]
-    }
-
-    private func stopObservingActivity() {
-        activityObservers.forEach(NotificationCenter.default.removeObserver)
-        activityObservers = []
     }
 
     // MARK: Measurement
@@ -546,8 +491,8 @@ public final class VideoAd {
         if reason == .failed, let failure {
             delegate?.videoAd(self, didFail: failure)
         }
-        durationTask?.cancel()
-        stopObservingActivity()
+        // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
+        let activeTime = clock?.stop() ?? 0
         meter?.stop()
         meter = nil
         skAdNetwork?.end()
@@ -583,12 +528,7 @@ public final class VideoAd {
             }
         }
         if format != .linear {
-            // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
-            if let since = activeSince {
-                activeAccumulated += ProcessInfo.processInfo.systemUptime - since
-                activeSince = nil
-            }
-            tracker.fire("overlayViewDuration", viewDurationMs: Int((activeAccumulated * 1000).rounded()))
+            tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
         DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
@@ -765,15 +705,11 @@ public final class VideoAd {
     }
 
     /// Dropping the last reference releases everything: the bridge tears the page down in its own
-    /// `deinit`; the duration clock is stopped here. Never reached while the ad is on screen, because the
-    /// SDK retains it until `didEnd`.
+    /// `deinit`, the clock in its own; the meter's timer is stopped here. Never reached while the ad is on
+    /// screen, because the SDK retains it until `didEnd`.
     deinit {
-        let clock = durationTask
-        let observers = activityObservers
         let meter = self.meter
         let teardown: @MainActor () -> Void = {
-            clock?.cancel()
-            observers.forEach(NotificationCenter.default.removeObserver)
             meter?.stopTimer()
         }
         if Thread.isMainThread {

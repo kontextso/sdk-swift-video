@@ -21,6 +21,7 @@ extension KontextVideo {
         /// The legacy IAB US Privacy (CCPA) string. Some DSPs still read it.
         public let usPrivacy: String?
 
+        /// Set only what your consent platform did not write; `coppa` can only come from you.
         public init(
             gdpr: Bool? = nil,
             gdprConsent: String? = nil,

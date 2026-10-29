@@ -8,7 +8,9 @@ extension KontextVideo {
         /// A simplified rating: `explicit` content gets no ads that require safe content. Leave it unset
         /// when you do not know: OpenRTB's media rating has no "unknown" value, so the SDK never defaults it.
         public enum Rating: String, Encodable, Sendable {
+            /// Suitable for every advertiser.
             case safe
+            /// Mature content: only ads that accept it.
             case explicit
         }
 
@@ -16,11 +18,14 @@ extension KontextVideo {
         public struct Series: Encodable, Sendable, Equatable {
             /// Required and non-empty; a series with an empty id is left out of the request.
             public let id: String
+            /// The series' public name.
             public let title: String?
+            /// A short synopsis of the series.
             public let description: String?
             /// Total number of episodes, at least 1; anything else is left out of the request.
             public let episodeCount: Int?
 
+            /// Only `id` is required; the rest is contextual signal.
             public init(id: String, title: String? = nil, description: String? = nil, episodeCount: Int? = nil) {
                 self.id = id
                 self.title = title
@@ -32,6 +37,7 @@ extension KontextVideo {
                 case id, title, description, episodeCount
             }
 
+            /// The wire form: absent fields are left out, an `episodeCount` below 1 too.
             public func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
                 try container.encode(id, forKey: .id)
@@ -46,12 +52,15 @@ extension KontextVideo {
         public let id: String
         /// BCP-47, for example "en" or "pt-BR". Required and non-empty, as `id`.
         public let language: String
+        /// Whether the video suits every advertiser; `nil` when you do not know.
         public let mediaRating: Rating?
         /// The episode's public page.
         public let url: URL?
+        /// The episode's public name.
         public let title: String?
         /// IAB Content Taxonomy 3.0 ids.
         public let categories: [String]?
+        /// A short synopsis of the episode.
         public let description: String?
         /// Seconds, rounded to the nearest whole millisecond. Left out of the request when negative,
         /// non-finite (NaN is what `AVPlayerItem.duration.seconds` gives before the item is ready, or for
@@ -59,11 +68,14 @@ extension KontextVideo {
         public let duration: TimeInterval?
         /// At least 1; anything else is left out of the request.
         public let episodeNumber: Int?
+        /// Words that describe the video, in the publisher's own terms.
         public let keywords: [String]?
         /// For example "romance".
         public let genre: String?
+        /// The series the episode belongs to, when it is one.
         public let series: Series?
 
+        /// Only `id` and `language` are required; the rest is contextual signal, send what you have.
         public init(
             id: String,
             language: String,
@@ -96,6 +108,8 @@ extension KontextVideo {
             case id, language, mediaRating, url, title, categories, description, duration, episodeNumber, keywords, genre, series
         }
 
+        /// The wire form: absent fields are left out, as are numbers the server's schema would refuse
+        /// (see `duration` and `episodeNumber`); `duration` goes as milliseconds.
         public func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(id, forKey: .id)

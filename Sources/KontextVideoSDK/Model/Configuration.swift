@@ -42,6 +42,7 @@ extension KontextVideo {
         /// a staging or mock server; a URL without a scheme and host stops a debug build.
         public let adServerURL: URL
 
+        /// Only `publisherToken` is required.
         public init(
             publisherToken: String,
             requestTrackingAuthorization: Bool = false,
