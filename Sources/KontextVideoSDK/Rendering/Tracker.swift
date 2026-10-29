@@ -10,8 +10,14 @@ import Foundation
 final class Tracker {
     /// Milliseconds into the ad video, as the page last reported it; `[ADPLAYHEAD]`.
     var adPlayhead = 0
-    /// Content time in seconds at the moment of firing; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`.
+    /// Content time in seconds; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`. The app's provider behind it is app
+    /// code, so the ad reads it once before an operation (`frozenContentPlayhead`) rather than inside a beacon.
     var contentPlayhead: () -> TimeInterval = { 0 }
+    /// The content playhead read before the operation now running; every beacon of it uses this value and
+    /// calls no app code. `nil` outside an operation: a beacon then reads `contentPlayhead` itself.
+    var frozenContentPlayhead: TimeInterval?
+    /// Whether any URL asks for the content playhead; when none does, nobody reads it.
+    let readsContentPlayhead: Bool
 
     /// Events that fire every time they happen, as VAST players do (a second click is a second click, every
     /// pause counts); each occurrence gets its own fire id. Everything else fires once per entry.
@@ -26,6 +32,7 @@ final class Tracker {
         self.adId = adId
         self.entries = entries
         session = Environment.session
+        readsContentPlayhead = entries.contains { Self.asksForContentPlayhead($0.url) }
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
@@ -97,8 +104,8 @@ final class Tracker {
             .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
             .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
         // The content playhead read once, and only when a URL asks for it: its two names are one moment.
-        let content = normalized.contains("[MEDIAPLAYHEAD]") || normalized.contains("[CONTENTPLAYHEAD]")
-            ? Self.encode(Self.playhead(seconds: contentPlayhead())) : ""
+        let content = Self.asksForContentPlayhead(normalized)
+            ? Self.encode(Self.playhead(seconds: frozenContentPlayhead ?? contentPlayhead())) : ""
         return normalized
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
@@ -115,6 +122,14 @@ final class Tracker {
             // URL, and every `%3A` above would become `%253A`.
             .replacingOccurrences(of: "[", with: "%5B")
             .replacingOccurrences(of: "]", with: "%5D")
+    }
+
+    /// Either name of the content playhead, its brackets encoded or not.
+    static func asksForContentPlayhead(_ template: String) -> Bool {
+        let normalized = template
+            .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
+            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+        return normalized.contains("[MEDIAPLAYHEAD]") || normalized.contains("[CONTENTPLAYHEAD]")
     }
 
     /// `[TIMESTAMP]`: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone.

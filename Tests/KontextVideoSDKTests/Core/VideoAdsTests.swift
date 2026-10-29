@@ -619,6 +619,52 @@ struct VideoAdsTests {
         #expect(!gate.isOpen)
     }
 
+    @Test func destroyWhileTheUserAgentIsLookedUpThrowsDestroyedAtOnceAndTheOthersWait() async throws {
+        let gate = DialogGate()
+        var lookups = 0
+        Environment.userAgent = {
+            lookups += 1
+            while !gate.open { await sleepMs(5) }
+            return "Mozilla/5.0 test"
+        }
+        // A safety net: without the fix the destroyed call would wait until the lookup answers.
+        Task { await sleepMs(3000); gate.open = true }
+        let destroyed = await makeAds(content: "v1")
+        let other = harness.player.ads(for: .init(id: "v2", language: "en"))
+        harness.serve(Fixtures.ad(id: "img-ua"))
+        let call = Task { await error { try await destroyed.format(.pause) } }
+        let otherCall = Task { try await other.format(.pause) }
+        #expect(await waitUntil { lookups == 1 })
+        await sleepMs(20)
+        destroyed.destroy()
+        let failure = await call.value
+        guard case .destroyed = failure else { Issue.record("expected destroyed, got \(String(describing: failure))"); return }
+        #expect(!gate.open, "released while the user agent was still being looked up")
+        gate.open = true
+        #expect(try await otherCall.value.id == "img-ua", "the other video waited for the same lookup")
+        #expect(lookups == 1, "one lookup for everyone, the one initialize started")
+        #expect(harness.adsRequests.count == 1, "the destroyed video sent nothing")
+        #expect(harness.adsRequests.first?.body.flatMap { ($0["device"] as? [String: Any])?["network"] as? [String: Any] }?["userAgent"] as? String == "Mozilla/5.0 test")
+    }
+
+    @Test func destroyReleasesThePlayheadProvider() async {
+        final class Screen {
+            var ads: VideoAds?
+            func playhead() -> TimeInterval { 12 }
+        }
+        var screen: Screen? = Screen()
+        weak var released: Screen?
+        released = screen
+        let ads = await makeAds()
+        screen?.ads = ads
+        ads.playheadProvider = { [screen] in screen?.playhead() ?? 0 }   // a strong capture, the cycle an app writes
+        #expect(ads.playhead == 12)
+        ads.destroy()
+        screen = nil
+        #expect(released == nil, "destroy dropped the closure that kept the app's object")
+        #expect(ads.playheadProvider == nil)
+    }
+
     // MARK: Playhead
 
     @Test func playheadComesFromTheProviderOrTheTrackedPlayerOrIsZero() async {

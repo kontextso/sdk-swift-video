@@ -139,15 +139,18 @@ public final class VideoAd {
     /// throws `invalidated(.rejected)`, a later `show` too. Synchronous and fire-and-forget. Throws
     /// `alreadyShown` after `show`, `invalidated(reason)` or `destroyed` when the ad already ended.
     public func reject(_ reason: RejectReason = .notUsed) throws {
-        if wasShown { throw VideoAdError.alreadyShown }
-        if let invalidationReason { throw Self.error(for: invalidationReason) }
-        if descriptor.isExpired {
-            invalidate(.expired)
-            throw VideoAdError.invalidated(.expired)
+        try withContentPlayhead {
+            if wasShown { throw VideoAdError.alreadyShown }
+            if let invalidationReason { throw Self.error(for: invalidationReason) }
+            if descriptor.isExpired {
+                invalidate(.expired)
+                throw VideoAdError.invalidated(.expired)
+            }
+            Logger.info("\(format) ad \(id.prefix(8)): rejected (\(reason))")
+            // Committed before the beacon: the rejection is final the moment the app asked for it.
+            invalidate(.rejected)
+            tracker.fire("notUsed", notUsed: Tracker.NotUsed(reason))
         }
-        Logger.info("\(format) ad \(id.prefix(8)): rejected (\(reason))")
-        tracker.fire("notUsed", notUsed: Tracker.NotUsed(reason))
-        invalidate(.rejected)
     }
 
     /// The ad can still be loaded or shown; otherwise the error to throw.
@@ -202,6 +205,10 @@ public final class VideoAd {
     /// fitted again within the same limits, and a view that becomes too small for it ends it with
     /// `.interrupted`.
     public func show(in view: UIView) throws {
+        try withContentPlayhead { try showInline(in: view) }
+    }
+
+    private func showInline(in view: UIView) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
         guard AdPlacement.canBeSeen(view) else {
@@ -211,7 +218,15 @@ public final class VideoAd {
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
         let adFrame = try frame(in: area, safeArea: container.safeAreaInsets)
-        let host = AdHostView(frame: container.bounds, content: bridge.takeWebView())
+        // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
+        // of its parking window calls that window's overridable hooks, and adding the host calls the
+        // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
+        // step below checks for that. One bridge throughout: after an end, `bridge` would make a new one.
+        let bridge = self.bridge
+        reserve()
+        let webView = bridge.takeWebView()
+        guard !hasEnded else { return }
+        let host = AdHostView(frame: container.bounds, content: webView)
         host.content.frame = adFrame
         host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
         host.onUnfit = { [weak self] in
@@ -223,11 +238,8 @@ public final class VideoAd {
             }
         }
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
-        // Reserved, and the host known, before UIKit runs any of the app's code: adding a subview calls the
-        // container's overridable hooks, which may show another ad (it finds the slot taken) or destroy this
-        // ad's `VideoAds` (the end finds the host and removes it).
+        // The host is known before it is added, so an end from the container's hook finds and removes it.
         hostView = host
-        reserve()
         container.addSubview(host)
         // The hook may also have taken the player off screen without ending anything: the ad committed, but
         // nobody can see it, so it ends at once, with no impression.
@@ -249,6 +261,10 @@ public final class VideoAd {
     /// SDK dismisses it: the video completing, a skip, a close, an error, or an interruption, each ending
     /// in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
+        try withContentPlayhead { try showLinear(from: viewController) }
+    }
+
+    private func showLinear(from viewController: UIViewController?) throws {
         guard format == .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
         let presenter: UIViewController
@@ -266,7 +282,15 @@ public final class VideoAd {
             }
             presenter = top
         }
-        let controller = LinearViewController(webView: bridge.takeWebView())
+        // Reserved first, so a completion that runs at once finds the ad shown and the slot taken, and before
+        // the WebView leaves its parking window, whose overridable hooks are the app's code (a show from
+        // there finds the slot taken; a destroy ends this ad, checked below). The page is shown, and the
+        // beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit refused must never
+        // record an impression.
+        reserve()
+        let webView = bridge.takeWebView()
+        guard !hasEnded else { return }
+        let controller = LinearViewController(webView: webView)
         controller.onInterrupted = { [weak self] in
             guard let self else { return }
             Logger.warning("ad \(id.prefix(8)): presentation interrupted")
@@ -275,10 +299,6 @@ public final class VideoAd {
         linearController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
-        // Reserved first, so a completion that runs at once finds the ad shown and the slot taken. The page is
-        // shown, and the beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit
-        // refused must never record an impression.
-        reserve()
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
         presenter.present(controller, animated: true) { [weak self] in
             self?.presented()
@@ -387,6 +407,19 @@ public final class VideoAd {
         return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea)
     }
 
+    /// Runs `work` with the content playhead read once, before it. The app's playhead provider is the one
+    /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
+    /// every beacon inside uses that value, so no app code runs in the middle of a state change. Nested calls
+    /// share the outer read; nothing is read when no URL asks for it.
+    @discardableResult
+    func withContentPlayhead<T>(_ work: () throws -> T) rethrows -> T {
+        guard tracker.frozenContentPlayhead == nil, tracker.readsContentPlayhead else { return try work() }
+        let playhead = tracker.contentPlayhead()
+        tracker.frozenContentPlayhead = playhead
+        defer { tracker.frozenContentPlayhead = nil }
+        return try work()
+    }
+
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
     /// unshown ones; `show` returning is the app's signal. Before any of the app's code can run, so a show
     /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
@@ -401,6 +434,10 @@ public final class VideoAd {
     /// fire. Everything the ad needs while on screen is set up before anyone outside hears of it: the
     /// impression delegate at the end may end the ad on the spot, and `end()` must find all of it.
     func presented() {
+        withContentPlayhead { presentNow() }
+    }
+
+    private func presentNow() {
         guard !hasEnded, !isPresented else { return }
         isPresented = true
         bridge.show()
@@ -459,7 +496,7 @@ public final class VideoAd {
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
         meter.onVerdict = { [weak self] verdict in
-            self?.tracker.fire(verdict.rawValue)
+            self?.withContentPlayhead { self?.tracker.fire(verdict.rawValue) }
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
         // The app took the view away (navigated off without dismiss()): the ad ends, or it would block every
@@ -486,6 +523,10 @@ public final class VideoAd {
 
     /// The one terminal moment after a successful show. Idempotent.
     func end(_ reason: EndReason) {
+        withContentPlayhead { endNow(reason) }
+    }
+
+    private func endNow(_ reason: EndReason) {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
         if reason == .failed, let failure {
@@ -584,6 +625,10 @@ public final class VideoAd {
 
     /// What the page reports, mapped to the beacons and the delegate.
     private func handle(_ event: FrameEvent) {
+        withContentPlayhead { handleNow(event) }
+    }
+
+    private func handleNow(_ event: FrameEvent) {
         // The bridge stops delivering once hidden; this is the same rule at the ad's own door.
         guard !hasEnded, invalidationReason == nil else { return }
         switch event {

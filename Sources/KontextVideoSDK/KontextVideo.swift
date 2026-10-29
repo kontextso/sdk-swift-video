@@ -90,7 +90,7 @@ public final class KontextVideo {
         state = .initializing
         // The browser user agent every ads request carries: evaluated in a WebView once per process and
         // cached by KontextKit. Started now so the first request does not wait for it.
-        Task { _ = await NetworkInfoProvider.collect() }
+        Task { _ = await NetworkInfo.current() }
         initTask = Task {
             await fetchConfig(configuration: configuration)
             // Cancelled by `resetForTesting()`: the state is no longer this call's to report.

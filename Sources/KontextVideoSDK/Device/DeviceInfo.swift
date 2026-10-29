@@ -101,13 +101,27 @@ struct AudioInfo: Encodable, Sendable {
 }
 
 /// The `network` object of an ads request: the browser's user agent (`navigator.userAgent` of a WebView),
-/// as sdk-swift sends it. KontextKit evaluates it once per process and caches it; `nil` when WebKit could
-/// not answer.
+/// as sdk-swift sends it; `nil` when WebKit could not answer.
 struct NetworkInfo: Encodable, Sendable {
     let userAgent: String?
 
+    /// The one lookup in flight, or done with a value: KontextKit makes a WebView for every call until it has
+    /// cached the answer, so the SDK asks once and every request waits for that.
+    @MainActor static var lookup: Task<String?, Never>?
+
+    /// Waits for the user agent. A cancelled caller (a request whose `VideoAds` was destroyed) stops waiting
+    /// at once, with no user agent, and the lookup goes on for the others; the request then finds its owner
+    /// gone and sends nothing. A lookup that found none is tried again by the next caller.
     @MainActor
     static func current() async -> NetworkInfo {
-        NetworkInfo(userAgent: await NetworkInfoProvider.collect().userAgent)
+        let task = lookup ?? Task { await Environment.userAgent() }
+        lookup = task
+        do {
+            let userAgent = try await awaitShared(task)
+            if userAgent == nil, lookup == task { lookup = nil }
+            return NetworkInfo(userAgent: userAgent)
+        } catch {
+            return NetworkInfo(userAgent: nil)
+        }
     }
 }

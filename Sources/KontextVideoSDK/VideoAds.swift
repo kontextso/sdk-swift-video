@@ -14,7 +14,8 @@ public final class VideoAds {
     /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
     /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
     /// `trackPlayhead(of:)` sets it for you. Nothing set: 0, which is what a request made before the
-    /// episode plays (a prefetch) should carry.
+    /// episode plays (a prefetch) should carry. Capture your objects weakly: the closure is kept until
+    /// `destroy()`. Read once per SDK operation, before it changes anything; return the time, nothing more.
     public var playheadProvider: (() -> TimeInterval)?
 
     /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
@@ -242,6 +243,8 @@ public final class VideoAds {
         isDestroyed = true
         request?.cancel()
         state.endAll()
+        // After the last beacons read it: an app closure that captures what owns this object no longer keeps it.
+        playheadProvider = nil
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 
@@ -276,8 +279,10 @@ extension VideoAds {
         /// `destroy()`: every held ad gets its `notUsed` beacon and ends; the ad on screen ends.
         func endAll() {
             for ad in Array(ads.values) {
-                ad.tracker.fire("notUsed", notUsed: .destroyed)
-                ad.invalidate(.destroyed)
+                ad.withContentPlayhead {
+                    ad.invalidate(.destroyed)
+                    ad.tracker.fire("notUsed", notUsed: .destroyed)
+                }
             }
             ads = [:]
             showing?.end(.destroyed)

@@ -49,31 +49,173 @@ struct VideoAdReentrancyTests {
         return harness.server.beacons.map(\.event)
     }
 
-    /// The usual tracking, with the content playhead macro only in `event`'s URL: the app's provider then
-    /// runs inside that one beacon and no other.
-    private func tracking(readingThePlayheadOnlyIn event: String, adId: String) -> [[String: Any]] {
-        Fixtures.tracking(video: false, adId: adId).map { entry in
-            var entry = entry
-            let url = entry["url"] as? String ?? ""
-            entry["url"] = entry["event"] as? String == event ? url : url.replacingOccurrences(of: "&cph=[MEDIAPLAYHEAD]", with: "")
-            return entry
+    @Test func aProviderThatDestroysAtShowMeansNothingIsShown() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10p"))
+        var reads = 0
+        ads.playheadProvider = { [weak ads] in
+            reads += 1
+            ads?.destroy()
+            return 0
+        }
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected destroyed")
+        } catch VideoAdError.destroyed {}
+        #expect(reads == 1, "read once, before the show changed anything")
+        #expect(!ad.wasShown && delegate.events.isEmpty)
+        #expect(KontextVideo.shared.adOnScreen == nil && harness.player.view.subviews.isEmpty)
+        #expect(!(await beacons()).contains("impression"))
+    }
+
+    @Test func aShowReadsTheProviderOnceAndEveryBeaconOfItUsesThatValue() async throws {
+        let (ad, _, ads) = try await makeAd(Fixtures.ad(id: "p11i"))
+        var reads = 0
+        ads.playheadProvider = {
+            reads += 1
+            return TimeInterval(reads)   // advances on every read
+        }
+        try ad.show(in: harness.player.view)
+        #expect(reads == 1)
+        let shows = { self.harness.server.beacons.filter { $0.adId == "p11i" && ["creativeView", "iconView", "impression"].contains($0.event) } }
+        #expect(await waitUntil { shows().count == 3 })
+        let playheads = Set(shows().compactMap { $0.query["cph"] })
+        #expect(playheads == ["00:00:01.000"], "creativeView, iconView and the impression: one moment, \(playheads)")
+        try ad.dismiss()
+    }
+
+    @Test func aProviderThatDestroysAtAClickDropsTheClickAndKeepsDidEndLast() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p11c"))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        try ad.show(in: harness.player.view)
+        ads.playheadProvider = { [weak ads] in
+            ads?.destroy()
+            return 0
+        }
+        ad.bridge.noteTouch()   // a click counts only right after the viewer's touch
+        send(ad, "ad.click", ["url": "https://brand.test/offer"])
+        #expect(delegate.events == ["impression", "end:destroyed"], "the ad ended before the click was handled: \(delegate.events)")
+        await sleepMs(50)
+        #expect(opened.isEmpty, "a click on an ad the app destroyed first opens nothing")
+    }
+
+    // MARK: Unparking
+
+    @Test func aDestroyFromTheParkingWindowsHookWhileShowingEndsTheAdWithNothingShown() async throws {
+        let hook = HookWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        Environment.parkingWindow = { hook }
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o12d"))
+        hook.onRemove = { ads.destroy() }
+        try ad.show(in: harness.player.view)
+        #expect(ad.wasShown && ad.hasEnded)
+        #expect(delegate.events == ["end:destroyed"], "no impression for an ad that ended before it was on screen")
+        #expect(harness.player.view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+    }
+
+    @Test func aShowFromTheParkingWindowsHookFindsTheSlotTaken() async throws {
+        let hook = HookWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        Environment.parkingWindow = { hook }
+        let (first, firstDelegate, _) = try await makeAd(Fixtures.overlayAd(id: "o12s"))
+        let (second, secondDelegate, _) = try await makeAd(Fixtures.ad(id: "p12s"))
+        let other = UIView(frame: CGRect(x: 0, y: 400, width: 390, height: 220))
+        window.add(other)
+        var nested: Error?
+        hook.onRemove = { do { try second.show(in: other) } catch { nested = error } }
+        try first.show(in: harness.player.view)
+        guard case .anotherAdShowing? = nested as? VideoAdError else { Issue.record("expected anotherAdShowing, got \(String(describing: nested))"); return }
+        #expect(first.wasShown && !second.wasShown && second.isReady)
+        #expect(firstDelegate.events == ["impression"] && secondDelegate.events.isEmpty)
+        #expect(other.subviews.isEmpty && KontextVideo.shared.adOnScreen === first)
+        try first.dismiss()
+    }
+
+    @Test func aDestroyFromTheParkingWindowsHookEndsALinearAdBeforeUIKitPresentsIt() async throws {
+        let hook = HookWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        Environment.parkingWindow = { hook }
+        let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "v12d"))
+        hook.onRemove = { ads.destroy() }
+        try ad.show(from: window.root)
+        #expect(ad.wasShown && ad.hasEnded && ad.linearController == nil)
+        #expect(window.root.presentedViewController == nil, "nothing was presented")
+        #expect(delegate.events == ["end:destroyed"] && KontextVideo.shared.adOnScreen == nil)
+    }
+
+    // MARK: Hostile app code through every operation
+
+    enum Hostile: String, CaseIterable {
+        case destroyOwner, showThisAd, showAnotherAd, dismissThisAd
+    }
+
+    enum Operation: String, CaseIterable {
+        case show, reject, dismiss, errorBeforeShow, errorAfterShow, click, videoStart, destroy
+        var needsShown: Bool { ![.show, .reject, .errorBeforeShow].contains(self) }
+    }
+
+    /// Every operation, with a playhead provider that does something hostile the first time the SDK reads it.
+    /// Whatever it does: at most one ad on screen, `didEnd` last and once, no impression for an ad that was not
+    /// shown, a rejected or failed ad never shown, and no host left behind.
+    @Test func hostileProviderThroughEveryOperationKeepsTheGuarantees() async throws {
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        let other = UIView(frame: CGRect(x: 0, y: 400, width: 390, height: 220))
+        window.add(other)
+        for hostile in Hostile.allCases {
+            for operation in Operation.allCases {
+                let label = "\(hostile.rawValue) during \(operation.rawValue)"
+                let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "x-\(hostile.rawValue)-\(operation.rawValue)", creative: "video"))
+                let (another, anotherDelegate, otherAds) = try await makeAd(Fixtures.ad(id: "y-\(hostile.rawValue)-\(operation.rawValue)"))
+                if operation.needsShown {
+                    try ad.show(in: harness.player.view)
+                    if operation != .videoStart { send(ad, "video.start", ["playhead": 0]) }
+                }
+                var armed = true
+                ads.playheadProvider = { [weak ads, weak ad, weak another] in
+                    guard armed else { return 0 }
+                    armed = false
+                    switch hostile {
+                    case .destroyOwner: ads?.destroy()
+                    case .showThisAd: try? ad?.show(in: harness.player.view)
+                    case .showAnotherAd: try? another?.show(in: other)
+                    case .dismissThisAd: try? ad?.dismiss()
+                    }
+                    return 0
+                }
+                switch operation {
+                case .show: try? ad.show(in: harness.player.view)
+                case .reject: try? ad.reject()
+                case .dismiss: try? ad.dismiss()
+                case .errorBeforeShow, .errorAfterShow: send(ad, "ad.error", ["code": 405])
+                case .click:
+                    ad.bridge.noteTouch()
+                    send(ad, "ad.click", ["url": "https://brand.test/\(label)"])
+                case .videoStart: send(ad, "video.start", ["playhead": 0])
+                case .destroy: ads.destroy()
+                }
+                check([(ad, delegate, harness.player.view), (another, anotherDelegate, other)], label)
+                ads.playheadProvider = nil
+                for shown in [ad, another] where shown.wasShown && !shown.hasEnded { try? shown.dismiss() }
+                ads.destroy()
+                otherAds.destroy()
+                #expect(KontextVideo.shared.adOnScreen == nil, "\(label): the slot is free afterwards")
+            }
         }
     }
 
-    @Test func aPlayheadProviderThatDestroysDuringShowGetsNoImpressionAfterDidEnd() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10p"))
-        var reads = 0
-        // The first beacon at show reads the playhead; the app's provider destroys the VideoAds there.
-        ads.playheadProvider = { [weak ads] in
-            reads += 1
-            if reads == 1 { ads?.destroy() }
-            return 0
+    private func check(_ ads: [(ad: VideoAd, delegate: RecordingDelegate, view: UIView)], _ label: String) {
+        let onScreen = ads.filter { $0.ad.wasShown && !$0.ad.hasEnded }
+        #expect(onScreen.count <= 1, "\(label): at most one ad on screen")
+        if let slot = KontextVideo.shared.adOnScreen {
+            #expect(onScreen.contains { $0.ad === slot }, "\(label): the slot holds the ad on screen")
         }
-        try ad.show(in: harness.player.view)
-        #expect(reads >= 1, "the show's beacons read the app's provider")
-        #expect(delegate.events == ["end:destroyed"], "didEnd is the last and only call: \(delegate.events)")
-        #expect(KontextVideo.shared.adOnScreen == nil && ad.loadedBridge == nil)
-        #expect(!(await beacons()).contains("impression"), "nothing after the end")
+        for (ad, delegate, view) in ads {
+            let ends = delegate.events.filter { $0.hasPrefix("end:") }
+            #expect(ends.count == (ad.wasShown && ad.hasEnded ? 1 : 0), "\(label): \(ad.id) ends once if shown: \(delegate.events)")
+            if let last = delegate.events.last, !ends.isEmpty { #expect(last.hasPrefix("end:"), "\(label): didEnd is last: \(delegate.events)") }
+            if delegate.events.contains("impression") { #expect(ad.wasShown, "\(label): an impression only for a shown ad") }
+            if ad.invalidationReason != nil { #expect(!ad.wasShown, "\(label): an invalidated ad is never shown") }
+            let hosts = view.subviews.filter { $0 is AdHostView }.count   // each view holds only its own ad
+            #expect(hosts == (ad.wasShown && !ad.hasEnded ? 1 : 0), "\(label): \(ad.id) leaves no host behind")
+        }
     }
 
     @Test func aShowFromInsideTheContainersAddHookFindsTheSlotTaken() async throws {
@@ -118,34 +260,6 @@ struct VideoAdReentrancyTests {
         #expect(!(await beacons()).contains("impression"))
     }
 
-    @Test func aProviderThatDestroysDuringTheImpressionBeaconKeepsDidEndLast() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p11i", extra: ["tracking": tracking(readingThePlayheadOnlyIn: "impression", adId: "p11i")]))
-        var reads = 0
-        ads.playheadProvider = { [weak ads] in
-            reads += 1
-            ads?.destroy()
-            return 0
-        }
-        try ad.show(in: harness.player.view)
-        #expect(reads == 1, "read inside the impression beacon only")
-        #expect(delegate.events == ["end:destroyed"], "no impression callback after the end: \(delegate.events)")
-        #expect(KontextVideo.shared.adOnScreen == nil)
-    }
-
-    @Test func aProviderThatDestroysDuringTheClickBeaconStillOpensTheClickAndKeepsDidEndLast() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p11c", extra: ["tracking": tracking(readingThePlayheadOnlyIn: "click", adId: "p11c")]))
-        var opened: [URL] = []
-        Environment.openURL = { url, completion in opened.append(url); completion(true) }
-        try ad.show(in: harness.player.view)
-        ads.playheadProvider = { [weak ads] in
-            ads?.destroy()
-            return 0
-        }
-        ad.bridge.noteTouch()   // a click counts only right after the viewer's touch
-        send(ad, "ad.click", ["url": "https://brand.test/offer"])
-        #expect(delegate.events == ["impression", "end:destroyed"], "no click callback after the end: \(delegate.events)")
-        #expect(await waitUntil { opened.map(\.absoluteString) == ["https://brand.test/offer"] }, "the viewer's tap still opens")
-    }
 }
 }
 
@@ -158,6 +272,20 @@ private final class ReentrantView: UIView {
         super.didAddSubview(subview)
         let action = onAdd
         onAdd = nil
+        action?()
+    }
+}
+
+/// A parking window that runs the app's code when the SDK takes a WebView out of it, as an overridable
+/// UIKit hook can.
+@MainActor
+private final class HookWindow: UIWindow {
+    var onRemove: (() -> Void)?
+
+    override func willRemoveSubview(_ subview: UIView) {
+        super.willRemoveSubview(subview)
+        let action = onRemove
+        onRemove = nil
         action?()
     }
 }
