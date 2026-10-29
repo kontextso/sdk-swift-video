@@ -125,6 +125,45 @@ struct IntegrationTests {
         try ad.dismiss()
     }
 
+    @Test func aShownPageCannotReloadOrReplaceItselfButMayChangeItsFragment() async throws {
+        let ads = await start()
+        harness.serve(Fixtures.ad(id: "img-reload"))
+        let ad = try await ads.format(.pause)
+        try await ad.load()
+        try ad.show(in: harness.player.view)
+        let page = try #require(ad.bridge.webView.url)
+        // A marker in the document: it survives only as long as the document does.
+        await inPage(ad, "window.kontextMarker = 'kept'")
+        let marker = { try? await ad.bridge.webView.evaluateJavaScript("window.kontextMarker || 'gone'") as? String }
+
+        await inPage(ad, "location.reload()")
+        await sleepMs(300)
+        #expect(await marker() == "kept", "a reload is refused")
+        await inPage(ad, "location.href = location.href")
+        await sleepMs(300)
+        #expect(await marker() == "kept", "so is loading the current URL again")
+        #expect(ad.bridge.webView.url == page)
+
+        await inPage(ad, "location.hash = 'endcard'")
+        #expect(await waitUntil { ad.bridge.webView.url?.fragment == "endcard" }, "a fragment change goes through")
+        #expect(await marker() == "kept", "within the same document")
+        #expect(ad.wasShown && !ad.hasEnded, "the ad is still on screen")
+        try ad.dismiss()
+    }
+
+    @Test func aPagesDialogsAreAnsweredAtOnceAsDismissed() async throws {
+        let ads = await start()
+        harness.serve(Fixtures.ad(id: "img-dialogs"))
+        let ad = try await ads.format(.pause)
+        try await ad.load()
+        try ad.show(in: harness.player.view)
+        // Each dialog must get its answer from the SDK's handlers: a handler that never answers hangs the page here.
+        let answers = try await ad.bridge.webView.evaluateJavaScript("JSON.stringify([alert('a') === undefined, confirm('c'), prompt('p', 'd')])") as? String
+        #expect(answers == "[true,false,null]", "alert returns, confirm is declined, prompt is cancelled")
+        #expect(ad.wasShown && !ad.hasEnded)
+        try ad.dismiss()
+    }
+
     // MARK: Linear, video creative
 
     @Test func linearPlaysToCompletion() async throws {

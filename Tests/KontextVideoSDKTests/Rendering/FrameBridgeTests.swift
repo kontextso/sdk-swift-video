@@ -415,6 +415,11 @@ struct FrameBridgeTests {
         shown(bridge)
         // Ready: the document stays.
         #expect(decide("https://server.kontext.so/frame/ad-1#endcard", true) == .allow, "a fragment, within the document")
+        #expect(decide("https://server.kontext.so/frame/ad-1", true) == .cancel, "the current URL without a fragment loads a new document")
+        #expect(bridge.navigationDecision(to: page, isMainFrame: true, isReload: true, current: page) == .cancel, "so does a reload")
+        let anchored = URL(string: "https://server.kontext.so/frame/ad-1#endcard")!
+        #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, isReload: true, current: anchored) == .cancel, "a reload, even with a fragment")
+        #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, current: anchored) == .allow, "the same fragment again stays within the document")
         #expect(decide("https://server.kontext.so/frame/other", true) == .cancel, "a same-origin page would replace the creative")
         #expect(decide("about:blank", true) == .cancel, "and so would a blank page")
         #expect(decide("https://brand.test/", true) == .external)

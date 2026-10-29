@@ -350,17 +350,19 @@ final class FrameBridge: NSObject {
     /// What a top-level navigation may do. While the page loads: its own origin (redirects included) and
     /// `about:blank`; anything else is a click the page could not report. Once it is ready the document
     /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
-    /// the same origin, is refused, or the creative and its close control would vanish under an ad still
-    /// shown. A subframe (the creative's own iframe) navigates freely.
+    /// the same origin or a reload of itself, is refused, or the creative and its close control would vanish
+    /// under an ad still shown. A navigation stays within the document, as browsers decide it, when the
+    /// target carries a fragment and differs from the current URL in nothing else; a reload, or the current
+    /// URL without a fragment, loads a new document. A subframe (the creative's own iframe) navigates freely.
     enum NavigationDecision: Equatable {
         case allow, cancel, external
     }
 
-    func navigationDecision(to target: URL, isMainFrame: Bool, current: URL?) -> NavigationDecision {
+    func navigationDecision(to target: URL, isMainFrame: Bool, isReload: Bool = false, current: URL?) -> NavigationDecision {
         guard isMainFrame else { return .allow }
         let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
         if state == .loading { return ours ? .allow : .external }
-        if let current, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
+        if let current, !isReload, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
         return ours ? .cancel : .external
     }
 
@@ -416,7 +418,8 @@ extension FrameBridge: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
-        switch navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false, current: webView.url) {
+        switch navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false,
+                                    isReload: navigationAction.navigationType == .reload, current: webView.url) {
         case .allow:
             decisionHandler(.allow)
         case .cancel:

@@ -38,14 +38,16 @@ struct TrackerTests {
 
     @Test func clicksAndPlaybackTogglesFireEveryTimeWithTheirOwnFireId() async throws {
         let tracker = try makeTracker()
+        // The contract's list, written out: derived from `Tracker.repeatable`, a name dropped there would pass.
+        let repeatable = ["click", "mute", "pause", "resume", "unmute"]
         var ids: [String: [String]] = [:]
-        for event in Tracker.repeatable.sorted() {
+        for event in repeatable {
             ids[event] = [tracker.fire(event), tracker.fire(event)]
         }
         tracker.fire("start")
         tracker.fire("start")
-        let beacons = await fired(Tracker.repeatable.count * 2 + 1)
-        for event in Tracker.repeatable {
+        let beacons = await fired(repeatable.count * 2 + 1)
+        for event in repeatable {
             let fids = beacons.filter { $0.event == event && $0.query["part"] == nil }.map { $0.query["fid"] ?? "" }
             #expect(Set(fids) == Set(ids[event] ?? []) && fids.count == 2, "\(event) fires each time, each with its own fire id")
         }
@@ -107,7 +109,7 @@ struct TrackerTests {
         tracker.fireProgress(upTo: 10_200)   // the page skipped 5000 and rounded 10 000 up
         tracker.fireProgress(upTo: 10_200)
         let beacons = await fired(2)
-        #expect(beacons.map { $0.query["offset"] } == ["5000", "10000"], "both passed checkpoints, once each; 15 000 waits")
+        #expect(beacons.compactMap { Int($0.query["offset"] ?? "") }.sorted() == [5000, 10_000], "both passed checkpoints, once each, whatever order they arrive in; 15 000 waits")
         #expect(Set(beacons.map { $0.query["fid"] }).count == 2, "separate occurrences, separate fire ids")
     }
 
@@ -178,6 +180,19 @@ struct TrackerTests {
         #expect(beacon.query["x"] == "[KONTEXT_UNKNOWN]", "a macro the SDK does not know stays in place")
         let raw = try #require(server.requests(to: "/events/").first?.request.url?.absoluteString)
         #expect(raw.contains("x=%5BKONTEXT_UNKNOWN%5D") && !raw.contains("%25"), "its brackets are encoded, so nothing else is re-encoded: \(raw)")
+    }
+
+    @Test func aPartlyEncodedPlayheadMacroIsStillFilled() async throws {
+        let tracker = Tracker(adId: "ad-1", entries: [
+            AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?new=%5BMEDIAPLAYHEAD]&old=[CONTENTPLAYHEAD%5D", offset: nil, part: nil),
+        ])
+        var reads = 0
+        tracker.contentPlayhead = { reads += 1; return 61.5 }
+        tracker.fire("impression")
+        let beacon = try #require(await fired(1).first)
+        #expect(beacon.query["new"] == "00:01:01.500", "an encoded opening bracket only")
+        #expect(beacon.query["old"] == "00:01:01.500", "an encoded closing bracket only")
+        #expect(reads == 1, "read once for both")
     }
 
     @Test func cacheBustingIsEightRandomDigitsPerBeacon() async throws {

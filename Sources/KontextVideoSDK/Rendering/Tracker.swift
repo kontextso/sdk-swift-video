@@ -90,15 +90,16 @@ final class Tracker {
     }
 
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
-        // The content playhead read once, and only when a URL asks for it: its two names are one moment.
-        let contentMacros = ["[MEDIAPLAYHEAD]", "[CONTENTPLAYHEAD]", "%5BMEDIAPLAYHEAD%5D", "%5BCONTENTPLAYHEAD%5D"]
-        let content = contentMacros.contains { template.range(of: $0, options: .caseInsensitive) != nil }
-            ? Self.encode(Self.playhead(seconds: contentPlayhead())) : ""
-        return template
-            // A macro may arrive with its brackets encoded (a click-through parsed into a `URL`); the end
-            // re-encodes whatever is left, so a bracket that was never a macro comes out as it went in.
+        // A macro may arrive with its brackets encoded, one or both (a click-through parsed into a `URL`):
+        // normalized first, so detection and substitution see the same string. The end re-encodes whatever
+        // is left, so a bracket that was never a macro comes out as it went in.
+        let normalized = template
             .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
             .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+        // The content playhead read once, and only when a URL asks for it: its two names are one moment.
+        let content = normalized.contains("[MEDIAPLAYHEAD]") || normalized.contains("[CONTENTPLAYHEAD]")
+            ? Self.encode(Self.playhead(seconds: contentPlayhead())) : ""
+        return normalized
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
             .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: content)
