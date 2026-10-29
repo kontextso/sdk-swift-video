@@ -45,8 +45,9 @@ public final class VideoAds {
         if !content.leftOut.isEmpty {
             Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
         }
-        // An expired ad is otherwise dropped only at the next call; under memory pressure its creative, a whole
-        // web content process, goes at once. Valid ads stay loaded: `show` must stay instant.
+        // An expired ad is otherwise dropped only at the next call; under memory pressure its renderer (the
+        // WebView) is released at once. WebKit decides when its processes exit. Valid ads stay loaded: `show`
+        // must stay instant.
         memoryWarningObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
