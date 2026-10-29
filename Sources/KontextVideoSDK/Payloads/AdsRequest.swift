@@ -41,7 +41,7 @@ struct AdsRequest: Encodable, Sendable {
             ifa: tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
             attStatus: tracking.attStatus,
-            // What the publisher set wins per field; the rest comes from the CMP's shared storage.
+            // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
             regulatory: ConsentStorage.read(merging: sdk.regulatory),
             sdk: SDKInfo(),
             app: .current(),
