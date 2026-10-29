@@ -367,11 +367,16 @@ struct FrameBridgeTests {
     }
 
     @Test func aFailedNavigationAfterThePageIsReadyIsIgnored() {
-        let (bridge, events) = makeBridge()
-        shown(bridge)
-        let before = events.events.count
-        bridge.webView(bridge.webView, didFail: nil, withError: URLError(.networkConnectionLost))
-        #expect(bridge.state == .shown && events.events.count == before)
+        let (loaded, loadedEvents) = makeBridge()
+        loaded.receive(message("ad.loaded"), from: main)
+        loaded.webView(loaded.webView, didFail: nil, withError: URLError(.networkConnectionLost))
+        loaded.webView(loaded.webView, didFailProvisionalNavigation: nil, withError: URLError(.cannotFindHost))
+        #expect(loaded.state == .loaded && loadedEvents.events.count == 1, "loaded, not yet shown: only ad.loaded")
+        let (shownBridge, shownEvents) = makeBridge()
+        shown(shownBridge)
+        let before = shownEvents.events.count
+        shownBridge.webView(shownBridge.webView, didFail: nil, withError: URLError(.networkConnectionLost))
+        #expect(shownBridge.state == .shown && shownEvents.events.count == before)
     }
 
     @Test func aProcessTerminationWhileLiveFailsTheAd() {
