@@ -35,16 +35,6 @@ struct RequestTests {
         #expect(attribution?["aak"] is [String])
     }
 
-    @Test func aConfigRetryIsTheSameRequestUnderANewId() throws {
-        let request = ConfigRequest.make(configuration: configuration, installId: "install-1")
-        var original = try Fixtures.encode(request)
-        var retry = try Fixtures.encode(request.retry())
-        #expect(original["requestId"] as? String != retry["requestId"] as? String)
-        original["requestId"] = nil
-        retry["requestId"] = nil
-        #expect(NSDictionary(dictionary: original) == NSDictionary(dictionary: retry), "everything else exactly as first read")
-    }
-
     @Test func eachConfigRequestHasItsOwnId() {
         let a = ConfigRequest.make(configuration: configuration, installId: "i")
         let b = ConfigRequest.make(configuration: configuration, installId: "i")

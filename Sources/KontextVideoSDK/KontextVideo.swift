@@ -1,4 +1,3 @@
-import Foundation
 import KontextKit
 
 /// Entry point of the Kontext Video SDK.
@@ -12,8 +11,8 @@ public final class KontextVideo {
         case enabled
         /// The server switched the SDK off. Final for this app launch.
         case disabled(reason: String)
-        /// `/config` failed: a failure that may clear (no network, a 5xx, a 429) twice, or a 4xx or a malformed
-        /// answer once. No ads until a later `/config` succeeds: every ads request retries it first.
+        /// `/config` failed (one attempt: no network, an error status, a malformed answer). No ads until a later
+        /// `/config` succeeds: every ads request tries it again first.
         case failed
     }
 
@@ -176,35 +175,17 @@ public final class KontextVideo {
         Logger.level = .warning
     }
 
-    /// `/config`'s one retry: after a failure that may clear (no network, a 5xx, a 429), the request is
-    /// sent again after `configRetryDelay` seconds, under a new `requestId` (each request its own trace
-    /// id). A 4xx or a malformed answer is not retried. A constant in spirit; a
-    /// variable so the tests can shrink the wait (`nonisolated(unsafe)`: a global the test harness writes
-    /// before anything runs, the race is accepted, not fixed).
-    nonisolated(unsafe) static var configRetryDelay: TimeInterval = 2
-
-    /// `attempt` hears the `requestId` of each request as it leaves, so a failure is reported with the id of
-    /// the attempt that failed.
-    static func sendConfigRequest(_ request: ConfigRequest, client: APIClient,
-                                  attempt: (String) -> Void = { _ in }) async throws -> ConfigResponse {
-        do {
-            attempt(request.requestId)
-            return try await client.post("config", body: request)
-        } catch let error as APIError where error.isRetryable {
-            Logger.warning("/config failed (\(error)); retrying in \(configRetryDelay) s")
-            try await Task.sleep(nanoseconds: UInt64(configRetryDelay * 1_000_000_000))
-            let retry = request.retry()
-            attempt(retry.requestId)
-            return try await client.post("config", body: retry)
-        }
+    /// One attempt, whatever the failure: no retry policy for now, every request is sent once. After a failure
+    /// the SDK is `.failed`, and the next ads request tries `/config` again (`waitUntilEnabled`).
+    static func sendConfigRequest(_ request: ConfigRequest, client: APIClient) async throws -> ConfigResponse {
+        try await client.post("config", body: request)
     }
 
     private func fetchConfig(configuration: Configuration) async {
         let client = APIClient(baseURL: configuration.adServerURL)
         let request = ConfigRequest.make(configuration: configuration, installId: Self.installId)
-        var lastRequestId = request.requestId
         do {
-            let response = try await Self.sendConfigRequest(request, client: client) { lastRequestId = $0 }
+            let response = try await Self.sendConfigRequest(request, client: client)
             // Cancelled meanwhile (`resetForTesting()`): the answer belongs to a state that was reset.
             guard !Task.isCancelled else { return }
             switch response {
@@ -230,7 +211,7 @@ public final class KontextVideo {
             Logger.error("/config failed, no ads until it succeeds: \(error)")
             // Waits in memory: it leaves once a later `/config` turns the reports on.
             let failure = ErrorReporter.RequestFailure(error)
-            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: lastRequestId, failure: failure)
+            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: failure)
         }
     }
 }

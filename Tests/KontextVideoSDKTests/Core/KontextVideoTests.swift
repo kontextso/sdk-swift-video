@@ -95,11 +95,11 @@ struct KontextVideoTests {
         #expect(try await sdk.waitUntilEnabled() == false)
     }
 
-    @Test func failedInitAfterTheRetryIsFailed() async throws {
+    @Test func aFailedInitIsFailedAfterOneAttempt() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         let state = await harness.initialize()
         #expect(state == .failed)
-        #expect(harness.server.requests(to: "/v2/config").count == 2, "one retry")
+        #expect(harness.server.requests(to: "/v2/config").count == 1, "one attempt, no retry")
         #expect(try await sdk.waitUntilEnabled() == false)
     }
 
@@ -115,11 +115,11 @@ struct KontextVideoTests {
     @Test func aFailedInitIsRetriedByTheNextRequestAtOnce() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         _ = await harness.initialize()
-        #expect(harness.server.requests(to: "/v2/config").count == 2, "10 s timeout, one retry")
+        #expect(harness.server.requests(to: "/v2/config").count == 1)
         harness.server.on("/v2/config", .json(Fixtures.initEnabled()))
-        #expect(try await sdk.waitUntilEnabled(), "waitUntilEnabled retries a failed /config itself, no waiting period")
+        #expect(try await sdk.waitUntilEnabled(), "waitUntilEnabled tries a failed /config again itself, no waiting period")
         #expect(sdk.state == .enabled)
-        #expect(harness.server.requests(to: "/v2/config").count == 3)
+        #expect(harness.server.requests(to: "/v2/config").count == 2)
     }
 
     @Test func everyRequestRetriesAFailedInitAgain() async throws {
@@ -127,7 +127,7 @@ struct KontextVideoTests {
         _ = await harness.initialize()
         #expect(try await sdk.waitUntilEnabled() == false)
         #expect(try await sdk.waitUntilEnabled() == false)
-        #expect(harness.server.requests(to: "/v2/config").count == 6, "two more attempts, each with its own retry")
+        #expect(harness.server.requests(to: "/v2/config").count == 3, "two more attempts, one request each")
         #expect(sdk.state == .failed)
     }
 
@@ -142,7 +142,6 @@ struct KontextVideoTests {
     }
 
     @Test func theCompletionRunsExactlyOnceForEveryOutcome() async throws {
-        KontextVideo.configRetryDelay = 0.001
         let outcomes: [(StubServer.Response, KontextVideo.State)] = [
             (.json(Fixtures.initEnabled()), .enabled),
             (.json(Fixtures.disabled("publisherDisabled")), .disabled(reason: "publisherDisabled")),
@@ -248,38 +247,17 @@ struct KontextVideoTests {
         #expect(KontextVideo.version == SDKInfo.version)
     }
 
-    // MARK: The /config retry
+    // MARK: One attempt
 
-    @Test func configRequestRetriesOnceOnARetryableFailureUnderANewRequestId() async throws {
-        var calls = 0
-        harness.server.on("/v2/config") { _ in
-            calls += 1
-            return calls == 1 ? .failure(.timedOut) : .json(Fixtures.initEnabled(reportDebug: true))
+    @Test func configRequestIsSentOnceEvenWhenTheFailureMayClear() async {
+        for failure in [StubServer.Response.failure(.timedOut), .json(Fixtures.errors("unavailable", status: 503), status: 503),
+                        .json(Fixtures.errors("rateLimited", status: 429), status: 429), .json(Fixtures.errors("invalidRequest"), status: 400)] {
+            harness.server.on("/v2/config", failure)
+            let before = harness.server.requests(to: "/v2/config").count
+            let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
+            await #expect(throws: APIError.self) { try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL)) }
+            #expect(harness.server.requests(to: "/v2/config").count == before + 1, "no retry: a network failure, a 503, a 429, a 400 alike")
         }
-        KontextVideo.configRetryDelay = 0.001
-        let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
-        let response = try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL))
-        guard case .enabled(let reportDebug, _) = response else { Issue.record("expected enabled"); return }
-        #expect(reportDebug)
-        let bodies = harness.server.requests(to: "/v2/config").compactMap(\.body)
-        #expect(bodies.count == 2)
-        #expect(bodies[0]["requestId"] as? String != bodies[1]["requestId"] as? String, "each request its own trace id, the retry included")
-        #expect(bodies[0]["installId"] as? String == bodies[1]["installId"] as? String && bodies[1]["publisherToken"] as? String == "t", "the rest as it was")
-    }
-
-    @Test func configRequestDoesNotRetryAClientError() async {
-        harness.server.on("/v2/config", .json(Fixtures.errors("invalidRequest"), status: 400))
-        let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
-        await #expect(throws: APIError.self) { try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL)) }
-        #expect(harness.server.requests(to: "/v2/config").count == 1)
-    }
-
-    @Test func configRequestGivesUpAfterTheSecondFailure() async {
-        harness.server.on("/v2/config", .failure(.timedOut))
-        KontextVideo.configRetryDelay = 0.001
-        let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
-        await #expect(throws: APIError.self) { try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL)) }
-        #expect(harness.server.requests(to: "/v2/config").count == 2)
     }
 }
 }

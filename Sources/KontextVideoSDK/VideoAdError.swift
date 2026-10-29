@@ -12,7 +12,7 @@ public enum VideoAdError: Error, Sendable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion; a release build
     /// gets this error instead, and works once `initialize` runs.
     case notInitialized
-    /// `/config` failed, and the retry this `format()` made failed too. Every `format()` retries it; no ads
+    /// `/config` failed, and so did the attempt this `format()` made. Every `format()` tries it again; no ads
     /// until it succeeds.
     case initializationFailed
     /// The `VideoAds` was destroyed. It is terminal: create a new one for the next content.
@@ -125,7 +125,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .notInitialized:
             return "KontextVideo.shared.initialize(with:) was not called"
         case .initializationFailed:
-            return "/config failed, and retrying it failed too; no ads until it succeeds"
+            return "/config failed, and trying it again failed too; no ads until it succeeds"
         case .destroyed:
             return "the VideoAds was destroyed"
         case .disabled(let reason):

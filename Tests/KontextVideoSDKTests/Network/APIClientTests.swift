@@ -83,7 +83,6 @@ struct APIClientTests {
             #expect(status == 400)
             #expect(errors.first?.code == "invalidRequest")
             #expect(errors.first?.title == "video.id is required")
-            #expect(error.isRetryable == false)
             #expect(error.description == "HTTP 400: video.id is required")
         } catch {
             Issue.record("unexpected \(error)")
@@ -108,14 +107,13 @@ struct APIClientTests {
                 guard case .http(let got, _) = error else { Issue.record("expected http for \(name), got \(error)"); continue }
                 #expect(got == status, "\(name)")
                 #expect(error.description == description, "\(name)")
-                #expect(error.isRetryable == (status >= 500), "\(name)")
             } catch {
                 Issue.record("unexpected \(error) for \(name)")
             }
         }
     }
 
-    @Test func serverErrorsAndRateLimitsAreRetryable() async {
+    @Test func serverErrorsAndRateLimitsAreHTTPErrorsWithTheirStatus() async {
         for status in [500, 503, 429] {
             server.on("/v2/ping", .empty(status))
             do {
@@ -125,25 +123,13 @@ struct APIClientTests {
                 guard case .http(let got, let errors) = error else { Issue.record("expected http"); return }
                 #expect(got == status)
                 #expect(errors.isEmpty, "no body, no parsed errors")
-                #expect(error.isRetryable)
             } catch {
                 Issue.record("unexpected \(error)")
             }
         }
     }
 
-    @Test func theRetryRuleAtItsBoundaries() {
-        let statuses: [(Int, Bool)] = [(400, false), (428, false), (429, true), (430, false), (499, false), (500, true), (503, true), (599, true), (600, false), (0, false)]
-        for (status, retryable) in statuses {
-            #expect(APIError.http(status: status, errors: []).isRetryable == retryable, "HTTP \(status)")
-        }
-        #expect(!APIError.transport(URLError(.cancelled)).isRetryable, "a cancelled request is not sent again")
-        #expect(APIError.transport(URLError(.serverCertificateUntrusted)).isRetryable, "a captive portal's certificate clears on the next network")
-        #expect(APIError.transport(URLError(.timedOut)).isRetryable)
-        #expect(!APIError.decoding(URLError(.cannotDecodeContentData)).isRetryable)
-    }
-
-    @Test func transportFailureIsRetryable() async {
+    @Test func aTransportFailureIsATransportError() async {
         server.on("/v2/ping", .failure(.notConnectedToInternet))
         do {
             let _: Reply = try await client.post("ping", body: Body(hello: "x"))
@@ -151,7 +137,6 @@ struct APIClientTests {
         } catch let error as APIError {
             guard case .transport(let urlError) = error else { Issue.record("expected transport"); return }
             #expect(urlError.code == .notConnectedToInternet)
-            #expect(error.isRetryable)
             #expect(error.description.hasPrefix("transport error"))
         } catch {
             Issue.record("unexpected \(error)")
@@ -165,7 +150,6 @@ struct APIClientTests {
             Issue.record("expected a throw")
         } catch let error as APIError {
             guard case .decoding = error else { Issue.record("expected decoding"); return }
-            #expect(error.isRetryable == false)
         } catch {
             Issue.record("unexpected \(error)")
         }
@@ -187,7 +171,6 @@ struct APIClientTests {
             Issue.record("expected a throw")
         } catch let error as APIError {
             guard case .transport(let urlError) = error, urlError.code == .cancelled else { Issue.record("expected cancelled, got \(error)"); return }
-            #expect(error.isRetryable == false, "whoever cancelled it does not want it sent again")
         } catch {
             Issue.record("unexpected \(error)")
         }

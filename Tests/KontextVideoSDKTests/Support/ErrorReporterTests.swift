@@ -281,12 +281,12 @@ struct ErrorReporterTests {
         #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes + 1024 }, "within the batch budget: \(sizes)")
     }
 
-    @Test func aFailedConfigRetryIsReportedWithTheIdOfTheAttemptThatFailed() async throws {
+    @Test func aFailedConfigIsReportedWithTheIdOfItsRequest() async throws {
         harness.server.on("/v2/config", .failure(.timedOut))
         _ = await harness.initialize()
-        let attempts = harness.server.requests(to: "/v2/config").compactMap { $0.body?["requestId"] as? String }
-        #expect(attempts.count == 2 && attempts[0] != attempts[1], "the first attempt and its retry")
-        #expect(reporter.buffer.first?.requestId == attempts.last, "the retry failed last; its id is the one reported")
+        let sent = harness.server.requests(to: "/v2/config").compactMap { $0.body?["requestId"] as? String }
+        #expect(sent.count == 1, "one attempt")
+        #expect(reporter.buffer.first?.requestId == sent.first)
     }
 
     @Test func anExpiredHeldAdIsNotCountedAsKept() async throws {

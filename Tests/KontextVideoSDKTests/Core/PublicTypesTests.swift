@@ -13,7 +13,7 @@ struct PublicTypesTests {
     @Test func everyErrorReadsAsASentence() {
         let cases: [(VideoAdError, String)] = [
             (.notInitialized, "KontextVideo.shared.initialize(with:) was not called"),
-            (.initializationFailed, "/config failed, and retrying it failed too; no ads until it succeeds"),
+            (.initializationFailed, "/config failed, and trying it again failed too; no ads until it succeeds"),
             (.destroyed, "the VideoAds was destroyed"),
             (.disabled(reason: "publisherDisabled"), "the SDK is disabled by the server (publisherDisabled)"),
             (.noFill(reason: .noAdMatch), "no fill (noAdMatch)"),

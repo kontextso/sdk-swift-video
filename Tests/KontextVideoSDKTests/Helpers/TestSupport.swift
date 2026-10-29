@@ -203,7 +203,6 @@ struct SDKHarness {
         server.on("/events/", .empty())
         server.on("/v2/debug", .empty())
         server.on("/v2/error", .empty())
-        KontextVideo.configRetryDelay = 0.01
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
         Environment.isApplicationActive = { true }
         ViewabilityMeter.interval = 0.05
@@ -251,7 +250,6 @@ struct SDKHarness {
         KontextVideo.shared.resetForTesting()
         Environment.reset()
         StubServer.uninstall()
-        KontextVideo.configRetryDelay = 2
         FrameBridge.loadTimeout = 10
         ViewabilityMeter.interval = 0.25
         // The runner never completes a modal transition: a linear ad's didEnd comes from the fallback.
