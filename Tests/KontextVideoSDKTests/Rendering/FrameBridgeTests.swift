@@ -368,6 +368,19 @@ struct FrameBridgeTests {
         #expect(purpose == "adChoices")
     }
 
+    @Test func anOpenWithoutAPurposeIsUnknownAndAnUnfamiliarOneIsKept() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        bridge.noteTouch()
+        bridge.receive(message("ad.open", ["url": "https://privacy.test"]), from: main)
+        guard case .open(_, let missing) = recorder.last else { Issue.record("expected open"); return }
+        #expect(missing == "unknown")
+        bridge.noteTouch()
+        bridge.receive(message("ad.open", ["url": "https://privacy.test", "purpose": "whyThisAd"]), from: main)
+        guard case .open(_, let unfamiliar) = recorder.last else { Issue.record("expected open"); return }
+        #expect(unfamiliar == "whyThisAd", "passed through unchanged")
+    }
+
     @Test func invalidURLsAreDropped() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)

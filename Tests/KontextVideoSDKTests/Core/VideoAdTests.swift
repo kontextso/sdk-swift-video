@@ -112,7 +112,10 @@ struct VideoAdTests {
     @Test func notLoadedAdIsNotReady() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p3"), loaded: false)
         #expect(ad.isReady == false)
-        #expect(throws: VideoAdError.self) { try ad.show(in: harness.player.view) }
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected notLoaded, show succeeded")
+        } catch VideoAdError.notLoaded {} catch { Issue.record("expected notLoaded, got \(error)") }
     }
 
     @Test func expiryIsFoundOutAtShowNotByATimer() async throws {
@@ -484,6 +487,21 @@ struct VideoAdTests {
         #expect(!fired.contains("click"))
     }
 
+    @Test func anOpenForAnotherPurposeOpensTheURLAndFiresNothing() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16b"))
+        var opened: [URL] = []
+        Environment.openURL = { url, completion in opened.append(url); completion(true) }
+        try ad.show(in: harness.player.view)
+        for purpose in [nil, "whyThisAd"] as [String?] {
+            ad.bridge.noteTouch()
+            send(ad, "ad.open", purpose.map { ["url": "https://privacy.test", "purpose": $0] } ?? ["url": "https://privacy.test"])
+        }
+        #expect(opened.count == 2, "both open their URL")
+        #expect(delegate.clicks.isEmpty, "not clicks")
+        let fired = await beacons()
+        #expect(!fired.contains("click") && !fired.contains("iconClick"), "neither a click nor the AdChoices icon's trackers")
+    }
+
     @Test func errorAfterShowIsDidFailThenDidEndFailed() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p17"))
         try ad.show(in: harness.player.view)
@@ -661,6 +679,7 @@ struct VideoAdTests {
         send(ad, "video.start", ["playhead": 0])   // a page that started anyway: dropped, it was never shown
         #expect(await waitUntil { delegate.endReasons == [.failed] })
         #expect(delegate.events == ["fail", "end:failed"], "no impression for an ad nobody saw")
+        guard case .presenterUnavailable? = delegate.failures.first else { Issue.record("expected presenterUnavailable, got \(delegate.failures)"); return }
         let fired = await beacons()
         #expect(!fired.contains("impression") && !fired.contains("creativeView") && !fired.contains("start"), "nothing billable: \(fired)")
         #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")

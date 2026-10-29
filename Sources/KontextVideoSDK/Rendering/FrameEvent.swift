@@ -1,7 +1,8 @@
 import Foundation
 
-/// What the frame page told the bridge, already checked and in order. The page only reports
-/// moments; the SDK fires every beacon.
+/// What the frame page told the bridge, accepted after the bridge's checks of the sender, the envelope
+/// and the state (no video event before `ad.show`, nothing after the end). It does not enforce every
+/// playback order; the page only reports moments and the SDK fires every beacon.
 enum FrameEvent: Sendable {
     /// The creative is loaded and can be shown (the VAST `loaded` moment).
     case loaded
@@ -15,8 +16,9 @@ enum FrameEvent: Sendable {
     case skip(playhead: Int)
     /// A moment of the ad video; the SDK fires the beacon of the same name.
     case video(VideoEvent, playhead: Int)
-    /// The ad video passed one of the `progress` tracking entries' offsets; `offset` (ms) says which one
-    /// fires. The only video moment with more than a playhead.
+    /// A progress checkpoint the page reported. Both values are milliseconds into the ad video. The SDK fires
+    /// every unfired `progress` entry up to the greater of `offset` and `playhead`, so a checkpoint the page
+    /// skipped still fires. The only video moment with more than a playhead.
     case progress(offset: Int, playhead: Int)
     /// The video played to the end. The SDK fires `complete`.
     case complete(playhead: Int)
