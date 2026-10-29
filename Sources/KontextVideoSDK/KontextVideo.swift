@@ -88,9 +88,6 @@ public final class KontextVideo {
         }
         Logger.debug("Initialising, SDK version \(Self.version)")
         state = .initializing
-        // The browser user agent every ads request carries: evaluated in a WebView once per process and
-        // cached by KontextKit. Started now so the first request does not wait for it.
-        Task { _ = await NetworkInfo.current() }
         initTask = Task {
             await fetchConfig(configuration: configuration)
             // Cancelled by `resetForTesting()`: the state is no longer this call's to report.
@@ -202,6 +199,10 @@ public final class KontextVideo {
                 DebugReporter.shared.event("config.response", state: ["enabled": true])
                 state = .enabled
                 Logger.info("Enabled")
+                // The browser user agent every ads request carries, evaluated in a WebView once per process.
+                // Started now, so the first request rarely waits for it; not at `initialize`, so an app whose
+                // SDK the server switches off never makes that WebView.
+                Task { _ = await NetworkInfo.current() }
             case .disabled(let reason):
                 state = .disabled(reason: reason)
                 Logger.warning("Disabled by the server: \(reason)")

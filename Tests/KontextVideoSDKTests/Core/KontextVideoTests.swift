@@ -181,6 +181,20 @@ struct KontextVideoTests {
         #expect(harness.server.requests(to: "/v2/config").count == 1, "one /config for everyone")
     }
 
+    @Test func theUserAgentIsLookedUpOnlyOnceTheServerEnabledTheSDK() async throws {
+        var lookups = 0
+        Environment.userAgent = { lookups += 1; return "Mozilla/5.0 test" }
+        harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
+        _ = await harness.initialize()
+        await sleepMs(50)
+        #expect(lookups == 0, "a switched-off SDK makes no WebView")
+        sdk.resetForTesting()
+        Environment.userAgent = { lookups += 1; return "Mozilla/5.0 test" }
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled()))
+        _ = await harness.initialize()
+        #expect(await waitUntil { lookups == 1 }, "started by the enabled /config, before any ads request")
+    }
+
     @Test func disableFromAnAdsResponseIsTheSameKillSwitch() async throws {
         _ = await harness.initialize()
         sdk.disable(reason: "appVersionDisabled")

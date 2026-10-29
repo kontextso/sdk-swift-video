@@ -2,6 +2,7 @@ import AVFoundation
 import Foundation
 @testable import KontextVideoSDK
 import Testing
+import UIKit
 
 /// `VideoAds`: every way `format(_:)` answers, the request it sends (all formats, the session, `held`),
 /// following the server (re-serve, replace, no-fill), the shared request and its races, the kill switch,
@@ -642,7 +643,7 @@ struct VideoAdsTests {
         #expect(!gate.open, "released while the user agent was still being looked up")
         gate.open = true
         #expect(try await otherCall.value.id == "img-ua", "the other video waited for the same lookup")
-        #expect(lookups == 1, "one lookup for everyone, the one initialize started")
+        #expect(lookups == 1, "one lookup for everyone, the one the enabled /config started")
         #expect(harness.adsRequests.count == 1, "the destroyed video sent nothing")
         #expect(harness.adsRequests.first?.body.flatMap { ($0["device"] as? [String: Any])?["network"] as? [String: Any] }?["userAgent"] as? String == "Mozilla/5.0 test")
     }
@@ -663,6 +664,20 @@ struct VideoAdsTests {
         screen = nil
         #expect(released == nil, "destroy dropped the closure that kept the app's object")
         #expect(ads.playheadProvider == nil)
+    }
+
+    @Test func aMemoryWarningReleasesExpiredCreativesAndKeepsValidOnes() async throws {
+        let ads = await makeAds()
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-mw-old", expires: 30_000), "overlay": Fixtures.overlayAd(id: "img-mw-new")])
+        let old = try await ads.format(.pause)
+        let fresh = try await ads.format(.overlay)
+        try await old.load()
+        try await fresh.load()
+        advanceClock(by: 31)   // the pause ad's 30 s ran out, the overlay's hour did not
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        #expect(old.invalidationReason == .expired && old.loadedBridge == nil, "the expired creative is released at once")
+        #expect(fresh.isReady && fresh.loadedBridge != nil, "a valid loaded ad stays loaded, so show stays instant")
+        #expect(await notUsedBeacons().isEmpty, "silently: the server knows expires")
     }
 
     // MARK: Playhead

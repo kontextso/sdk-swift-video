@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 /// The ads of one video (one episode). Creating it sends nothing; every request comes from `format(_:)`.
 /// Create the next episode's while the current one plays if you like; any number can be alive at once.
@@ -24,6 +25,9 @@ public final class VideoAds {
     private let state = State()
     /// The request in flight: every `format(_:)` meanwhile waits for it instead of sending another.
     private var request: Task<[AdFormat: VideoAdError.NoFillReason], Error>?
+    /// The system's memory warning. `nonisolated(unsafe)` only so `deinit`, which is not on the main actor,
+    /// may read it for the teardown.
+    nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
 
     /// Needs `initialize(with:)` to have been called; `/config` itself may still be in flight, requests
     /// wait for it.
@@ -41,7 +45,22 @@ public final class VideoAds {
         if !content.leftOut.isEmpty {
             Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
         }
+        // An expired ad is otherwise dropped only at the next call; under memory pressure its creative, a whole
+        // web content process, goes at once. Valid ads stay loaded: `show` must stay instant.
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dropExpiredAds() }
+        }
         Logger.debug("VideoAds created for video \(content.id)")
+    }
+
+    /// Expired ads leave silently, as before a request: the server knows `expires`.
+    private func dropExpiredAds() {
+        let expired = state.ads.values.filter { $0.descriptor.isExpired }
+        guard !expired.isEmpty else { return }
+        Logger.info("\(content.id): memory warning, \(expired.count) expired ad(s) released")
+        for ad in expired { ad.invalidate(.expired) }
     }
 
     // MARK: Getting an ad
@@ -244,6 +263,8 @@ public final class VideoAds {
         isDestroyed = true
         request?.cancel()
         state.endAll()
+        memoryWarningObserver.map(NotificationCenter.default.removeObserver)
+        memoryWarningObserver = nil
         // After the last beacons read it: an app closure that captures what owns this object no longer keeps it.
         playheadProvider = nil
         Logger.debug("VideoAds destroyed for video \(content.id)")
@@ -253,9 +274,11 @@ public final class VideoAds {
     deinit {
         let request = self.request
         let state = self.state
+        let observer = memoryWarningObserver
         let teardown: @MainActor () -> Void = {
             request?.cancel()
             state.endAll()
+            observer.map(NotificationCenter.default.removeObserver)
         }
         if Thread.isMainThread {
             MainActor.assumeIsolated { teardown() }
