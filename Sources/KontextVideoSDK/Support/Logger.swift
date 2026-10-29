@@ -17,6 +17,15 @@ enum Logger {
         set { lock.withLock { storedLevel = newValue } }
     }
 
+    /// Tests only: receives every message that passes the level check, with its level, as it goes to the
+    /// console. Guarded by `lock`, like the level.
+    nonisolated(unsafe) private static var storedSink: ((KontextVideo.Configuration.LogLevel, String) -> Void)?
+
+    static var sink: ((KontextVideo.Configuration.LogLevel, String) -> Void)? {
+        get { lock.withLock { storedSink } }
+        set { lock.withLock { storedSink = newValue } }
+    }
+
     static func error(_ message: @autoclosure () -> String) {
         log(.error, message)
     }
@@ -44,6 +53,7 @@ enum Logger {
     private static func log(_ messageLevel: KontextVideo.Configuration.LogLevel, _ build: () -> String) {
         guard messageLevel <= level else { return }
         let message = build()
+        sink?(messageLevel, message)
         switch messageLevel {
         case .none: break
         case .error: output.error("\(message, privacy: .public)")

@@ -207,19 +207,23 @@ struct RequestTests {
     }
 
     @Test func anAppThatNeverAskedForTrackingIsWarnedOnceAtTheFirstRequest() async throws {
+        Logger.level = .warning
+        defer { Logger.level = .warning }
+        var warnings: [String] = []
+        Logger.sink = { level, message in
+            if level == .warning, message.contains("App Tracking Transparency") { warnings.append(message) }
+        }
         Environment.trackingAuthorizationStatus = { .authorized }
         _ = try await TrackingInfo.current(requestAuthorization: false)
-        #expect(!TrackingInfo.warnedAboutUnaskedTracking, "answered: nothing to say")
+        #expect(warnings.isEmpty, "answered: nothing to say")
         Environment.trackingAuthorizationStatus = { .notDetermined }
         Environment.requestTrackingAuthorization = { .denied }
         _ = try await TrackingInfo.current(requestAuthorization: true)
-        #expect(!TrackingInfo.warnedAboutUnaskedTracking, "the SDK asks itself: nothing to say")
-        Environment.trackingAuthorizationStatus = { .notDetermined }
-        _ = try await TrackingInfo.current(requestAuthorization: false)
-        #expect(TrackingInfo.warnedAboutUnaskedTracking, "nobody asked: the warning is given")
-        // Once per launch: the flag stays set, so the next requests say nothing more.
-        _ = try await TrackingInfo.current(requestAuthorization: false)
-        #expect(TrackingInfo.warnedAboutUnaskedTracking)
+        #expect(warnings.isEmpty, "the SDK asks itself: nothing to say")
+        for _ in 0..<3 {
+            _ = try await TrackingInfo.current(requestAuthorization: false)
+        }
+        #expect(warnings.count == 1, "nobody asked: one warning across three requests, \(warnings.count) given")
     }
 
     final class Gate {

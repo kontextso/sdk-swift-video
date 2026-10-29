@@ -85,6 +85,7 @@ enum Environment {
         userAgent = { await NetworkInfoProvider.collect().userAgent }
         NetworkInfo.lookup = nil
         TrackingInfo.warnedAboutUnaskedTracking = false
+        Logger.sink = nil
         skAdNetwork = KontextKitSKAdNetwork()
         storeProduct = KontextKitStoreProduct()
         now = defaultNow
