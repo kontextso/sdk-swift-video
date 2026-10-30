@@ -14,12 +14,8 @@ public final class VideoAds {
     /// The labels given at creation, less what `Labels.checked` dropped: what every request carries.
     let labels: [String: String]
 
-    /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
-    /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
-    /// `trackPlayhead(of:)` sets it for you. Nothing set: 0, which is what a request made before the
-    /// episode plays (a prefetch) should carry. Capture your objects weakly: the closure is kept until
-    /// `destroy()`. Read once per SDK operation, before it changes anything; return the time, nothing more.
-    public var playheadProvider: (() -> TimeInterval)?
+    /// The content player set by `track(_:)`: the playhead, and the playing state an overlay follows.
+    let playback = ContentPlayback()
 
     /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
     let sessionId = UUID().uuidString.lowercased()
@@ -65,6 +61,8 @@ public final class VideoAds {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.dropExpiredAds() }
         }
+        // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds.
+        playback.onChange = { [weak self] change in self?.state.showing?.contentDidChange(change) }
         Logger.debug("VideoAds created for video \(content.id)")
     }
 
@@ -247,21 +245,25 @@ public final class VideoAds {
 
     // MARK: Playhead
 
-    /// Reads the content playhead from this `AVPlayer` whenever the SDK needs one; the player is held
-    /// weakly and `currentTime()` is read at that moment, no observer is attached. With one `AVPlayer`
-    /// reused across episodes, call it when this episode starts playing in it, not at creation: before
-    /// that the player's time belongs to the previous episode. Sets `playheadProvider`.
-    public func trackPlayhead(of player: AVPlayer) {
-        // `seconds` is NaN for an invalid or indefinite time; `playhead` turns that into 0.
-        playheadProvider = { [weak player] in player?.currentTime().seconds ?? 0 }
+    /// The player this episode plays in. The SDK reads its time for requests and the `[CONTENTPLAYHEAD]`
+    /// macro of beacons, and follows its playback for an overlay: an overlay is shown over playing content
+    /// only (`show(in:)` throws `contentPaused` otherwise), ends as `.interrupted` when the content pauses,
+    /// ends or the player moves to another item, and its `duration` counts seconds of video. The SDK observes
+    /// the player's `rate` and `currentItem`; it holds the player weakly and lets go at `destroy()`. With one
+    /// `AVPlayer` reused across episodes, call it when this episode starts playing in it, not at creation:
+    /// before that the player's time belongs to the previous episode. Without a player the playhead is 0
+    /// (right for a prefetch) and an overlay runs on its own time.
+    public func track(_ player: AVPlayer) {
+        playback.track(player)
     }
 
-    /// Content time in seconds, read now: the provider's, or 0. Clamped to ten years: a broken provider
-    /// (NaN, infinity, a huge number) must not crash the app when the request converts it to `Int`.
-    var playhead: TimeInterval {
-        guard let value = playheadProvider?(), value.isFinite else { return 0 }
-        return min(max(0, value), 315_360_000)
+    /// The same for any other player: conform it to `VideoAdsPlayer`. Held weakly.
+    public func track(_ player: some VideoAdsPlayer) {
+        playback.track(player)
     }
+
+    /// Content time in seconds, read now, or 0.
+    var playhead: TimeInterval { playback.playhead }
 
     // MARK: What the ads report
 
@@ -274,11 +276,15 @@ public final class VideoAds {
     /// Shown: the ad leaves its format, so the next request does not list it.
     func adDidBeginShowing(_ ad: VideoAd) {
         state.showing = ad
+        // An overlay counts its seconds of video and watches a player without a publisher on ticks.
+        playback.isTicking = ad.format == .overlay
         adDidLeave(ad)
     }
 
     func adDidEnd(_ ad: VideoAd) {
-        if state.showing === ad { state.showing = nil }
+        guard state.showing === ad else { return }
+        state.showing = nil
+        playback.isTicking = false
     }
 
     // MARK: Destroying
@@ -295,8 +301,8 @@ public final class VideoAds {
         state.endAll()
         memoryWarningObserver.map(NotificationCenter.default.removeObserver)
         memoryWarningObserver = nil
-        // After the last beacons read it: an app closure that captures what owns this object no longer keeps it.
-        playheadProvider = nil
+        // After the last beacons read it: the player, its observers and the ticks go.
+        playback.stop()
         Logger.debug("VideoAds destroyed for video \(content.id)")
     }
 
@@ -307,6 +313,7 @@ public final class VideoAds {
         let request = self.request
         let state = self.state
         let observer = memoryWarningObserver
+        let playback = self.playback
         let contentId = content.id
         let teardown: @MainActor () -> Void = {
             request?.cancel()
@@ -315,6 +322,7 @@ public final class VideoAds {
             }
             state.endAll()
             observer.map(NotificationCenter.default.removeObserver)
+            playback.stop()
         }
         if Thread.isMainThread {
             MainActor.assumeIsolated { teardown() }

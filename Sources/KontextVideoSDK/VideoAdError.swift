@@ -44,6 +44,10 @@ public enum VideoAdError: Error, Sendable {
 
     /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
     case notLoaded
+    /// `show(in:)` on an overlay while the content of its `VideoAds` is paused (with a player tracked by
+    /// `track(_:)`): an overlay runs over playing content only. The ad stays ready: show it once the
+    /// content plays again.
+    case contentPaused
     /// No variant of the ad fits the view: it would have to shrink below 50 % (aspect ratio kept), or at
     /// all for a creative marked not scalable. `minimum` is the smallest view that holds it, its safe area
     /// included (the ad stays inside the safe area). The ad stays ready:
@@ -144,6 +148,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the ad ended before it was shown (\(reason))"
         case .notLoaded:
             return "the ad is not loaded yet; call load() first"
+        case .contentPaused:
+            return "the content is paused; show the overlay once it plays"
         case .containerTooSmall(let minimum):
             return "the view is too small for the ad; at least \(Self.points(minimum.width))×\(Self.points(minimum.height)) points are needed"
         case .presenterUnavailable:

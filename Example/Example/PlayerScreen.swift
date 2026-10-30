@@ -91,13 +91,14 @@ final class Playback: ObservableObject {
         player.actionAtItemEnd = .none
         playerView.playerLayer.player = player
         playerView.playerLayer.videoGravity = .resizeAspectFill
-        // Creating it sends nothing; the request goes out in prepare(). The SDK reads the playhead from the player.
+        // Creating it sends nothing; the request goes out in prepare(). The SDK reads the playhead from the
+        // player, and follows its playback: an overlay lives only while the content plays.
         ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), labels: video.labels)
-        ads.trackPlayhead(of: player)
+        ads.track(player)
     }
 
-    /// The content starts and loops, the ad is prepared, and after 3 s a linear ad or an overlay shows; a pause
-    /// ad waits for the viewer's tap. Once: SwiftUI calls `onAppear` again when the linear ad's presentation is
+    /// The content starts and loops, the ad is prepared, and after 3 s of playing a linear ad or an overlay
+    /// shows; a pause ad waits for the viewer's tap. Once: SwiftUI calls `onAppear` again when the linear ad's presentation is
     /// dismissed.
     func start() {
         guard !started else { return }
@@ -109,9 +110,19 @@ final class Playback: ObservableObject {
         }
         startTask = Task {
             await prepare()
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await waitForPlaying(seconds: 3)
             guard !Task.isCancelled, !leaving else { return }
             moment()
+        }
+    }
+
+    /// Returns once the content has played this long; time paused does not count, so the moment never comes
+    /// over a paused video.
+    private func waitForPlaying(seconds: TimeInterval) async {
+        var played: TimeInterval = 0
+        while played < seconds, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if player.rate != 0 { played += 0.25 }
         }
     }
 

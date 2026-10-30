@@ -721,12 +721,12 @@ struct VideoAdsTests {
         released = screen
         let ads = await makeAds()
         screen?.ads = ads
-        ads.playheadProvider = { [screen] in screen?.playhead() ?? 0 }   // a strong capture, the cycle an app writes
+        ads.usePlayhead { [screen] in screen?.playhead() ?? 0 }   // a strong capture, the cycle an app writes
         #expect(ads.playhead == 12)
         ads.destroy()
         screen = nil
-        #expect(released == nil, "destroy dropped the closure that kept the app's object")
-        #expect(ads.playheadProvider == nil)
+        #expect(released == nil, "destroy dropped the reads that kept the app's object")
+        #expect(ads.playhead == 0 && !ads.playback.isTracking)
     }
 
     @Test func aMemoryWarningReleasesExpiredCreativesAndKeepsValidOnes() async throws {
@@ -745,23 +745,23 @@ struct VideoAdsTests {
 
     // MARK: Playhead
 
-    @Test func playheadComesFromTheProviderOrTheTrackedPlayerOrIsZero() async {
+    @Test func playheadComesFromTheTrackedPlayerOrIsZero() async {
         let ads = await makeAds()
         harness.player.playhead = 47
         #expect(ads.playhead == 47)
-        ads.playheadProvider = { .nan }
+        ads.usePlayhead { .nan }
         #expect(ads.playhead == 0, "never NaN")
-        ads.playheadProvider = { -3 }
+        ads.usePlayhead { -3 }
         #expect(ads.playhead == 0, "never negative")
-        ads.playheadProvider = { .infinity }
+        ads.usePlayhead { .infinity }
         #expect(ads.playhead == 0, "never infinite")
-        ads.playheadProvider = { .greatestFiniteMagnitude }
+        ads.usePlayhead { .greatestFiniteMagnitude }
         #expect(ads.playhead == 315_360_000, "a huge value is clamped, not a crash")
         let player = AVPlayer()
-        ads.trackPlayhead(of: player)
-        #expect(ads.playhead == 0, "tracking a player replaces the provider; no item: 0")
-        ads.playheadProvider = { 5 }
-        #expect(ads.playhead == 5, "a provider replaces the tracked player")
+        ads.track(player)
+        #expect(ads.playhead == 0, "tracking a player replaces what was tracked; no item: 0")
+        ads.usePlayhead { 5 }
+        #expect(ads.playhead == 5, "and the other way round")
         let bare = VideoAds(content: .init(id: "bare", language: "en"))
         #expect(bare.playhead == 0, "nothing set: the start of the video, what a prefetch sends")
     }
@@ -771,10 +771,10 @@ struct VideoAdsTests {
         var player: AVPlayer? = AVPlayer()
         weak var released: AVPlayer?
         released = player
-        ads.trackPlayhead(of: player!)
+        ads.track(player!)
         player = nil
-        #expect(released == nil, "the provider does not keep the player")
-        #expect(ads.playhead == 0)
+        #expect(released == nil, "tracking does not keep the player")
+        #expect(ads.playhead == 0 && !ads.playback.isTracking)
     }
 }
 }

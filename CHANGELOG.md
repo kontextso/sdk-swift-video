@@ -5,6 +5,13 @@
 In progress.
 
 ### Breaking
+* `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `VideoAdsPlayer` protocol (`currentTime`, `isPlaying`, and an optional `isPlayingPublisher`). The SDK reads the playhead from it as before, and now also follows its playback. It holds the player weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
+* An overlay lives only while the content plays, when a player is tracked:
+  * Pausing the content, its end, or the player moving to another item ends the overlay as `.interrupted`.
+  * The overlay's `duration` counts seconds of video. A stall or a seek counts nothing.
+  * `show(in:)` on an overlay over paused content throws the new `VideoAdError.contentPaused`, and the ad stays ready.
+  * Another ad's `show` first ends an overlay whose content stopped, so a pause ad shown right after `player.pause()` finds the screen free.
+  * Without a tracked player, an overlay runs on its own time, as before.
 * `VideoAd.Click` no longer has `url`: `didClick` says where the viewer tapped (`area`), not what opened, as AdMob and AppLovin MAX do. The page's target was the advertiser's tracking link, often not what opened (a fallback, the App Store sheet), and the SDK opens it itself.
 
 * `show(in:insets:)`: insets that keep an overlay or a pause card clear of your own controls, added to the view's safe area (`bottom: 80` puts a bottom strip 80 points above it). Kept through resizes and rotations, counted in `containerTooSmall`'s minimum; a full-screen pause ad ignores them. `show(in:)` is unchanged. Insets that leave no width or height throw `containerTooSmall` (or end a shown ad as `.interrupted` on a resize), however large.

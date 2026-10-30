@@ -61,7 +61,7 @@ public final class VideoAd {
     /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
     /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
-    public private(set) var isCompleted = false
+    public internal(set) var isCompleted = false
 
     /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
     /// move it.
@@ -104,8 +104,9 @@ public final class VideoAd {
     /// video starts: a linear ad's meter waits for the presentation to finish.
     private var videoPlaying = false
     /// Time on screen while the app is active, for an overlay or pause ad; it also ends an overlay whose
-    /// `duration` elapsed. Made when the ad is presented.
+    /// `duration` elapsed, unless the overlay follows the content. Made when the ad is presented.
     private(set) var clock: ActiveTimeClock?
+    var contentProgress: ContentProgress?   // an overlay that follows the content: `VideoAd+Content`
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
@@ -201,11 +202,11 @@ public final class VideoAd {
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
-    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent) and
-    /// `containerTooSmall` (the ad stays ready in both). Succeeds once the ad is on screen; from then until
-    /// `didEnd` the SDK retains it. The ad follows the view when it resizes or rotates: the same variant is
-    /// fitted again within the same limits, and a view that becomes too small for it ends it with
-    /// `.interrupted`.
+    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent),
+    /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
+    /// three. Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it. The ad follows the
+    /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
+    /// with `.interrupted`. An overlay of a `VideoAds` that tracks a player also ends when the content stops.
     ///
     /// `insets` keep an overlay or a pause card clear of your own controls: they add to the view's safe area,
     /// as UIKit's `additionalSafeAreaInsets` do, so `bottom: 80` places a bottom strip 80 points above the
@@ -219,6 +220,7 @@ public final class VideoAd {
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
+        try checkContentPlaying()
         guard AdPlacement.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
             throw VideoAdError.presenterUnavailable
@@ -362,6 +364,7 @@ public final class VideoAd {
     private func checkShowable() throws {
         if wasShown { throw VideoAdError.alreadyShown }
         try checkUsable()
+        KontextVideo.shared.adOnScreen?.endIfContentStopped()
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
         guard isLoaded else { throw VideoAdError.notLoaded }
     }
@@ -412,12 +415,11 @@ public final class VideoAd {
         return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: AdPlacement.adding(extraInsets, to: safeArea))
     }
 
-    /// Runs `work` with the content playhead read once, before it. The app's playhead provider is the one
+    /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
     /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
-    /// every beacon inside uses that value, so no app code runs in the middle of a state change. Nested calls
-    /// share the outer read; nothing is read when no URL asks for it (`urls`: those the operation brings,
-    /// a click's destinations). While the provider runs, the last value is the frozen one: an operation the
-    /// provider starts reads nothing more, so a provider that ends the ad cannot recurse.
+    /// every beacon inside uses that value. Nested calls share the outer read; nothing is read when no URL
+    /// asks for it (`urls`: the operation's, a click's destinations). While the player is read, the last value
+    /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
     @discardableResult
     func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
         let asked = tracker.readsContentPlayhead || urls.contains { Tracker.asksForContentPlayhead($0.absoluteString) }
@@ -457,7 +459,7 @@ public final class VideoAd {
         // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
         skAdNetwork?.start()
         if format != .linear {
-            let clock = ActiveTimeClock(duration: format == .overlay ? duration : nil, adId: id) { [weak self] in
+            let clock = ActiveTimeClock(duration: format == .overlay && !followsContent ? duration : nil, adId: id) { [weak self] in
                 guard let self, !hasEnded else { return }
                 Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
                 isCompleted = true
@@ -465,13 +467,14 @@ public final class VideoAd {
             }
             self.clock = clock
             clock.start(in: hostView?.window)
+            startFollowingContent()
         }
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for
         // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
         // was refused, waits for the viewer's tap as long as it takes; the SDK keeps no start timer, it
         // could not tell the two apart.
-        // Every beacon may call the app's playhead provider, which may end the ad: nothing more after that.
+        // Every beacon may read the app's player, which may end the ad: nothing more after that.
         guard !hasEnded else { return }
         tracker.fire("creativeView")
         guard !hasEnded else { return }
@@ -489,7 +492,7 @@ public final class VideoAd {
         impressionRecorded = true
         tracker.fire("impression")
         Logger.info("ad \(id.prefix(8)): impression")
-        // The beacon called the app's playhead provider, which may have ended the ad: `didEnd` stays last.
+        // The beacon read the app's player, which may have ended the ad: `didEnd` stays last.
         guard !hasEnded else { return }
         delegate?.videoAdDidRecordImpression(self)
     }
@@ -672,7 +675,7 @@ public final class VideoAd {
             // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
             let fireId = tracker.fire("click", part: area == .endCard ? "endCard" : nil)
             openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
-            // The beacon called the app's playhead provider, which may have ended the ad: the viewer's tap
+            // The beacon read the app's player, which may have ended the ad: the viewer's tap
             // still opens, but `didEnd` stays the last thing the app hears.
             guard !hasEnded else { return }
             delegate?.videoAd(self, didClick: Click(area: area))

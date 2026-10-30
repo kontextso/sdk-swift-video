@@ -29,6 +29,9 @@ final class ActiveTimeClock {
         self.onElapsed = onElapsed
     }
 
+    /// An active stretch is running: the ad is on screen and its scene active.
+    var isCounting: Bool { since != nil }
+
     /// Seconds on screen while the app was active, the current stretch included.
     var elapsed: TimeInterval {
         accumulated + (since.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0)

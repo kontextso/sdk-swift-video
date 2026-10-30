@@ -4,11 +4,14 @@ import Testing
 import UIKit
 
 /// A player for tests: a view the test places in a window, and a playhead the test sets. `ads(for:)`
-/// makes a `VideoAds` that reads the playhead from here.
+/// makes a `VideoAds` that reads the playhead from here, without a playing state: an overlay runs on its
+/// own time. `isPlaying` is for tests that pass the player to `track(_:)`.
 @MainActor
-final class TestPlayer {
+final class TestPlayer: VideoAdsPlayer {
     let view: UIView
     var playhead: TimeInterval = 0
+    var isPlaying = true
+    var currentTime: TimeInterval { playhead }
 
     init(size: CGSize = CGSize(width: 390, height: 220)) {
         view = UIView(frame: CGRect(origin: .zero, size: size))
@@ -16,8 +19,16 @@ final class TestPlayer {
 
     func ads(for content: KontextVideo.Content) -> VideoAds {
         let ads = VideoAds(content: content)
-        ads.playheadProvider = { [unowned self] in playhead }
+        ads.usePlayhead { [unowned self] in playhead }
         return ads
+    }
+}
+
+extension VideoAds {
+    /// A playhead from a closure and no playing state: what the SDK reads at requests and beacons, while an
+    /// overlay runs on its own time. Replaces whatever was tracked.
+    func usePlayhead(_ read: @escaping () -> TimeInterval) {
+        playback.track(time: read, playing: { nil })
     }
 }
 
@@ -257,6 +268,7 @@ struct SDKHarness {
         DebugReporter.interval = 0.1
         DebugReporter.shared.isEnabled = false
         ErrorReporter.interval = 0.01
+        ContentPlayback.tickInterval = 0.25
         ErrorReporter.retryDelay = 30
         ErrorReporter.maxRetryDelay = 300
         SKAdNetworkImpression.queue = nil

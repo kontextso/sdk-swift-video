@@ -10,13 +10,13 @@ import Foundation
 final class Tracker {
     /// Milliseconds into the ad video, as the page last reported it; `[ADPLAYHEAD]`.
     var adPlayhead = 0
-    /// Content time in seconds; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`. The app's provider behind it is app
+    /// Content time in seconds; `[MEDIAPLAYHEAD]` and `[CONTENTPLAYHEAD]`. The app's player behind it is app
     /// code, so the ad reads it once before an operation (`frozenContentPlayhead`) rather than inside a beacon.
     var contentPlayhead: () -> TimeInterval = { 0 }
     /// The content playhead read before the operation now running; every beacon of it uses this value and
     /// calls no app code. `nil` outside an operation: a beacon then reads `contentPlayhead` itself.
     var frozenContentPlayhead: TimeInterval?
-    /// The last value the app's provider gave; what an operation started from inside the provider uses.
+    /// The last value the app's player gave; what an operation started while it is read uses.
     var lastContentPlayhead: TimeInterval = 0
     /// Whether any URL asks for the content playhead; when none does, nobody reads it.
     let readsContentPlayhead: Bool

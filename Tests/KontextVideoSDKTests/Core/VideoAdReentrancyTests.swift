@@ -52,7 +52,7 @@ struct VideoAdReentrancyTests {
     @Test func aProviderThatDestroysAtShowMeansNothingIsShown() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10p"))
         var reads = 0
-        ads.playheadProvider = { [weak ads] in
+        ads.usePlayhead { [weak ads] in
             reads += 1
             ads?.destroy()
             return 0
@@ -70,7 +70,7 @@ struct VideoAdReentrancyTests {
     @Test func aShowReadsTheProviderOnceAndEveryBeaconOfItUsesThatValue() async throws {
         let (ad, _, ads) = try await makeAd(Fixtures.ad(id: "p11i"))
         var reads = 0
-        ads.playheadProvider = {
+        ads.usePlayhead {
             reads += 1
             return TimeInterval(reads)   // advances on every read
         }
@@ -88,7 +88,7 @@ struct VideoAdReentrancyTests {
         var opened: [URL] = []
         Environment.openURL = { url, completion in opened.append(url); completion(true) }
         try ad.show(in: harness.player.view)
-        ads.playheadProvider = { [weak ads] in
+        ads.usePlayhead { [weak ads] in
             ads?.destroy()
             return 0
         }
@@ -103,7 +103,7 @@ struct VideoAdReentrancyTests {
         let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o11r"))
         try ad.show(in: harness.player.view)
         var reads = 0
-        ads.playheadProvider = { [weak ad] in
+        ads.usePlayhead { [weak ad] in
             reads += 1
             if reads < 20 { try? ad?.dismiss() }   // bounded only so a regression fails instead of overflowing the stack
             return 0
@@ -124,7 +124,7 @@ struct VideoAdReentrancyTests {
         Environment.openURL = { url, completion in opened.append(url); completion(false) }   // the first fails: the fallback opens too
         try ad.show(in: harness.player.view)
         var reads = 0
-        ads.playheadProvider = {
+        ads.usePlayhead {
             reads += 1
             return TimeInterval(reads)   // advances on every read
         }
@@ -205,7 +205,7 @@ struct VideoAdReentrancyTests {
                     if operation != .videoStart { send(ad, "video.start", ["playhead": 0]) }
                 }
                 var armed = true
-                ads.playheadProvider = { [weak ads, weak ad, weak another] in
+                ads.usePlayhead { [weak ads, weak ad, weak another] in
                     guard armed else { return 0 }
                     armed = false
                     switch hostile {
@@ -228,7 +228,7 @@ struct VideoAdReentrancyTests {
                 case .destroy: ads.destroy()
                 }
                 check([(ad, delegate, harness.player.view), (another, anotherDelegate, other)], label)
-                ads.playheadProvider = nil
+                ads.playback.stop()
                 for shown in [ad, another] where shown.wasShown && !shown.hasEnded { try? shown.dismiss() }
                 ads.destroy()
                 otherAds.destroy()

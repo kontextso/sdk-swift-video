@@ -25,10 +25,10 @@ struct Video: Identifiable {
               caption: "Tap to pause: a full-screen pause ad shows, its Resume plays on"),
         Video(id: "demo-overlay", title: "Revenge of the Heiress", format: .overlay,
               labels: ["stage": "free_episodes"], cover: [.orange, .red], url: clip,
-              caption: "An overlay after 3 s"),
+              caption: "An overlay after 3 s of playing; pausing ends it"),
         Video(id: "demo-linear", title: "The CEO's Secret", format: .linear,
               labels: ["stage": "unlock"], cover: [.pink, .purple], url: clip,
-              caption: "A linear ad after 3 s"),
+              caption: "A linear ad after 3 s of playing"),
     ]
 
     /// A bundled portrait clip; every video plays it.
