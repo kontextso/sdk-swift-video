@@ -16,24 +16,19 @@ struct Video: Identifiable {
     /// What happens once the video plays.
     let caption: String
 
-    /// The labels as the card shows them, in a fixed order.
-    var labelText: String {
-        labels.sorted { $0.key > $1.key }.map { "\($0.key): \($0.value)" }.joined(separator: " · ")
-    }
-
     static let all: [Video] = [
         Video(id: "demo-pause", title: "Moonlit Contract", format: .pause,
               labels: ["stage": "first_episode", "layout": "inline"], cover: [.indigo, .blue], url: clip,
-              caption: "First episode: only when the viewer pauses, a pause card. Tap to pause, tap again to resume"),
+              caption: "Tap to pause: a pause ad shows, tap again to resume"),
         Video(id: "demo-pause-fullscreen", title: "The Heir's Return", format: .pause,
               labels: ["stage": "first_episode", "layout": "fullscreen"], cover: [.teal, .green], url: clip,
-              caption: "First episode, full-screen player: a full-screen pause ad. Tap to pause, tap again to resume"),
+              caption: "Tap to pause: a full-screen pause ad shows, its Resume plays on"),
         Video(id: "demo-overlay", title: "Revenge of the Heiress", format: .overlay,
               labels: ["stage": "free_episodes"], cover: [.orange, .red], url: clip,
-              caption: "Free episodes: an overlay after 3 s, the story keeps playing"),
+              caption: "An overlay after 3 s"),
         Video(id: "demo-linear", title: "The CEO's Secret", format: .linear,
               labels: ["stage": "unlock"], cover: [.pink, .purple], url: clip,
-              caption: "A locked episode, unlocked by an ad: a linear ad after 3 s"),
+              caption: "A linear ad after 3 s"),
     ]
 
     /// A bundled portrait clip; every video plays it.

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Four videos, one per situation, each with the labels it sends. Tapping one opens the full-screen player.
+/// Four videos, one per situation. Tapping one opens the full-screen player.
 struct HomeView: View {
     @State private var selected: Video?
 
@@ -47,7 +47,6 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(video.title).font(.headline)
                 Text(video.caption).font(.subheadline).foregroundStyle(.secondary)
-                Text(video.labelText).font(.caption.monospaced()).foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
         }

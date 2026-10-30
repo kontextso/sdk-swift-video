@@ -4,8 +4,9 @@ import SwiftUI
 import UIKit
 
 /// The full-screen player. The content plays in `playback.playerView`. Overlay and pause ads go into
-/// `playback.adArea`, a transparent view over the video, shown with a bottom inset as tall as the episode's
-/// title, so the ad never covers it; the SDK presents a linear ad over the screen.
+/// `playback.adArea`, a transparent view over the whole screen, on top of everything: an overlay or a pause
+/// card is shown with a bottom inset as tall as the episode's title, so it never covers it, while a
+/// full-screen pause ad covers the title and the back button too. The SDK presents a linear ad over the screen.
 struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var playback: Playback
@@ -23,26 +24,14 @@ struct PlayerScreen: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.white.opacity(0.8))
             }
-            ZStack(alignment: .bottomLeading) {
-                // Where the SDK puts overlay and pause ads: the whole player area. `show(in:insets:)` keeps the
-                // ad above the title, with the title's height as the bottom inset.
-                AdAreaHost(view: playback.adArea)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(playback.video.title).font(.headline).foregroundStyle(.white)
-                    Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 24)
-                .background(GeometryReader { proxy in Color.clear.preference(key: TitleHeight.self, value: proxy.size.height) })
+            VStack(alignment: .leading, spacing: 4) {
+                Text(playback.video.title).font(.headline).foregroundStyle(.white)
+                Text(playback.status).font(.subheadline).foregroundStyle(.white.opacity(0.8))
             }
-            .onPreferenceChange(TitleHeight.self) { height in
-                Task { @MainActor in playback.adInsets = UIEdgeInsets(top: 0, left: 0, bottom: height + 12, right: 0) }
-            }
-        }
-        .background(.black)
-        .contentShape(Rectangle())
-        .onTapGesture { playback.toggle() }
-        .overlay(alignment: .topLeading) {
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+            .background(GeometryReader { proxy in Color.clear.preference(key: TitleHeight.self, value: proxy.size.height) })
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             Button {
                 playback.stop()
                 dismiss()
@@ -54,7 +43,19 @@ struct PlayerScreen: View {
                     .background(.black.opacity(0.4), in: Circle())
             }
             .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Where the SDK puts overlay and pause ads: the whole screen, above the title and the back button.
+            // The SDK keeps a strip or a card inside the safe area, and `show(in:insets:)` keeps it above the
+            // title; a full-screen pause ad fills it all. Taps outside an ad go through to the player.
+            AdAreaHost(view: playback.adArea)
+                .ignoresSafeArea()
         }
+        .onPreferenceChange(TitleHeight.self) { height in
+            Task { @MainActor in playback.adInsets = UIEdgeInsets(top: 0, left: 0, bottom: height + 12, right: 0) }
+        }
+        .background(.black)
+        .contentShape(Rectangle())
+        .onTapGesture { playback.toggle() }
         .statusBarHidden()
         // Not onDisappear: the linear ad's full-screen presentation covers this view, and SwiftUI
         // reports that as a disappearance too.
