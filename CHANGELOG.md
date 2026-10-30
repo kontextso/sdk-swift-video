@@ -7,10 +7,10 @@ In progress.
 ### Breaking
 * `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `VideoAdsPlayer` protocol (`currentTime`, `isPlaying`, and an optional `isPlayingPublisher`). The SDK reads the playhead from it as before, and now also follows its playback. It holds the player weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
 * An overlay lives only while the content plays, when a player is tracked:
-  * Pausing the content, its end, or the player moving to another item ends the overlay as `.interrupted`.
-  * The overlay's `duration` counts seconds of video. A stall or a seek counts nothing.
-  * `show(in:)` on an overlay over paused content throws the new `VideoAdError.contentPaused`, and the ad stays ready.
-  * Another ad's `show` first ends an overlay whose content stopped, so a pause ad shown right after `player.pause()` finds the screen free.
+  * The overlay ends as `.interrupted` when the content pauses (a published pause counts even if playback resumes before it is delivered), the item plays to its end (whatever `actionAtItemEnd` does), the player moves to another item, `track(_:)` is called with another player, or the tracked player is gone.
+  * The overlay's `duration` counts seconds of video. A stall counts nothing. An `AVPlayer`'s time jumps count nothing; for other players a step faster than 2.5× real time is taken as a seek.
+  * `show(in:)` on an overlay over paused content throws the new `VideoAdError.contentPaused`, and the ad stays ready. A pause while the overlay's view is being attached ends it before any impression.
+  * Another ad's `show` first ends an overlay whose content stopped, so a pause ad shown right after `player.pause()` finds the screen free. `show` runs that app code (the overlay's `didEnd`, the player's `isPlaying`) before its own checks.
   * Without a tracked player, an overlay runs on its own time, as before.
 * `VideoAd.Click` no longer has `url`: `didClick` says where the viewer tapped (`area`), not what opened, as AdMob and AppLovin MAX do. The page's target was the advertiser's tracking link, often not what opened (a fallback, the App Store sheet), and the SDK opens it itself.
 

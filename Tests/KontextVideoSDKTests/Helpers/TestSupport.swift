@@ -28,7 +28,7 @@ extension VideoAds {
     /// A playhead from a closure and no playing state: what the SDK reads at requests and beacons, while an
     /// overlay runs on its own time. Replaces whatever was tracked.
     func usePlayhead(_ read: @escaping () -> TimeInterval) {
-        playback.track(time: read, playing: { nil })
+        playback.trackPlayheadOnly(read)
     }
 }
 

@@ -220,7 +220,6 @@ public final class VideoAd {
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
         guard format != .linear else { throw VideoAdError.wrongPresentation }
         try checkShowable()
-        try checkContentPlaying()
         guard AdPlacement.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
             throw VideoAdError.presenterUnavailable
@@ -252,13 +251,13 @@ public final class VideoAd {
         // The host is known before it is added, so an end from the container's hook finds and removes it.
         hostView = host
         container.addSubview(host)
-        // The hook may also have taken the player off screen without ending anything: the ad committed, but
-        // nobody can see it, so it ends at once, with no impression.
+        // The hook may have taken the player off screen or paused the content: the ad ends, with no impression.
         if !hasEnded, !AdPlacement.canBeSeen(host) {
             Logger.warning("ad \(id.prefix(8)): the view left the screen as the ad was added; ended as interrupted")
             end(.interrupted)
             return
         }
+        endIfContentStopped()
         presented()
     }
 
@@ -363,10 +362,11 @@ public final class VideoAd {
 
     private func checkShowable() throws {
         if wasShown { throw VideoAdError.alreadyShown }
+        let contentPaused = runAppCodeBeforeShow()
         try checkUsable()
-        KontextVideo.shared.adOnScreen?.endIfContentStopped()
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
         guard isLoaded else { throw VideoAdError.notLoaded }
+        if contentPaused { throw VideoAdError.contentPaused }
     }
 
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never

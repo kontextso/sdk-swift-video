@@ -774,7 +774,7 @@ struct VideoAdsTests {
         ads.track(player!)
         player = nil
         #expect(released == nil, "tracking does not keep the player")
-        #expect(ads.playhead == 0 && !ads.playback.isTracking)
+        #expect(ads.playhead == 0 && ads.playback.isTracking && !ads.playback.isPlaying, "a player that is gone plays nothing")
     }
 }
 }

@@ -136,23 +136,202 @@ struct VideoAdContentTests {
         #expect(ad.isCompleted)
     }
 
+    /// The example's bundled clip: a real movie, so AVFoundation plays it rather than failing the item.
+    private static let movie = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Example/Example/Resources/sample-episode.mp4")
+
+    /// A playing `AVPlayer` with the movie, ready before the ad is shown.
+    private func playingPlayer() async throws -> AVPlayer {
+        let player = AVPlayer(url: Self.movie)
+        player.actionAtItemEnd = .none
+        try #require(await waitUntil(5) { player.currentItem?.status == .readyToPlay }, "the movie loads")
+        player.play()
+        return player
+    }
+
+    private func loadedAd(_ payload: [String: Any], of ads: VideoAds) throws -> (VideoAd, RecordingDelegate) {
+        let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        ad.bridge.load()
+        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        return (ad, delegate)
+    }
+
     @Test func anAVPlayerPauseEndsTheOverlayInTheSameTurnAndAnotherItemToo() async throws {
-        let player = AVPlayer(playerItem: AVPlayerItem(url: URL(fileURLWithPath: "/nonexistent/a.mp4")))
-        player.rate = 1
+        ContentPlayback.tickInterval = 30
+        let player = try await playingPlayer()
+        defer { player.pause() }
         let (first, firstDelegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-av1")) { $0.track(player) }
-        #expect(ads.playback.isTracking && ads.playback.isPlaying)
         try first.show(in: view)
         player.pause()
         #expect(firstDelegate.endReasons == [.interrupted], "rate is observed: ended before pause() returned")
-        let second = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.overlayAd(id: "o-c-av2")), owner: ads)
-        let secondDelegate = RecordingDelegate()
-        second.delegate = secondDelegate
-        second.bridge.load()
-        second.bridge.receive(["adId": second.id, "type": "ad.loaded"], from: sender)
-        player.rate = 1
+        let (second, secondDelegate) = try loadedAd(Fixtures.overlayAd(id: "o-c-av2"), of: ads)
+        player.play()
         try second.show(in: view)
-        player.replaceCurrentItem(with: AVPlayerItem(url: URL(fileURLWithPath: "/nonexistent/b.mp4")))
+        player.replaceCurrentItem(with: AVPlayerItem(url: Self.movie))
         #expect(secondDelegate.endReasons == [.interrupted], "another item: another episode")
+    }
+
+    @Test func theEndOfTheItemEndsTheOverlayEvenWhenTheRateStays() async throws {
+        let player = try await playingPlayer()   // `actionAtItemEnd = .none`: the rate does not drop at the end
+        defer { player.pause() }
+        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: player.currentTime().seconds + 0.4, preferredTimescale: 600)
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-end")) { $0.track(player) }
+        try ad.show(in: view)
+        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "the item's end")
+        #expect(player.rate != 0 && ads.playback.isPlaying, "the player still asks to play: only the end notification told")
+    }
+
+    @Test func aQueuedCallbackOfAPlayerTrackedBeforeEndsNothing() async throws {
+        ContentPlayback.tickInterval = 30
+        let old = try await playingPlayer()
+        let fresh = try await playingPlayer()
+        defer { old.pause(); fresh.pause() }
+        let (_, _, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-old")) { $0.track(old) }
+        // A change on another thread: its callback reaches the main actor only after this test yields.
+        let changed = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            old.replaceCurrentItem(with: AVPlayerItem(url: Self.movie))
+            changed.signal()
+        }
+        try #require(Self.wait(for: changed))
+        ads.track(fresh)
+        let (ad, delegate) = try loadedAd(Fixtures.overlayAd(id: "o-c-new"), of: ads)
+        try ad.show(in: view)
+        await sleepMs(300)
+        #expect(delegate.endReasons.isEmpty, "the old player's item change belongs to a binding that is gone")
+        try ad.dismiss()
+    }
+
+    private nonisolated static func wait(for signal: DispatchSemaphore) -> Bool {
+        signal.wait(timeout: .now() + 5) == .success
+    }
+
+    /// A container whose add-subview hook the test fills: app code that runs while `show` attaches the ad.
+    final class HookView: UIView {
+        var onAdd: (() -> Void)?
+        override func didAddSubview(_ subview: UIView) {
+            super.didAddSubview(subview)
+            onAdd?()
+        }
+    }
+
+    @Test func aPauseWhileTheOverlayIsAttachedEndsItBeforeAnImpression() async throws {
+        let player = try await playingPlayer()
+        defer { player.pause() }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-hook")) { $0.track(player) }
+        let container = HookView(frame: view.bounds)
+        window.add(container)
+        var endedInThePause = false
+        container.onAdd = {
+            player.pause()
+            endedInThePause = ad.hasEnded
+        }
+        try ad.show(in: container)
+        #expect(endedInThePause, "the pause ended the overlay, reserved but not yet presented")
+        #expect(delegate.events == ["end:interrupted"] && container.subviews.isEmpty, "no impression over paused content")
+    }
+
+    @Test func aPauseNoCallbackReportedDuringTheAttachEndsItBeforeAnImpression() async throws {
+        ContentPlayback.tickInterval = 30   // a custom player without a publisher: only the check after the attach sees it
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-hook2"))
+        let container = HookView(frame: view.bounds)
+        window.add(container)
+        container.onAdd = { self.harness.player.isPlaying = false }
+        try ad.show(in: container)
+        #expect(delegate.events == ["end:interrupted"] && container.subviews.isEmpty)
+    }
+
+    @Test func trackingAnotherPlayerEndsTheOverlayThatFollowedTheFirst() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-retrack"))
+        try ad.show(in: view)
+        ads.track(TestPlayer())
+        #expect(delegate.endReasons == [.interrupted])
+        #expect(!ads.playback.isTicking, "nothing on screen: no ticks")
+    }
+
+    @Test func aPlayerThatIsGoneEndsTheOverlayAndRefusesTheNext() async throws {
+        var player: TestPlayer? = TestPlayer()
+        weak var released = player
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-gone", duration: 1000)) { $0.track(player!) }
+        try ad.show(in: view)
+        player = nil
+        #expect(released == nil)
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "no content left under it, and no wall-time expiry either")
+        let (next, _) = try loadedAd(Fixtures.overlayAd(id: "o-c-gone2"), of: ads)
+        do {
+            try next.show(in: view)
+            Issue.record("expected contentPaused")
+        } catch VideoAdError.contentPaused {}
+    }
+
+    @Test func aShortSeekCountsNothingAndALateSampleOfRealPlaybackCounts() {
+        let seek = ContentProgress(duration: 1, at: 10)
+        #expect(!seek.advance(to: 11.5, counting: true) && seek.elapsed == 0, "1.5 s at once, before any time passed: a seek")
+        let late = ContentProgress(duration: 10, at: 0)
+        advanceClock(by: 3)
+        #expect(!late.advance(to: 3, counting: true) && late.elapsed == 3, "3 s of video after 3 s: playback, sampled late")
+        let jumped = ContentProgress(duration: 10, at: 0)
+        advanceClock(by: 1)
+        jumped.resync(to: 0.8)   // an AVPlayer time jump
+        #expect(!jumped.advance(to: 0.8, counting: true) && jumped.elapsed == 0)
+    }
+
+    @Test func aPublishedPauseEndsTheOverlayEvenIfPlaybackResumesBeforeDelivery() async throws {
+        ContentPlayback.tickInterval = 30
+        let player = PublishingPlayer()
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-flicker")) { $0.track(player) }
+        try ad.show(in: view)
+        player.isPlaying = false
+        player.isPlaying = true
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "the pause was published: it counts")
+    }
+
+    /// Ends nothing but calls back: the app's `didEnd` for the reentrancy cases.
+    final class EndHook: VideoAdDelegate {
+        var onEnd: (() -> Void)?
+        func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) { onEnd?() }
+    }
+
+    /// A player whose `isPlaying` getter runs app code.
+    final class HookPlayer: VideoAdsPlayer {
+        var currentTime: TimeInterval = 0
+        var onRead: (() -> Void)?
+        var isPlaying: Bool {
+            onRead?()
+            return true
+        }
+    }
+
+    @Test func anOverlaysDidEndThatDestroysTheIncomingAdsOwnerStopsItsShow() async throws {
+        ContentPlayback.tickInterval = 30
+        let (overlay, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-re1"))
+        let (pause, pauseDelegate, pauseOwner) = try await makeAd(Fixtures.ad(id: "p-c-re1"))
+        let hook = EndHook()
+        hook.onEnd = { pauseOwner.destroy() }
+        overlay.delegate = hook
+        try overlay.show(in: view)
+        harness.player.isPlaying = false
+        do {
+            try pause.show(in: view)
+            Issue.record("expected destroyed")
+        } catch VideoAdError.destroyed {}
+        #expect(!pause.wasShown && pauseDelegate.events.isEmpty && view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+    }
+
+    @Test func aPlayingGetterThatDestroysTheOwnerStopsTheShow() async throws {
+        let player = HookPlayer()
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-re2")) { $0.track(player) }
+        player.onRead = { [weak ads, weak player] in
+            player?.onRead = nil
+            ads?.destroy()
+        }
+        do {
+            try ad.show(in: view)
+            Issue.record("expected destroyed")
+        } catch VideoAdError.destroyed {}
+        #expect(ads.isDestroyed && !ad.wasShown && delegate.events.isEmpty && view.subviews.isEmpty)
     }
 
     @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {
