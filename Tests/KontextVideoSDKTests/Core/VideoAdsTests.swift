@@ -69,6 +69,44 @@ struct VideoAdsTests {
         #expect(Set(second?["held"] as? [String] ?? []) == ["img-p1", "vid-l1"], "both unshown bids are listed")
     }
 
+    @Test func labelsGoWithEveryRequestAndAChangeReachesTheNextOne() async throws {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-l", language: "en"), labels: ["stage": "first_episode", "layout": "inline"])
+        harness.serve(formats: ["pause": Fixtures.ad(id: "img-l1")])
+        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == ["stage": "first_episode", "layout": "inline"])
+        ads.labels["layout"] = "fullscreen"
+        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests[1].body?["labels"] as? [String: String] == ["stage": "first_episode", "layout": "fullscreen"])
+        ads.labels = [:]
+        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests[2].body?["labels"] == nil, "none: left out")
+    }
+
+    @Test func labelsThatBreakTheRulesAreDroppedWithAWarning() async throws {
+        _ = await harness.initialize()
+        Logger.level = .warning
+        defer { Logger.level = .warning }
+        var warnings: [String] = []
+        Logger.sink = { level, message in if level == .warning, message.contains("labels of video") { warnings.append(message) } }
+        var labels = ["stage": "unlock", "Stage": "x", "bad-key": "x", "empty": "", "long": String(repeating: "é", count: 33)]
+        for index in 0..<25 { labels["k\(index)"] = "v" }   // 26 valid keys with "stage": 20 are kept
+        let ads = VideoAds(content: .init(id: "ep-d", language: "en"), labels: labels)
+        #expect(ads.labels.count == Labels.maxCount)
+        #expect(ads.labels["Stage"] == nil && ads.labels["bad-key"] == nil && ads.labels["empty"] == nil)
+        #expect(ads.labels["long"] == nil, "66 bytes: dropped, not cut")
+        #expect(warnings.count == 1, "one warning names them all")
+        #expect(warnings.first?.contains("bad-key") == true && warnings.first?.contains("more than 20") == true)
+        ads.labels = ["stage": "unlock"]
+        ads.labels["ok_key"] = "1"
+        ads.labels["No"] = "1"
+        #expect(ads.labels == ["stage": "unlock", "ok_key": "1"] && warnings.count == 2, "a later change is checked too")
+        #expect(Labels.isValidKey(String(repeating: "a", count: 64)) && !Labels.isValidKey(String(repeating: "a", count: 65)))
+        harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
+        _ = try await ads.format(.linear)
+        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == ads.labels, "what the property holds is what goes")
+    }
+
     @Test func everyVideoAdsHasItsOwnSession() async throws {
         let first = await makeAds(content: "a")
         let second = harness.player.ads(for: .init(id: "b", language: "en"))

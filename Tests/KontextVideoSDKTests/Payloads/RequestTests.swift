@@ -52,6 +52,7 @@ struct RequestTests {
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
+            labels: ["stage": "first_episode", "layout": "fullscreen"],
             player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: Int((playhead * 1000).rounded())),
             sessionId: "s-1",
             held: ["a-1", "a-2"]
@@ -74,6 +75,7 @@ struct RequestTests {
         #expect(json["placementId"] == nil, "no placement ids on the wire")
         #expect(json["sessionId"] as? String == "s-1")
         #expect(json["held"] as? [String] == ["a-1", "a-2"])
+        #expect(json["labels"] as? [String: String] == ["stage": "first_episode", "layout": "fullscreen"])
         #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
         let player = json["player"] as? [String: Any]
         #expect(player?["width"] as? Int == 390)
@@ -94,19 +96,20 @@ struct RequestTests {
         let bare = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
         ))
         #expect((bare["ifa"] as? [String: Any])?["id"] as? String == "6D92078A-8246-4BA4-AE5B-76104861E7DC", "the IDFA as given")
         #expect(bare["user"] == nil && bare["variantId"] == nil, "nothing the app did not set")
+        #expect(bare["labels"] == nil, "no labels: the field is left out")
         let again = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
         ))
         #expect(bare["requestId"] as? String != again["requestId"] as? String, "a new id per request")
         KontextVideo.shared.user = KontextVideo.User(id: "later")
         let later = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0), sessionId: "s", held: []
+            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
         ))
         #expect((later["user"] as? [String: Any])?["id"] as? String == "later", "a change reaches the next request")
         KontextVideo.shared.user = nil
@@ -117,7 +120,7 @@ struct RequestTests {
         request = await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
             tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), player: .make(playhead: 0),
+            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0),
             sessionId: "s-2", held: []
         )
         let json = try Fixtures.encode(request)

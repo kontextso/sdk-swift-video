@@ -91,7 +91,7 @@ final class Playback: ObservableObject {
         playerView.playerLayer.player = player
         playerView.playerLayer.videoGravity = .resizeAspectFill
         // Creating it sends nothing; the request goes out in prepare(). The SDK reads the playhead from the player.
-        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"))
+        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), labels: video.labels)
         ads.trackPlayhead(of: player)
     }
 

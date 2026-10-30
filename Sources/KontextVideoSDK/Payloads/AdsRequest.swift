@@ -19,6 +19,8 @@ struct AdsRequest: Encodable, Sendable {
     let device: AdsDevice
     let player: PlayerSnapshot
     let video: KontextVideo.Content
+    /// `VideoAds.labels` as the request began; left out when there are none.
+    let labels: [String: String]?
     /// One per `VideoAds`: the server keeps the bids it gave out per session.
     let sessionId: String
     /// Ids of the unshown bids the SDK holds: the server re-serves them, anything else it gave this session
@@ -26,11 +28,11 @@ struct AdsRequest: Encodable, Sendable {
     let held: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, sessionId, held
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, labels, sessionId, held
     }
 
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, labels: [String: String], player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
         AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
@@ -48,6 +50,7 @@ struct AdsRequest: Encodable, Sendable {
             device: await .current(),
             player: player,
             video: content,
+            labels: labels.isEmpty ? nil : labels,
             sessionId: sessionId,
             held: held
         )

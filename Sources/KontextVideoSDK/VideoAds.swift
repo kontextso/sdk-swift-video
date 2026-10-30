@@ -11,6 +11,15 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
+    /// Key-values that say where these ads play: the viewer's stage in the series, the player's layout,
+    /// the screen (`["stage": "first_episode", "layout": "fullscreen"]`). The server's configuration
+    /// decides what they change, such as which formats it offers; the SDK only sends them, with every
+    /// request from the next `format(_:)` on. Keys of `a-z`, `0-9` and `_`, values not empty, both at most
+    /// 64 bytes, at most 20 pairs: anything else is dropped with a console warning, and is not kept here.
+    /// They describe the screen, never the viewer: no personal data.
+    public var labels: [String: String] {
+        didSet { labels = Labels.checked(labels, for: content.id) }
+    }
 
     /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
     /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
@@ -33,9 +42,10 @@ public final class VideoAds {
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
 
     /// Needs `initialize(with:)` to have been called; `/config` itself may still be in flight, requests
-    /// wait for it.
-    public init(content: KontextVideo.Content) {
+    /// wait for it. `labels`: see the property; change them later and the next request carries them.
+    public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
+        self.labels = Labels.checked(labels, for: content.id)
         KontextVideo.shared.requireInitialized("VideoAds(content:)")
         // What the publisher passed wrong, said once here rather than as a server 400 later. An empty id or
         // language makes every request fail: a programmer error, which stops a debug build. The rest is
@@ -118,6 +128,7 @@ public final class VideoAds {
         for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
         let content = content
+        let labels = labels
         let sessionId = sessionId
         let task = Task { [weak self] () throws -> [AdFormat: VideoAdError.NoFillReason] in
             defer { self?.request = nil }
@@ -151,7 +162,7 @@ public final class VideoAds {
             }
             let playhead = try owner().playhead
             let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
-                                             player: .make(playhead: playhead), sessionId: sessionId, held: held)
+                                             labels: labels, player: .make(playhead: playhead), sessionId: sessionId, held: held)
             // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
             try owner().checkStillUsable()
             try owner().lastRequestId = body.requestId
