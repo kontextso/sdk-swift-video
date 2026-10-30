@@ -461,6 +461,53 @@ struct VideoAdContentTests {
         #expect(!seek.advance(to: 2, counting: true, rate: 1) && seek.elapsed == 0, "2 s in a quarter second at 1×: a seek")
     }
 
+    /// A player whose publisher runs app code when it is read and when it is subscribed to.
+    final class SetupHookPlayer: VideoAdsPlayer {
+        var currentTime: TimeInterval = 1
+        var isPlaying = true
+        var onRead: (() -> Void)?
+        var onSubscribe: (() -> Void)?
+        var subscriptions = 0
+        let subject = PassthroughSubject<Bool, Never>()
+        var isPlayingPublisher: AnyPublisher<Bool, Never>? {
+            onRead?()
+            return subject.handleEvents(receiveSubscription: { [weak self] _ in
+                self?.subscriptions += 1
+                self?.onSubscribe?()
+            }, receiveCancel: { [weak self] in self?.subscriptions -= 1 }).eraseToAnyPublisher()
+        }
+    }
+
+    @Test func aDestroyWhileThePublisherIsReadLeavesNoSubscription() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-setup1", language: "en"))
+        let player = SetupHookPlayer()
+        player.onRead = { [weak ads] in ads?.destroy() }
+        ads.track(player)
+        #expect(ads.isDestroyed && !ads.playback.isTracking && player.subscriptions == 0)
+    }
+
+    @Test func aDestroyWhileSubscribingLeavesNoSubscription() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-setup2", language: "en"))
+        let player = SetupHookPlayer()
+        player.onSubscribe = { [weak ads] in ads?.destroy() }
+        ads.track(player)
+        #expect(ads.isDestroyed && !ads.playback.isTracking && player.subscriptions == 0)
+    }
+
+    @Test func aTrackWhileThePublisherIsReadKeepsTheLastPlayersSubscription() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-setup3", language: "en"))
+        defer { ads.destroy() }
+        let middle = SetupHookPlayer()
+        let last = SetupHookPlayer()
+        last.currentTime = 99
+        middle.onRead = { [weak ads] in ads?.track(last) }
+        ads.track(middle)
+        #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0)
+    }
+
     @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-none")) { _ in }
         try ad.show(in: view)

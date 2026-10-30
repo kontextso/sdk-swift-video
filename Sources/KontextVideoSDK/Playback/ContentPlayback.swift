@@ -158,12 +158,19 @@ final class ContentPlayback {
     func track(_ player: some VideoAdsPlayer) {
         let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying })
         let generation = self.generation
-        subscription = player.isPlayingPublisher?
+        // Reading the publisher and subscribing are app code: a `destroy()` or another `track` there wins, and
+        // this binding's subscription is dropped instead of stored.
+        let subscription = player.isPlayingPublisher?
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] playing in
                 MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: playing), from: generation) }
             }
+        guard generation == self.generation else {
+            subscription?.cancel()
+            return
+        }
+        self.subscription = subscription
         finishBinding(overlayWasShown: overlayWasShown)
     }
 
