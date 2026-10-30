@@ -10,16 +10,22 @@ extension VideoAd {
     /// the player is read. Every check after it sees what that code left. Returns whether this overlay's
     /// content is paused.
     func runAppCodeBeforeShow() -> Bool {
-        KontextVideo.shared.adOnScreen?.endIfContentStopped()
+        // An ad already shown leaves the ad on screen alone; `show` throws `alreadyShown` right after.
+        if !wasShown { KontextVideo.shared.adOnScreen?.endIfContentStopped() }
         guard followsContent, owner?.playback.isPlaying == false else { return false }
         Logger.warning("ad \(id.prefix(8)): cannot show the overlay, the content is paused")
         return true
     }
 
-    /// The overlay is on screen: its `duration`, if any, counts from the playhead now.
+    /// The overlay is on screen: its `duration`, if any, counts from the playhead now, and starts again from
+    /// the playhead whenever its scene comes back: video played while it could not be seen counts nothing.
     func startFollowingContent() {
         guard followsContent, let duration, let owner else { return }
         contentProgress = ContentProgress(duration: duration, at: owner.playback.playhead)
+        clock?.onActivate = { [weak self] in
+            guard let self, let playback = self.owner?.playback else { return }
+            contentProgress?.resync(to: playback.playhead)
+        }
     }
 
     /// The tracked player changed or a tick came. An overlay cares from the moment `show` reserved it: a
@@ -48,7 +54,7 @@ extension VideoAd {
         }
         guard change == .tick, let contentProgress, !hasEnded else { return }
         // Seconds of video while the overlay is seen: not while its scene is inactive.
-        if contentProgress.advance(to: playback.playhead, counting: clock?.isCounting == true) {
+        if contentProgress.advance(to: playback.playhead, counting: clock?.isCounting == true, rate: playback.rate) {
             Logger.debug("ad \(id.prefix(8)): overlay duration of \(contentProgress.duration) s of video elapsed")
             isCompleted = true
             end(.completed)

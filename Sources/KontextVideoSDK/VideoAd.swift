@@ -361,8 +361,8 @@ public final class VideoAd {
     }
 
     private func checkShowable() throws {
-        if wasShown { throw VideoAdError.alreadyShown }
         let contentPaused = runAppCodeBeforeShow()
+        if wasShown { throw VideoAdError.alreadyShown }
         try checkUsable()
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
         guard isLoaded else { throw VideoAdError.notLoaded }

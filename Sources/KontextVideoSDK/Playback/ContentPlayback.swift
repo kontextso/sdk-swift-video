@@ -53,10 +53,17 @@ final class ContentPlayback {
     private(set) var isTracking = false
     /// Which binding is current; a callback from an older one is dropped.
     private var generation = 0
+    /// Which item of an `AVPlayer` its item callbacks belong to; one from an item before is dropped.
+    private var itemGeneration = 0
+    /// The `AVPlayer`'s current item played to its end and has not restarted (a seek, a play) or been
+    /// replaced: it plays nothing, whatever its rate (`actionAtItemEnd` `.none` keeps the rate).
+    private var itemEnded = false
     /// Content time in seconds, `nil` once the player is gone.
     private var readTime: (() -> TimeInterval?)?
     /// Whether the content plays, `nil` once the player is gone.
     private var readPlaying: (() -> Bool?)?
+    /// The playback speed when the player tells it (an `AVPlayer`'s `rate`), for telling fast playback from a seek.
+    private var readRate: (() -> Double?)?
     private weak var avPlayer: AVPlayer?
     private var observations: [NSKeyValueObservation] = []
     private var itemObservers: [any NSObjectProtocol] = []
@@ -69,6 +76,9 @@ final class ContentPlayback {
         guard isTracking else { return true }
         return readPlaying?() ?? false
     }
+
+    /// The playback speed, when the player tells it.
+    var rate: Double? { readRate?() }
 
     /// Content time in seconds, read now, or 0. Clamped to ten years: a broken player (NaN, infinity, a huge
     /// number) must not crash the app when a request converts it to `Int`.
@@ -94,30 +104,43 @@ final class ContentPlayback {
         }
     }
 
-    /// The core of both `track` calls: what to read. Replaces whatever was tracked; an overlay on screen
-    /// followed the old player, so it hears `contentChanged` and ends.
-    func track(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?) {
+    /// The start of both `track` calls: what to read, replacing whatever was tracked. Returns whether an
+    /// overlay was on screen: it followed the old player, so once the new binding is complete it hears
+    /// `contentChanged` (`finishBinding`) and ends.
+    private func bind(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?, rate: @escaping () -> Double? = { nil }) -> Bool {
         let ticking = isTicking
         stop()
         isTracking = true
         readTime = time
         readPlaying = playing
+        readRate = rate
         isTicking = ticking
-        if ticking { onChange?(.contentChanged) }
+        return ticking
+    }
+
+    /// The binding is complete: an overlay that followed the old player ends. Last, because its `didEnd` is
+    /// app code: a `destroy()` or another `track` there wins, and this binding does nothing more.
+    private func finishBinding(overlayWasShown: Bool) {
+        if overlayWasShown { deliver(.contentChanged, from: generation) }
     }
 
     func track(_ player: AVPlayer) {
         // `seconds` is NaN for an invalid or indefinite time; `playhead` turns that into 0. `rate` is the rate
         // asked for: 0 after `pause()`, unchanged while buffering, and at the end only with `actionAtItemEnd`
-        // `.pause`; the item's end is observed on its own.
-        track(time: { [weak player] in player?.currentTime().seconds }, playing: { [weak player] in player.map { $0.rate != 0 } })
+        // `.pause`; the item's end is observed on its own and holds until the item restarts or is replaced.
+        let overlayWasShown = bind(time: { [weak player] in player?.currentTime().seconds },
+                                   playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.itemEnded != true } },
+                                   rate: { [weak player] in player.map { Double($0.rate) } })
         avPlayer = player
         let generation = self.generation
         observations = [
             player.observe(\.rate, options: [.new]) { [weak self] _, change in
                 let playback = self
                 let playing = change.newValue.map { $0 != 0 }
-                Self.onMain { playback?.deliver(.playback(isPlaying: playing), from: generation) }
+                Self.onMain {
+                    if playing == true, playback?.generation == generation { playback?.itemEnded = false }   // played again
+                    playback?.deliver(.playback(isPlaying: playing), from: generation)
+                }
             },
             player.observe(\.currentItem) { [weak self] _, _ in
                 let playback = self
@@ -129,10 +152,11 @@ final class ContentPlayback {
             },
         ]
         observeItem(player.currentItem)
+        finishBinding(overlayWasShown: overlayWasShown)
     }
 
     func track(_ player: some VideoAdsPlayer) {
-        track(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying })
+        let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying })
         let generation = self.generation
         subscription = player.isPlayingPublisher?
             .removeDuplicates()
@@ -140,6 +164,7 @@ final class ContentPlayback {
             .sink { [weak self] playing in
                 MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: playing), from: generation) }
             }
+        finishBinding(overlayWasShown: overlayWasShown)
     }
 
     /// A playhead and no playing state: an overlay runs on its own time. For the tests, which read the
@@ -159,32 +184,47 @@ final class ContentPlayback {
         subscription = nil
         readTime = nil
         readPlaying = nil
+        readRate = nil
         avPlayer = nil
+        itemEnded = false
         isTracking = false
         isTicking = false
     }
 
-    /// The end and the time jumps of the item the player has now; the previous item's go.
+    /// The end and the time jumps of the item the player has now; the previous item's go, and its callbacks
+    /// still queued are dropped.
     private func observeItem(_ item: AVPlayerItem?) {
         itemObservers.forEach(NotificationCenter.default.removeObserver)
         itemObservers = []
+        itemGeneration += 1
+        itemEnded = false
         guard let item else { return }
         let generation = self.generation
+        let itemGeneration = self.itemGeneration
         let center = NotificationCenter.default
         itemObservers = [
             center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: nil) { [weak self] _ in
                 let playback = self
-                Self.onMain { playback?.deliver(.contentEnded, from: generation) }
+                Self.onMain { playback?.deliverItem(.contentEnded, from: generation, item: itemGeneration) }
             },
             center.addObserver(forName: AVPlayerItem.timeJumpedNotification, object: item, queue: nil) { [weak self] _ in
                 let playback = self
-                Self.onMain { playback?.deliver(.jumped, from: generation) }
+                Self.onMain { playback?.deliverItem(.jumped, from: generation, item: itemGeneration) }
             },
         ]
     }
 
     private func deliver(_ change: Change, from generation: Int) {
         guard generation == self.generation else { return }
+        onChange?(change)
+    }
+
+    /// An item's callback: dropped when the player moved to another item since. The end holds until the item
+    /// restarts (a time jump, a seek back to play it again).
+    private func deliverItem(_ change: Change, from generation: Int, item: Int) {
+        guard generation == self.generation, item == itemGeneration else { return }
+        if change == .contentEnded { itemEnded = true }
+        if change == .jumped { itemEnded = false }
         onChange?(change)
     }
 
@@ -199,14 +239,17 @@ final class ContentPlayback {
 }
 
 /// An overlay's `duration` in seconds of video: the playhead's progress while the overlay is on screen and
-/// its scene active. A step backwards, or one faster than `maxRate` times the real time since the playhead
-/// last moved, is a seek or a loop: it counts nothing, and counting goes on from the new position. An
-/// `AVPlayer`'s time jumps also start the count again (`resync`). A custom player's seek that looks like
-/// playback (small, or after a long stall) can count.
+/// its scene active (`resync` when the scene comes back, so time hidden counts nothing). A step backwards,
+/// or one faster than the playback speed allows for the real time since the playhead last moved, is a seek
+/// or a loop: it counts nothing, and counting goes on from the new position. An `AVPlayer` gives its speed,
+/// and its time jumps start the count again; for a custom player the limit is `maxRate`, so a seek that
+/// looks like playback (small, or after a long stall) can count.
 @MainActor
 final class ContentProgress {
-    /// Faster than any playback speed a player offers (2× at most, usually), with room for a late sample.
-    static let maxRate: Double = 2.5
+    /// The speed allowed when the player does not tell its own: 4× playback and a late sample still count.
+    static let maxRate: Double = 4.25
+    /// Room above a known speed for a late sample.
+    static let rateMargin: Double = 1.25
     /// What a step may exceed `maxRate` by: the sampling's own jitter.
     static let slack: TimeInterval = 0.25
     let duration: TimeInterval
@@ -226,16 +269,17 @@ final class ContentProgress {
         lastMovedAt = Environment.now()
     }
 
-    /// Takes the playhead now; counts the step when `counting` and it looks like playback. `true` once the
-    /// duration is reached.
-    func advance(to playhead: TimeInterval, counting: Bool) -> Bool {
+    /// Takes the playhead now; counts the step when `counting` and it looks like playback at `rate` (the
+    /// player's speed, `nil` when unknown). `true` once the duration is reached.
+    func advance(to playhead: TimeInterval, counting: Bool, rate: Double? = nil) -> Bool {
         let step = playhead - last
         if step != 0 {
             let now = Environment.now()
             let real = now - lastMovedAt
             last = playhead
             lastMovedAt = now
-            if counting, step > 0, step <= real * Self.maxRate + Self.slack { elapsed += step }
+            let speed = rate.map { max(abs($0) * Self.rateMargin, 1) } ?? Self.maxRate
+            if counting, step > 0, step <= real * speed + Self.slack { elapsed += step }
         }
         return elapsed >= duration
     }

@@ -31,6 +31,9 @@ final class ActiveTimeClock {
 
     /// An active stretch is running: the ad is on screen and its scene active.
     var isCounting: Bool { since != nil }
+    /// Called when an active stretch begins after the clock started: the scene came back. An overlay that
+    /// counts seconds of video starts its count again from there.
+    var onActivate: (() -> Void)?
 
     /// Seconds on screen while the app was active, the current stretch included.
     var elapsed: TimeInterval {
@@ -82,6 +85,7 @@ final class ActiveTimeClock {
         guard !stopped, since == nil else { return }
         since = ProcessInfo.processInfo.systemUptime
         startTimer()
+        onActivate?()
     }
 
     private func startTimer() {
