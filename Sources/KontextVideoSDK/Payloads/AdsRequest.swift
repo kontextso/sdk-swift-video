@@ -19,7 +19,7 @@ struct AdsRequest: Encodable, Sendable {
     let device: AdsDevice
     let player: PlayerSnapshot
     let video: KontextVideo.Content
-    /// `VideoAds.labels` as the request began; left out when there are none.
+    /// The labels given to `VideoAds(content:labels:)`; left out when there are none.
     let labels: [String: String]?
     /// One per `VideoAds`: the server keeps the bids it gave out per session.
     let sessionId: String

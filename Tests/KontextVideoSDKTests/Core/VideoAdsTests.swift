@@ -69,17 +69,15 @@ struct VideoAdsTests {
         #expect(Set(second?["held"] as? [String] ?? []) == ["img-p1", "vid-l1"], "both unshown bids are listed")
     }
 
-    @Test func labelsGoWithEveryRequestAndAChangeReachesTheNextOne() async throws {
+    @Test func labelsGoWithEveryRequest() async throws {
         _ = await harness.initialize()
         let ads = VideoAds(content: .init(id: "ep-l", language: "en"), labels: ["stage": "first_episode", "layout": "inline"])
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-l1")])
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == ["stage": "first_episode", "layout": "inline"])
-        ads.labels["layout"] = "fullscreen"
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests[1].body?["labels"] as? [String: String] == ["stage": "first_episode", "layout": "fullscreen"])
-        ads.labels = [:]
-        _ = try await ads.format(.pause)
+        #expect(harness.adsRequests.map { $0.body?["labels"] as? [String: String] } == Array(repeating: ["stage": "first_episode", "layout": "inline"], count: 2))
+        let bare = harness.player.ads(for: .init(id: "ep-n", language: "en"))
+        _ = try await bare.format(.pause)
         #expect(harness.adsRequests[2].body?["labels"] == nil, "none: left out")
     }
 
@@ -97,10 +95,6 @@ struct VideoAdsTests {
         #expect(ads.labels["long"] == nil, "66 bytes: dropped, not cut")
         #expect(warnings.count == 1, "one warning names them all")
         #expect(warnings.first?.contains("bad-key") == true && warnings.first?.contains("more than 20") == true)
-        ads.labels = ["stage": "unlock"]
-        ads.labels["ok_key"] = "1"
-        ads.labels["No"] = "1"
-        #expect(ads.labels == ["stage": "unlock", "ok_key": "1"] && warnings.count == 2, "a later change is checked too")
         #expect(Labels.isValidKey(String(repeating: "a", count: 64)) && !Labels.isValidKey(String(repeating: "a", count: 65)))
         harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
         _ = try await ads.format(.linear)

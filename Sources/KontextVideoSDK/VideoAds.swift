@@ -11,15 +11,8 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
-    /// Key-values that say where these ads play: the viewer's stage in the series, the player's layout,
-    /// the screen (`["stage": "first_episode", "layout": "fullscreen"]`). The server's configuration
-    /// decides what they change, such as which formats it offers; the SDK only sends them, with every
-    /// request from the next `format(_:)` on. Keys of `a-z`, `0-9` and `_`, values not empty, both at most
-    /// 64 bytes, at most 20 pairs: anything else is dropped with a console warning, and is not kept here.
-    /// They describe the screen, never the viewer: no personal data.
-    public var labels: [String: String] {
-        didSet { labels = Labels.checked(labels, for: content.id) }
-    }
+    /// The labels given at creation, less what `Labels.checked` dropped: what every request carries.
+    let labels: [String: String]
 
     /// Where the SDK reads the content playhead, in seconds, when it needs one: at a request, in the
     /// `[CONTENTPLAYHEAD]` macro of a beacon. For any player; for an `AVPlayer`,
@@ -42,7 +35,12 @@ public final class VideoAds {
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
 
     /// Needs `initialize(with:)` to have been called; `/config` itself may still be in flight, requests
-    /// wait for it. `labels`: see the property; change them later and the next request carries them.
+    /// wait for it. `labels`: key-values that say where these ads play, such as the viewer's stage in the
+    /// series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every request
+    /// of this object carries them, and the server's configuration decides what they change, such as which
+    /// formats it offers; they are fixed for the object's life. Keys of `a-z`, `0-9` and `_`, values not
+    /// empty, both at most 64 bytes, at most 20 pairs: anything else is dropped with a console warning.
+    /// They describe the screen, never the viewer: no personal data.
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
         self.labels = Labels.checked(labels, for: content.id)

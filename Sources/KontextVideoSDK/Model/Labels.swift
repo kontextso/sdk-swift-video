@@ -1,4 +1,4 @@
-/// The checks behind `VideoAds.labels`: what the SDK sends, and what it drops with a warning. The labels
+/// The checks behind `VideoAds(content:labels:)`: what the SDK sends, and what it drops with a warning. The labels
 /// describe where the ads play, never the viewer; the server's configuration decides what they change.
 enum Labels {
     /// At most this many pairs: the first in key order are kept.
