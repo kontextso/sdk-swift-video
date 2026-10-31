@@ -23,6 +23,7 @@ In progress.
 * Ads never play in Picture in Picture or on an AirPlay screen, where nothing could measure them.
 * A frame page whose connection drops after it started loading fails the ad at once (`didFail`), instead of waiting for the load timeout.
 * Example app: leaving the player screen no longer restarts the content when `destroy()` ends an ad on screen.
+* Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device ids, ad data and diagnostics are linked (the install id joins them), and the device id is tracking (the IDFA after ATT), as Google's AdMob and IMA SDKs declare them. Publishers' App Store privacy labels should be checked against it.
 
 ## 0.1.0
 

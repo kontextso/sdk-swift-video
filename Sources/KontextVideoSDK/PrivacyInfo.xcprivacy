@@ -2,39 +2,70 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Mirrors sdk-swift. The IDFA is sent only after the user authorized tracking through ATT
-       (the SDK omits it otherwise and sends the status); the ad server is not listed as a
-       tracking domain, which would block every request from unauthorized users. Review with
-       legal before the first App Store submission that includes this SDK. -->
+  <!-- As Google's AdMob and IMA SDKs: NSPrivacyTracking false and no tracking domains (listing the ad
+       server would block every request from users who did not authorize tracking); the identifiers used
+       for tracking are marked per data type instead. Should the server match identifiers with other
+       companies' data, that moves to its own host, listed here with NSPrivacyTracking true. The IDFA is sent only after the user authorized tracking
+       through ATT. Review with legal before the first App Store submission that includes this SDK. -->
   <key>NSPrivacyTracking</key><false/>
   <key>NSPrivacyTrackingDomains</key>
   <array/>
   <key>NSPrivacyCollectedDataTypes</key>
   <array>
-    <!-- IDFA (ATT-authorized only), IDFV, the SDK's install id. -->
+    <!-- The IDFA (ATT-authorized only; tracking, as AdMob declares it), the IDFV and the SDK's install id.
+         Linked: a request carries them with the publisher's user id or email when the app sets one;
+         the install id also joins error and debug reports to requests (App Functionality). -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeDeviceID</string>
-      <key>NSPrivacyCollectedDataTypeLinked</key><false/>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key><true/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+    <!-- The episode watched (id, title, series, genre), the playhead and the labels on every request. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeProductInteraction</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
       <key>NSPrivacyCollectedDataTypeTracking</key><false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
       <array>
         <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
       </array>
     </dict>
-    <!-- Ad requests, impressions, clicks and the other ad events. -->
+    <!-- Ad requests, impressions, clicks, viewability and the other ad events. -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeAdvertisingData</string>
-      <key>NSPrivacyCollectedDataTypeLinked</key><false/>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
       <key>NSPrivacyCollectedDataTypeTracking</key><false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
       <array>
         <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
       </array>
     </dict>
-    <!-- Only when the app sets KontextVideo.shared.user: the publisher's user id and email
-         (the server hashes the email on arrival and never stores the plain address). -->
+    <!-- Approximate location the server derives from the IP address, with the timezone and locale
+         the SDK sends, for ad selection and the bid requests to demand partners. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key><false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+    <!-- Only when the app sets KontextVideo.shared.user: the publisher's user id, for ad selection.
+         Tracking: set true if production matches it with other companies' data (decision pending). -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeUserID</string>
@@ -45,6 +76,9 @@
         <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
       </array>
     </dict>
+    <!-- Only when the app sets KontextVideo.shared.user: email or emailHash (a hash still identifies the
+         person), for ad selection.
+         Tracking: set true if production matches it with other companies' data (decision pending). -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeEmailAddress</string>
@@ -55,15 +89,29 @@
         <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
       </array>
     </dict>
-    <!-- Device, OS, screen, battery and audio facts sent with requests; the debug log when the
-         server asks for it. -->
+    <!-- Device, OS, screen, battery and audio facts sent with requests, used to pick and render ads;
+         error reports and the debug log, with the install id (linked). -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeOtherDiagnosticData</string>
-      <key>NSPrivacyCollectedDataTypeLinked</key><false/>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
       <key>NSPrivacyCollectedDataTypeTracking</key><false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
       <array>
+        <string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+        <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+      </array>
+    </dict>
+    <!-- How long a creative took to load (durationMs) and its error reports, with the install id (linked). -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypePerformanceData</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key><true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key><false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
         <string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
       </array>
     </dict>
@@ -75,7 +123,7 @@
       <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
       <key>NSPrivacyAccessedAPITypeReasons</key>
       <array>
-        <!-- CA92.1: the SDK's own install id (KontextKit) and the IAB consent keys a CMP writes. -->
+        <!-- CA92.1: the SDK's own install id (KontextKit) and the IAB consent keys a CMP writes in the app's defaults. -->
         <string>CA92.1</string>
       </array>
     </dict>
@@ -84,9 +132,18 @@
       <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
       <key>NSPrivacyAccessedAPITypeReasons</key>
       <array>
-        <!-- C617.1: KontextKit's AppInfoProvider reads the Documents directory creation date
-             as a first-install-time proxy. -->
+        <!-- C617.1: KontextKit's AppInfoProvider reads the Documents directory creation date as a first-install-time proxy. -->
         <string>C617.1</string>
+      </array>
+    </dict>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <!-- 35F9.1: ProcessInfo.systemUptime times the on-screen clock and the creative's load; only elapsed
+             times leave the device. -->
+        <string>35F9.1</string>
       </array>
     </dict>
   </array>
