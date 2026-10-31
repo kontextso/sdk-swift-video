@@ -27,7 +27,9 @@ targets:
       properties:
         CFBundleDisplayName: Kontext Video
         UILaunchScreen: {}
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # Testing: all orientations so rotation can be exercised. Revert to
+        # [UIInterfaceOrientationPortrait] for the shipped portrait-only behaviour.
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSUserTrackingUsageDescription: The advertising identifier lets advertisers recognize you, so you see more relevant ads.
         # Kontext's ad network id, so installs from the demo's app-install ads can be attributed.
         SKAdNetworkItems:
