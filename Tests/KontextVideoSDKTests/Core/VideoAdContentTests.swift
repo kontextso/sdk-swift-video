@@ -425,6 +425,14 @@ struct VideoAdContentTests {
             Issue.record("expected contentPaused")
         } catch VideoAdError.contentPaused {}
         #expect(next.isReady && delegate.events.isEmpty)
+        // A pause and a play without a seek restart nothing: the item is still past its end.
+        player.pause()
+        player.play()
+        await sleepMs(100)
+        do {
+            try next.show(in: view)
+            Issue.record("expected contentPaused after pause and play")
+        } catch VideoAdError.contentPaused {}
         player.currentItem?.forwardPlaybackEndTime = .invalid
         await player.seek(to: .zero)   // the app plays it again
         #expect(await waitUntil(2) { ads.playback.isPlaying })
@@ -467,6 +475,7 @@ struct VideoAdContentTests {
         var isPlaying = true
         var onRead: (() -> Void)?
         var onSubscribe: (() -> Void)?
+        var onCancel: (() -> Void)?
         var subscriptions = 0
         let subject = PassthroughSubject<Bool, Never>()
         var isPlayingPublisher: AnyPublisher<Bool, Never>? {
@@ -474,7 +483,10 @@ struct VideoAdContentTests {
             return subject.handleEvents(receiveSubscription: { [weak self] _ in
                 self?.subscriptions += 1
                 self?.onSubscribe?()
-            }, receiveCancel: { [weak self] in self?.subscriptions -= 1 }).eraseToAnyPublisher()
+            }, receiveCancel: { [weak self] in
+                self?.subscriptions -= 1
+                self?.onCancel?()
+            }).eraseToAnyPublisher()
         }
     }
 
@@ -506,6 +518,53 @@ struct VideoAdContentTests {
         middle.onRead = { [weak ads] in ads?.track(last) }
         ads.track(middle)
         #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0)
+    }
+
+    @Test func aDestroyInTheOldSubscriptionsCancellationLeavesNothingTracked() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-cancel1", language: "en"))
+        let first = SetupHookPlayer()
+        let next = SetupHookPlayer()
+        first.onCancel = { [weak ads] in ads?.destroy() }
+        ads.track(first)
+        ads.track(next)   // cancels the first player's subscription, which destroys
+        #expect(ads.isDestroyed && !ads.playback.isTracking && next.subscriptions == 0 && first.subscriptions == 0)
+    }
+
+    @Test func aTrackInTheOldSubscriptionsCancellationWins() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-cancel2", language: "en"))
+        defer { ads.destroy() }
+        let first = SetupHookPlayer()
+        let middle = SetupHookPlayer()
+        let last = SetupHookPlayer()
+        last.currentTime = 77
+        first.onCancel = { [weak ads] in ads?.track(last) }
+        ads.track(first)
+        ads.track(middle)
+        #expect(ads.playback.playhead == 77 && last.subscriptions == 1 && middle.subscriptions == 0)
+    }
+
+    @Test func aTrackInTheCancellationThatDestroyRunsTracksNothing() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-cancel3", language: "en"))
+        let first = SetupHookPlayer()
+        let next = SetupHookPlayer()
+        first.onCancel = { [weak ads] in ads?.track(next) }
+        ads.track(first)
+        ads.destroy()
+        #expect(!ads.playback.isTracking && next.subscriptions == 0)
+    }
+
+    @Test func trackAfterDestroyDoesNothing() async throws {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-after-destroy", language: "en"))
+        ads.destroy()
+        let custom = SetupHookPlayer()
+        ads.track(custom)
+        #expect(!ads.playback.isTracking && custom.subscriptions == 0)
+        ads.track(AVPlayer())
+        #expect(!ads.playback.isTracking)
     }
 
     @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {

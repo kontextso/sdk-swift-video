@@ -55,7 +55,7 @@ final class ContentPlayback {
     private var generation = 0
     /// Which item of an `AVPlayer` its item callbacks belong to; one from an item before is dropped.
     private var itemGeneration = 0
-    /// The `AVPlayer`'s current item played to its end and has not restarted (a seek, a play) or been
+    /// The `AVPlayer`'s current item played to its end and has not restarted (a seek; a play alone is not one) or been
     /// replaced: it plays nothing, whatever its rate (`actionAtItemEnd` `.none` keeps the rate).
     private var itemEnded = false
     /// Content time in seconds, `nil` once the player is gone.
@@ -106,10 +106,14 @@ final class ContentPlayback {
 
     /// The start of both `track` calls: what to read, replacing whatever was tracked. Returns whether an
     /// overlay was on screen: it followed the old player, so once the new binding is complete it hears
-    /// `contentChanged` (`finishBinding`) and ends.
-    private func bind(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?, rate: @escaping () -> Double? = { nil }) -> Bool {
+    /// `contentChanged` (`finishBinding`) and ends. `nil` when app code run by the teardown bound or stopped
+    /// the playback itself: that call won.
+    private func bind(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?, rate: @escaping () -> Double? = { nil }) -> Bool? {
         let ticking = isTicking
+        let expected = generation + 1
         stop()
+        // The old subscription's cancellation is app code: a `track` or `destroy()` there won, and this binding stops.
+        guard generation == expected else { return nil }
         isTracking = true
         readTime = time
         readPlaying = playing
@@ -128,19 +132,17 @@ final class ContentPlayback {
         // `seconds` is NaN for an invalid or indefinite time; `playhead` turns that into 0. `rate` is the rate
         // asked for: 0 after `pause()`, unchanged while buffering, and at the end only with `actionAtItemEnd`
         // `.pause`; the item's end is observed on its own and holds until the item restarts or is replaced.
-        let overlayWasShown = bind(time: { [weak player] in player?.currentTime().seconds },
-                                   playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.itemEnded != true } },
-                                   rate: { [weak player] in player.map { Double($0.rate) } })
+        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime().seconds },
+                                         playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.itemEnded != true } },
+                                         rate: { [weak player] in player.map { Double($0.rate) } }) else { return }
         avPlayer = player
         let generation = self.generation
         observations = [
             player.observe(\.rate, options: [.new]) { [weak self] _, change in
                 let playback = self
                 let playing = change.newValue.map { $0 != 0 }
-                Self.onMain {
-                    if playing == true, playback?.generation == generation { playback?.itemEnded = false }   // played again
-                    playback?.deliver(.playback(isPlaying: playing), from: generation)
-                }
+                // A rate alone never restarts an ended item: play() after the end plays nothing. A seek does (`jumped`).
+                Self.onMain { playback?.deliver(.playback(isPlaying: playing), from: generation) }
             },
             player.observe(\.currentItem) { [weak self] _, _ in
                 let playback = self
@@ -156,7 +158,7 @@ final class ContentPlayback {
     }
 
     func track(_ player: some VideoAdsPlayer) {
-        let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying })
+        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying }) else { return }
         let generation = self.generation
         // Reading the publisher and subscribing are app code: a `destroy()` or another `track` there wins, and
         // this binding's subscription is dropped instead of stored.
@@ -188,7 +190,9 @@ final class ContentPlayback {
         observations = []
         itemObservers.forEach(NotificationCenter.default.removeObserver)
         itemObservers = []
-        subscription = nil
+        // Kept, not released here: releasing cancels it, and its cancellation runs the app's code.
+        let subscription = self.subscription
+        self.subscription = nil
         readTime = nil
         readPlaying = nil
         readRate = nil
@@ -196,6 +200,8 @@ final class ContentPlayback {
         itemEnded = false
         isTracking = false
         isTicking = false
+        // Last, with every property settled: a `track` or `destroy()` in the cancellation finds a stopped playback.
+        subscription?.cancel()
     }
 
     /// The end and the time jumps of the item the player has now; the previous item's go, and its callbacks
