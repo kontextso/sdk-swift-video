@@ -23,7 +23,7 @@ In progress.
 * Ads never play in Picture in Picture or on an AirPlay screen, where nothing could measure them.
 * A frame page whose connection drops after it started loading fails the ad at once (`didFail`), instead of waiting for the load timeout.
 * Example app: leaving the player screen no longer restarts the content when `destroy()` ends an ad on screen.
-* `track(_:)` after `destroy()` does nothing; a `track` or `destroy()` in an old player's subscription cancellation wins over the call that cancelled it, instead of crashing the app; a player that played to its end and plays again without a seek still refuses an overlay.
+* `track(_:)` after `destroy()` does nothing; a `track` or `destroy()` in an old player's subscription cancellation wins over the call that cancelled it, instead of crashing the app, and an overlay shown over the old player still ends; a player that played to its end and plays again without a seek still refuses an overlay.
 * Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device facts sent as ad inputs (Other Data Types) are declared apart from error and debug reports (Other Diagnostic Data); device ids, ad data and diagnostics are linked (the install id joins them). Nothing is declared as tracking: no Kontext server uses the data for tracking yet. Publishers' App Store privacy labels should be checked against it.
 
 ## 0.1.0

@@ -545,6 +545,18 @@ struct VideoAdContentTests {
         #expect(ads.playback.playhead == 77 && last.subscriptions == 1 && middle.subscriptions == 0)
     }
 
+    @Test func aTrackInTheOldSubscriptionsCancellationEndsTheOverlayOnScreen() async throws {
+        let first = SetupHookPlayer()
+        let middle = SetupHookPlayer()
+        let last = SetupHookPlayer()
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-cancel")) { $0.track(first) }
+        try ad.show(in: view)
+        first.onCancel = { [weak ads] in ads?.track(last) }
+        ads.track(middle)   // cancels the first player's subscription, which tracks the last one
+        #expect(delegate.endReasons == [.interrupted], "the overlay followed the first player")
+        #expect(KontextVideo.shared.adOnScreen == nil && last.subscriptions == 1 && middle.subscriptions == 0)
+    }
+
     @Test func aTrackInTheCancellationThatDestroyRunsTracksNothing() async {
         _ = await harness.initialize()
         let ads = VideoAds(content: .init(id: "ep-cancel3", language: "en"))

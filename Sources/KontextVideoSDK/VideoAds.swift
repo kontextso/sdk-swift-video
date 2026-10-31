@@ -63,6 +63,10 @@ public final class VideoAds {
         }
         // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds.
         playback.onChange = { [weak self] change in self?.state.showing?.contentDidChange(change) }
+        playback.isOverlayShown = { [weak self] in
+            guard let ad = self?.state.showing else { return false }
+            return ad.format == .overlay && !ad.hasEnded
+        }
         Logger.debug("VideoAds created for video \(content.id)")
     }
 

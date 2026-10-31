@@ -49,6 +49,8 @@ final class ContentPlayback {
 
     /// Every change, on the main actor; the `VideoAds` passes it to its ad on screen.
     var onChange: ((Change) -> Void)?
+    /// Whether an overlay of the `VideoAds` is on screen now; set by the `VideoAds`.
+    var isOverlayShown: () -> Bool = { false }
     /// `track` was called and `stop()` was not since: a player was given, alive or not.
     private(set) var isTracking = false
     /// Which binding is current; a callback from an older one is dropped.
@@ -109,17 +111,19 @@ final class ContentPlayback {
     /// `contentChanged` (`finishBinding`) and ends. `nil` when app code run by the teardown bound or stopped
     /// the playback itself: that call won.
     private func bind(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?, rate: @escaping () -> Double? = { nil }) -> Bool? {
-        let ticking = isTicking
         let expected = generation + 1
         stop()
         // The old subscription's cancellation is app code: a `track` or `destroy()` there won, and this binding stops.
         guard generation == expected else { return nil }
+        // Asked of the ad on screen, not of the ticks: a `track` nested in the cancellation runs after `stop()`
+        // turned them off, and must still hand the overlay over.
+        let overlayShown = isOverlayShown()
         isTracking = true
         readTime = time
         readPlaying = playing
         readRate = rate
-        isTicking = ticking
-        return ticking
+        isTicking = overlayShown
+        return overlayShown
     }
 
     /// The binding is complete: an overlay that followed the old player ends. Last, because its `didEnd` is
