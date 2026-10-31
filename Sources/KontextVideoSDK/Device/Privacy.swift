@@ -82,7 +82,7 @@ struct TrackingInfo: Sendable {
 
 /// The consent signals a consent management platform writes to `UserDefaults` under the IAB's shared
 /// keys (TCF v2, GPP, US Privacy), read by KontextKit's `ConsentDataProvider`. A usable CMP value
-/// wins: it is the live, authoritative consent, as AdMob and MAX read it with no override at all. What
+/// wins: it is the live, authoritative consent, as major ad SDKs read it, with no override at all. What
 /// the publisher set on `KontextVideo.shared.regulatory` fills in where the CMP has none usable (a key it
 /// did not write, an empty or malformed one); `coppa` can only come from the publisher.
 enum ConsentStorage {

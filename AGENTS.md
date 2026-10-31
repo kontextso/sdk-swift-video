@@ -69,7 +69,7 @@ format, each shows its ad 3 s in. See
 - The page never fires a beacon; `Tracker` does, each entry once, except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence. The SDK never requests an ad by itself.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then the code, then `sdk-kotlin-video`.
-- Follow ad-SDK conventions (AdMob, AppLovin MAX, IMA) and modern Apple patterns: `async throws` for one-result
+- Follow established mobile ad-SDK conventions and modern Apple patterns: `async throws` for one-result
   calls, a delegate for the on-screen moments, public types nested under `KontextVideo` (what the app constructs)
   or `VideoAd` (what it reads off an ad) with `AdFormat` the one top-level exception, internal types top level,
   `TimeInterval` seconds in

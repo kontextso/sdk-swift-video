@@ -16,7 +16,7 @@ public final class KontextVideo {
         case failed
     }
 
-    /// The one instance. Every public call goes through it, as `GADMobileAds.sharedInstance()` or `ALSdk.shared()`.
+    /// The one instance. Every public call goes through it.
     public static let shared = KontextVideo()
 
     /// The SDK's version, the same string it sends with every request. For your logs and crash reports.
@@ -100,9 +100,8 @@ public final class KontextVideo {
         }
     }
 
-    /// The same, for `async` code: returns the state once `/config` has answered or failed, as AdMob's
-    /// `await MobileAds.shared.start()`. Swift picks this overload in an `async` context and the
-    /// fire-and-forget one elsewhere.
+    /// The same, for `async` code: returns the state once `/config` has answered or failed. Swift picks
+    /// this overload in an `async` context and the fire-and-forget one elsewhere.
     public func initialize(with configuration: Configuration) async -> State {
         initialize(with: configuration, completion: nil)
         await initTask?.value
@@ -138,7 +137,7 @@ public final class KontextVideo {
     /// do the same for their configure calls). A release build only logs and carries on, because the
     /// order of calls in a real app is not always deterministic and an ad SDK must never take the app
     /// down in front of users. Not `throws`: that would put `try` on every publisher's call for a mistake
-    /// most never make. AdMob and AppLovin MAX also stay non-throwing and let the ad load fail instead.
+    /// most never make. Major ad SDKs also stay non-throwing and let the ad load fail instead.
     @discardableResult
     func requireInitialized(_ call: String) -> Bool {
         guard !isInitialized else { return true }

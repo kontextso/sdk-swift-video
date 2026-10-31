@@ -263,7 +263,7 @@ public final class VideoAd {
 
     /// Presents a linear ad full screen. From `viewController` when given, which must be on screen
     /// and not already presenting; with `nil` (the default) from the key window's top view controller,
-    /// as AdMob's `present(from: nil)` and MAX's `showAd()` do. Pass the controller when the guess would
+    /// as other ad SDKs do. Pass the controller when the guess would
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (an overlay or pause
     /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,
@@ -559,7 +559,7 @@ public final class VideoAd {
             linearController = nil
             controller.isEndingByAd = true
             if controller.presentingViewController != nil, reason != .interrupted {
-                // `didEnd` waits for the dismissal, as AdMob's and MAX's "dismissed" callbacks do: an app
+                // `didEnd` waits for the dismissal, as other ad SDKs' "dismissed" callbacks do: an app
                 // that presents its next screen in `didEnd` must not collide with the animation.
                 dismissing = true
                 controller.dismiss(animated: true) { [weak self] in self?.finish(reason) }

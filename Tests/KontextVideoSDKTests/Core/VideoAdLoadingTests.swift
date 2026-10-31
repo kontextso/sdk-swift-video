@@ -265,11 +265,11 @@ struct VideoAdLoadingTests {
 
     @Test func rejectOutbidCarriesTheWinningPriceAndTheWinner() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-17"))
-        try ad.reject(.outbid(winningPrice: 2.4, winner: "AppLovin MAX"))
+        try ad.reject(.outbid(winningPrice: 2.4, winner: "Other Network"))
         let beacon = await beacons("notUsed").first
         #expect(beacon?["reason"] == "outbid")
         #expect(beacon?["wp"] == "2.4")
-        #expect(beacon?["winner"] == "AppLovin MAX", "percent-encoded on the wire, decoded here")
+        #expect(beacon?["winner"] == "Other Network", "percent-encoded on the wire, decoded here")
         let (other, _) = try await make(Fixtures.ad(id: "img-17b"))
         try other.reject(.outbid())
         let bare = await beacons("notUsed").last

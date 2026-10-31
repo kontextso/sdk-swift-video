@@ -14,7 +14,7 @@
 /// pause ad closed with ✕ (`.closed`) leaves the content paused, Resume (`.resumed`) means play; after
 /// `.destroyed` the viewer has usually left. `didEnd` is delivered once: for an overlay or pause ad
 /// synchronously, even from inside your own `dismiss()` or `destroy()` call; for a linear ad once its
-/// dismissal finished (as AdMob's and MAX's "dismissed" callbacks), so the next screen can be presented
+/// dismissal finished (as other ad SDKs' "dismissed" callbacks), so the next screen can be presented
 /// from it. Should UIKit never finish that dismissal, `didEnd` still comes after a bounded wait.
 @MainActor
 public protocol VideoAdDelegate: AnyObject {
@@ -26,7 +26,7 @@ public protocol VideoAdDelegate: AnyObject {
     func videoAdDidRecordImpression(_ ad: VideoAd)
     /// The viewer tapped the ad and the SDK took the click: it fired the click beacons and is opening the
     /// target (the URL, its fallback when the first cannot open, or the App Store sheet for an app-install
-    /// ad). Neither which target opened nor whether it did is reported, as with AdMob and MAX. `click.area`
+    /// ad). Neither which target opened nor whether it did is reported, as with other ad SDKs. `click.area`
     /// says where the viewer tapped. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a

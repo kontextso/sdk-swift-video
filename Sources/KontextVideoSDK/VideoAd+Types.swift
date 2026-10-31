@@ -41,7 +41,7 @@ extension VideoAd {
         /// The app does not use it, for any reason: the moment passed, the viewer left, the app's own choice.
         case notUsed
         /// Another network won the publisher's auction; `winningPrice` (CPM) and `winner` (the network, in
-        /// the app's own words: `"AppLovin MAX"`, `"AdMob"`) when the app knows them. DSPs use both.
+        /// the app's own words) when the app knows them. DSPs use both.
         case outbid(winningPrice: Double? = nil, winner: String? = nil)
     }
 

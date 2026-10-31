@@ -12,7 +12,7 @@ In progress.
   * `show(in:)` on an overlay over paused content throws the new `VideoAdError.contentPaused`, and the ad stays ready. A pause while the overlay's view is being attached ends it before any impression.
   * Another ad's `show` first ends an overlay whose content stopped, so a pause ad shown right after `player.pause()` finds the screen free. `show` runs that app code (the overlay's `didEnd`, the player's `isPlaying`) before its own checks.
   * Without a tracked player, an overlay runs on its own time, as before.
-* `VideoAd.Click` no longer has `url`: `didClick` says where the viewer tapped (`area`), not what opened, as AdMob and AppLovin MAX do. The page's target was the advertiser's tracking link, often not what opened (a fallback, the App Store sheet), and the SDK opens it itself.
+* `VideoAd.Click` no longer has `url`: `didClick` says where the viewer tapped (`area`), not what opened, as established ad SDKs do. The page's target was the advertiser's tracking link, often not what opened (a fallback, the App Store sheet), and the SDK opens it itself.
 
 * `show(in:insets:)`: insets that keep an overlay or a pause card clear of your own controls, added to the view's safe area (`bottom: 80` puts a bottom strip 80 points above it). Kept through resizes and rotations, counted in `containerTooSmall`'s minimum; a full-screen pause ad ignores them. `show(in:)` is unchanged. Insets that leave no width or height throw `containerTooSmall` (or end a shown ad as `.interrupted` on a resize), however large.
 * `VideoAds(content:labels:)`: key-values that say where the ads play, such as the viewer's stage in the series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every ads request of that `VideoAds` carries them (`labels`), fixed for its life; the server's configuration decides what they change, such as which formats it offers. Keys of `a-z`, `0-9` and `_`, values not empty, both at most 64 bytes, at most 20 pairs; the rest is dropped with a console warning. The example app shows four situations this way, a full-screen pause ad among them.
@@ -23,7 +23,7 @@ In progress.
 * Ads never play in Picture in Picture or on an AirPlay screen, where nothing could measure them.
 * A frame page whose connection drops after it started loading fails the ad at once (`didFail`), instead of waiting for the load timeout.
 * Example app: leaving the player screen no longer restarts the content when `destroy()` ends an ad on screen.
-* Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device ids, ad data and diagnostics are linked (the install id joins them), and the device id is tracking (the IDFA after ATT), as Google's AdMob and IMA SDKs declare them. Publishers' App Store privacy labels should be checked against it.
+* Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device ids, ad data and diagnostics are linked (the install id joins them), and the device id is tracking (the IDFA after ATT), as major ad SDKs declare them. Publishers' App Store privacy labels should be checked against it.
 
 ## 0.1.0
 
