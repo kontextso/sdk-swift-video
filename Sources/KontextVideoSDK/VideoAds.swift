@@ -1,3 +1,4 @@
+import AppTrackingTransparency
 import AVFoundation
 import Foundation
 import UIKit
@@ -154,16 +155,17 @@ public final class VideoAds {
                 throw VideoAdError.initializationFailed
             }
             guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
-            // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request.
-            let tracking: TrackingInfo
+            // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request. Its
+            // answer is read with the rest of the privacy fields, after the last wait.
+            let answered: ATTrackingManager.AuthorizationStatus?
             do {
-                tracking = try await TrackingInfo.current(requestAuthorization: configuration.requestTrackingAuthorization)
+                answered = try await TrackingInfo.authorizeIfNeeded(requestAuthorization: configuration.requestTrackingAuthorization)
             } catch {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
             let playhead = try owner().playhead
-            let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: tracking, content: content,
+            let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered), content: content,
                                              labels: labels, player: .make(playhead: playhead), sessionId: sessionId, held: held)
             // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
             try owner().checkStillUsable()

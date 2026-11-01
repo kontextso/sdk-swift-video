@@ -41,24 +41,44 @@ struct TrackingInfo: Sendable {
     /// `NSUserTrackingUsageDescription`). Apple decides whether the dialog appears: not while the app is
     /// inactive or another permission dialog is up. The status then stays undetermined and a later request
     /// asks again. Throws `CancellationError` when the calling task is cancelled while the dialog is up
-    /// (`destroy()` of its `VideoAds`); the dialog itself, and every other caller waiting on it, go on.
+    /// (`destroy()` of its `VideoAds`); the dialog itself, and every other caller waiting on it, go on. A
+    /// request uses the two halves instead, with its other waits in between; the tests, which the analyzer
+    /// does not see, call this one.
     @MainActor
-    static func current(requestAuthorization: Bool) async throws -> TrackingInfo {
-        var status = Environment.trackingAuthorizationStatus()
+    static func current(requestAuthorization: Bool) async throws -> TrackingInfo { // swiftlint:disable:this unused_declaration
+        read(answered: try await authorizeIfNeeded(requestAuthorization: requestAuthorization))
+    }
+
+    /// The asynchronous half of `current`: the dialog when asked for and the viewer has not answered.
+    /// Returns the dialog's answer, `nil` when none was shown. A request reads the status itself (`read`) only
+    /// after its last wait, so an answer or a reset made meanwhile is what it sends.
+    @MainActor
+    static func authorizeIfNeeded(requestAuthorization: Bool) async throws -> ATTrackingManager.AuthorizationStatus? {
+        let status = Environment.trackingAuthorizationStatus()
         if requestAuthorization, status == .notDetermined {
             let task = authorization ?? Task {
                 defer { authorization = nil }
                 return await Environment.requestTrackingAuthorization()
             }
             authorization = task
-            status = try await awaitShared(task)
-            Logger.info("ATT: \(name(of: status))")
+            let answer = try await awaitShared(task)
+            Logger.info("ATT: \(name(of: answer))")
+            return answer
         } else if status == .notDetermined, !warnedAboutUnaskedTracking {
             // A publisher who forgot both their own dialog and the SDK's option sends every request without
             // the IDFA; said once, at the first request, where a developer looks.
             warnedAboutUnaskedTracking = true
             Logger.warning("App Tracking Transparency not answered yet: the IDFA is not sent until the app asks, or set requestTrackingAuthorization: true.")
         }
+        return nil
+    }
+
+    /// The status and IDFA now, synchronously. The OS is the authority; the dialog's `answered` stands in
+    /// only while the OS still reports `notDetermined` for it.
+    @MainActor
+    static func read(answered: ATTrackingManager.AuthorizationStatus? = nil) -> TrackingInfo {
+        var status = Environment.trackingAuthorizationStatus()
+        if status == .notDetermined, let answered { status = answered }
         var ifa: IFA?
         if status == .authorized {
             let id = Environment.advertisingIdentifier().uuidString

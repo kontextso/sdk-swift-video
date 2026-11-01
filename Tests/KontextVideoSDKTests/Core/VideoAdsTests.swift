@@ -105,6 +105,42 @@ struct VideoAdsTests {
 
     // MARK: The request
 
+    @Test func privacyFieldsAreReadAfterEveryWaitOfTheRequest() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p-late"))
+        KontextVideo.shared.user = KontextVideo.User(id: "before")
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
+        Environment.trackingAuthorizationStatus = { .denied }
+        // The user agent lookup, one of the request's waits, held until the test lets it go.
+        var asked = false
+        var released = false
+        NetworkInfo.lookup = nil
+        Environment.userAgent = {
+            asked = true
+            while !released { await sleepMs(5) }
+            return "Mozilla/5.0 (test)"
+        }
+        let call = Task { try await ads.format(.pause) }
+        #expect(await waitUntil { asked })
+        // Meanwhile: a new user, a consent update from the CMP, the app's own regulatory change, ATT authorized.
+        KontextVideo.shared.user = KontextVideo.User(id: "after")
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: true)
+        Environment.consentDefaults.set(1, forKey: "IABTCF_gdprApplies")
+        Environment.consentDefaults.set("TC-AFTER", forKey: "IABTCF_TCString")
+        let idfa = UUID()
+        Environment.trackingAuthorizationStatus = { .authorized }
+        Environment.advertisingIdentifier = { idfa }
+        released = true
+        _ = try await call.value
+        let body = try #require(harness.adsRequests.first?.body)
+        #expect((body["user"] as? [String: Any])?["id"] as? String == "after")
+        let regulatory = body["regulatory"] as? [String: Any]
+        #expect(regulatory?["coppa"] as? Bool == true && regulatory?["gdprConsent"] as? String == "TC-AFTER")
+        #expect(body["attStatus"] as? String == "authorized" && (body["ifa"] as? [String: Any])?["id"] as? String == idfa.uuidString)
+        KontextVideo.shared.user = nil
+        KontextVideo.shared.regulatory = nil
+    }
+
     @Test func creatingAVideoAdsSendsNothing() async {
         _ = await makeAds()
         await sleepMs(50)

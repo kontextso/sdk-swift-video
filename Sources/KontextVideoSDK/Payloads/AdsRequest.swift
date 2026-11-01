@@ -31,9 +31,16 @@ struct AdsRequest: Encodable, Sendable {
         case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, labels, sessionId, held
     }
 
+    /// Every wait first (the device facts, the user agent among them), then, with nothing left to wait for,
+    /// what the viewer or the app may change at any moment: the user, the variant, the consent and the
+    /// tracking status (`tracking` is read here, after the waits). A consent update or an ATT answer made
+    /// while the request was being built is what it sends.
     @MainActor
-    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: TrackingInfo, content: KontextVideo.Content, labels: [String: String], player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
-        AdsRequest(
+    static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: @autoclosure () -> TrackingInfo, content: KontextVideo.Content,
+                     labels: [String: String], player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
+        let device = await AdsDevice.current()
+        let tracking = tracking()
+        return AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
@@ -47,7 +54,7 @@ struct AdsRequest: Encodable, Sendable {
             regulatory: ConsentStorage.read(merging: sdk.regulatory),
             sdk: SDKInfo(),
             app: .current(),
-            device: await .current(),
+            device: device,
             player: player,
             video: content,
             labels: labels.isEmpty ? nil : labels,
