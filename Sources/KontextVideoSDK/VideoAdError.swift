@@ -57,7 +57,9 @@ public enum VideoAdError: Error, Sendable {
     /// already presenting or not on screen, or with `show()` there is no key window or its top controller
     /// is mid-transition; for an overlay or pause ad the view is not in a window. In both, a view that is
     /// hidden, transparent or without an area, or sits in a hidden or transparent ancestor or window, is not
-    /// on screen. The ad stays ready: try
+    /// on screen; nor is anything while the app is not active or the window's scene is not in the foreground
+    /// and active (the content in Picture in Picture only, the lock screen, background audio, Control Center
+    /// over the app): show once the app is back in front. The ad stays ready: try
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable

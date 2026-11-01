@@ -203,7 +203,9 @@ public final class VideoAd {
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
-    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent),
+    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent;
+    /// or the app is not active or the view's window scene is not in the foreground and active: the content
+    /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
     /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
     /// three. Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it. The ad follows the
     /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
@@ -224,6 +226,10 @@ public final class VideoAd {
         try checkShowable()
         guard AdPlacement.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
+            throw VideoAdError.presenterUnavailable
+        }
+        guard AdPlacement.isInFront(view) else {
+            Logger.warning("ad \(id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
             throw VideoAdError.presenterUnavailable
         }
         let container = view
@@ -269,9 +275,10 @@ public final class VideoAd {
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (an overlay or pause
     /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,
-    /// `presenterUnavailable` (the ad stays ready; try again later or pass the right controller). Only the
-    /// SDK dismisses it: the video completing, a skip, a close, an error, or an interruption, each ending
-    /// in one `didEnd`. From here until `didEnd` the SDK retains the ad.
+    /// `presenterUnavailable` (the controller cannot present, or the app or its window scene is not in the
+    /// foreground and active; the ad stays ready: try again once the app is back, or pass the right
+    /// controller). Only the SDK dismisses it: the video completing, a skip, a close, an error, or an
+    /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
         try withContentPlayhead { try showLinear(from: viewController) }
     }
@@ -293,6 +300,10 @@ public final class VideoAd {
                 throw VideoAdError.presenterUnavailable
             }
             presenter = top
+        }
+        guard AdPlacement.isInFront(presenter.view) else {
+            Logger.warning("ad \(id.prefix(8)): cannot present, the app or the presenter's scene is not in front; the ad stays ready")
+            throw VideoAdError.presenterUnavailable
         }
         // Reserved first, so a completion that runs at once finds the ad shown and the slot taken, and before
         // the WebView leaves its parking window, whose overridable hooks are the app's code (a show from

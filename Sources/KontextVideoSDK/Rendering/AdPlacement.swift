@@ -63,4 +63,13 @@ enum AdPlacement {
         }
         return true
     }
+
+    /// Whether `view`'s window is in front of the viewer: the app is active and so is the window's scene
+    /// (`foregroundActive`; a window without a scene follows the app). Not with the content in Picture in
+    /// Picture only, on the lock screen, with background audio or under Control Center: an impression there
+    /// would count an ad nobody sees, and a linear ad would be presented into the background.
+    static func isInFront(_ view: UIView) -> Bool {
+        guard let window = view.window else { return false }
+        return Environment.isWindowActive(window)
+    }
 }

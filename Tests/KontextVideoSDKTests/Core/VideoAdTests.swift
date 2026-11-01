@@ -244,15 +244,16 @@ struct VideoAdTests {
         #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
     }
 
-    @Test func anOverlayShownWhileInactiveStartsItsClockOnActivation() async throws {
+    @Test func anOverlayIsRefusedWhileInactiveAndRunsItsClockOnceShownAfterActivation() async throws {
         Environment.isApplicationActive = { false }
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10d", duration: 150))
-        try ad.show(in: harness.player.view)
-        let scene = try #require(harness.player.view.window?.windowScene)
-        await sleepMs(300)
-        #expect(delegate.endReasons.isEmpty)
+        do {
+            try ad.show(in: harness.player.view)
+            Issue.record("expected presenterUnavailable")
+        } catch VideoAdError.presenterUnavailable {}
+        #expect(ad.isReady && delegate.events.isEmpty, "nothing spent while nobody can see it")
         Environment.isApplicationActive = { true }
-        NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)
+        try ad.show(in: harness.player.view)
         #expect(await waitUntil(5) { delegate.endReasons == [.completed] })
     }
 

@@ -106,6 +106,54 @@ struct VideoAdPlacementTests {
         }
     }
 
+    @Test func showRefusesWhileTheAppOrTheViewsSceneIsNotInFront() async throws {
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        window.add(player)
+        let (pause, _, _) = try await makeAd(Fixtures.ad(id: "p-front"))
+        let (linear, _, _) = try await makeAd(Fixtures.linearAd(id: "v-front"))
+        let delegate = RecordingDelegate()
+        pause.delegate = delegate
+        linear.delegate = delegate
+        Environment.keyWindow = { self.window.window }
+        let attempts: [(String, () throws -> Void)] = [
+            ("show(in:)", { try pause.show(in: player) }),
+            ("show(from:)", { try linear.show(from: self.window.root) }),
+            ("show()", { try linear.show() }),
+        ]
+        // The app in the background or inactive (PiP only, background audio, the lock screen), then the app
+        // active but the window's own scene not (Control Center pulled over it, an iPad scene behind).
+        let states: [(String, () -> Void)] = [
+            ("app not active", { Environment.isApplicationActive = { false } }),
+            ("scene not active", {
+                Environment.isApplicationActive = { true }
+                Environment.isWindowActive = { _ in false }
+            }),
+        ]
+        for (state, apply) in states {
+            apply()
+            for (call, show) in attempts {
+                do {
+                    try show()
+                    Issue.record("\(state), \(call): expected presenterUnavailable")
+                } catch VideoAdError.presenterUnavailable {
+                } catch {
+                    Issue.record("\(state), \(call): expected presenterUnavailable, got \(error)")
+                }
+            }
+        }
+        #expect(pause.isReady && linear.isReady && !pause.wasShown && !linear.wasShown, "nothing spent: both stay ready")
+        #expect(KontextVideo.shared.adOnScreen == nil && player.subviews.isEmpty && window.root.presentedViewController == nil)
+        #expect(delegate.events.isEmpty)
+        await sleepMs(100)
+        let fired = harness.server.beacons.filter { ["p-front", "v-front"].contains($0.adId) }.map(\.event)
+        #expect(!fired.contains("impression") && !fired.contains("creativeView"), "no impression for an ad nobody sees")
+        // Back in front: the same ad shows.
+        Environment.isWindowActive = { _ in true }
+        try pause.show(in: player)
+        #expect(pause.wasShown)
+        try pause.dismiss()
+    }
+
     @Test func aShownAdFollowsTheViewWhenItResizesAndEndsWhenItNoLongerFits() async throws {
         let wide: [String: Any] = ["width": 728, "height": 90, "scalable": true, "maintainAspectRatio": true]
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o2r", format: "overlay", position: "bottom", size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], moreSizes: [wide], duration: 6000))
