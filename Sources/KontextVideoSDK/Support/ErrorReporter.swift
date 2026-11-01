@@ -65,6 +65,12 @@ final class ErrorReporter {
             domain = ErrorReporter.capped(error.domain)
             code = error.code
         }
+
+        /// A page answered with an error status: domain `http`, the status as the code, as the Kotlin SDK sends it.
+        init(httpStatus: Int) {
+            domain = "http"
+            code = httpStatus
+        }
     }
 
     struct Report: Encodable, Sendable {

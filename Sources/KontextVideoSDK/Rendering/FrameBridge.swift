@@ -490,8 +490,22 @@ extension FrameBridge: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
-        // No downloads: only what the WebView can render itself.
-        decisionHandler(navigationResponse.canShowMIMEType ? .allow : .cancel)
+        decisionHandler(responseDecision(navigationResponse.response, isMainFrame: navigationResponse.isForMainFrame,
+                                         canShowMIMEType: navigationResponse.canShowMIMEType))
+    }
+
+    /// What a response may do, over plain values so the tests can pass a status (a custom scheme reaches
+    /// WebKit's policy without one). The page itself answered with an error status (a 410 after `expires`, a
+    /// 404, a 5xx): the load fails now, as a page that could not load, not after the load timeout over an
+    /// error page. No downloads: only what the WebView can render itself.
+    func responseDecision(_ response: URLResponse, isMainFrame: Bool, canShowMIMEType: Bool) -> WKNavigationResponsePolicy {
+        if isMainFrame, state == .loading, let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
+            Logger.warning("frame \(adId.prefix(8)): page answered \(status)")
+            failureUnderlying = ErrorReporter.Underlying(httpStatus: status)
+            fail(.error(code: loadErrorCode), cause: .loadFailed)
+            return .cancel
+        }
+        return canShowMIMEType ? .allow : .cancel
     }
 
     /// A new document starting in the main frame after the page was ready: one the policy above let through

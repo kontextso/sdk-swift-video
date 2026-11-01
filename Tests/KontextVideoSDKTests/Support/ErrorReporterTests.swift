@@ -2,6 +2,7 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 import UIKit
+import WebKit
 
 /// Error reports: off until `/config` turns them on, every fault coded once at its source, the body carrying
 /// ids and never personal data, and bounded delivery (retry unchanged, `410` stops, other `4xx` drops).
@@ -355,6 +356,41 @@ struct ErrorReporterTests {
         #expect(await waitUntil { !self.reports("frame.load_failed").isEmpty })
         let underlying = reports("frame.load_failed").first?["underlying"] as? [String: Any]
         #expect(underlying?["domain"] as? String == NSURLErrorDomain && underlying?["code"] as? Int == URLError.cannotFindHost.rawValue)
+    }
+
+    private func response(_ status: Int) -> HTTPURLResponse {
+        HTTPURLResponse(url: URL(string: "https://ads.test/frame/p")!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/html"])!
+    }
+
+    @Test func aPageAnsweredWithAnErrorStatusFailsTheLoadAtOnce() async throws {
+        await enableReports()
+        FramePageServer().install()   // a page that loads and never reports ready: only the status can fail it
+        let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
+        for status in [404, 410] {
+            let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "dead-st\(status)")), owner: ads)
+            let load = Task { try await ad.load() }
+            #expect(await waitUntil { ad.loadedBridge != nil })
+            let bridge = try #require(ad.loadedBridge)
+            #expect(bridge.responseDecision(response(status), isMainFrame: false, canShowMIMEType: true) == .allow,
+                    "an iframe's error status is the creative's business")
+            #expect(bridge.responseDecision(response(status), isMainFrame: true, canShowMIMEType: true) == .cancel)
+            do {
+                try await load.value
+                Issue.record("\(status): expected creativeFailed")
+            } catch VideoAdError.creativeFailed(let code) {
+                #expect(code == 500, "the load error code of an image")
+            }
+            #expect(ad.invalidationReason == .creativeFailed(code: 500))
+        }
+        #expect(await waitUntil { self.reports("frame.load_failed").count == 2 })
+        let underlying = reports("frame.load_failed").compactMap { $0["underlying"] as? [String: Any] }
+        #expect(underlying.map { $0["domain"] as? String } == ["http", "http"] && underlying.map { $0["code"] as? Int } == [404, 410])
+        #expect(reports("frame.load_failed").allSatisfy { $0["vastCode"] as? Int == 500 } && reports("ad.load_timeout").isEmpty)
+        // A success status still renders.
+        let ok = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "dead-st200")), owner: ads)
+        ok.bridge.load()
+        #expect(ok.bridge.responseDecision(response(200), isMainFrame: true, canShowMIMEType: true) == .allow && ok.bridge.state == .loading)
+        #expect(ok.bridge.responseDecision(response(200), isMainFrame: true, canShowMIMEType: false) == .cancel, "no downloads")
     }
 
     // MARK: Integration mistakes
