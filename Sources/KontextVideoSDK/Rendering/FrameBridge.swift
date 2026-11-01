@@ -392,17 +392,19 @@ final class FrameBridge: NSObject {
     /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
     /// the same origin or a reload of itself, is refused, or the creative and its close control would vanish
     /// under an ad still shown. A navigation stays within the document, as browsers decide it, when the
-    /// target carries a fragment and differs from the current URL in nothing else; a reload, or the current
-    /// URL without a fragment, loads a new document. A subframe (the creative's own iframe) navigates freely.
+    /// target carries a fragment and differs from the current URL in nothing else; a reload, a form submission
+    /// or any request that is not a GET (`isSubmission`, whatever its fragment), or the current URL without a
+    /// fragment, loads a new document. A subframe (the creative's own iframe) navigates freely.
     enum NavigationDecision: Equatable {
         case allow, cancel, external
     }
 
-    func navigationDecision(to target: URL, isMainFrame: Bool, isReload: Bool = false, current: URL?) -> NavigationDecision {
+    func navigationDecision(to target: URL, isMainFrame: Bool, isReload: Bool = false, isSubmission: Bool = false,
+                            current: URL?) -> NavigationDecision {
         guard isMainFrame else { return .allow }
         let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
         if state == .loading { return ours ? .allow : .external }
-        if let current, !isReload, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
+        if let current, !isReload, !isSubmission, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
         return ours ? .cancel : .external
     }
 
@@ -469,8 +471,11 @@ extension FrameBridge: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
+        let type = navigationAction.navigationType
+        let isSubmission = type == .formSubmitted || type == .formResubmitted
+            || (navigationAction.request.httpMethod ?? "GET").uppercased() != "GET"
         switch navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false,
-                                    isReload: navigationAction.navigationType == .reload, current: webView.url) {
+                                    isReload: type == .reload, isSubmission: isSubmission, current: webView.url) {
         case .allow:
             decisionHandler(.allow)
         case .cancel:
@@ -485,6 +490,24 @@ extension FrameBridge: WKNavigationDelegate {
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
         // No downloads: only what the WebView can render itself.
         decisionHandler(navigationResponse.canShowMIMEType ? .allow : .cancel)
+    }
+
+    /// A new document starting in the main frame after the page was ready: one the policy above let through
+    /// would replace the creative and its close control under an ad still shown. The backstop ends the ad; a
+    /// navigation within the document (a fragment) never starts one.
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        pageReplaced()
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        pageReplaced()
+    }
+
+    private func pageReplaced() {
+        guard state == .loaded || state == .shown else { return }
+        Logger.warning("frame \(adId.prefix(8)): the page replaced itself after it was ready; the ad ends")
+        webView.stopLoading()
+        fail(.error(code: state == .shown ? 405 : loadErrorCode), cause: .page)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

@@ -500,10 +500,32 @@ struct FrameBridgeTests {
         let anchored = URL(string: "https://server.kontext.so/frame/ad-1#endcard")!
         #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, isReload: true, current: anchored) == .cancel, "a reload, even with a fragment")
         #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, current: anchored) == .allow, "the same fragment again stays within the document")
+        let submitted = URL(string: "https://server.kontext.so/frame/ad-1#submitted")!
+        #expect(bridge.navigationDecision(to: submitted, isMainFrame: true, isSubmission: true, current: page) == .cancel,
+                "a form POST to the current URL and a fragment loads a new document")
+        #expect(bridge.navigationDecision(to: URL(string: "https://brand.test/#x")!, isMainFrame: true, isSubmission: true, current: page) == .external)
         #expect(decide("https://server.kontext.so/frame/other", true) == .cancel, "a same-origin page would replace the creative")
         #expect(decide("about:blank", true) == .cancel, "and so would a blank page")
         #expect(decide("https://brand.test/", true) == .external)
         #expect(decide("https://anything.test/creative", false) == .allow, "the creative's own iframe navigates freely")
+    }
+
+    @Test func aNewDocumentAfterThePageWasReadyEndsTheAd() {
+        let (loading, loadingEvents) = makeBridge()
+        loading.load()
+        loading.webView(loading.webView, didStartProvisionalNavigation: nil)
+        loading.webView(loading.webView, didCommit: nil)
+        #expect(loading.state == .loading && loadingEvents.events.isEmpty, "the page's own load and redirects")
+        let (shownBridge, shownEvents) = makeBridge()
+        shown(shownBridge)
+        shownBridge.webView(shownBridge.webView, didStartProvisionalNavigation: nil)
+        guard case .error(let code)? = shownEvents.last else { Issue.record("expected an error"); return }
+        #expect(code == 405 && shownBridge.state == .ended && shownBridge.failureCause == .page)
+        let (loaded, loadedEvents) = makeBridge(isVideo: true)
+        loaded.receive(message("ad.loaded"), from: main)
+        loaded.webView(loaded.webView, didCommit: nil)
+        guard case .error(let early)? = loadedEvents.last else { Issue.record("expected an error"); return }
+        #expect(early == 400 && loaded.state == .ended, "ready, not yet shown: the load error code")
     }
 
     @Test func aParkedBridgeReleasedWithoutAnEndLeavesNothingInTheWindow() {

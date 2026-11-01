@@ -144,6 +144,15 @@ struct IntegrationTests {
         #expect(await marker() == "kept", "so is loading the current URL again")
         #expect(ad.bridge.webView.url == page)
 
+        // A form POST to the current URL and a fragment looks like a move within the document, but loads a new one.
+        await inPage(ad, """
+            const form = document.createElement('form'); form.method = 'POST';
+            form.action = location.href.split('#')[0] + '#submitted'; document.body.appendChild(form); form.submit()
+            """)
+        await sleepMs(300)
+        #expect(await marker() == "kept", "a form submission is refused")
+        #expect(ad.wasShown && !ad.hasEnded)
+
         await inPage(ad, "location.hash = 'endcard'")
         #expect(await waitUntil { ad.bridge.webView.url?.fragment == "endcard" }, "a fragment change goes through")
         #expect(await marker() == "kept", "within the same document")
