@@ -451,11 +451,22 @@ struct FrameBridgeTests {
         #expect(recorder.events.count == before + 1, "a touch within the window still does")
     }
 
+    @Test func aFractionalOffsetOrPlayheadIsRoundedToTheNearestMillisecond() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        bridge.receive(message("video.progress", ["offset": 4957.59, "playhead": 5010.4]), from: main)
+        guard case .progress(let offset, let playhead)? = recorder.last else { Issue.record("expected progress"); return }
+        #expect(offset == 4958 && playhead == 5010)
+        bridge.receive(message("video.skip", ["playhead": 1234.5]), from: main)
+        guard case .skip(let skipped)? = recorder.last else { Issue.record("expected skip"); return }
+        #expect(skipped == 1235)
+    }
+
     @Test func aMalformedProgressOffsetIsDropped() {
         let (bridge, recorder) = makeBridge(isVideo: true)
         shown(bridge)
         let before = recorder.events.count
-        for offset in [1e300, -5, 2.5, Double.infinity, 86_400_001] as [Double] {
+        for offset in [1e300, -5, Double.infinity, 86_400_001] as [Double] {
             bridge.receive(message("video.progress", ["offset": offset, "playhead": 0]), from: main)
         }
         bridge.receive(message("video.progress", ["offset": "5000", "playhead": 0]), from: main)

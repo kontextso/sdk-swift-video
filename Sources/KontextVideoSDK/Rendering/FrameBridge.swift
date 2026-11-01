@@ -275,8 +275,10 @@ final class FrameBridge: NSObject {
             return
         }
         Logger.debug("frame \(adId.prefix(8)): ← \(type)")
-        // Milliseconds into the ad video, clamped to a day: a page value near `Int.max` must not reach arithmetic.
-        let playhead = min(max(0, (body["playhead"] as? NSNumber)?.intValue ?? 0), 86_400_000)
+        // Milliseconds into the ad video, a fraction rounded (a page reads `currentTime * 1000`), clamped to a
+        // day: a page value near `Int.max` must not reach arithmetic.
+        let rawPlayhead = (body["playhead"] as? NSNumber)?.doubleValue ?? 0
+        let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), 86_400_000).rounded()) : 0
 
         switch type {
         case "ad.loaded":
@@ -313,13 +315,14 @@ final class FrameBridge: NSObject {
             onEvent?(.complete(playhead: playhead))
         case "video.progress":
             guard state == .shown else { return }
-            // A checkpoint in whole milliseconds within a day; anything else would fire every checkpoint early.
-            guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, raw == raw.rounded(), (0...86_400_000).contains(raw) else {
+            // A checkpoint in milliseconds within a day, a fraction rounded to the nearest; anything else would
+            // fire every checkpoint early.
+            guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, (0...86_400_000).contains(raw) else {
                 Logger.debug("frame \(adId.prefix(8)): video.progress with a malformed offset dropped")
                 reportProtocolViolation("progress.offset")
                 return
             }
-            onEvent?(.progress(offset: Int(raw), playhead: playhead))
+            onEvent?(.progress(offset: Int(raw.rounded()), playhead: playhead))
         case let type where type.hasPrefix("video."):
             guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))) else { return }
             onEvent?(.video(event, playhead: playhead))

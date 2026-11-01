@@ -269,6 +269,44 @@ struct DecodingTests {
         #expect(distinct.result(for: .pause)?.ads.map(\.id) == ["other"])
     }
 
+    @Test func millisecondsMayBeFractionalAndAreRoundedToTheNearest() throws {
+        var linear = Fixtures.linearAd(id: "l-frac")
+        linear["expires"] = 30_000.4
+        linear["duration"] = 15_023.5
+        linear["skipOffset"] = 5000.2
+        linear["trigger"] = ["kind": "window", "from": 1000.5, "to": 2000.4]
+        linear["tracking"] = [
+            ["event": "progress", "url": "https://ads.test/p33", "offset": 4957.59],   // 33 % of 15 023 ms
+            ["event": "progress", "url": "https://ads.test/p-neg", "offset": -1],
+            ["event": "progress", "url": "https://ads.test/p-huge", "offset": 1e300],
+            ["event": "progress", "url": "https://ads.test/p5", "offset": 5000],
+            ["event": "start", "url": "https://ads.test/start"],
+        ]
+        let payload = try Fixtures.payload(linear)
+        #expect(payload.expires == 30_000 && payload.details == .linear(duration: 15_024, skipOffset: 5000))
+        #expect(payload.trigger == .window(from: 1001, to: 2000))
+        #expect(payload.tracking.map(\.url) == ["https://ads.test/p33", "https://ads.test/p5", "https://ads.test/start"],
+                "a negative or huge offset drops its entry, not the ad")
+        #expect(payload.tracking.map(\.offset) == [4958, 5000, nil])
+        var overlay = Fixtures.overlayAd(id: "o-frac")
+        overlay["duration"] = 2999.5
+        guard case .overlay(_, _, let duration) = try Fixtures.payload(overlay).details else { Issue.record("expected overlay"); return }
+        #expect(duration == 3000)
+        // Whole answers too: the response that failed on a fractional offset now decodes.
+        let response = try decode(AdsResponse.self, Fixtures.adsResponse(linear))
+        #expect(response.result(for: .linear)?.ads.map(\.id) == ["l-frac"])
+        // Still refused: a string, an entry broken otherwise, a non-finite or out-of-range duration.
+        var stringOffset = Fixtures.linearAd(id: "l-str")
+        stringOffset["tracking"] = [["event": "progress", "url": "https://ads.test/p", "offset": "5000"]]
+        var noURL = Fixtures.linearAd(id: "l-nourl")
+        noURL["tracking"] = [["event": "progress", "offset": 5000]]
+        var huge = Fixtures.linearAd(id: "l-huge")
+        huge["duration"] = 1e300
+        for ad in [stringOffset, noURL, huge] {
+            #expect(throws: DecodingError.self) { try Fixtures.payload(ad) }
+        }
+    }
+
     @Test func clearlyBrokenAdsAreRefused() throws {
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(id: "")) }
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(expires: 0)) }

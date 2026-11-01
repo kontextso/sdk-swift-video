@@ -71,10 +71,62 @@ struct AdPayload: Decodable, Sendable {
         /// A VAST event name: `impression`, `creativeView`, `start`, `complete`, `close`, ... The SDK ignores names it does not know.
         let event: String
         let url: String
-        /// `progress` only: milliseconds into the ad video at which to fire.
+        /// `progress` only: milliseconds into the ad video at which to fire. The wire's `number`: the server
+        /// converts a VAST percent (33 % of 15 023 ms is 4957.59), so it is rounded to the nearest millisecond.
         let offset: Int?
         /// `endCard` for the linear ad's end card; `nil` for the main creative.
         let part: String?
+
+        init(event: String, url: String, offset: Int?, part: String?) {
+            self.event = event
+            self.url = url
+            self.offset = offset
+            self.part = part
+        }
+
+        private enum CodingKeys: String, CodingKey { case event, url, offset, part }
+
+        /// An offset that is negative or out of range: this entry cannot fire at a meaningful moment.
+        struct InvalidOffset: Error {}
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            event = try container.decode(String.self, forKey: .event)
+            url = try container.decode(String.self, forKey: .url)
+            part = try container.decodeIfPresent(String.self, forKey: .part)
+            if let raw = try container.decodeIfPresent(Double.self, forKey: .offset) {
+                guard raw >= 0, let offset = AdPayload.milliseconds(raw) else { throw InvalidOffset() }
+                self.offset = offset
+            } else {
+                offset = nil
+            }
+        }
+    }
+
+    /// `tracking`: an entry whose offset is unusable is dropped, the rest of the ad stays; any other broken
+    /// entry still fails the ad.
+    private struct TrackingEntry: Decodable {
+        let event: TrackingEvent?
+
+        init(from decoder: Decoder) throws {
+            do {
+                event = try TrackingEvent(from: decoder)
+            } catch is TrackingEvent.InvalidOffset {
+                event = nil
+            }
+        }
+    }
+
+    /// The largest count of milliseconds taken: ten years, the content playhead's cap. Beyond it a value is
+    /// nonsense, and near `Int.max` it would trap the conversion.
+    static let maxMilliseconds: Double = 315_360_000_000
+
+    /// A wire `number` of milliseconds as whole ones, rounded to the nearest: the contract types durations
+    /// and offsets as numbers, and a server converting from VAST or percent sends fractions. `nil` when not
+    /// finite or beyond `maxMilliseconds` either way.
+    static func milliseconds(_ value: Double) -> Int? {
+        guard value.isFinite, abs(value) <= maxMilliseconds else { return nil }
+        return Int(value.rounded())
     }
 
     /// The nominal box the creative was built for, in points; the VAST NonLinear attributes. Both sides
@@ -117,8 +169,17 @@ struct AdPayload: Decodable, Sendable {
     /// An optional count of milliseconds, refused when negative (a negative overlay duration would end the
     /// overlay the moment it shows).
     private static func nonNegative(_ key: CodingKeys, in container: KeyedDecodingContainer<CodingKeys>) throws -> Int? {
-        let value = try container.decodeIfPresent(Int.self, forKey: key)
-        if let value, value < 0 { throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) must not be negative") }
+        guard container.contains(key), try !container.decodeNil(forKey: key) else { return nil }
+        let value = try milliseconds(key, in: container)
+        if value < 0 { throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) must not be negative") }
+        return value
+    }
+
+    /// A required count of milliseconds, a fraction rounded (`milliseconds(_:)`).
+    private static func milliseconds<Key: CodingKey>(_ key: Key, in container: KeyedDecodingContainer<Key>) throws -> Int {
+        guard let value = milliseconds(try container.decode(Double.self, forKey: key)) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) is not a usable count of milliseconds")
+        }
         return value
     }
 
@@ -188,10 +249,10 @@ struct AdPayload: Decodable, Sendable {
         format = try container.decode(AdFormat.self, forKey: .format)
         creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)
-        expires = try container.decode(Int.self, forKey: .expires)
+        expires = try Self.milliseconds(.expires, in: container)
         // An ad that is expired on arrival is not an ad the server meant to give.
         guard expires > 0 else { throw DecodingError.dataCorruptedError(forKey: .expires, in: container, debugDescription: "expires must be positive") }
-        tracking = try container.decode([TrackingEvent].self, forKey: .tracking)
+        tracking = try container.decode([TrackingEntry].self, forKey: .tracking).compactMap(\.event)
         attribution = try? container.decodeIfPresent(Attribution.self, forKey: .attribution)   // best effort: never fails the ad
 
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
@@ -199,7 +260,7 @@ struct AdPayload: Decodable, Sendable {
         case "manual":
             self.trigger = .manual
         case "window":
-            self.trigger = .window(from: try trigger.decode(Int.self, forKey: .from), to: try trigger.decode(Int.self, forKey: .to))
+            self.trigger = .window(from: try Self.milliseconds(.from, in: trigger), to: try Self.milliseconds(.to, in: trigger))
         case let kind:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: trigger, debugDescription: "unknown trigger kind \(kind)")
         }
@@ -232,7 +293,7 @@ struct AdPayload: Decodable, Sendable {
             details = .pause(position: position, sizes: position == .fullscreen ? [] : try Self.sizes(from: container))
         case .linear:
             details = .linear(
-                duration: try container.decode(Int.self, forKey: .duration),
+                duration: try Self.milliseconds(.duration, in: container),
                 skipOffset: try Self.nonNegative(.skipOffset, in: container)
             )
         }
