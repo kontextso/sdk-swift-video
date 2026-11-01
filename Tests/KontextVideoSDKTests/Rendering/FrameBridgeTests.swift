@@ -311,6 +311,8 @@ struct FrameBridgeTests {
     }
 
     @Test func systemSchemesThatActWithoutAPageAreRefused() {
+        // A fixed clock: every touch below is fresh however slow the runner (a CI run took 5.5 s for the loop).
+        Environment.now = { 1000 }
         let (bridge, recorder) = makeBridge()
         shown(bridge)
         let refused = ["tel:+15555550100", "telprompt:+15555550100", "sms:+15555550100&body=hi", "mms:+15555550100",
