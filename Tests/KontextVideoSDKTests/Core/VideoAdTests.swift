@@ -808,8 +808,9 @@ struct VideoAdTests {
         await sleepMs(150)
         #expect(!(await beacons()).contains("viewable"), "paused: the clock does not run")
         send(ad, "video.resume", ["playhead": 500])
-        // Two seconds of the video played while exposed; a slow runner's ticks come late, so wait, not sleep.
-        #expect(await waitUntil(5) { harness.server.beacons.contains { $0.event == "viewable" } })
+        // Two seconds of the video played while exposed; a slow runner's ticks come late (it takes 4-5 s locally),
+        // so wait with room, not sleep.
+        #expect(await waitUntil(15) { harness.server.beacons.contains { $0.event == "viewable" } })
         try ad.dismiss()
     }
 
