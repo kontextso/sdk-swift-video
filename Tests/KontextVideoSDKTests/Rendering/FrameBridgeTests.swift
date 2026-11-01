@@ -293,6 +293,56 @@ struct FrameBridgeTests {
         #expect(area == .creative)
     }
 
+    @Test func theHostAppsOwnSchemesAreRefused() {
+        Environment.hostAppSchemes = { ["hostapp", "fb12345"] }
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        for raw in ["hostapp://wallet/buy?coins=9999", "HostApp://settings", "fb12345://authorize"] {
+            bridge.noteTouch()
+            bridge.receive(message("ad.click", ["url": raw]), from: main)
+            bridge.receive(message("ad.open", ["url": raw, "purpose": "adChoices"]), from: main)
+            bridge.externalNavigation(to: URL(string: raw)!)
+        }
+        #expect(recorder.events.count == 1, "a creative never drives the publisher's own app: \(recorder.events)")
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "brandapp://product/1"]), from: main)
+        guard case .click(let url, _, _) = recorder.last else { Issue.record("expected click"); return }
+        #expect(url.scheme == "brandapp", "an advertiser's deep link still opens")
+    }
+
+    @Test func systemSchemesThatActWithoutAPageAreRefused() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        let refused = ["tel:+15555550100", "telprompt:+15555550100", "sms:+15555550100&body=hi", "mms:+15555550100",
+                       "facetime:+15555550100", "facetime-audio:+15555550100",
+                       "itms-services://?action=download-manifest&url=https://evil.test/app.plist",
+                       "shortcuts://run-shortcut?name=x", "app-settings:", "prefs:root=General", "App-Prefs:root=General"]
+        for raw in refused {
+            bridge.noteTouch()
+            bridge.receive(message("ad.click", ["url": raw]), from: main)
+            bridge.receive(message("ad.open", ["url": raw, "purpose": "adChoices"]), from: main)
+            bridge.externalNavigation(to: URL(string: raw)!)
+            bridge.receive(message("ad.click", ["url": "https://brand.test", "fallbackUrl": raw]), from: main)
+            guard case .click(let url, let fallback, _) = recorder.last else { Issue.record("expected the web click for \(raw)"); continue }
+            #expect(url.scheme == "https", "\(raw) opened nothing, the touch was left for the web click")
+            #expect(fallback == nil, "\(raw) refused as a fallback")
+        }
+        #expect(recorder.events.count == 1 + refused.count, "only the web clicks: \(recorder.events)")
+    }
+
+    @Test func aRefusedURLWithAnAllowedFallbackOpensTheFallback() {
+        Environment.hostAppSchemes = { ["hostapp"] }
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "hostapp://wallet", "fallbackUrl": "http://brand.test/offer"]), from: main)
+        guard case .click(let url, let fallback, _) = recorder.last else { Issue.record("expected click"); return }
+        #expect(url.absoluteString == "http://brand.test/offer" && fallback == nil)
+        bridge.noteTouch()
+        bridge.receive(message("ad.click", ["url": "tel:+15555550100", "fallbackUrl": "sms:+15555550100"]), from: main)
+        #expect(recorder.events.count == 2, "both refused: nothing opens")
+    }
+
     @Test func intentSchemeIsRefused() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)

@@ -476,6 +476,20 @@ struct VideoAdTests {
         #expect(opened == ["brandapp://offer", "https://brand.test/offer"])
     }
 
+    @Test func aClickIntoTheHostAppOpensItsWebFallbackInstead() async throws {
+        Environment.hostAppSchemes = { ["hostapp"] }
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p15b"))
+        var opened: [String] = []
+        Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(true) }
+        try ad.show(in: harness.player.view)
+        ad.bridge.noteTouch()
+        send(ad, "ad.click", ["url": "hostapp://wallet/buy", "fallbackUrl": "https://brand.test/offer"])
+        #expect(opened == ["https://brand.test/offer"], "the publisher's own app is never opened")
+        #expect(delegate.clicks.count == 1)
+        let fired = await beacons()
+        #expect(fired.contains("click"))
+    }
+
     @Test func adChoicesOpensWithoutAClickAndFiresIconClick() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16"))
         var opened: [URL] = []

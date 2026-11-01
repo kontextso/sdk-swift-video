@@ -20,9 +20,17 @@ final class FrameBridge: NSObject {
     static var loadTimeout: TimeInterval = 10
     /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1
-    /// Web, store and app deep links all open; `intent:` can start any Android component, and the rest are
-    /// not links to anywhere. iOS refuses the latter itself; the SDK's policy says so.
-    static let refusedSchemes: Set<String> = ["intent", "javascript", "data", "file", "blob", "about"]
+    /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
+    /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
+    /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
+    /// `itms-services:`, a shortcut, the Settings app), or are not links to anywhere (`intent:` is Android's,
+    /// the rest load in place). Web, App Store and advertiser app deep links open; the host app's own schemes
+    /// are refused as well (`isAllowed`).
+    static let refusedSchemes: Set<String> = [
+        "tel", "telprompt", "sms", "mms", "facetime", "facetime-audio", "itms-services", "shortcuts",
+        "app-settings", "prefs", "app-prefs", "x-apple-reminderkit", "x-apple-health",
+        "intent", "javascript", "data", "file", "blob", "about",
+    ]
 
     /// Why the bridge failed: several causes fire the same VAST code, and the error report keeps them apart.
     enum FailureCause: Sendable {
@@ -278,7 +286,8 @@ final class FrameBridge: NSObject {
             onEvent?(.loaded)
         case "ad.click", "ad.open":
             guard state == .shown, let raw = body["url"] as? String, let url = Self.url(raw) else { return }
-            guard Self.isAllowed(url) else {
+            let fallback = type == "ad.click" ? (body["fallbackUrl"] as? String).flatMap(Self.url) : nil
+            guard let target = Self.target(url, fallback: fallback) else {
                 Logger.warning("frame \(adId.prefix(8)): \(type) to \(Logger.describe(url)) dropped, scheme refused")
                 return
             }
@@ -287,9 +296,7 @@ final class FrameBridge: NSObject {
                 return
             }
             if type == "ad.click" {
-                // The fallback is opened under the same policy; a refused one is dropped, the click stays.
-                let fallback = (body["fallbackUrl"] as? String).flatMap(Self.url).flatMap { Self.isAllowed($0) ? $0 : nil }
-                onEvent?(.click(url: url, fallbackUrl: fallback, area: VideoAd.Click.Area(body["area"] as? String)))
+                onEvent?(.click(url: target.url, fallbackUrl: target.fallback, area: VideoAd.Click.Area(body["area"] as? String)))
             } else {
                 onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
             }
@@ -337,10 +344,20 @@ final class FrameBridge: NSObject {
         return true
     }
 
-    /// A URL the page may have opened: anything but the refused schemes.
+    /// A URL the page may have opened: anything but the refused schemes and the host app's own. A link into
+    /// the host app would let an advertiser drive the publisher's own screens (a purchase flow, its settings).
     static func isAllowed(_ target: URL) -> Bool {
         guard let scheme = target.scheme?.lowercased() else { return false }
-        return !refusedSchemes.contains(scheme)
+        return !refusedSchemes.contains(scheme) && !Environment.hostAppSchemes().contains(scheme)
+    }
+
+    /// What a click or open goes to under `isAllowed`, `nil` when nothing may open. The fallback is held to the
+    /// same policy: a refused one is dropped and the URL stays; a refused URL with an allowed fallback opens
+    /// the fallback instead.
+    static func target(_ url: URL, fallback: URL?) -> (url: URL, fallback: URL?)? {
+        let fallback = fallback.flatMap { isAllowed($0) ? $0 : nil }
+        if isAllowed(url) { return (url, fallback) }
+        return fallback.map { ($0, nil) }
     }
 
     /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
