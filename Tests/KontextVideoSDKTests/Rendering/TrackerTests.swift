@@ -27,6 +27,42 @@ struct TrackerTests {
         return server.beacons
     }
 
+    @Test func aBeaconNeverDownloadsTheBodyOfItsResponse() async throws {
+        server.on("/big/", .streamed(6 * 1024 * 1024))
+        server.on("/chunked/", .streamed(6 * 1024 * 1024, chunked: true))
+        let tracker = Tracker(adId: "ad-1", entries: [
+            AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/big/impression", offset: nil, part: nil),
+            AdPayload.TrackingEvent(event: "creativeView", url: "https://ads.test/chunked/creativeView", offset: nil, part: nil),
+        ])
+        tracker.fire("impression")
+        tracker.fire("creativeView")
+        #expect(await waitUntil(StubServer.streamGrace * 3) { self.server.streams.count == 2 })
+        for stream in server.streams {
+            #expect(stream.cancelled && stream.delivered == 0, "\(stream.path): cancelled at the head, \(stream.delivered) body bytes sent")
+        }
+        #expect(server.requests(to: "/big/").count == 1 && server.requests(to: "/chunked/").count == 1, "both beacons arrived")
+    }
+
+    @Test func aBeaconsErrorStatusIsStillLogged() async throws {
+        server.on("/events/ad-1/impression", .empty(500))
+        let previous = Logger.level
+        defer { Logger.level = previous }
+        Logger.level = .warning
+        let lines = Lines()
+        Logger.sink = { level, message in if level == .warning { lines.append(message) } }
+        let tracker = try makeTracker()
+        tracker.fire("impression")
+        #expect(await waitUntil(5) { lines.all.contains { $0.contains("impression beacon answered 500") } })
+    }
+
+    /// Log lines collected from URLSession's queue.
+    final class Lines: @unchecked Sendable {
+        private let lock = NSLock()
+        private var lines: [String] = []
+        var all: [String] { lock.withLock { lines } }
+        func append(_ line: String) { lock.withLock { lines.append(line) } }
+    }
+
     @Test func firesEachEntryOnce() async throws {
         let tracker = try makeTracker()
         tracker.fire("impression")

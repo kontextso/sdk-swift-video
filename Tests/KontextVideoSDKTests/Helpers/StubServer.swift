@@ -15,6 +15,19 @@ final class StubServer: @unchecked Sendable {
         var delay: TimeInterval = 0
         /// Held until the test opens it: for races, instead of guessing a delay. The request is recorded at once.
         var gate: Gate?
+        /// A body of this many bytes, sent in 64 KiB pieces after the head, as a large download arrives: with
+        /// a `Content-Length`, or chunked (no length) when `chunked`. The head goes first; the body only if the
+        /// client has not cancelled within `streamGrace` seconds. What was delivered lands in `streams`.
+        var streamedBytes: Int?
+        var chunked = false
+
+        /// `streamedBytes` of zeros.
+        static func streamed(_ bytes: Int, chunked: Bool = false) -> Response {
+            var response = Response(status: 200)
+            response.streamedBytes = bytes
+            response.chunked = chunked
+            return response
+        }
 
         static func json(_ object: Any, status: Int = 200) -> Response {
             Response(status: status, body: try! JSONSerialization.data(withJSONObject: object))
@@ -61,6 +74,28 @@ final class StubServer: @unchecked Sendable {
         var query: [String: String] {
             Dictionary(uniqueKeysWithValues: (URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
         }
+    }
+
+    /// One streamed response: the path, the body bytes delivered, and whether the client cancelled first.
+    struct Stream: Sendable {
+        let path: String
+        let delivered: Int
+        let cancelled: Bool
+    }
+
+    /// How long a streamed response waits for the client to cancel before it sends the body.
+    static let streamGrace: TimeInterval = 5
+
+    private var recordedStreams: [Stream] = []
+
+    var streams: [Stream] {
+        lock.lock(); defer { lock.unlock() }
+        return recordedStreams
+    }
+
+    fileprivate func record(_ stream: Stream) {
+        lock.lock(); defer { lock.unlock() }
+        recordedStreams.append(stream)
     }
 
     private let lock = NSLock()
@@ -182,6 +217,9 @@ final class StubProtocol: URLProtocol {
             return
         }
         let response = server.handle(request)
+        if let size = response.streamedBytes {
+            return stream(size, chunked: response.chunked, to: server)
+        }
         let deliver = { [self] in
             if let error = response.error {
                 client?.urlProtocol(self, didFailWithError: error)
@@ -201,5 +239,39 @@ final class StubProtocol: URLProtocol {
         }
     }
 
-    override func stopLoading() {}
+    private let stopped = DispatchSemaphore(value: 0)
+    private let stateLock = NSLock()
+    private var isStopped = false
+
+    override func stopLoading() {
+        stateLock.withLock { isStopped = true }
+        stopped.signal()
+    }
+
+    /// The head, then, unless the client cancelled within the grace period, the body piece by piece, stopping
+    /// as soon as the client does.
+    private func stream(_ size: Int, chunked: Bool, to server: StubServer) {
+        let path = request.url?.path ?? ""
+        var headers = ["Content-Type": "application/octet-stream"]
+        if chunked { headers["Transfer-Encoding"] = "chunked" } else { headers["Content-Length"] = String(size) }
+        let http = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
+        client?.urlProtocol(self, didReceive: http, cacheStoragePolicy: .notAllowed)
+        DispatchQueue.global().async { [self] in
+            if stopped.wait(timeout: .now() + StubServer.streamGrace) == .success {
+                return server.record(.init(path: path, delivered: 0, cancelled: true))
+            }
+            let piece = Data(count: 64 * 1024)
+            var delivered = 0
+            while delivered < size {
+                if stateLock.withLock({ isStopped }) {
+                    return server.record(.init(path: path, delivered: delivered, cancelled: true))
+                }
+                let next = piece.prefix(min(piece.count, size - delivered))
+                client?.urlProtocol(self, didLoad: next)
+                delivered += next.count
+            }
+            client?.urlProtocolDidFinishLoading(self)
+            server.record(.init(path: path, delivered: delivered, cancelled: false))
+        }
+    }
 }
