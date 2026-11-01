@@ -964,6 +964,42 @@ struct VideoAdTests {
         #expect(!fired.contains("close") && !fired.contains("overlayViewDuration"), "no VAST event for an app abort")
     }
 
+    /// A root that records the dismissals asked of it and completes them at once, as UIKit would once the
+    /// transition finished; the runner never finishes one.
+    final class DismissSpy: UIViewController {
+        var dismissals = 0
+        override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+            dismissals += 1
+            completion?()
+        }
+    }
+
+    @Test func aLinearAdIsDismissedFromItsPresenterSoACoverOverItGoesToo() async throws {
+        VideoAd.dismissalTimeout = 0.05
+        defer { VideoAd.dismissalTimeout = 1 }
+        let spy = DismissSpy()
+        let window = UIWindow(windowScene: try #require(self.window.window.windowScene))
+        window.frame = self.window.window.frame
+        window.rootViewController = spy
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13b"))
+        try ad.show(from: spy)
+        let controller = try #require(ad.linearController)
+        #expect(await waitUntil { spy.presentedViewController === controller })
+        // The runner never completes the transition: the controller's view is put in the window directly, so
+        // the meter sees the ad. It cannot present anything over the ad either (the App Store sheet of an
+        // install click), so what is checked is where the dismissal is asked: the ad's own `dismiss` would
+        // take only such a cover, the presenter's takes the ad and everything over it.
+        window.addSubview(controller.view)
+        ad.presented()
+        ads.destroy()
+        #expect(spy.dismissals == 1, "dismissed from the presenter")
+        #expect(await waitUntil { delegate.endReasons == [.destroyed] }, "didEnd after the dismissal's completion")
+        await sleepMs(200)   // past the watchdog
+        #expect(delegate.endReasons == [.destroyed], "once, the watchdog adds nothing")
+    }
+
     // MARK: Ownership
 
     @Test func theSDKRetainsAShowingAdUntilItEnds() async throws {
