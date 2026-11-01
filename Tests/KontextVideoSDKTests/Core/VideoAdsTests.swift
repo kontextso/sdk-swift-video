@@ -83,6 +83,26 @@ struct VideoAdsTests {
         }
     }
 
+    @Test func aFormatTheAnswerLeavesOutKeepsItsHeldAdAndOnlyANoFillDropsIt() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p-kept"))
+        let pause = try await ads.format(.pause)
+        try await pause.load()
+        // An answer with only an overlay entry: nothing said about pause.
+        harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.overlayAd(id: "img-o-new"))]]) }
+        #expect(try await ads.format(.overlay).id == "img-o-new")
+        #expect(pause.isReady && pause.invalidationReason == nil, "the held pause ad stays as it is, loaded")
+        #expect(try await ads.format(.pause) === pause)
+        // Nothing held and nothing said: a no-fill, reason unknown.
+        guard case .noFill(let reason)? = await error({ try await ads.format(.linear) }) else { Issue.record("expected noFill"); return }
+        #expect(reason == .unknown)
+        #expect((harness.adsRequests.last?.body?["held"] as? [String])?.contains("img-p-kept") == true, "still listed in held")
+        // An explicit no-fill for pause drops it, as before.
+        harness.server.on("/v2/video/ads") { _ in .json(Fixtures.noFill()) }
+        _ = await error { try await ads.format(.pause) }
+        #expect(pause.invalidationReason == .expired && !pause.isReady)
+    }
+
     // MARK: The request
 
     @Test func creatingAVideoAdsSendsNothing() async {

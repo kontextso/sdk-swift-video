@@ -218,17 +218,23 @@ public final class VideoAds {
         }
     }
 
-    /// Follows the server for every format, whatever the SDK's own clock says: the same id keeps the bid
-    /// unchanged (the re-served payload is ignored); a new id replaces it, as does a no-fill, because the
-    /// server replaces a held bid only once it expired. An id the SDK already spent (shown or rejected
-    /// while the request ran) is ignored for its format. Returns the no-fill reasons by format.
+    /// Follows the server for every format it answered, whatever the SDK's own clock says: the same id
+    /// keeps the bid unchanged (the re-served payload is ignored); a new id replaces it, as does a no-fill,
+    /// because the server replaces a held bid only once it expired. A format the answer leaves out decides
+    /// nothing: its held ad stays as it is, loaded or not, until its own expiry (no held ad: a no-fill,
+    /// reason unknown). An id the SDK already spent (shown or rejected while the request ran) is ignored
+    /// for its format. Returns the no-fill reasons by format.
     private func apply(_ response: AdsResponse) -> [AdFormat: VideoAdError.NoFillReason] {
         var noFill: [AdFormat: VideoAdError.NoFillReason] = [:]
         for format in AdFormat.allCases {
             let current = state.ads[format]
-            guard let ad = response.result(for: format)?.ads.first else {
+            guard let result = response.result(for: format) else {
+                if current == nil { noFill[format] = .unknown }
+                continue
+            }
+            guard let ad = result.ads.first else {
                 current?.invalidate(.expired)
-                let reason = response.result(for: format)?.noFillReason ?? .unknown
+                let reason = result.noFillReason ?? .unknown
                 noFill[format] = reason
                 logNoFill(format, reason: reason)
                 continue
