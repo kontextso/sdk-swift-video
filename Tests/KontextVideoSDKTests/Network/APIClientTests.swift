@@ -162,14 +162,17 @@ struct APIClientTests {
     }
 
     @Test func anAnswerOverTheSizeLimitFailsAsATransportError() async throws {
-        let limit = APIClient.maxResponseBytes
+        #expect(APIClient.maxResponseBytes == 5 * 1024 * 1024)
+        // The rule with a small limit: the same code paths, without moving megabytes through the stub server.
+        let limit = 4_096
+        let small = APIClient(baseURL: server.baseURL, responseLimit: limit)
         server.on("/v2/ping", StubServer.Response(status: 200, body: padded(to: limit)))
-        let reply: Reply = try await client.post("ping", body: Body(hello: "x"))
+        let reply: Reply = try await small.post("ping", body: Body(hello: "x"))
         #expect(reply.ok, "exactly at the limit is read")
         for status in [200, 500] {
             server.on("/v2/ping", StubServer.Response(status: status, body: padded(to: limit + 1)))
             do {
-                let _: Reply = try await client.post("ping", body: Body(hello: "x"))
+                let _: Reply = try await small.post("ping", body: Body(hello: "x"))
                 Issue.record("expected a throw for \(status)")
             } catch let error as APIError {
                 guard case .transport(let urlError) = error else { Issue.record("expected transport for \(status), got \(error)"); continue }

@@ -9,11 +9,14 @@ struct APIClient: Sendable {
 
     let baseURL: URL
     let session: URLSession
+    /// `maxResponseBytes`, smaller in tests.
+    let responseLimit: Int
 
     @MainActor
-    init(baseURL: URL, session: URLSession? = nil) {
+    init(baseURL: URL, session: URLSession? = nil, responseLimit: Int = APIClient.maxResponseBytes) {
         self.baseURL = baseURL
         self.session = session ?? Environment.session
+        self.responseLimit = responseLimit
     }
 
     /// The body as `post` sends it. Sorted keys: the same value always encodes to the same bytes, for logs and diffs.
@@ -78,7 +81,7 @@ extension APIClient {
     /// error. Streamed where the OS can (iOS 15), so nothing past the limit is held; on iOS 14 the body is
     /// read whole and refused afterwards, as `URLSession` has no streaming `async` call there.
     private func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        let limit = Self.maxResponseBytes
+        let limit = responseLimit
         guard #available(iOS 15.0, *) else {
             let (data, response) = try await session.data(for: request)
             guard data.count <= limit else { throw URLError(.dataLengthExceedsMaximum) }
