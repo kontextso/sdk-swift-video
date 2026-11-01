@@ -83,6 +83,27 @@ struct VideoAdsTests {
         }
     }
 
+    @Test func anIdHeldUnderAnotherFormatMakesTheAnswerMalformedAndTheHeldAdStays() async throws {
+        let ads = await makeAds()
+        for (heldFormat, askedFormat) in [(AdFormat.overlay, AdFormat.pause), (.pause, .overlay)] {
+            let id = "img-x-\(heldFormat.rawValue)"
+            let entry = { (format: AdFormat) in Fixtures.filledEntry(format == .overlay ? Fixtures.overlayAd(id: id) : Fixtures.ad(id: id)) }
+            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(heldFormat)]]) }
+            let held = try await ads.format(heldFormat)
+            // The next answer leaves the held format out (so its ad is kept) and brings the same id under the other.
+            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
+            let failure = await error { try await ads.format(askedFormat) }
+            guard case .request? = failure else { Issue.record("\(heldFormat): expected request, got \(String(describing: failure))"); continue }
+            #expect(held.invalidationReason == nil, "\(heldFormat): the held ad stays")
+            #expect(try await ads.format(heldFormat) === held, "\(heldFormat): a malformed answer, the held ad comes back")
+            try held.reject()
+            // One bid, rejected once: nothing of it is left, under either format.
+            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
+            guard case .noFill(let reason)? = await error({ try await ads.format(askedFormat) }) else { Issue.record("\(heldFormat): expected noFill"); continue }
+            #expect(reason == .alreadyUsed, "\(heldFormat)")
+        }
+    }
+
     @Test func aFormatTheAnswerLeavesOutKeepsItsHeldAdAndOnlyANoFillDropsIt() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p-kept"))

@@ -176,6 +176,7 @@ public final class VideoAds {
             let response: AdsResponse
             do {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
+                try owner().checkIdsAgainstHeld(response)
             } catch {
                 try owner().checkStillUsable()
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
@@ -206,6 +207,20 @@ public final class VideoAds {
         try checkStillUsable()
         reportDroppedAds(response, requestId: requestId)
         return apply(response)
+    }
+
+    /// One id is one bid, across answers as within one: an answer that brings, under one format, the id of
+    /// an ad held under another (whose format the answer may leave out, so it stays) is malformed as a whole,
+    /// before anything held or spent changes, as an id listed twice in one answer is. Otherwise rejecting one
+    /// copy would leave the other valid, to be shown after its `notUsed`.
+    private func checkIdsAgainstHeld(_ response: AdsResponse) throws {
+        guard case .formats(let results) = response else { return }
+        for result in results {
+            for payload in result.ads {
+                guard let other = state.ads.first(where: { $0.key != result.format && $0.value.id == payload.id }) else { continue }
+                throw APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "ad \(payload.id) is \(result.format), and held as \(other.key)")))
+            }
+        }
     }
 
     /// An ad that did not decode was dropped from its format, the rest of the answer stands: each is
