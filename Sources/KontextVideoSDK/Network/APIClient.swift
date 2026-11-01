@@ -3,6 +3,9 @@ import Foundation
 /// Sends JSON requests to the ad server's `/v2/` routes.
 struct APIClient: Sendable {
     static let defaultTimeout: TimeInterval = 10
+    /// The largest answer read, error bodies included. Ours are a few kilobytes; a broken server or CDN that
+    /// sends hundreds of megabytes inside the deadline must not fill the app's memory, nor the decoder's.
+    static let maxResponseBytes = 5 * 1024 * 1024
 
     let baseURL: URL
     let session: URLSession
@@ -35,7 +38,7 @@ struct APIClient: Sendable {
             // the POST): deliberate. The base URL is ours and the routes do not redirect today; a redirect
             // would be our own server's, for example a move behind a new host, and refusing it would turn
             // that into an outage of every installed SDK.
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await load(request)
         } catch let error as URLError {
             throw APIError.transport(error)
         }
@@ -53,6 +56,36 @@ struct APIClient: Sendable {
         } catch {
             throw APIError.decoding(error)
         }
+    }
+}
+
+extension APIClient {
+    /// The answer, cut at `maxResponseBytes`: a longer one fails as `dataLengthExceedsMaximum`, a transport
+    /// error. Streamed where the OS can (iOS 15), so nothing past the limit is held; on iOS 14 the body is
+    /// read whole and refused afterwards, as `URLSession` has no streaming `async` call there.
+    private func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let limit = Self.maxResponseBytes
+        guard #available(iOS 15.0, *) else {
+            let (data, response) = try await session.data(for: request)
+            guard data.count <= limit else { throw URLError(.dataLengthExceedsMaximum) }
+            return (data, response)
+        }
+        let (bytes, response) = try await session.bytes(for: request)
+        // Stopping the task ends the transfer; the bytes already received are dropped with it.
+        guard response.expectedContentLength <= Int64(limit) else {
+            bytes.task.cancel()
+            throw URLError(.dataLengthExceedsMaximum)
+        }
+        var data = Data()
+        if response.expectedContentLength > 0 { data.reserveCapacity(Int(response.expectedContentLength)) }
+        for try await byte in bytes {
+            guard data.count < limit else {
+                bytes.task.cancel()
+                throw URLError(.dataLengthExceedsMaximum)
+            }
+            data.append(byte)
+        }
+        return (data, response)
     }
 }
 

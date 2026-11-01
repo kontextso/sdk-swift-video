@@ -155,6 +155,31 @@ struct APIClientTests {
         }
     }
 
+    /// A JSON body of exactly `size` bytes: `{"ok":true,"pad":"xx…"}`.
+    private func padded(to size: Int) -> Data {
+        let head = Data(#"{"ok":true,"pad":""#.utf8), tail = Data(#""}"#.utf8)
+        return head + Data(repeating: UInt8(ascii: "x"), count: size - head.count - tail.count) + tail
+    }
+
+    @Test func anAnswerOverTheSizeLimitFailsAsATransportError() async throws {
+        let limit = APIClient.maxResponseBytes
+        server.on("/v2/ping", StubServer.Response(status: 200, body: padded(to: limit)))
+        let reply: Reply = try await client.post("ping", body: Body(hello: "x"))
+        #expect(reply.ok, "exactly at the limit is read")
+        for status in [200, 500] {
+            server.on("/v2/ping", StubServer.Response(status: status, body: padded(to: limit + 1)))
+            do {
+                let _: Reply = try await client.post("ping", body: Body(hello: "x"))
+                Issue.record("expected a throw for \(status)")
+            } catch let error as APIError {
+                guard case .transport(let urlError) = error else { Issue.record("expected transport for \(status), got \(error)"); continue }
+                #expect(urlError.code == .dataLengthExceedsMaximum, "one byte over, error bodies too: \(status)")
+            } catch {
+                Issue.record("unexpected \(error)")
+            }
+        }
+    }
+
     @Test func emptyBodyDecodesAsEmptyResponse() async throws {
         server.on("/v2/debug", .empty(204))
         let _: EmptyResponse = try await client.post("debug", body: Body(hello: "x"))
