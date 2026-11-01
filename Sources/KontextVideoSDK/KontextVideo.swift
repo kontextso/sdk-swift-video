@@ -133,8 +133,8 @@ public final class KontextVideo {
     ///
     /// Calling the SDK before initialising it is a mistake in the app's code, not a runtime condition,
     /// so it is handled the way Swift handles programmer errors: `assertionFailure` stops a debug build
-    /// on the first run with the message, where a log line could be overlooked (Firebase and RevenueCat
-    /// do the same for their configure calls). A release build only logs and carries on, because the
+    /// on the first run with the message, where a log line could be overlooked (a common choice for an
+    /// SDK's configure call). A release build only logs and carries on, because the
     /// order of calls in a real app is not always deterministic and an ad SDK must never take the app
     /// down in front of users. Not `throws`: that would put `try` on every publisher's call for a mistake
     /// most never make. Major ad SDKs also stay non-throwing and let the ad load fail instead.

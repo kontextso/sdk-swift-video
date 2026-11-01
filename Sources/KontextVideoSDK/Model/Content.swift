@@ -1,8 +1,8 @@
 import Foundation
 
 extension KontextVideo {
-    /// The publisher's video the ads are for, "content" in ad-industry terms (VAST `[CONTENTPLAYHEAD]`,
-    /// IMA `contentTitle`). Everything beyond `id` and `language` is contextual signal: send what you have.
+    /// The publisher's video the ads are for, "content" in ad-industry terms (VAST
+    /// `[CONTENTPLAYHEAD]`). Everything beyond `id` and `language` is contextual signal: send what you have.
     /// Times are seconds in Swift and milliseconds on the wire.
     public struct Content: Encodable, Sendable, Equatable {
         /// A simplified rating: `explicit` content gets no ads that require safe content. Leave it unset

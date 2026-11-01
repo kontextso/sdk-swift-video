@@ -263,7 +263,7 @@ public final class VideoAd {
 
     /// Presents a linear ad full screen. From `viewController` when given, which must be on screen
     /// and not already presenting; with `nil` (the default) from the key window's top view controller,
-    /// as other ad SDKs do. Pass the controller when the guess would
+    /// the usual default for a full-screen ad. Pass the controller when the guess would
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (an overlay or pause
     /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,

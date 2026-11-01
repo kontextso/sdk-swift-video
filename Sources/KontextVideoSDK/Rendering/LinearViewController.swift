@@ -54,7 +54,7 @@ final class LinearViewController: UIViewController {
 }
 
 extension LinearViewController {
-    /// The key window's root controller, followed through what it presents to the top, as other ad SDKs do.
+    /// The key window's root controller, followed through what it presents to the top.
     /// `nil` when there is no key window or the top controller cannot present: it is
     /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that
     /// can, and the ad goes over it, as a peer's would.
