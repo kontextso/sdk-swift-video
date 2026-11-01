@@ -3,7 +3,8 @@ import Combine
 
 /// Your player, as the SDK reads it: where the content is, and whether it plays. Pass it to
 /// `VideoAds.track(_:)`; an `AVPlayer` needs no conformance, `track` takes it directly. The SDK holds it
-/// weakly and reads it on the main actor.
+/// strongly until `destroy()` or the next `track`, so a small wrapper around your player needs no other
+/// reference; it reads it on the main actor.
 @MainActor
 public protocol VideoAdsPlayer: AnyObject {
     /// Where the content is, in seconds of the episode.
@@ -24,8 +25,9 @@ extension VideoAdsPlayer {
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
 /// an overlay, which lives only while the content plays. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
-/// `VideoAdsPlayer` (its publisher, or a read every `tickInterval` while an overlay is on screen). Holds the
-/// player weakly; `stop()` drops every observer, subscription and timer. Every callback carries the binding
+/// `VideoAdsPlayer` (its publisher, or a read every `tickInterval` while an overlay is on screen). Holds an
+/// `AVPlayer` weakly (the app owns it) and a `VideoAdsPlayer` strongly (often a wrapper only the SDK holds);
+/// `stop()` drops every observer, subscription and timer, and the player. Every callback carries the binding
 /// it came from: one queued from a player tracked before is dropped.
 @MainActor
 final class ContentPlayback {
@@ -67,6 +69,8 @@ final class ContentPlayback {
     /// The playback speed when the player tells it (an `AVPlayer`'s `rate`), for telling fast playback from a seek.
     private var readRate: (() -> Double?)?
     private weak var avPlayer: AVPlayer?
+    /// The tracked `VideoAdsPlayer`, kept alive until `stop()`.
+    private var customPlayer: (any VideoAdsPlayer)?
     private var observations: [NSKeyValueObservation] = []
     private var itemObservers: [any NSObjectProtocol] = []
     private var subscription: AnyCancellable?
@@ -163,6 +167,7 @@ final class ContentPlayback {
 
     func track(_ player: some VideoAdsPlayer) {
         guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying }) else { return }
+        customPlayer = player
         let generation = self.generation
         // Reading the publisher and subscribing are app code: a `destroy()` or another `track` there wins, and
         // this binding's subscription is dropped instead of stored.
@@ -197,6 +202,9 @@ final class ContentPlayback {
         // Kept, not released here: releasing cancels it, and its cancellation runs the app's code.
         let subscription = self.subscription
         self.subscription = nil
+        // Released after the cancellation, for the same reason: its deinit is the app's code too.
+        let customPlayer = self.customPlayer
+        self.customPlayer = nil
         readTime = nil
         readPlaying = nil
         readRate = nil
@@ -205,7 +213,7 @@ final class ContentPlayback {
         isTracking = false
         isTicking = false
         // Last, with every property settled: a `track` or `destroy()` in the cancellation finds a stopped playback.
-        subscription?.cancel()
+        withExtendedLifetime(customPlayer) { subscription?.cancel() }
     }
 
     /// The end and the time jumps of the item the player has now; the previous item's go, and its callbacks

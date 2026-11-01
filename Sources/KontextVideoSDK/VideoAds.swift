@@ -253,7 +253,7 @@ public final class VideoAds {
     /// macro of beacons, and follows its playback for an overlay: an overlay is shown over playing content
     /// only (`show(in:)` throws `contentPaused` otherwise), ends as `.interrupted` when the content pauses,
     /// ends or the player moves to another item, and its `duration` counts seconds of video. The SDK observes
-    /// the player's `rate` and `currentItem`; it holds the player weakly and lets go at `destroy()`, after which `track` does nothing. With one
+    /// the player's `rate` and `currentItem`; it holds the player weakly (the app keeps it) and lets go at `destroy()`, after which `track` does nothing. With one
     /// `AVPlayer` reused across episodes, call it when this episode starts playing in it, not at creation:
     /// before that the player's time belongs to the previous episode. Without a player the playhead is 0
     /// (right for a prefetch) and an overlay runs on its own time.
@@ -262,7 +262,9 @@ public final class VideoAds {
         playback.track(player)
     }
 
-    /// The same for any other player: conform it to `VideoAdsPlayer`. Held weakly.
+    /// The same for any other player: conform it to `VideoAdsPlayer`, or wrap it in a small type that does.
+    /// Unlike an `AVPlayer`, it is held strongly, until `destroy()` or the next `track`: a wrapper needs no
+    /// other reference.
     public func track(_ player: some VideoAdsPlayer) {
         guard !isDestroyed else { return }
         playback.track(player)

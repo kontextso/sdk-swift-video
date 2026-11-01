@@ -252,20 +252,47 @@ struct VideoAdContentTests {
         #expect(!ads.playback.isTicking, "nothing on screen: no ticks")
     }
 
-    @Test func aPlayerThatIsGoneEndsTheOverlayAndRefusesTheNext() async throws {
-        var player: TestPlayer? = TestPlayer()
-        weak var released: TestPlayer?
+    @Test func anAVPlayerThatIsGoneEndsTheOverlayAndRefusesTheNext() async throws {
+        var player: AVPlayer? = try await playingPlayer()
+        weak var released: AVPlayer?
         released = player
         let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-gone", duration: 1000)) { $0.track(player!) }
         try ad.show(in: view)
+        player?.pause()
         player = nil
-        #expect(released == nil)
+        #expect(await waitUntil(5) { released == nil }, "an AVPlayer is the app's: held weakly")
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "no content left under it, and no wall-time expiry either")
         let (next, _) = try loadedAd(Fixtures.overlayAd(id: "o-c-gone2"), of: ads)
         do {
             try next.show(in: view)
             Issue.record("expected contentPaused")
         } catch VideoAdError.contentPaused {}
+    }
+
+    @Test func aWrapperOnlyTheSDKHoldsKeepsWorkingUntilDestroy() async throws {
+        weak var released: TestPlayer?
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-wrap", duration: 1000)) { ads in
+            let wrapper = TestPlayer()
+            wrapper.playhead = 12
+            released = wrapper
+            ads.track(wrapper)
+        }
+        #expect(released != nil, "held by the SDK")
+        #expect(ads.playback.isPlaying && ads.playhead == 12)
+        try ad.show(in: view)
+        await sleepMs(60)
+        #expect(delegate.endReasons.isEmpty, "the content still plays under the overlay")
+        try ad.dismiss()
+        ads.track(TestPlayer())
+        #expect(released == nil, "the next track lets go of it")
+        weak var second: TestPlayer?
+        do {
+            let wrapper = TestPlayer()
+            second = wrapper
+            ads.track(wrapper)
+        }
+        ads.destroy()
+        #expect(second == nil, "destroy lets go of it")
     }
 
     @Test func aShortSeekCountsNothingAndALateSampleOfRealPlaybackCounts() {
