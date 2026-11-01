@@ -101,11 +101,10 @@ final class ErrorReporter {
         let errors: [Report]
     }
 
-    /// One batch, retried as it is until it leaves or the server refuses it: the server dedupes by `batchId`.
+    /// One batch, retried byte for byte until it leaves or the server refuses it: the server dedupes by `batchId`.
     private struct Batch {
-        let id: String
-        let dropped: Int
-        let reports: [Report]
+        let count: Int
+        let body: Data
     }
 
     /// Whether reports leave: unknown until `/config` answers, then what it said.
@@ -124,8 +123,8 @@ final class ErrorReporter {
     static let maxBuffered = 200
     /// Reports in one request.
     static let maxBatch = 50
-    /// Encoded bytes of the reports waiting, and of the reports in one request: the counts alone do not bound
-    /// memory or upload size.
+    /// Encoded bytes of the reports waiting, and of one whole request body, envelope included: the counts alone
+    /// do not bound memory or upload size.
     static let maxBufferedBytes = 256 * 1024
     static let maxBatchBytes = 64 * 1024
     /// UTF-8 bytes kept of every string field: ids, `detail`, the underlying error's domain, history names
@@ -310,38 +309,10 @@ final class ErrorReporter {
     /// when it waits for a retry.
     private func flush() async -> Bool {
         guard mode == .on, let configuration = KontextVideo.shared.configuration else { return true }
-        let batch: Batch
-        if let pendingBatch {
-            batch = pendingBatch
-        } else {
-            guard !buffer.isEmpty else { return true }
-            // Up to `maxBatch` reports and `maxBatchBytes`, at least one: a single report is bounded by its fields.
-            var count = 0
-            var bytes = 0
-            while count < min(buffer.count, Self.maxBatch), count == 0 || bytes + sizes[count] <= Self.maxBatchBytes {
-                bytes += sizes[count]
-                count += 1
-            }
-            let reports = Array(buffer.prefix(count))
-            buffer.removeFirst(count)
-            sizes.removeFirst(count)
-            bufferedBytes -= bytes
-            batch = Batch(id: UUID().uuidString.lowercased(), dropped: dropped, reports: reports)
-            dropped = 0
-            pendingBatch = batch
-        }
-        let os = OSInfo.current()
-        let request = Request(
-            batchId: batch.id,
-            publisherToken: configuration.publisherToken,
-            installId: KontextVideo.installId,
-            app: .current(),
-            os: Request.OS(name: os.name.rawValue, version: os.version),
-            dropped: batch.dropped,
-            errors: batch.reports
-        )
+        guard let batch = pendingBatch ?? nextBatch(token: configuration.publisherToken) else { return true }
+        pendingBatch = batch
         do {
-            let _: EmptyResponse = try await APIClient(baseURL: configuration.adServerURL).post("error", body: request)
+            let _: EmptyResponse = try await APIClient(baseURL: configuration.adServerURL).post("error", encodedBody: batch.body)
             pendingBatch = nil
             failures = 0
             return true
@@ -352,14 +323,63 @@ final class ErrorReporter {
             return true
         } catch APIError.http(let status, _) where (400..<500).contains(status) && status != 429 {
             // Refused for good (a malformed body, a refused token): a retry would be refused the same way.
-            Logger.debug("error batch of \(batch.reports.count) refused with \(status), dropped")
+            Logger.debug("error batch of \(batch.count) refused with \(status), dropped")
             pendingBatch = nil
             return true
         } catch {
             // Reporting never affects the SDK. The same batch goes again later; newer reports wait behind it.
-            Logger.debug("error batch of \(batch.reports.count) not delivered: \(error)")
+            Logger.debug("error batch of \(batch.count) not delivered: \(error)")
             failures += 1
             return false
         }
+    }
+    /// The oldest waiting reports as one finished request body: up to `maxBatch` of them, and as many as fit in
+    /// `maxBatchBytes` with the envelope and the separators, the size of the whole body being what is limited.
+    /// The rest wait for the next batch. A report that cannot fit even alone is dropped and counted. `nil` when
+    /// nothing is left to send.
+    private func nextBatch(token: String) -> Batch? {
+        let id = UUID().uuidString.lowercased()
+        let os = OSInfo.current()
+        let request = { (reports: [Report]) in
+            Request(batchId: id, publisherToken: token, installId: KontextVideo.installId, app: .current(),
+                    os: Request.OS(name: os.name.rawValue, version: os.version), dropped: self.dropped, errors: reports)
+        }
+        while !buffer.isEmpty {
+            // `"errors":[]` holds the reports, one byte between each two: the size is known before encoding.
+            guard let envelope = try? APIClient.encode(request([])).count else { return nil }
+            var count = 0
+            var bytes = envelope
+            while count < min(buffer.count, Self.maxBatch), bytes + sizes[count] + (count > 0 ? 1 : 0) <= Self.maxBatchBytes {
+                bytes += sizes[count] + (count > 0 ? 1 : 0)
+                count += 1
+            }
+            if count == 0 {
+                Logger.debug("error report of \(sizes[0]) bytes dropped, it cannot fit a batch")
+                remove(1)
+                dropped += 1
+                continue
+            }
+            // Checked on the encoded body itself: the arithmetic above is the plan, the body is what leaves.
+            var body = try? APIClient.encode(request(Array(buffer.prefix(count))))
+            while count > 1, (body?.count ?? 0) > Self.maxBatchBytes {
+                count -= 1
+                body = try? APIClient.encode(request(Array(buffer.prefix(count))))
+            }
+            guard let body, body.count <= Self.maxBatchBytes else {
+                remove(1)
+                dropped += 1
+                continue
+            }
+            remove(count)
+            dropped = 0
+            return Batch(count: count, body: body)
+        }
+        return nil
+    }
+
+    private func remove(_ count: Int) {
+        buffer.removeFirst(count)
+        bufferedBytes -= sizes.prefix(count).reduce(0, +)
+        sizes.removeFirst(count)
     }
 }

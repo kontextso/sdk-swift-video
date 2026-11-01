@@ -146,6 +146,39 @@ struct ErrorReporterTests {
         #expect(bodies[0]["batchId"] as? String == bodies[1]["batchId"] as? String, "the same batch, so the server counts it once")
         let ids = bodies.map { (($0["errors"] as? [[String: Any]])?.first?["id"] as? String) ?? "" }
         #expect(ids[0] == ids[1] && !ids[0].isEmpty, "the same report, as it was")
+        let raw = harness.server.requests(to: "/v2/error").map(\.rawBody)
+        #expect(raw[0] == raw[1] && !raw[0].isEmpty, "byte for byte")
+    }
+
+    @Test func aBatchJustUnderTheBudgetInReportsAloneIsSplitByItsWholeBody() async throws {
+        // Reports of one shape and size, calibrated so that as many as fit in the budget by their own bytes
+        // leave less room than any envelope takes: counting the reports alone would send an oversized body.
+        let field = String(repeating: "f", count: ErrorReporter.maxFieldLength)
+        DebugReporter.shared.clearHistory()
+        for _ in 0..<5 { DebugReporter.shared.event(field, adId: field) }
+        var shape: (detail: String, size: Int, count: Int)?
+        for length in 1...ErrorReporter.maxFieldLength {
+            reporter.resetForTesting()
+            let detail = String(repeating: "d", count: length)
+            reporter.report(.skanFailed, stage: .attribution, requestId: field, sessionId: field, adId: field, detail: detail)
+            let size = try JSONEncoder().encode(try #require(reporter.buffer.first)).count
+            let count = ErrorReporter.maxBatchBytes / size
+            if count <= ErrorReporter.maxBatch, ErrorReporter.maxBatchBytes - count * size < 200 {
+                shape = (detail, size, count)
+                break
+            }
+        }
+        let (detail, size, count) = try #require(shape, "a calibration exists")
+        reporter.resetForTesting()
+        for _ in 0..<count {
+            reporter.report(.skanFailed, stage: .attribution, requestId: field, sessionId: field, adId: field, detail: detail)
+        }
+        await enableReports()
+        #expect(await waitUntil { self.reports().count == count }, "every report leaves, the overflow in the next batch")
+        let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
+        #expect(sizes.count == 2 && sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes },
+                "\(count) reports of \(size) bytes: two bodies, each within \(ErrorReporter.maxBatchBytes): \(sizes)")
+        #expect(reporter.dropped == 0)
     }
 
     @Test func a410StopsReportingForTheLaunchAndOther4xxDropTheBatch() async {
@@ -263,7 +296,7 @@ struct ErrorReporterTests {
             ["requestId", "sessionId", "adId", "detail"].allSatisfy { ((report[$0] as? String)?.count ?? 0) <= ErrorReporter.maxFieldLength }
         }, "every string capped")
         let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
-        #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes + 1024 }, "each request within the budget plus its envelope: \(sizes)")
+        #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes }, "each whole request within the budget, envelope included: \(sizes)")
     }
 
     @Test func aCharacterWithThousandsOfCombiningMarksIsCappedByBytes() async throws {
@@ -283,7 +316,7 @@ struct ErrorReporterTests {
         #expect(((moment?["adId"] as? String)?.utf8.count ?? 0) <= ErrorReporter.maxFieldLength)
         #expect((((moment?["state"] as? [String: Any])?["format"] as? String)?.utf8.count ?? 0) <= ErrorReporter.maxFieldLength)
         let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
-        #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes + 1024 }, "within the batch budget: \(sizes)")
+        #expect(sizes.allSatisfy { $0 <= ErrorReporter.maxBatchBytes }, "within the batch budget: \(sizes)")
     }
 
     @Test func aFailedConfigIsReportedWithTheIdOfItsRequest() async throws {

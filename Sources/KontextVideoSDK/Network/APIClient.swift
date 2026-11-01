@@ -16,19 +16,33 @@ struct APIClient: Sendable {
         self.session = session ?? Environment.session
     }
 
+    /// The body as `post` sends it. Sorted keys: the same value always encodes to the same bytes, for logs and diffs.
+    static func encode(_ body: some Encodable) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try encoder.encode(body)
+    }
+
     func post<Body: Encodable, Response: Decodable>(
         _ path: String,
         body: Body,
         timeout: TimeInterval = APIClient.defaultTimeout
     ) async throws -> Response {
         try Task.checkCancellation()   // a task cancelled before this point sends nothing
+        return try await post(path, encodedBody: Self.encode(body), timeout: timeout)
+    }
+
+    /// The same with a body already encoded: a request retried byte for byte, or one sized before it leaves.
+    func post<Response: Decodable>(
+        _ path: String,
+        encodedBody: Data,
+        timeout: TimeInterval = APIClient.defaultTimeout
+    ) async throws -> Response {
+        try Task.checkCancellation()
         var request = URLRequest(url: baseURL.appendingPathComponent("v2/\(path)"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Sorted keys: the same value always encodes to the same bytes, for logs and diffs.
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .sortedKeys
-        request.httpBody = try encoder.encode(body)
+        request.httpBody = encodedBody
         request.timeoutInterval = timeout
 
         let data: Data
