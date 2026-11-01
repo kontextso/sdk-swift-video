@@ -259,6 +259,16 @@ struct DecodingTests {
         #expect(once.result(for: .pause)?.ads.count == 1)
     }
 
+    @Test func anAdIdListedTwiceFailsTheResponseInEitherOrder() throws {
+        let overlay = Fixtures.filledEntry(Fixtures.overlayAd(id: "same"))
+        let pause = Fixtures.filledEntry(Fixtures.ad(id: "same"))
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [overlay, pause]]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [pause, overlay]]) }
+        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(id: "same"), Fixtures.ad(id: "same")]]]]) }
+        let distinct = try decode(AdsResponse.self, ["enabled": true, "formats": [overlay, Fixtures.filledEntry(Fixtures.ad(id: "other"))]])
+        #expect(distinct.result(for: .pause)?.ads.map(\.id) == ["other"])
+    }
+
     @Test func clearlyBrokenAdsAreRefused() throws {
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(id: "")) }
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(expires: 0)) }

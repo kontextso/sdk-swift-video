@@ -85,6 +85,12 @@ enum AdsResponse: Decodable, Sendable {
         guard Set(results.map(\.format)).count == results.count else {
             throw DecodingError.dataCorruptedError(forKey: .formats, in: container, debugDescription: "a format is listed twice")
         }
+        // One auction, one id: the same id under two formats would let one bid be rejected in one and shown
+        // in the other (a notUsed, then an impression). The whole answer is malformed, as with a format twice.
+        let ids = results.flatMap { $0.ads.map(\.id) }
+        guard Set(ids).count == ids.count else {
+            throw DecodingError.dataCorruptedError(forKey: .formats, in: container, debugDescription: "an ad id is listed twice")
+        }
         self = .formats(results)
     }
 

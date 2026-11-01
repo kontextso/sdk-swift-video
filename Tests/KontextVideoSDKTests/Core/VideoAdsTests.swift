@@ -67,6 +67,22 @@ struct VideoAdsTests {
         #expect(report["requestId"] as? String == ads.lastRequestId && report["recovery"] as? String == "no_ad")
     }
 
+    @Test func anAnswerWithOneAdIdUnderTwoFormatsIsMalformedAndTheHeldAdComesBack() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-p-held"))
+        let held = try await ads.format(.pause)
+        for order in [["overlay", "pause"], ["pause", "overlay"]] {
+            harness.server.on("/v2/video/ads") { _ in
+                .json(["enabled": true, "formats": order.map { format -> [String: Any] in
+                    format == "overlay" ? Fixtures.filledEntry(Fixtures.overlayAd(id: "img-dup")) : Fixtures.filledEntry(Fixtures.ad(id: "img-dup"))
+                }])
+            }
+            let error = await error { try await ads.format(.overlay) }
+            guard case .request? = error else { Issue.record("\(order): expected request, got \(String(describing: error))"); continue }
+            #expect(try await ads.format(.pause) === held, "\(order): the held ad comes back")
+        }
+    }
+
     // MARK: The request
 
     @Test func creatingAVideoAdsSendsNothing() async {
