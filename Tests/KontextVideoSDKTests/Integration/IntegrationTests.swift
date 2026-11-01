@@ -175,6 +175,25 @@ struct IntegrationTests {
 
     // MARK: Linear, video creative
 
+    @Test func aPageThatPostsJSONStringsPlaysTheWholeFlow() async throws {
+        let ads = await start()
+        harness.serve(Fixtures.ad(id: "vid-json", format: "linear", creative: "video", position: nil, size: nil, duration: 10_000, skipOffset: 5000,
+                                  frameURL: "\(Fixtures.frameOrigin)/frame/vid-json?json=1"))
+        let delegate = RecordingDelegate()
+        let ad = try await ads.format(.linear)
+        try await ad.load()   // ad.loaded arrived as a string
+        ad.delegate = delegate
+        try ad.show(from: window.root)
+        ad.linearController?.loadViewIfNeeded()
+        window.add(ad.bridge.webView)
+        ad.presented()
+        #expect(await waitUntil(3) { ad.isCompleted }, "every video message arrived as a string")
+        #expect(await waitUntil { Set(self.events(for: "vid-json")).isSuperset(of: ["start", "midpoint", "progress", "complete"]) })
+        #expect(delegate.events.contains("impression"))
+        await inPage(ad, "window.closeEndCard()")
+        #expect(await waitUntil { delegate.endReasons == [.closed] })
+    }
+
     @Test func linearPlaysToCompletion() async throws {
         let ads = await start()
         harness.serve(Fixtures.linearAd(id: "vid-full"))

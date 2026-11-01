@@ -4,8 +4,8 @@ import WebKit
 
 /// Owns the WebView of one ad and speaks the Kontext Frame Protocol v2 with its page.
 ///
-/// The page posts to the `kontext` script message handler; the bridge answers with
-/// `window.postMessage` into the page. One bridge, one ad: it accepts messages only from the main frame
+/// The page posts `JSON.stringify(message)` to `webkit.messageHandlers.kontext`, the same string the Android
+/// bridge takes; an object is also accepted. The bridge answers with `window.postMessage` into the page. One bridge, one ad: it accepts messages only from the main frame
 /// of the page it loaded, carrying its own ad id, and only in an order that makes sense.
 @MainActor
 final class FrameBridge: NSObject {
@@ -260,6 +260,17 @@ final class FrameBridge: NSObject {
         receive(message.body, from: Sender(message.frameInfo))
     }
 
+    /// The largest message string parsed, in UTF-8 bytes; every message of the protocol is far smaller.
+    static let maxMessageBytes = 64 * 1024
+
+    /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
+    /// as WebKit converted it. `nil` for anything else.
+    static func messageObject(_ rawBody: Any) -> [String: Any]? {
+        if let object = rawBody as? [String: Any] { return object }
+        guard let text = rawBody as? String, text.utf8.count <= maxMessageBytes else { return nil }
+        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+    }
+
     /// Checks the envelope, the sender and the order; drops anything else without an error.
     func receive(_ rawBody: Any, from sender: Sender) {
         guard state != .ended else { return }
@@ -267,7 +278,7 @@ final class FrameBridge: NSObject {
             Logger.debug("frame \(adId.prefix(8)): message from another frame dropped")
             return
         }
-        guard let body = rawBody as? [String: Any],
+        guard let body = Self.messageObject(rawBody),
               body["adId"] as? String == adId,
               let type = body["type"] as? String else {
             Logger.debug("frame \(adId.prefix(8)): malformed message dropped")

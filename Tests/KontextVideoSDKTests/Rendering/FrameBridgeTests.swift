@@ -51,6 +51,40 @@ struct FrameBridgeTests {
         guard case .loaded = recorder.last else { Issue.record("expected loaded"); return }
     }
 
+    /// `message` as the page posts it: `JSON.stringify(message)`.
+    private func json(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: message(type, extra, adId: adId)), encoding: .utf8)!
+    }
+
+    @Test func aMessagePostedAsAJSONStringIsTheSameMessage() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        bridge.receive(json("ad.loaded"), from: main)
+        #expect(bridge.state == .loaded)
+        bridge.show()
+        bridge.receive(json("video.start", ["playhead": 0]), from: main)
+        guard case .video(.start, 0)? = recorder.last else { Issue.record("expected video.start, got \(String(describing: recorder.last))"); return }
+        bridge.receive(json("video.progress", ["offset": 5000, "playhead": 5010]), from: main)
+        guard case .progress(5000, 5010)? = recorder.last else { Issue.record("expected progress"); return }
+        bridge.noteTouch()
+        bridge.receive(json("ad.click", ["url": "https://brand.test/landing", "area": "cta"]), from: main)
+        guard case .click(let url, _, _)? = recorder.last else { Issue.record("expected click"); return }
+        #expect(url.absoluteString == "https://brand.test/landing")
+        bridge.receive(json("ad.loaded", adId: "ad-2"), from: main)
+        #expect(recorder.events.count == 4, "the same checks: another ad's id is dropped")
+    }
+
+    @Test func aStringThatIsNotAJSONObjectOrIsTooLongIsDropped() {
+        let (bridge, recorder) = makeBridge()
+        for body in ["[1, 2]", "\"ad.loaded\"", "42", "not json", "", "{\"adId\": \"ad-1\", \"type\": "] {
+            bridge.receive(body, from: main)
+        }
+        let padding = String(repeating: "x", count: FrameBridge.maxMessageBytes)
+        bridge.receive(json("ad.loaded", ["padding": padding]), from: main)
+        #expect(bridge.state == .loading && recorder.events.isEmpty)
+        bridge.receive(json("ad.loaded", ["padding": String(padding.prefix(1000))]), from: main)
+        #expect(bridge.state == .loaded, "within the bound it parses")
+    }
+
     @Test func messagesWithAnotherAdIdAreDropped() {
         let (bridge, recorder) = makeBridge()
         bridge.receive(message("ad.loaded", adId: "ad-2"), from: main)

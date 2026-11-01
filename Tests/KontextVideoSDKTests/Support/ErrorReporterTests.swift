@@ -236,6 +236,8 @@ struct ErrorReporterTests {
         ad.bridge.receive(["type": "ad.loaded"], from: sender)
         ad.bridge.receive(["adId": ad.id, "type": "ad.fromTheFuture"], from: sender)   // a newer page: not a violation
         ad.bridge.receive(["adId": "x"], from: FrameBridge.Sender(isMainFrame: false, scheme: "https", host: "creative.test", port: 443))
+        ad.bridge.receive("[\"not an object\"]", from: sender)   // a JSON string that is no envelope: the same fault
+        ad.bridge.receive(String(repeating: " ", count: FrameBridge.maxMessageBytes + 1), from: sender)
         #expect(await waitUntil { !self.reports("frame.protocol_violation").isEmpty })
         await sleepMs(50)
         let violations = reports("frame.protocol_violation")

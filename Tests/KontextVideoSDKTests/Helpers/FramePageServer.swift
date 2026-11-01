@@ -15,6 +15,8 @@ import WebKit
 /// - `dead-…`: never sends `ad.loaded`.
 /// - `slow-…`: sends `ad.loaded` after `step` ms (`?step=`, default 60), for what happens while a load runs.
 /// - `err-…`: sends `ad.error` with code 502 instead of `ad.loaded`.
+///
+/// `?json=1` posts every message as `JSON.stringify(message)`, the contract's transport, instead of an object.
 @MainActor
 final class FramePageServer: NSObject, WKURLSchemeHandler {
     static let scheme = "kontext-test"
@@ -29,11 +31,13 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
     nonisolated func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         let url = urlSchemeTask.request.url!
         let adId = url.lastPathComponent
-        let step = Int(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "step" }?.value ?? "") ?? 60
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let step = Int(query.first { $0.name == "step" }?.value ?? "") ?? 60
+        let json = query.contains { $0.name == "json" }
         Task { @MainActor in
             served.append(adId)
         }
-        let html = Self.page(adId: adId, step: step)
+        let html = Self.page(adId: adId, step: step, json: json)
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/html; charset=utf-8"])!
         urlSchemeTask.didReceive(response)
         urlSchemeTask.didReceive(Data(html.utf8))
@@ -42,7 +46,7 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
 
     nonisolated func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
-    nonisolated static func page(adId: String, step: Int) -> String {
+    nonisolated static func page(adId: String, step: Int, json: Bool = false) -> String {
         let kind = adId.split(separator: "-").first.map(String.init) ?? "img"
         return """
         <!doctype html><html data-ad-id="\(adId)"><head><meta name="viewport" content="width=device-width"></head>
@@ -55,7 +59,7 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
         var shown = false, completed = false;
         function send(type, payload) {
           var m = Object.assign({ adId: adId, type: type }, payload || {});
-          window.webkit.messageHandlers.kontext.postMessage(m);
+          window.webkit.messageHandlers.kontext.postMessage(\(json ? "JSON.stringify(m)" : "m"));
         }
         window.addEventListener('message', function (e) {
           var m = e.data; if (!m || m.adId !== adId) return;
