@@ -184,7 +184,7 @@ public final class VideoAds {
                                             sessionId: sessionId, failure: failure, recovery: recovery)
                 throw VideoAdError.request(error)
             }
-            return try owner().receive(response)
+            return try owner().receive(response, requestId: body.requestId)
         }
         request = task
         return task
@@ -193,7 +193,7 @@ public final class VideoAds {
     /// The answer, for a `VideoAds` still in use. The kill switch in it switches the whole SDK off and
     /// drops every ad, with no notices: the server knows. Switched off meanwhile by another video's
     /// response: the answer is dropped, the ads it carries are never held.
-    private func receive(_ response: AdsResponse) throws -> [AdFormat: VideoAdError.NoFillReason] {
+    private func receive(_ response: AdsResponse, requestId: String) throws -> [AdFormat: VideoAdError.NoFillReason] {
         if case .disabled(let reason) = response {
             KontextVideo.shared.disable(reason: reason)
             // The reason is never seen: load() and show throw `.disabled` first.
@@ -201,7 +201,21 @@ public final class VideoAds {
             throw VideoAdError.disabled(reason: reason)
         }
         try checkStillUsable()
+        reportDroppedAds(response, requestId: requestId)
         return apply(response)
+    }
+
+    /// An ad that did not decode was dropped from its format, the rest of the answer stands: each is
+    /// reported once here, in the request every caller shares, with its format and the field that failed.
+    private func reportDroppedAds(_ response: AdsResponse, requestId: String) {
+        guard case .formats(let results) = response else { return }
+        for result in results {
+            for path in result.dropped {
+                Logger.error("\(result.format) for \(content.id): an ad of request \(requestId) is malformed at \(path); dropped")
+                ErrorReporter.shared.report(.adsDecodeFailed, stage: .request, requestId: requestId, sessionId: sessionId,
+                                            detail: "\(result.format.rawValue):\(path)", recovery: result.ads.isEmpty ? .noAd : nil)
+            }
+        }
     }
 
     /// Follows the server for every format, whatever the SDK's own clock says: the same id keeps the bid

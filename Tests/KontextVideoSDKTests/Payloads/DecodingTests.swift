@@ -82,10 +82,32 @@ struct DecodingTests {
         #expect(disabled == AdsResponse.unknownReason)
     }
 
-    @Test func adsResponseWithoutFormatsOrWithAnUnknownFormatIsRejected() {
+    @Test func adsResponseWithoutFormatsIsRejectedAndAFormatTheSDKDoesNotKnowIsIgnored() throws {
         #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true]) }
-        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "banner", "ads": []]]]) }
         #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause"]]]) }
+        // A format added after this SDK shipped (a future `menu`), even twice or malformed: the rest stands.
+        let menu: [String: Any] = ["format": "menu", "ads": [["id": "m1", "format": "menu"]]]
+        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [menu, Fixtures.filledEntry(Fixtures.ad(id: "p1")), menu, ["format": "menu", "ads": "junk"]]])
+        #expect(response.result(for: .pause)?.ads.map(\.id) == ["p1"])
+        #expect(response.result(for: .overlay) == nil && response.result(for: .linear) == nil)
+    }
+
+    @Test func oneInvalidAdLosesOnlyItsOwnFormat() throws {
+        var linear = Fixtures.linearAd(id: "bad")
+        linear["price"] = ["value": 2.0, "currency": "usd", "precision": "exact"]
+        let response = try decode(AdsResponse.self, Fixtures.adsResponse(formats: ["overlay": Fixtures.overlayAd(id: "good"), "linear": linear]))
+        #expect(response.result(for: .overlay)?.ads.map(\.id) == ["good"] && response.result(for: .overlay)?.dropped == [])
+        let dropped = try #require(response.result(for: .linear))
+        #expect(dropped.ads.isEmpty && dropped.noFillReason == .unknown, "a format with nothing valid left is a no-fill")
+        #expect(dropped.dropped == ["price.currency"], "the failing field, for the report")
+        // A field missing, a value of the wrong type, or not an object at all.
+        var noId = Fixtures.ad(id: "x")
+        noId.removeValue(forKey: "id")
+        var badExpires = Fixtures.ad(id: "y")
+        badExpires["expires"] = "soon"
+        let pause = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [noId, badExpires, 7, Fixtures.ad(id: "z")], "noFillReason": "frequencyCap"]]])
+        #expect(pause.result(for: .pause)?.ads.map(\.id) == ["z"] && pause.result(for: .pause)?.noFillReason == nil)
+        #expect(pause.result(for: .pause)?.dropped == ["id", "expires", "ad"])
     }
 
     @Test func aResponseForOtherFormatsHasNoEntryForThisOne() throws {
@@ -413,10 +435,12 @@ struct DecodingTests {
         // A filled entry ignores a contradictory no-fill reason.
         let filled = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad()], "noFillReason": "frequencyCap"]]])
         #expect(filled.result(for: .pause)?.noFillReason == nil && filled.result(for: .pause)?.ads.count == 1)
-        // A malformed or mismatched second ad fails the response, although only the first is used today.
+        // A malformed second ad is dropped alone; a mismatched one fails the response, although only the first
+        // is used today.
         var broken = Fixtures.ad(id: "ad-2")
         broken["sizes"] = []
-        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), broken]]]]) }
+        let kept = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), broken]]]])
+        #expect(kept.result(for: .pause)?.ads.map(\.id) == ["ad-1"] && kept.result(for: .pause)?.dropped == ["sizes"])
         #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), Fixtures.overlayAd()]]]]) }
     }
 

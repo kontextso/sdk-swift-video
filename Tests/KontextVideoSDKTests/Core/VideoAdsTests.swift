@@ -44,6 +44,29 @@ struct VideoAdsTests {
         return arrived()
     }
 
+    // MARK: A malformed ad
+
+    @Test func oneMalformedAdIsANoFillForItsFormatOnlyAndIsReportedOnce() async throws {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportErrors: true)))
+        let ads = await makeAds()
+        var linear = Fixtures.linearAd(id: "vid-bad")
+        linear["price"] = ["value": 2.0, "currency": "usd", "precision": "exact"]
+        harness.serve(formats: ["overlay": Fixtures.overlayAd(id: "img-o-good"), "linear": linear])
+        async let overlay = ads.format(.overlay)
+        async let missing = error { try await ads.format(.linear) }
+        #expect(try await overlay.id == "img-o-good", "the other formats keep their ads")
+        guard case .noFill(let reason)? = await missing else { Issue.record("expected noFill"); return }
+        #expect(reason == .unknown)
+        #expect(harness.adsRequests.count == 1)
+        let reports = { self.harness.server.requests(to: "/v2/error").flatMap { ($0.body?["errors"] as? [[String: Any]]) ?? [] } }
+        #expect(await waitUntil { !reports().isEmpty })
+        await sleepMs(100)
+        let report = try #require(reports().first)
+        #expect(reports().count == 1, "once per request, not per caller")
+        #expect(report["code"] as? String == "ads.decode_failed" && report["detail"] as? String == "linear:price.currency")
+        #expect(report["requestId"] as? String == ads.lastRequestId && report["recovery"] as? String == "no_ad")
+    }
+
     // MARK: The request
 
     @Test func creatingAVideoAdsSendsNothing() async {
