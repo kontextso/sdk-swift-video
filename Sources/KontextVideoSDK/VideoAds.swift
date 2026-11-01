@@ -61,11 +61,12 @@ public final class VideoAds {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.dropExpiredAds() }
         }
-        // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds.
+        // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds;
+        // a pause ad ends when the content plays again.
         playback.onChange = { [weak self] change in self?.state.showing?.contentDidChange(change) }
-        playback.isOverlayShown = { [weak self] in
+        playback.isFollowerShown = { [weak self] in
             guard let ad = self?.state.showing else { return false }
-            return ad.format == .overlay && !ad.hasEnded
+            return ad.format != .linear && !ad.hasEnded
         }
         Logger.debug("VideoAds created for video \(content.id)")
     }
@@ -250,13 +251,15 @@ public final class VideoAds {
     // MARK: Playhead
 
     /// The player this episode plays in. The SDK reads its time for requests and the `[CONTENTPLAYHEAD]`
-    /// macro of beacons, and follows its playback for an overlay: an overlay is shown over playing content
-    /// only (`show(in:)` throws `contentPaused` otherwise), ends as `.interrupted` when the content pauses,
-    /// ends or the player moves to another item, and its `duration` counts seconds of video. The SDK observes
+    /// macro of beacons, and follows its playback for an overlay and a pause ad: an overlay is shown over
+    /// playing content only (`show(in:)` throws `contentPaused` otherwise), ends as `.interrupted` when the
+    /// content pauses, ends or the player moves to another item, and its `duration` counts seconds of video; a
+    /// pause ad ends as `.interrupted` when the content plays again after a pause, whoever resumed it (the
+    /// lock screen, Control Center, a headset, PiP or your own code). The SDK observes
     /// the player's `rate` and `currentItem`; it holds the player weakly (the app keeps it) and lets go at `destroy()`, after which `track` does nothing. With one
     /// `AVPlayer` reused across episodes, call it when this episode starts playing in it, not at creation:
     /// before that the player's time belongs to the previous episode. Without a player the playhead is 0
-    /// (right for a prefetch) and an overlay runs on its own time.
+    /// (right for a prefetch), an overlay runs on its own time and a pause ad stays until it is closed or dismissed.
     public func track(_ player: AVPlayer) {
         guard !isDestroyed else { return }   // destroy() is terminal: nothing would release a new binding
         playback.track(player)
@@ -284,8 +287,9 @@ public final class VideoAds {
     /// Shown: the ad leaves its format, so the next request does not list it.
     func adDidBeginShowing(_ ad: VideoAd) {
         state.showing = ad
-        // An overlay counts its seconds of video and watches a player without a publisher on ticks.
-        playback.isTicking = ad.format == .overlay
+        // An overlay counts its seconds of video, and both it and a pause ad watch a player without a
+        // publisher, on ticks.
+        playback.isTicking = ad.format != .linear
         adDidLeave(ad)
     }
 

@@ -1,7 +1,10 @@
-/// An overlay lives only while the content plays, when the `VideoAds` tracks a player (`track(_:)`): a
-/// pause, the end of the content, another item, another player or a player that is gone ends it as
-/// `.interrupted`; its `duration` counts seconds of video; and it cannot be shown over paused content.
-/// Without a tracked player it runs on active time, as before.
+/// With a player tracked by `track(_:)`, overlay and pause ads follow the content. An overlay lives only
+/// while the content plays: a pause, the end of the content, another item, another player or a player that
+/// is gone ends it as `.interrupted`; its `duration` counts seconds of video; and it cannot be shown over
+/// paused content. A pause ad lives only while the content is paused: once the content plays again, resumed
+/// from anywhere (the lock screen, Control Center, a headset, PiP, the app's own code), it ends as
+/// `.interrupted`. The app's content is already playing then; `.resumed` stays the viewer's Resume on the ad.
+/// Without a tracked player both run on active time and the app's calls alone.
 extension VideoAd {
     /// This overlay follows the content: its `VideoAds` tracks a player, alive or gone.
     var followsContent: Bool { format == .overlay && owner?.playback.isTracking == true }
@@ -31,6 +34,7 @@ extension VideoAd {
     /// The tracked player changed or a tick came. An overlay cares from the moment `show` reserved it: a
     /// pause while its view is being attached ends it before any impression.
     func contentDidChange(_ change: ContentPlayback.Change) {
+        if format == .pause { return pauseContentDidChange(change) }
         guard followsContent, wasShown, !hasEnded, let playback = owner?.playback else { return }
         switch change {
         case .contentChanged, .contentEnded:
@@ -61,10 +65,47 @@ extension VideoAd {
         }
     }
 
-    /// An overlay over content that no longer plays ends: before another ad's `show`, so a pause ad shown
-    /// right after `player.pause()` finds the screen free, and once its own view is attached, for a pause
-    /// no callback reported while that ran.
+    /// This pause ad follows the content: its `VideoAds` tracks a player, alive or gone.
+    var pauseFollowsContent: Bool { format == .pause && owner?.playback.isTracking == true }
+
+    /// A pause ad is on screen: from here on, content seen playing after it was seen paused ends it. Content
+    /// that already played at `show` must pause first: a rate change of playing content is no resume.
+    func startFollowingPausedContent() {
+        guard pauseFollowsContent, let playback = owner?.playback else { return }
+        contentPausedSinceShow = !playback.isPlaying
+    }
+
+    /// The tracked player changed or a tick came, for a pause ad on screen: it ends once the content plays
+    /// again after a pause, whoever resumed it.
+    private func pauseContentDidChange(_ change: ContentPlayback.Change) {
+        guard pauseFollowsContent, isPresented, !hasEnded, let playback = owner?.playback else { return }
+        let playing: Bool
+        switch change {
+        case .playback(isPlaying: let value?): playing = value
+        case .contentEnded: playing = false
+        case .playback(isPlaying: nil), .contentChanged, .jumped, .tick: playing = playback.isPlaying
+        }
+        endIfContentResumed(playing: playing)
+    }
+
+    private func endIfContentResumed(playing: Bool) {
+        guard playing else {
+            contentPausedSinceShow = true
+            return
+        }
+        guard contentPausedSinceShow else { return }
+        Logger.info("ad \(id.prefix(8)): the content plays again; the pause ad ends")
+        end(.interrupted)
+    }
+
+    /// An ad over content that no longer fits it ends: before another ad's `show`, so a pause ad shown right
+    /// after `player.pause()`, or an overlay shown right after `player.play()`, finds the screen free; and,
+    /// for an overlay, once its own view is attached, for a pause no callback reported while that ran.
     func endIfContentStopped() {
+        if format == .pause {
+            guard pauseFollowsContent, isPresented, !hasEnded, let playback = owner?.playback else { return }
+            return endIfContentResumed(playing: playback.isPlaying)
+        }
         guard format == .overlay, wasShown, !hasEnded, followsContent, owner?.playback.isPlaying == false else { return }
         Logger.info("ad \(id.prefix(8)): the content paused; the overlay ends")
         end(.interrupted)

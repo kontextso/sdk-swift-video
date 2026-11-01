@@ -7,7 +7,8 @@ import UIKit
 
 /// An overlay over a tracked player lives only while the content plays: a pause, the end or another item
 /// ends it as `.interrupted`, `show` refuses paused content, another ad's `show` finds the screen free
-/// after a pause, its `duration` counts seconds of video, and `destroy()` lets go of the player.
+/// after a pause, its `duration` counts seconds of video, and `destroy()` lets go of the player. A pause ad
+/// over a tracked player ends as `.interrupted` once the content plays again.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -608,6 +609,74 @@ struct VideoAdContentTests {
 
     @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-none")) { _ in }
+        try ad.show(in: view)
+        await sleepMs(60)
+        #expect(delegate.endReasons.isEmpty)
+        try ad.dismiss()
+    }
+
+    // MARK: A pause ad follows the content the other way
+
+    @Test func aPauseAdEndsAsInterruptedWhenTheContentPlaysAgain() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-resume"))
+        harness.player.isPlaying = false
+        try ad.show(in: view)
+        await sleepMs(60)
+        #expect(delegate.endReasons.isEmpty, "paused: it stays")
+        harness.player.isPlaying = true   // resumed outside the app's code: lock screen, headset, PiP
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "read on a tick, without a publisher")
+        #expect(view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+    }
+
+    @Test func aPublisherEndsThePauseAdWithoutWaitingForATick() async throws {
+        ContentPlayback.tickInterval = 30
+        let player = PublishingPlayer()
+        player.isPlaying = false
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-pub")) { $0.track(player) }
+        try ad.show(in: view)
+        player.isPlaying = true
+        #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] })
+    }
+
+    @Test func anAVPlayerPlayEndsThePauseAd() async throws {
+        let player = try await playingPlayer()
+        player.pause()
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-av")) { $0.track(player) }
+        try ad.show(in: view)
+        player.play()
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
+        player.pause()
+    }
+
+    @Test func aPauseAdShownOverPlayingContentWaitsForAPauseFirst() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-over"))
+        try ad.show(in: view)   // the player still reports playing: a rate change is not a resume
+        await sleepMs(80)
+        #expect(delegate.endReasons.isEmpty)
+        harness.player.isPlaying = false
+        await sleepMs(80)
+        #expect(delegate.endReasons.isEmpty)
+        harness.player.isPlaying = true
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
+    }
+
+    @Test func anOverlayShownRightAfterThePlayFindsTheScreenFree() async throws {
+        ContentPlayback.tickInterval = 30   // no tick comes in between: the overlay's show ends the pause ad
+        let (pause, pauseDelegate, ads) = try await makeAd(Fixtures.ad(id: "p-c-hand2"))
+        let overlay = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.overlayAd(id: "o-c-hand2")), owner: ads)
+        overlay.bridge.load()
+        overlay.bridge.receive(["adId": overlay.id, "type": "ad.loaded"], from: sender)
+        harness.player.isPlaying = false
+        try pause.show(in: view)
+        harness.player.isPlaying = true
+        try overlay.show(in: view)
+        #expect(pauseDelegate.endReasons == [.interrupted], "the pause ad ended first")
+        #expect(KontextVideo.shared.adOnScreen === overlay)
+        try overlay.dismiss()
+    }
+
+    @Test func withoutATrackedPlayerThePauseAdIgnoresPlayback() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-none")) { _ in }
         try ad.show(in: view)
         await sleepMs(60)
         #expect(delegate.endReasons.isEmpty)

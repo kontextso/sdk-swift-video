@@ -107,6 +107,7 @@ public final class VideoAd {
     /// `duration` elapsed, unless the overlay follows the content. Made when the ad is presented.
     private(set) var clock: ActiveTimeClock?
     var contentProgress: ContentProgress?   // an overlay that follows the content: `VideoAd+Content`
+    var contentPausedSinceShow = false   // a pause ad that follows the content: `VideoAd+Content`
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
@@ -206,7 +207,8 @@ public final class VideoAd {
     /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
     /// three. Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it. The ad follows the
     /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
-    /// with `.interrupted`. An overlay of a `VideoAds` that tracks a player also ends when the content stops.
+    /// with `.interrupted`. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
+    /// stops, and a pause ad when the content plays again, both as `.interrupted`.
     ///
     /// `insets` keep an overlay or a pause card clear of your own controls: they add to the view's safe area,
     /// as UIKit's `additionalSafeAreaInsets` do, so `bottom: 80` places a bottom strip 80 points above the
@@ -468,6 +470,7 @@ public final class VideoAd {
             self.clock = clock
             clock.start(in: hostView?.window)
             startFollowingContent()
+            startFollowingPausedContent()
         }
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for
@@ -599,29 +602,6 @@ public final class VideoAd {
         if KontextVideo.shared.adOnScreen === self { KontextVideo.shared.adOnScreen = nil }
         owner?.adDidEnd(self)
         delegate?.videoAd(self, didEnd: reason)
-    }
-
-    // MARK: Clicks
-
-    /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
-    /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
-    private func openClick(_ url: URL, fallback: URL?) {
-        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return Self.open(url, fallback: fallback) }
-        // The viewer's tap is honored even if the ad ends while the sheet loads: the URL opens when it fails.
-        Task {
-            if await skAdNetwork.presentStore() { return }
-            Self.open(url, fallback: fallback)
-        }
-    }
-
-    /// Opens a URL the page asked for: the app store, a deep link, a web page. The fallback is tried when
-    /// the first cannot be opened (an app that is not installed).
-    private static func open(_ url: URL, fallback: URL?) {
-        Environment.openURL(url) { opened in
-            if !opened, let fallback {
-                Environment.openURL(fallback) { _ in }
-            }
-        }
     }
 
     // MARK: The page's events

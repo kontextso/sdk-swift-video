@@ -13,7 +13,7 @@ public protocol VideoAdsPlayer: AnyObject {
     /// playing: the content is about to move on.
     var isPlaying: Bool { get }
     /// Optional: emits whenever `isPlaying` changes, for an immediate reaction. Without it the SDK reads
-    /// `isPlaying` four times a second while an overlay is on screen, and at every `show`.
+    /// `isPlaying` four times a second while an overlay or pause ad is on screen, and at every `show`.
     var isPlayingPublisher: AnyPublisher<Bool, Never>? { get }
 }
 
@@ -23,9 +23,9 @@ extension VideoAdsPlayer {
 }
 
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
-/// an overlay, which lives only while the content plays. Fed by an `AVPlayer` (observed: `rate`, so a
+/// an overlay, which lives only while the content plays, and a pause ad, which lives only while it is paused. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
-/// `VideoAdsPlayer` (its publisher, or a read every `tickInterval` while an overlay is on screen). Holds an
+/// `VideoAdsPlayer` (its publisher, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
 /// `AVPlayer` weakly (the app owns it) and a `VideoAdsPlayer` strongly (often a wrapper only the SDK holds);
 /// `stop()` drops every observer, subscription and timer, and the player. Every callback carries the binding
 /// it came from: one queued from a player tracked before is dropped.
@@ -46,13 +46,14 @@ final class ContentPlayback {
         case tick
     }
 
-    /// How often a tick comes while an overlay is on screen. Tests shorten it.
+    /// How often a tick comes while an overlay or pause ad is on screen. Tests shorten it.
     static var tickInterval: TimeInterval = 0.25
 
     /// Every change, on the main actor; the `VideoAds` passes it to its ad on screen.
     var onChange: ((Change) -> Void)?
-    /// Whether an overlay of the `VideoAds` is on screen now; set by the `VideoAds`.
-    var isOverlayShown: () -> Bool = { false }
+    /// Whether an overlay or pause ad of the `VideoAds` is on screen now, an ad that follows the content;
+    /// set by the `VideoAds`.
+    var isFollowerShown: () -> Bool = { false }
     /// `track` was called and `stop()` was not since: a player was given, alive or not.
     private(set) var isTracking = false
     /// Which binding is current; a callback from an older one is dropped.
@@ -93,7 +94,7 @@ final class ContentPlayback {
         return min(max(0, value), 315_360_000)
     }
 
-    /// Ticks run while an overlay of this `VideoAds` is on screen, and only then.
+    /// Ticks run while an overlay or pause ad of this `VideoAds` is on screen, and only then.
     var isTicking = false {
         didSet {
             guard isTicking != oldValue else { return }
@@ -121,7 +122,7 @@ final class ContentPlayback {
         guard generation == expected else { return nil }
         // Asked of the ad on screen, not of the ticks: a `track` nested in the cancellation runs after `stop()`
         // turned them off, and must still hand the overlay over.
-        let overlayShown = isOverlayShown()
+        let overlayShown = isFollowerShown()
         isTracking = true
         readTime = time
         readPlaying = playing
