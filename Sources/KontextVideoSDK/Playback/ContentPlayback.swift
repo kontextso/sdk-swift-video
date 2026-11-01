@@ -4,7 +4,8 @@ import Combine
 /// Your player, as the SDK reads it: where the content is, and whether it plays. Pass it to
 /// `VideoAds.track(_:)`; an `AVPlayer` needs no conformance, `track` takes it directly. The SDK holds it
 /// strongly until `destroy()` or the next `track`, so a small wrapper around your player needs no other
-/// reference; it reads it on the main actor.
+/// reference; it reads it on the main actor. A conforming type that references the `VideoAds`, or the object
+/// owning it, keeps both alive until `destroy()`: call `destroy()` then, or do not reference the ads from it.
 @MainActor
 public protocol VideoAdsPlayer: AnyObject {
     /// Where the content is, in seconds of the episode.

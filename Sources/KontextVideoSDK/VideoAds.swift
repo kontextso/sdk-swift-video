@@ -4,7 +4,8 @@ import UIKit
 
 /// The ads of one video (one episode). Creating it sends nothing; every request comes from `format(_:)`.
 /// Create the next episode's while the current one plays if you like; any number can be alive at once.
-/// Call `destroy()` when the viewer leaves the video; releasing the object does the same, best effort.
+/// Call `destroy()` when the viewer leaves the video; releasing the object does the same, best effort, except
+/// while a custom player passed to `track(_:)` references it (see there): then only `destroy()` does.
 @MainActor
 public final class VideoAds {
     /// The video these ads are for, as passed at creation; every request carries it.
@@ -287,7 +288,10 @@ public final class VideoAds {
 
     /// The same for any other player: conform it to `VideoAdsPlayer`, or wrap it in a small type that does.
     /// Unlike an `AVPlayer`, it is held strongly, until `destroy()` or the next `track`: a wrapper needs no
-    /// other reference.
+    /// other reference. A player or wrapper that references this `VideoAds`, directly or through the object
+    /// that owns it (your player model), makes a cycle: both stay alive, with the ads they hold and their
+    /// WebViews, until `destroy()`. Call `destroy()` when the viewer leaves the video, as always, or keep
+    /// the reference out of the adapter (or weak).
     public func track(_ player: some VideoAdsPlayer) {
         guard !isDestroyed else { return }
         playback.track(player)
@@ -339,6 +343,7 @@ public final class VideoAds {
     }
 
     /// Releasing the object does what `destroy()` does, best effort: the beacons leave if the process lives.
+    /// Never reached while a tracked custom player references the object: `destroy()` breaks that cycle.
     /// Released while it still holds ads, it says so on the console: the usual cause is a `VideoAds` the app
     /// did not keep (a local variable, a SwiftUI view struct) while it kept the ads.
     deinit {

@@ -683,6 +683,30 @@ struct VideoAdContentTests {
         try ad.dismiss()
     }
 
+    /// A player model that owns its `VideoAds` and is its tracked player: the cycle the docs warn about.
+    final class OwningPlayer: VideoAdsPlayer {
+        var ads: VideoAds?
+        var currentTime: TimeInterval { 0 }
+        var isPlaying: Bool { true }
+    }
+
+    @Test func aCustomPlayerThatReferencesItsVideoAdsIsFreedByDestroy() async throws {
+        _ = await harness.initialize()
+        weak var weakAds: VideoAds?
+        weak var weakPlayer: OwningPlayer?
+        do {
+            let player = OwningPlayer()
+            let ads = VideoAds(content: .init(id: "ep-cycle", language: "en"))
+            player.ads = ads
+            ads.track(player)
+            weakAds = ads
+            weakPlayer = player
+        }
+        #expect(weakAds != nil && weakPlayer != nil, "the cycle the docs describe: releasing alone frees nothing")
+        weakAds?.destroy()
+        #expect(weakAds == nil && weakPlayer == nil, "destroy() breaks it: both are freed")
+    }
+
     @Test func destroyAndReleaseLetGoOfThePlayerAndItsObservers() async throws {
         _ = await harness.initialize()
         let player = PublishingPlayer()
