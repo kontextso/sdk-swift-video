@@ -280,13 +280,16 @@ struct DecodingTests {
             ["event": "progress", "url": "https://ads.test/p-neg", "offset": -1],
             ["event": "progress", "url": "https://ads.test/p-huge", "offset": 1e300],
             ["event": "progress", "url": "https://ads.test/p5", "offset": 5000],
+            ["event": "progress", "url": "https://ads.test/p-str", "offset": "5000"],
+            ["event": "progress", "url": "https://ads.test/p-obj", "offset": ["ms": 5000]],
+            ["event": "progress", "url": "https://ads.test/p-bool", "offset": true],
             ["event": "start", "url": "https://ads.test/start"],
         ]
         let payload = try Fixtures.payload(linear)
         #expect(payload.expires == 30_000 && payload.details == .linear(duration: 15_024, skipOffset: 5000))
         #expect(payload.trigger == .window(from: 1001, to: 2000))
         #expect(payload.tracking.map(\.url) == ["https://ads.test/p33", "https://ads.test/p5", "https://ads.test/start"],
-                "a negative or huge offset drops its entry, not the ad")
+                "a negative, huge or non-numeric offset drops its entry, not the ad")
         #expect(payload.tracking.map(\.offset) == [4958, 5000, nil])
         var overlay = Fixtures.overlayAd(id: "o-frac")
         overlay["duration"] = 2999.5
@@ -295,14 +298,12 @@ struct DecodingTests {
         // Whole answers too: the response that failed on a fractional offset now decodes.
         let response = try decode(AdsResponse.self, Fixtures.adsResponse(linear))
         #expect(response.result(for: .linear)?.ads.map(\.id) == ["l-frac"])
-        // Still refused: a string, an entry broken otherwise, a non-finite or out-of-range duration.
-        var stringOffset = Fixtures.linearAd(id: "l-str")
-        stringOffset["tracking"] = [["event": "progress", "url": "https://ads.test/p", "offset": "5000"]]
+        // Still refused: an entry broken otherwise, a non-finite or out-of-range duration.
         var noURL = Fixtures.linearAd(id: "l-nourl")
         noURL["tracking"] = [["event": "progress", "offset": 5000]]
         var huge = Fixtures.linearAd(id: "l-huge")
         huge["duration"] = 1e300
-        for ad in [stringOffset, noURL, huge] {
+        for ad in [noURL, huge] {
             #expect(throws: DecodingError.self) { try Fixtures.payload(ad) }
         }
     }

@@ -86,7 +86,7 @@ struct AdPayload: Decodable, Sendable {
 
         private enum CodingKeys: String, CodingKey { case event, url, offset, part }
 
-        /// An offset that is negative or out of range: this entry cannot fire at a meaningful moment.
+        /// An offset that is not a number, negative or out of range: this entry cannot fire at a meaningful moment.
         struct InvalidOffset: Error {}
 
         init(from decoder: Decoder) throws {
@@ -94,7 +94,14 @@ struct AdPayload: Decodable, Sendable {
             event = try container.decode(String.self, forKey: .event)
             url = try container.decode(String.self, forKey: .url)
             part = try container.decodeIfPresent(String.self, forKey: .part)
-            if let raw = try container.decodeIfPresent(Double.self, forKey: .offset) {
+            // A string, a boolean or an object is no count of milliseconds either: the entry goes, not the ad.
+            let raw: Double?
+            do {
+                raw = try container.decodeIfPresent(Double.self, forKey: .offset)
+            } catch DecodingError.typeMismatch {
+                throw InvalidOffset()
+            }
+            if let raw {
                 guard raw >= 0, let offset = AdPayload.milliseconds(raw) else { throw InvalidOffset() }
                 self.offset = offset
             } else {
@@ -103,8 +110,8 @@ struct AdPayload: Decodable, Sendable {
         }
     }
 
-    /// `tracking`: an entry whose offset is unusable is dropped, the rest of the ad stays; any other broken
-    /// entry still fails the ad.
+    /// `tracking`: an entry whose offset is unusable (not a number, negative, out of range) is dropped, the
+    /// rest of the ad stays; any other broken entry still fails the ad.
     private struct TrackingEntry: Decodable {
         let event: TrackingEvent?
 
