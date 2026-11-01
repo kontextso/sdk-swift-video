@@ -51,11 +51,17 @@ enum AdPlacement {
                      bottom: safeArea.bottom + insets.bottom, right: safeArea.right + insets.right)
     }
 
-    /// Whether the viewer could see `view`: in a window, with an area, and neither it, an ancestor nor the
-    /// window hidden or transparent. What covers it is not known here; the meter measures that once the ad
-    /// is shown.
+    /// The window `view` is in. A window passed as the container is its own: UIKit gives a window no
+    /// `window` of its own.
+    static func window(of view: UIView) -> UIWindow? {
+        view as? UIWindow ?? view.window
+    }
+
+    /// Whether the viewer could see `view`: in a window (or a window itself), with an area, and neither it,
+    /// an ancestor nor the window hidden or transparent. What covers it is not known here; the meter measures
+    /// that once the ad is shown.
     static func canBeSeen(_ view: UIView) -> Bool {
-        guard view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return false }
+        guard window(of: view) != nil, view.bounds.width > 0, view.bounds.height > 0 else { return false }
         var node: UIView? = view
         while let current = node {
             if current.isHidden || current.alpha <= 0.01 { return false }
@@ -69,7 +75,7 @@ enum AdPlacement {
     /// Picture only, on the lock screen, with background audio or under Control Center: an impression there
     /// would count an ad nobody sees, and a linear ad would be presented into the background.
     static func isInFront(_ view: UIView) -> Bool {
-        guard let window = view.window else { return false }
+        guard let window = window(of: view) else { return false }
         return Environment.isWindowActive(window)
     }
 }

@@ -106,6 +106,34 @@ struct VideoAdPlacementTests {
         }
     }
 
+    @Test func aWindowItselfCanBeTheContainer() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-win"))
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        // A window has no `window` of its own: it is its own, on screen while visible and its scene in front.
+        try ad.show(in: window.window)
+        #expect(ad.wasShown && window.window.subviews.contains { $0 is AdHostView })
+        try ad.dismiss()
+        #expect(delegate.endReasons == [.dismissed])
+        let hiddenWindow = TestWindow()
+        defer { hiddenWindow.tearDown() }
+        hiddenWindow.window.isHidden = true
+        let (hidden, _, _) = try await makeAd(Fixtures.ad(id: "p-win-h"))
+        let refused = { (container: UIWindow, label: String) in
+            do {
+                try hidden.show(in: container)
+                Issue.record("\(label): expected presenterUnavailable")
+            } catch VideoAdError.presenterUnavailable {
+            } catch {
+                Issue.record("\(label): expected presenterUnavailable, got \(error)")
+            }
+        }
+        refused(hiddenWindow.window, "a hidden window is not on screen")
+        Environment.isWindowActive = { _ in false }
+        refused(window.window, "nor one whose scene is not in front")
+        #expect(hidden.isReady && !hidden.wasShown)
+    }
+
     @Test func showRefusesWhileTheAppOrTheViewsSceneIsNotInFront() async throws {
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
         window.add(player)
