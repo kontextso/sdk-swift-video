@@ -558,9 +558,9 @@ public final class VideoAd {
         if let controller = linearController {
             linearController = nil
             controller.isEndingByAd = true
-            if let presenter = controller.presentingViewController, reason != .interrupted {
-                // `didEnd` waits for the dismissal, so an app presenting its next screen there misses the animation. The
-                // presenter's takes the ad and anything over it (an install click's store sheet); the ad's, only that.
+            // Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
+            // the animation. From the presenter: it takes the ad and anything over it (an install click's store sheet).
+            if controller.isPresentedLive, let presenter = controller.presentingViewController {
                 dismissing = true
                 presenter.dismiss(animated: true) { [weak self] in self?.finish(reason) }
                 // A completion UIKit never calls: once the controller has left the screen, or after a

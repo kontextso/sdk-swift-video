@@ -974,30 +974,56 @@ struct VideoAdTests {
         }
     }
 
-    @Test func aLinearAdIsDismissedFromItsPresenterSoACoverOverItGoesToo() async throws {
-        VideoAd.dismissalTimeout = 0.05
-        defer { VideoAd.dismissalTimeout = 1 }
-        let spy = DismissSpy()
+    /// A linear ad presented from a `DismissSpy` in a window of its own; the controller's view is put in the
+    /// window directly, as the runner never completes the transition, so the meter sees the ad.
+    private func presentLinear(_ ad: VideoAd, from spy: DismissSpy) async throws -> (LinearViewController, UIWindow) {
         let window = UIWindow(windowScene: try #require(self.window.window.windowScene))
         window.frame = self.window.window.frame
         window.rootViewController = spy
         window.makeKeyAndVisible()
-        defer { window.isHidden = true; window.rootViewController = nil }
-        let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13b"))
         try ad.show(from: spy)
         let controller = try #require(ad.linearController)
         #expect(await waitUntil { spy.presentedViewController === controller })
-        // The runner never completes the transition: the controller's view is put in the window directly, so
-        // the meter sees the ad. It cannot present anything over the ad either (the App Store sheet of an
-        // install click), so what is checked is where the dismissal is asked: the ad's own `dismiss` would
-        // take only such a cover, the presenter's takes the ad and everything over it.
         window.addSubview(controller.view)
         ad.presented()
+        return (controller, window)
+    }
+
+    @Test func aLinearAdIsDismissedFromItsPresenterSoACoverOverItGoesToo() async throws {
+        VideoAd.dismissalTimeout = 0.05
+        defer { VideoAd.dismissalTimeout = 1 }
+        let spy = DismissSpy()
+        let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13b"))
+        let (_, window) = try await presentLinear(ad, from: spy)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        // The runner cannot present anything over the ad (the App Store sheet of an install click), so what is
+        // checked is where the dismissal is asked: the ad's own `dismiss` would take only such a cover, the
+        // presenter's takes the ad and everything over it.
         ads.destroy()
         #expect(spy.dismissals == 1, "dismissed from the presenter")
         #expect(await waitUntil { delegate.endReasons == [.destroyed] }, "didEnd after the dismissal's completion")
         await sleepMs(200)   // past the watchdog
         #expect(delegate.endReasons == [.destroyed], "once, the watchdog adds nothing")
+    }
+
+    @Test func anInterruptedLinearAdStillPresentedIsDismissed() async throws {
+        let spy = DismissSpy()
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i13c"))
+        let (controller, window) = try await presentLinear(ad, from: spy)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        controller.view.removeFromSuperview()   // the view left the window, nothing covers it: the meter ends the ad
+        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] })
+        #expect(spy.dismissals == 1, "the controller was still presented: the SDK takes it down")
+    }
+
+    @Test func aLinearAdUIKitTookAwayIsNotDismissedAgain() async throws {
+        let spy = DismissSpy()
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i13d"))
+        let (controller, window) = try await presentLinear(ad, from: spy)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        controller.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
+        #expect(delegate.endReasons == [.interrupted], "at once: nothing to wait for")
+        #expect(spy.dismissals == 0, "UIKit already took it")
     }
 
     // MARK: Ownership

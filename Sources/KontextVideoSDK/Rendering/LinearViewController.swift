@@ -10,6 +10,10 @@ final class LinearViewController: UIViewController {
     var isEndingByAd = false
     /// Called when the view left the screen and the ad did not ask for it.
     var onInterrupted: (() -> Void)?
+    /// UIKit took the presentation away (`viewDisappeared`): nothing is left for the ad to dismiss.
+    private(set) var wasRemovedBySystem = false
+    /// Still presented and not on its way out: ending the ad must dismiss it, whatever ended it.
+    var isPresentedLive: Bool { presentingViewController != nil && !isBeingDismissed && !wasRemovedBySystem }
 
     private let webView: WKWebView
 
@@ -49,6 +53,7 @@ final class LinearViewController: UIViewController {
     /// is an interruption.
     func viewDisappeared(isBeingDismissed: Bool, isMovingFromParent: Bool, hasPresenter: Bool) {
         guard !isEndingByAd, isBeingDismissed || isMovingFromParent || !hasPresenter else { return }
+        wasRemovedBySystem = true
         onInterrupted?()
     }
 }

@@ -90,8 +90,9 @@ struct VideoAdSKAdNetworkTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.installAd(Fixtures.linearAd(id: "s4"), itunesItem: "s4"))
         try ad.show(from: window.root)
         ad.end(.interrupted)
-        await sleepMs(50)
-        #expect(skanCalls.isEmpty && delegate.endReasons == [.interrupted])
+        // Still presented: the SDK dismisses it and didEnd waits for that (the runner never finishes it, the watchdog does).
+        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] })
+        #expect(skanCalls.isEmpty)
     }
 
     @Test func theEndWaitsForAStartStillInFlight() async throws {
