@@ -357,6 +357,48 @@ struct VideoAdsTests {
         #expect(ad.invalidationReason == .expired)
     }
 
+    @Test func aHeldAdThatExpiredDuringTheRequestLeavesWithAnAnswerThatOmitsItsFormat() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-e1", expires: 30_000))
+        let ad = try await ads.format(.pause)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        // The answer says nothing about pause: only a linear ad.
+        harness.server.on("/v2/video/ads") { _ in
+            var response = StubServer.Response.json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd(id: "vid-e1"))]])
+            response.gate = gate
+            return response
+        }
+        let pause = Task { try await ads.format(.pause) }
+        let linear = Task { try await ads.format(.linear) }
+        #expect(await waitUntil { self.harness.adsRequests.count == 2 })
+        #expect(harness.adsRequests[1].body?["held"] as? [String] == ["img-e1"], "valid when the request left: held")
+        advanceClock(by: 31)
+        gate.open()
+        #expect(try await linear.value.id == "vid-e1")
+        let late = await error { try await pause.value }
+        guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
+        #expect(reason == .unknown)
+        #expect(ad.invalidationReason == .expired, "the answer left pause out, and the ad expired meanwhile: it leaves")
+        #expect(await notUsedBeacons().isEmpty, "silently: the server knows expires")
+    }
+
+    @Test func anAdThatExpiresBeforeItsWaiterResumesIsNotReturned() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-e2", expires: 30_000))
+        let ad = try await ads.format(.pause)
+        harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd(id: "vid-e2"))]]) }
+        // The clock passes the pause ad's expiry after the answer swept the expired ads, before the waiter resumes.
+        Logger.level = .info
+        defer { Logger.level = .warning }
+        Logger.sink = { _, message in if message.contains("linear for ep-1: ad vid-e2") { advanceClock(by: 31) } }
+        let late = await error { try await ads.format(.pause) }
+        guard case .noFill(let reason) = late else { Issue.record("expected noFill, got \(String(describing: late))"); return }
+        #expect(reason == .unknown, "no ad expired at the answer: the reason is unknown")
+        #expect(ad.invalidationReason == .expired)
+        #expect(await notUsedBeacons().isEmpty)
+    }
+
     // MARK: Failures
 
     @Test func aFailedRequestReturnsTheHeldBidWhileItIsValid() async throws {

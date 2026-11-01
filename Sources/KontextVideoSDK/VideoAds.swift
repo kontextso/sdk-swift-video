@@ -101,15 +101,24 @@ public final class VideoAds {
         } catch VideoAdError.request(let error) {
             // Destroyed or switched off between the failure and this caller's turn: no held ad comes back.
             try checkStillUsable()
-            if let held = state.ads[format], !held.descriptor.isExpired {
+            if let held = validHeld(format) {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
             }
             throw VideoAdError.request(error)
         }
         try checkStillUsable()
-        if let ad = state.ads[format] { return ad }
+        if let ad = validHeld(format) { return ad }
         throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
+    }
+
+    /// The held ad of `format` while it is valid. One that expired since the answer (app code ran before
+    /// this caller resumed) leaves silently, as before a request: the server knows `expires`.
+    private func validHeld(_ format: AdFormat) -> VideoAd? {
+        guard let held = state.ads[format] else { return nil }
+        guard held.descriptor.isExpired else { return held }
+        held.invalidate(.expired)
+        return nil
     }
 
     /// Whether a valid unshown ad is held: what a failed request leaves the app with (an expired one is not).
@@ -241,8 +250,10 @@ public final class VideoAds {
     /// because the server replaces a held bid only once it expired. A format the answer leaves out decides
     /// nothing: its held ad stays as it is, loaded or not, until its own expiry (no held ad: a no-fill,
     /// reason unknown). An id the SDK already spent (shown or rejected while the request ran) is ignored
-    /// for its format. Returns the no-fill reasons by format.
+    /// for its format. A held ad that expired while the request ran leaves first, silently, whether the
+    /// answer names its format or not. Returns the no-fill reasons by format.
     private func apply(_ response: AdsResponse) -> [AdFormat: VideoAdError.NoFillReason] {
+        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         var noFill: [AdFormat: VideoAdError.NoFillReason] = [:]
         for format in AdFormat.allCases {
             let current = state.ads[format]
@@ -257,8 +268,8 @@ public final class VideoAds {
                 logNoFill(format, reason: reason)
                 continue
             }
-            // Re-served and still valid: kept unchanged, the payload is ignored.
-            if let current, current.id == ad.id, !current.descriptor.isExpired { continue }
+            // Re-served (and valid: the expired left above): kept unchanged, the payload is ignored.
+            if let current, current.id == ad.id { continue }
             // Replaced, no longer served, or re-served after it expired: it never comes back.
             current?.invalidate(.expired)
             if state.spentIds.contains(ad.id) {
