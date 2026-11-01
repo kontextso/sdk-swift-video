@@ -66,6 +66,9 @@ enum Environment {
     /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and an ad must
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
     nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
+    /// Custom schemes a frame page may come from besides http and https: the one the tests serve their pages
+    /// over (`schemeHandlers`). Empty in an app; not cleared by `reset`, as decoding runs before any harness.
+    nonisolated(unsafe) static var testFrameSchemes: Set<String> = []
 
     // Called by the tests, which the analyzer does not see.
     // swiftlint:disable:next unused_declaration

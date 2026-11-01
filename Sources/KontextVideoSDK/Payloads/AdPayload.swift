@@ -40,6 +40,28 @@ struct AdPayload: Decodable, Sendable {
         /// ISO 4217.
         let currency: String
         let precision: Precision
+
+        init(value: Double, currency: String, precision: Precision) {
+            self.value = value
+            self.currency = currency
+            self.precision = precision
+        }
+
+        private enum CodingKeys: String, CodingKey { case value, currency, precision }
+
+        /// A finite, non-negative CPM in a three-letter currency: the publisher's auction compares it.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            value = try container.decode(Double.self, forKey: .value)
+            guard value.isFinite, value >= 0 else {
+                throw DecodingError.dataCorruptedError(forKey: .value, in: container, debugDescription: "the price must be a finite, non-negative CPM")
+            }
+            currency = try container.decode(String.self, forKey: .currency)
+            guard currency.count == 3, currency.allSatisfy({ ("A"..."Z").contains($0) }) else {
+                throw DecodingError.dataCorruptedError(forKey: .currency, in: container, debugDescription: "the currency must be an ISO 4217 code")
+            }
+            precision = try container.decode(Precision.self, forKey: .precision)
+        }
     }
 
     /// One beacon of the ad. The SDK fires every entry once, when its moment happens, except `click`,
@@ -88,8 +110,8 @@ struct AdPayload: Decodable, Sendable {
         }
     }
 
-    /// Schemes a frame page never comes from: local files and inline content.
-    private static let refusedFrameSchemes: Set<String> = ["file", "javascript", "data", "blob", "about"]
+    /// Where a frame page comes from: the web, or a scheme the tests serve pages over.
+    private static let frameSchemes: Set<String> = ["http", "https"]
 
     /// An optional count of milliseconds, refused when negative (a negative overlay duration would end the
     /// overlay the moment it shows).
@@ -184,11 +206,13 @@ struct AdPayload: Decodable, Sendable {
         let rendering = try container.nestedContainer(keyedBy: RenderingKeys.self, forKey: .rendering)
         switch try rendering.decode(String.self, forKey: .kind) {
         case "frame":
-            // A page to load: absolute, with a scheme and a host, and not a scheme that loads something
-            // local or inline (`file://localhost/...` has a host, so the host alone does not rule it out).
+            // A web page to load: http or https, with a host and a valid port. Anything else (a local file,
+            // inline content, another app's scheme) is not a frame page.
             let url = try rendering.decode(URL.self, forKey: .url)
-            guard let scheme = url.scheme?.lowercased(), !Self.refusedFrameSchemes.contains(scheme), let host = url.host, !host.isEmpty else {
-                throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be absolute with a host")
+            guard let scheme = url.scheme?.lowercased(),
+                  Self.frameSchemes.contains(scheme) || Environment.testFrameSchemes.contains(scheme),
+                  let host = url.host, !host.isEmpty, (url.port.map { (1...65_535).contains($0) } ?? true) else {
+                throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be an http or https page with a host")
             }
             self.rendering = .frame(url)
         case let kind:

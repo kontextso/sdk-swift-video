@@ -266,8 +266,21 @@ struct DecodingTests {
         for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1"] {
             #expect(try Fixtures.payload(Fixtures.ad(frameURL: ok)).rendering == .frame(URL(string: ok)!))
         }
-        for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "file://localhost/etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank"] {
+        for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "file://localhost/etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank",
+                    "ftp://frames.test/frame", "ws://frames.test/frame", "myapp://frames/frame", "https://frames.test:0/frame", "https://frames.test:99999/frame"] {
             #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
+        }
+    }
+
+    @Test func aPriceIsAFiniteNonNegativeCPMInAThreeLetterCurrency() throws {
+        func price(_ fields: String) throws -> AdPayload.Price {
+            try JSONDecoder().decode(AdPayload.Price.self, from: Data("{\(fields), \"precision\": \"exact\"}".utf8))
+        }
+        #expect(try price(#""value": 7.5, "currency": "USD""#).value == 7.5)
+        #expect(try price(#""value": 0, "currency": "EUR""#).value == 0)
+        for bad in [#""value": 1e400, "currency": "USD""#, #""value": -1, "currency": "USD""#, #""value": 1, "currency": "usd""#,
+                    #""value": 1, "currency": "US""#, #""value": 1, "currency": "DOLLARS""#, #""value": 1, "currency": "U$D""#] {
+            #expect(throws: DecodingError.self, "\(bad)") { try price(bad) }
         }
     }
 

@@ -3,7 +3,11 @@ import Foundation
 
 /// Wire payloads as the ad server sends them, with knobs for what a test varies.
 enum Fixtures {
-    static let frameOrigin = "kontext-test://frames"
+    /// The test pages' origin; the first fixture lets the payload accept its scheme.
+    static let frameOrigin: String = {
+        Environment.testFrameSchemes = ["kontext-test"]
+        return "kontext-test://frames"
+    }()
 
     /// `video`: the creative's events; `nonLinear`: an overlay or pause ad's `overlayViewDuration`.
     static func tracking(video: Bool, nonLinear: Bool = true, origin: String = "https://ads.test", adId: String = "ad-1") -> [[String: Any]] {
@@ -135,7 +139,8 @@ enum Fixtures {
     }
 
     static func payload(_ ad: [String: Any]) throws -> AdPayload {
-        try JSONDecoder().decode(AdPayload.self, from: JSONSerialization.data(withJSONObject: ad))
+        _ = frameOrigin
+        return try JSONDecoder().decode(AdPayload.self, from: JSONSerialization.data(withJSONObject: ad))
     }
 
     /// The SKAdNetwork payload of an app-install ad, the Video API's example values; `fidelities` says
