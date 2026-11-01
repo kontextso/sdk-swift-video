@@ -279,7 +279,8 @@ struct DecodingTests {
         #expect(try price(#""value": 7.5, "currency": "USD""#).value == 7.5)
         #expect(try price(#""value": 0, "currency": "EUR""#).value == 0)
         for bad in [#""value": 1e400, "currency": "USD""#, #""value": -1, "currency": "USD""#, #""value": 1, "currency": "usd""#,
-                    #""value": 1, "currency": "US""#, #""value": 1, "currency": "DOLLARS""#, #""value": 1, "currency": "U$D""#] {
+                    #""value": 1, "currency": "US""#, #""value": 1, "currency": "DOLLARS""#, #""value": 1, "currency": "U$D""#,
+                    "\"value\": 1, \"currency\": \"A\u{0338}BC\"", "\"value\": 1, \"currency\": \"US\u{200D}D\""] {
             #expect(throws: DecodingError.self, "\(bad)") { try price(bad) }
         }
     }

@@ -57,7 +57,8 @@ struct AdPayload: Decodable, Sendable {
                 throw DecodingError.dataCorruptedError(forKey: .value, in: container, debugDescription: "the price must be a finite, non-negative CPM")
             }
             currency = try container.decode(String.self, forKey: .currency)
-            guard currency.count == 3, currency.allSatisfy({ ("A"..."Z").contains($0) }) else {
+            // Bytes, not Characters: a combining mark or a zero-width joiner hides inside one Character.
+            guard currency.utf8.count == 3, currency.utf8.allSatisfy({ (65...90).contains($0) }) else {
                 throw DecodingError.dataCorruptedError(forKey: .currency, in: container, debugDescription: "the currency must be an ISO 4217 code")
             }
             precision = try container.decode(Precision.self, forKey: .precision)
