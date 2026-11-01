@@ -24,8 +24,8 @@ final class FrameBridge: NSObject {
     /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
     /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
     /// `itms-services:`, a shortcut, the Settings app), or are not links to anywhere (`intent:` is Android's,
-    /// the rest load in place). Web, App Store and advertiser app deep links open; the host app's own schemes
-    /// are refused as well (`isAllowed`).
+    /// the rest load in place). Web, App Store and app deep links open, the host app's own included: which links
+    /// an ad may carry is the ad server's decision.
     static let refusedSchemes: Set<String> = [
         "tel", "telprompt", "sms", "mms", "facetime", "facetime-audio", "itms-services", "shortcuts",
         "app-settings", "prefs", "app-prefs", "x-apple-reminderkit", "x-apple-health",
@@ -344,11 +344,10 @@ final class FrameBridge: NSObject {
         return true
     }
 
-    /// A URL the page may have opened: anything but the refused schemes and the host app's own. A link into
-    /// the host app would let an advertiser drive the publisher's own screens (a purchase flow, its settings).
+    /// A URL the page may have opened: anything but the refused schemes.
     static func isAllowed(_ target: URL) -> Bool {
         guard let scheme = target.scheme?.lowercased() else { return false }
-        return !refusedSchemes.contains(scheme) && !Environment.hostAppSchemes().contains(scheme)
+        return !refusedSchemes.contains(scheme)
     }
 
     /// What a click or open goes to under `isAllowed`, `nil` when nothing may open. The fallback is held to the

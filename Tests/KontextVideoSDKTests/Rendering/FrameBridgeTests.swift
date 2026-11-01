@@ -293,21 +293,14 @@ struct FrameBridgeTests {
         #expect(area == .creative)
     }
 
-    @Test func theHostAppsOwnSchemesAreRefused() {
-        Environment.hostAppSchemes = { ["hostapp", "fb12345"] }
+    @Test func aDeepLinkIntoTheHostAppOpens() {
+        // Which links an ad may carry is the ad server's decision; the SDK opens the host app's own too.
         let (bridge, recorder) = makeBridge()
         shown(bridge)
-        for raw in ["hostapp://wallet/buy?coins=9999", "HostApp://settings", "fb12345://authorize"] {
-            bridge.noteTouch()
-            bridge.receive(message("ad.click", ["url": raw]), from: main)
-            bridge.receive(message("ad.open", ["url": raw, "purpose": "adChoices"]), from: main)
-            bridge.externalNavigation(to: URL(string: raw)!)
-        }
-        #expect(recorder.events.count == 1, "a creative never drives the publisher's own app: \(recorder.events)")
         bridge.noteTouch()
-        bridge.receive(message("ad.click", ["url": "brandapp://product/1"]), from: main)
+        bridge.receive(message("ad.click", ["url": "hostapp://premium"]), from: main)
         guard case .click(let url, _, _) = recorder.last else { Issue.record("expected click"); return }
-        #expect(url.scheme == "brandapp", "an advertiser's deep link still opens")
+        #expect(url.absoluteString == "hostapp://premium")
     }
 
     @Test func systemSchemesThatActWithoutAPageAreRefused() {
@@ -333,11 +326,10 @@ struct FrameBridgeTests {
     }
 
     @Test func aRefusedURLWithAnAllowedFallbackOpensTheFallback() {
-        Environment.hostAppSchemes = { ["hostapp"] }
         let (bridge, recorder) = makeBridge()
         shown(bridge)
         bridge.noteTouch()
-        bridge.receive(message("ad.click", ["url": "hostapp://wallet", "fallbackUrl": "http://brand.test/offer"]), from: main)
+        bridge.receive(message("ad.click", ["url": "itms-services://?action=download-manifest", "fallbackUrl": "http://brand.test/offer"]), from: main)
         guard case .click(let url, let fallback, _) = recorder.last else { Issue.record("expected click"); return }
         #expect(url.absoluteString == "http://brand.test/offer" && fallback == nil)
         bridge.noteTouch()

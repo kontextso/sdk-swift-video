@@ -476,15 +476,14 @@ struct VideoAdTests {
         #expect(opened == ["brandapp://offer", "https://brand.test/offer"])
     }
 
-    @Test func aClickIntoTheHostAppOpensItsWebFallbackInstead() async throws {
-        Environment.hostAppSchemes = { ["hostapp"] }
+    @Test func aRefusedClickOpensItsWebFallbackInstead() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p15b"))
         var opened: [String] = []
         Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(true) }
         try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "hostapp://wallet/buy", "fallbackUrl": "https://brand.test/offer"])
-        #expect(opened == ["https://brand.test/offer"], "the publisher's own app is never opened")
+        send(ad, "ad.click", ["url": "tel:+15555550100", "fallbackUrl": "https://brand.test/offer"])
+        #expect(opened == ["https://brand.test/offer"], "a call is never placed from an ad")
         #expect(delegate.clicks.count == 1)
         let fired = await beacons()
         #expect(fired.contains("click"))

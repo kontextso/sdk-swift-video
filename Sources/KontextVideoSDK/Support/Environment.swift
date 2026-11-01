@@ -29,10 +29,6 @@ enum Environment {
 
     private static let defaultSession = makeSession()
     /// Read once: the Info.plist does not change while the app runs.
-    private static let defaultHostAppSchemes: Set<String> = {
-        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] ?? []
-        return Set(types.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }.map { $0.lowercased() })
-    }()
     /// Where `show()` finds its presenter, and what the request reports as the player when nothing else says.
     static var keyWindow: @MainActor () -> UIWindow? = defaultKeyWindow
     /// Where a loading WebView is parked so WebKit runs its page and buffers its video: the key window.
@@ -43,8 +39,6 @@ enum Environment {
     static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
     /// Opens a URL the page asked for; the completion says whether it could.
     static var openURL: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenURL
-    /// The URL schemes the host app registered (`CFBundleURLTypes`), lowercased: a click never opens one.
-    static var hostAppSchemes: @MainActor () -> Set<String> = { defaultHostAppSchemes }
     /// A programmer error: stops a debug build. Tests record it instead.
     static var assertionFailure: (String) -> Void = { Swift.assertionFailure($0) }
     /// Where the IAB consent keys are read from.
@@ -81,7 +75,6 @@ enum Environment {
         parkingWindow = { keyWindow() }
         schemeHandlers = [:]
         openURL = defaultOpenURL
-        hostAppSchemes = { defaultHostAppSchemes }
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
