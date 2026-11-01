@@ -3,7 +3,8 @@
 /// is gone ends it as `.interrupted`; its `duration` counts seconds of video; and it cannot be shown over
 /// paused content. A pause ad lives only while the content is paused: once the content plays again, resumed
 /// from anywhere (the lock screen, Control Center, a headset, PiP, the app's own code), it ends as
-/// `.interrupted`. The app's content is already playing then; `.resumed` stays the viewer's Resume on the ad.
+/// `.interrupted`; `.resumed` stays the viewer's Resume on the ad. `.interrupted` has other causes too (the
+/// view leaving the window, too little room), so the app reads its player's state rather than the reason.
 /// Without a tracked player both run on active time and the app's calls alone.
 extension VideoAd {
     /// This overlay follows the content: its `VideoAds` tracks a player, alive or gone.

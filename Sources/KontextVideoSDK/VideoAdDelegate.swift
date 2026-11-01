@@ -11,9 +11,10 @@
 ///
 /// Put the clean-up after an ad in `didEnd`, and decide playback there from the format, the reason and
 /// whether that content is still current: a linear ad's end is normally where the content resumes; a
-/// pause ad closed with ✕ (`.closed`) leaves the content paused, Resume (`.resumed`) means play, and
-/// `.interrupted` with a tracked player means the content already plays again; after `.destroyed` the
-/// viewer has usually left. `didEnd` is delivered once: for an overlay or pause ad
+/// pause ad closed with ✕ (`.closed`) leaves the content paused, Resume (`.resumed`) means play; after
+/// `.interrupted`, read your player's state before acting: with a tracked player the content playing again
+/// ends a pause ad that way, but so do its view leaving the window and the view becoming too small, with the
+/// content still paused. After `.destroyed` the viewer has usually left. `didEnd` is delivered once: for an overlay or pause ad
 /// synchronously, even from inside your own `dismiss()` or `destroy()` call; for a linear ad once its
 /// dismissal finished (the usual meaning of a full-screen ad's "dismissed"), so the next screen can be presented
 /// from it. Should UIKit never finish that dismissal, `didEnd` still comes after a bounded wait.
@@ -96,8 +97,9 @@ extension VideoAd {
         /// app navigated away without `dismiss()`), or that view became too small for the ad (it shrank or
         /// rotated). A view that left is noticed within about two measuring intervals (0.5 s). For an overlay
         /// with a player tracked by `track(_:)`, also the content pausing, ending or moving to another item; for a
-        /// pause ad with a tracked player, the content playing again, resumed from anywhere (the app's content
-        /// already plays; Resume tapped on the ad is `.resumed`).
+        /// pause ad with a tracked player, the content playing again, resumed from anywhere (Resume tapped on
+        /// the ad is `.resumed`). The reason alone does not say which: a pause ad ending this way may leave the
+        /// content playing or still paused, so check the player before resuming or pausing it.
         case interrupted
         /// The app called `dismiss()`.
         case dismissed
