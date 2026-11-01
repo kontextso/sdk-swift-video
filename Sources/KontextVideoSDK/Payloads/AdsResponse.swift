@@ -7,10 +7,10 @@ enum AdsResponse: Decodable, Sendable {
     static let unknownReason = "unknown"
 
     /// One per format. `ads` is a sequence, the first to be shown first; today a filled entry
-    /// carries one. Strict on `format` and on `ads` being a list of ads of that format (they decide the
-    /// answer), lenient on the reason. Each ad decodes on its own: one that does not is dropped and named
-    /// in `dropped`, and the others, and the other formats, stay. A format left with no valid ad is a
-    /// no-fill with reason `unknown`.
+    /// carries one. Strict on `format` and on `ads` being a list (they decide the answer), lenient on the
+    /// reason. Each ad decodes on its own: one that does not, or whose own `format` is not the entry's, is
+    /// dropped and named in `dropped`, and the others, and the other formats, stay. A format left with no
+    /// valid ad is a no-fill with reason `unknown`.
     struct FormatResult: Decodable, Sendable {
         let format: AdFormat
         let ads: [AdPayload]
@@ -32,12 +32,11 @@ enum AdsResponse: Decodable, Sendable {
         fileprivate init(_ container: KeyedDecodingContainer<CodingKeys>, format: AdFormat) throws {
             self.format = format
             let attempts = try container.decode([Attempt<AdPayload>].self, forKey: .ads)
-            ads = attempts.compactMap(\.value)
-            dropped = attempts.compactMap(\.failure)
+            let decoded = attempts.compactMap(\.value)
             // The SDK files the ad under the result's format and finds it again by the ad's own: both must agree.
-            if let stray = ads.first(where: { $0.format != format }) {
-                throw DecodingError.dataCorruptedError(forKey: .ads, in: container, debugDescription: "ad \(stray.id) is \(stray.format), the result is \(format)")
-            }
+            // One that disagrees is a malformed ad, dropped alone (and not filed under its own format either).
+            ads = decoded.filter { $0.format == format }
+            dropped = attempts.compactMap(\.failure) + decoded.filter { $0.format != format }.map { _ in "format" }
             if ads.isEmpty {
                 // Every ad of a filled entry dropped: a no-fill, its reason unknown whatever the entry says.
                 noFillReason = dropped.isEmpty ? VideoAdError.NoFillReason(try? container.decodeIfPresent(String.self, forKey: .noFillReason)) : .unknown

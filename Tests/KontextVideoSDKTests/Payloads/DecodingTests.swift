@@ -242,12 +242,18 @@ struct DecodingTests {
 
     // MARK: Consistency
 
-    @Test func anAdOfAnotherFormatThanItsResultFailsTheResponse() throws {
+    @Test func anAdOfAnotherFormatThanItsResultIsDroppedAlone() throws {
         let stray = Fixtures.overlayAd(id: "o-in-pause")
-        #expect(throws: DecodingError.self) {
-            try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [stray]]]])
-        }
-        _ = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "overlay", "ads": [stray]]]])
+        // The only ad, filed under the wrong format: a no-fill of reason unknown whatever the entry says, and not
+        // filed under its own format either; another format is untouched.
+        let onlyOther = try decode(AdsResponse.self, ["enabled": true, "formats": [
+            ["format": "pause", "ads": [stray], "noFillReason": "frequencyCap"], Fixtures.filledEntry(Fixtures.linearAd()),
+        ]])
+        let misfiled = try #require(onlyOther.result(for: .pause))
+        #expect(misfiled.ads.isEmpty && misfiled.dropped == ["format"] && misfiled.noFillReason == .unknown)
+        #expect(onlyOther.result(for: .overlay) == nil)
+        #expect(onlyOther.result(for: .linear)?.ads.map(\.id) == ["ad-i"])
+        #expect(try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "overlay", "ads": [stray]]]]).result(for: .overlay)?.ads.map(\.id) == ["o-in-pause"])
     }
 
     @Test func aFormatListedTwiceFailsTheResponse() throws {
@@ -484,13 +490,16 @@ struct DecodingTests {
         // A filled entry ignores a contradictory no-fill reason.
         let filled = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad()], "noFillReason": "frequencyCap"]]])
         #expect(filled.result(for: .pause)?.noFillReason == nil && filled.result(for: .pause)?.ads.count == 1)
-        // A malformed second ad is dropped alone; a mismatched one fails the response, although only the first
-        // is used today.
+        // A malformed second ad is dropped alone.
         var broken = Fixtures.ad(id: "ad-2")
         broken["sizes"] = []
         let kept = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), broken]]]])
         #expect(kept.result(for: .pause)?.ads.map(\.id) == ["ad-1"] && kept.result(for: .pause)?.dropped == ["sizes"])
-        #expect(throws: DecodingError.self) { try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), Fixtures.overlayAd()]]]]) }
+        // An ad filed under the wrong format (its own `format` is not its entry's) is a malformed ad: it alone is
+        // dropped, the rest of the answer counts.
+        let withOther = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": [Fixtures.ad(), Fixtures.overlayAd()]]]])
+        #expect(withOther.result(for: .pause)?.ads.map(\.id) == ["ad-1"] && withOther.result(for: .pause)?.dropped == ["format"])
+        #expect(withOther.result(for: .pause)?.noFillReason == nil)
     }
 
     @Test func adPayloadEdges() throws {
