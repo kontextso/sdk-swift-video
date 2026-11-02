@@ -604,6 +604,12 @@ public final class VideoAd {
                 finish(reason)
             }
         }
+        // On screen but never an impression (a video that ended before its first frame, by the app, the viewer
+        // or an interruption): `close` is the outcome the server counts as shown, not billed. A failure already
+        // fired `error`, the other outcome; an ad that never reached the screen fired nothing to close.
+        if isPresented, !impressionRecorded, reason != .failed {
+            tracker.fire("close")
+        }
         if format != .linear {
             tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
@@ -682,7 +688,8 @@ public final class VideoAd {
             }
             Self.open(url, fallback: nil)
         case .close(let reason):
-            // The page's own close control; not fired for the app's dismiss() or destroy(). The reason is
+            // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
+            // outcome of a video that never started (`endNow`). The reason is
             // the gesture, the same in every format; `isCompleted` says whether the video ran to its
             // end. A linear ad's close before `complete` is a skip. `reason: complete` is the page ending
             // itself after the video completed with no end card: nobody closed anything, so no VAST
