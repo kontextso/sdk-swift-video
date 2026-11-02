@@ -18,6 +18,14 @@ extension VideoAd {
         public let currency: String
         /// Whether `value` is a DSP's clearing price or a forecast.
         public let precision: Precision
+
+        /// For your own tests, such as an auction against other networks' prices: the SDK makes the prices of
+        /// real ads from the server's answer.
+        public init(value: Double, currency: String, precision: Precision) {
+            self.value = value
+            self.currency = currency
+            self.precision = precision
+        }
     }
 
     /// The box a creative was built for, in points. The SDK scales it down to 50 % of this when the view

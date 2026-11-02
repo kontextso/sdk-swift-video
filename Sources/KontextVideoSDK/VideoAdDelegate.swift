@@ -73,6 +73,12 @@ extension VideoAd {
 
         /// Where the viewer tapped.
         public let area: Area
+
+        /// For your own tests, such as calling your `didClick` handling directly: the SDK makes the clicks
+        /// of real ads from the page's events.
+        public init(area: Area) {
+            self.area = area
+        }
     }
 
     /// How an ad on screen ended: who or what took it off the screen. Whether the creative ran to its
