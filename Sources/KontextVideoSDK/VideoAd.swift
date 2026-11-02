@@ -551,6 +551,8 @@ public final class VideoAd {
             Logger.warning("ad \(id.prefix(8)): its view left the window; ended as interrupted")
             end(.interrupted)
         }
+        // A sheet over a linear ad leaves its view in the window, where the meter would still see it whole.
+        meter.isCovered = { [weak self] in self?.linearController.map(Environment.isCovered) ?? false }
         self.meter = meter
         meter.start()
     }

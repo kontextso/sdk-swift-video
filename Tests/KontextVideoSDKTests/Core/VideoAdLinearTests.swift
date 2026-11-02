@@ -153,5 +153,36 @@ struct VideoAdLinearTests {
         await sleepMs(100)
         #expect(delegate.endReasons == [.skipped] && presenter.dismissals == 1)
     }
+
+    @Test func aSheetOverALinearAdReadsAsExposure0AndTheAdGoesOnOnceItGoes() async throws {
+        let presenter = Presenter()
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i43"))
+        var exposures: [Double] = []
+        ad.bridge.onSend = { type, payload in if type == "ad.exposure", let value = payload["exposedPercentage"] as? Double { exposures.append(value) } }
+        let (controller, window) = try await presentLinear(ad, from: presenter)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        send(ad, "video.start", ["playhead": 0])
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "on screen: \(exposures)")
+        // A sheet (the App Store product page after a click) leaves the ad's view in its window.
+        var covered = true
+        Environment.isCovered = { $0 === controller && covered }
+        exposures.removeAll()
+        for _ in 0..<30 {
+            advanceClock(by: 0.1)
+            ad.meter?.tick()
+        }
+        #expect(controller.view.window != nil, "still in the window under a sheet")
+        #expect(!exposures.isEmpty && exposures.allSatisfy { $0 == 0 }, "the page hears exposure 0 and pauses: \(exposures)")
+        #expect(ad.meter?.verdict == nil, "time under the sheet is not counted as visible")
+        #expect(delegate.endReasons.isEmpty && !ad.hasEnded)
+        // The sheet goes: exposed again, and the dwell starts over.
+        covered = false
+        for _ in 0..<25 {
+            advanceClock(by: 0.1)
+            ad.meter?.tick()
+        }
+        #expect(exposures.last.map { $0 > 0.5 } == true, "exposed again: \(exposures)")
+        #expect(ad.meter?.verdict == .viewable)
+    }
 }
 }

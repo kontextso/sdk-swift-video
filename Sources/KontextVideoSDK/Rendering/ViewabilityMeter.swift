@@ -30,6 +30,9 @@ final class ViewabilityMeter {
     /// On every tick while it stays out, from the second: an owner that waits out a cover hears again once
     /// the cover is gone and the view did not come back.
     var onDetached: (() -> Void)?
+    /// Whether something the meter cannot see covers the view while it stays in its window: a sheet presented
+    /// over a linear ad (the App Store product page after a click). Asked on every tick; covered reads as 0.
+    var isCovered: (() -> Bool)?
 
     private(set) var verdict: Verdict?
     private weak var view: UIView?
@@ -106,7 +109,8 @@ final class ViewabilityMeter {
         guard hasMeasured || (view.bounds.width > 0 && view.bounds.height > 0) else { return }
         hasMeasured = true
         // The ad's own scene, not the app: an iPad window in the background shows nothing.
-        let (percentage, visible) = Environment.isWindowActive(window) ? Self.exposure(of: view, in: window) : (0, .null)
+        let seen = Environment.isWindowActive(window) && isCovered?() != true
+        let (percentage, visible) = seen ? Self.exposure(of: view, in: window) : (0, .null)
         report(percentage, visible: visible.isNull ? .zero : visible)
         // The page's reaction to the exposure may have ended the ad.
         guard !stopped else { return }
