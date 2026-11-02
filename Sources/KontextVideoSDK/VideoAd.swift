@@ -15,6 +15,26 @@ import UIKit
 ///     ad.reject(.outbid(winningPrice: otherNetworkPrice))
 /// }
 /// ```
+///
+/// ## State
+///
+/// The public flags move one way and only in these combinations; any other is impossible:
+///
+/// | Stage | `isLoaded` | `isReady` | `invalidationReason` | `wasShown` | `hasEnded` |
+/// |---|---|---|---|---|---|
+/// | Returned by `format(_:)` | `false` | `false` | `nil` | `false` | `false` |
+/// | Loaded | `true` | `true`, `false` once expired | `nil` | `false` | `false` |
+/// | Ended before `show` | as it was | `false` | set | `false` | `false` |
+/// | On screen | `true` | `false` | `nil` | `true` | `false` |
+/// | Ended after `show` | `true` | `false` | `nil` | `true` | `true` |
+///
+/// - `invalidationReason` and `wasShown` never are both set: an ad ends either before `show` (nothing is
+///   delivered) or after it (exactly one `didEnd`). `hasEnded` implies `wasShown`.
+/// - Expiry is found at the next call: an expired ad reads `isReady == false` with `invalidationReason`
+///   still `nil` until `load()`, `show`, `reject()` or the next `format(_:)` sets it to `.expired`.
+/// - `isCompleted` can be `true` only once shown, and may be `true` before `hasEnded`: a linear ad's
+///   video completed and its end card is still on screen.
+/// - A linear ad's `hasEnded` comes when it begins to end; `didEnd` follows once its dismissal finished.
 @MainActor
 public final class VideoAd {
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
