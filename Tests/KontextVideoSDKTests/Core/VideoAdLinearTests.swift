@@ -3,9 +3,9 @@ import Foundation
 import Testing
 import UIKit
 
-/// A linear ad's full-screen controller where UIKit does not do what the SDK asked: a dismissal that never
-/// finishes. The ad is presented for real from a controller in a window of its own; the runner never
-/// completes a transition, so its presenter answers the dismissal itself.
+/// A linear ad's full-screen controller when UIKit does not simply present and dismiss it: a dismissal that
+/// never finishes, a screen presented over the ad. The ad is presented for real from a controller in a
+/// window of its own; the runner never completes a transition, so its presenter answers the dismissal itself.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -107,6 +107,51 @@ struct VideoAdLinearTests {
         #expect(KontextVideo.shared.adOnScreen == nil)
         try next.show(from: self.window.root)
         #expect(next.wasShown && KontextVideo.shared.adOnScreen === next)
+    }
+
+    // MARK: A screen over the ad
+
+    @Test func aFullScreenCoverOverALinearAdPausesItsMeasurementAndTheAdGoesOnOnceTheCoverGoes() async throws {
+        let presenter = Presenter()
+        let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i42"))
+        var exposures: [Double] = []
+        ad.bridge.onSend = { type, payload in if type == "ad.exposure", let value = payload["exposedPercentage"] as? Double { exposures.append(value) } }
+        let (controller, window) = try await presentLinear(ad, from: presenter)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        send(ad, "video.start", ["playhead": 0])
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "on screen: \(exposures)")
+        // The app presents its own screen, or an install click the App Store sheet, full screen over the ad. The
+        // runner refuses a presentation over a controller whose own never finished, so the check is told; what
+        // UIKit then does to the ad's controller is done by hand: viewDidDisappear, its view out of the window.
+        var covered = true
+        Environment.isCovered = { $0 === controller && covered }
+        controller.viewDisappeared(isBeingDismissed: false, isMovingFromParent: false, hasPresenter: true)
+        controller.view.removeFromSuperview()
+        exposures.removeAll()
+        // Three seconds of ticks under the cover, past the two a video needs to be viewable.
+        for _ in 0..<30 {
+            advanceClock(by: 0.1)
+            ad.meter?.tick()
+        }
+        #expect(!exposures.isEmpty && exposures.allSatisfy { $0 == 0 }, "the page hears exposure 0: \(exposures)")
+        #expect(ad.meter?.verdict == nil, "covered time is not counted as visible")
+        #expect(delegate.endReasons.isEmpty && !ad.hasEnded, "not interrupted: the view is out of the window only under the cover")
+        #expect(presenter.dismissals == 0 && ad.linearController === controller && KontextVideo.shared.adOnScreen === ad)
+        // The cover goes: the view is back, the page hears the exposure, and the dwell starts again.
+        covered = false
+        window.addSubview(controller.view)
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "exposed again: \(exposures)")
+        for _ in 0..<25 {
+            advanceClock(by: 0.1)
+            ad.meter?.tick()
+        }
+        #expect(ad.meter?.verdict == .viewable)
+        #expect(await waitUntil { self.harness.server.beacons.contains { $0.event == "viewable" } })
+        // A genuine end later: dismissed once, one didEnd.
+        send(ad, "video.skip", ["playhead": 3000])
+        #expect(await waitUntil { delegate.endReasons == [.skipped] })
+        await sleepMs(100)
+        #expect(delegate.endReasons == [.skipped] && presenter.dismissals == 1)
     }
 }
 }
