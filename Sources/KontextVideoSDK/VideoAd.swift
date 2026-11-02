@@ -325,32 +325,15 @@ public final class VideoAd {
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
-        presenter.present(controller, animated: true) { [weak self] in
+        LinearPresentation.present(controller, from: presenter, adId: id, timeout: Self.presentationTimeout) { [weak self] in
+            self.map { !$0.hasEnded && !$0.isPresented } ?? false
+        } onPresented: { [weak self] in
             self?.presented()
-        }
-        // UIKit can refuse a presentation without an error (another one in progress); then the completion
-        // never runs and the ad would hold the screen forever. After `presentationTimeout`: a controller
-        // that never reached a window failed; one that did, without the completion, is taken as presented
-        // after a longer wait.
-        Task { [weak self] in
-            let step = min(Self.presentationTimeout, 0.25)
-            let deadline = Environment.now() + Self.presentationTimeout
-            let cap = Environment.now() + Self.presentationTimeout * 5
-            while let ad = self, !ad.hasEnded, !ad.isPresented, Environment.now() < cap {
-                if Environment.now() >= deadline, controller.view.window == nil { break }
-                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
-            }
-            guard let self, !hasEnded, !isPresented else { return }
-            // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
-            if let window = controller.view.window, !window.isHidden, window.alpha > 0.01, Environment.isWindowActive(window) {
-                Logger.warning("ad \(id.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
-                presented()
-            } else {
-                Logger.error("ad \(id.prefix(8)): UIKit did not present the linear ad; ended as failed")
-                ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                            recovery: .adEndedFailed)
-                fail(.presenterUnavailable)
-            }
+        } onFailed: { [weak self] in
+            guard let self else { return }
+            ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                        recovery: .adEndedFailed)
+            fail(.presenterUnavailable)
         }
     }
 
@@ -571,30 +554,20 @@ public final class VideoAd {
         var dismissing = false
         if let controller = linearController {
             linearController = nil
-            controller.isEndingByAd = true
             // Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
-            // the animation. From the presenter: it takes the ad and anything over it (an install click's store sheet).
-            if controller.isPresentedLive, let presenter = controller.presentingViewController {
-                dismissing = true
-                presenter.dismiss(animated: true) { [weak self] in self?.finish(reason) }
-                // A completion UIKit never calls: once the controller has left the screen, or after a
-                // hard cap while it still has not, the app hears `didEnd` anyway.
-                Task { [weak self] in
-                    let deadline = Environment.now() + Self.dismissalTimeout
-                    let cap = Environment.now() + Self.dismissalTimeout * 5
-                    repeat {
-                        try? await Task.sleep(nanoseconds: UInt64(min(Self.dismissalTimeout, 0.25) * 1_000_000_000))
-                    } while Environment.now() < deadline || (controller.view.window != nil && Environment.now() < cap)
-                    guard let self, !finished else { return }
-                    if controller.view.window != nil {
-                        // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
-                        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
-                        DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
-                        ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                                    recovery: .didEndDelivered)
-                    }
-                    finish(reason)
+            // the animation.
+            dismissing = LinearPresentation.dismiss(controller, timeout: Self.dismissalTimeout) { [weak self] in
+                self.map { !$0.finished } ?? false
+            } completion: { [weak self] timedOut in
+                guard let self else { return }
+                if timedOut {
+                    // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
+                    Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
+                    DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
+                    ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                                recovery: .didEndDelivered)
                 }
+                finish(reason)
             }
         }
         if format != .linear {
