@@ -9,6 +9,16 @@ extension SerialSuites {
 @Suite
 @MainActor
 struct EnvironmentTests {
+    @Test func anAlertOverTheAdDoesNotCoverItASheetOrAScreenDoes() {
+        #expect(!Environment.covers(UIAlertController(title: "t", message: nil, preferredStyle: .alert)))
+        #expect(!Environment.covers(UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)))
+        let sheet = UIViewController()
+        sheet.modalPresentationStyle = .pageSheet
+        #expect(Environment.covers(sheet))
+        #expect(Environment.covers(UIViewController()))
+        #expect(!Environment.defaultIsCovered(UIViewController()), "nothing presented")
+    }
+
     @Test func anAppWithoutScenesFindsItsWindowOnTheAppDelegate() {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         #expect(Environment.keyWindow(scenes: [], delegateWindow: window) === window)

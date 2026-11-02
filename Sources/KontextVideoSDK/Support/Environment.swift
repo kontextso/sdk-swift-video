@@ -47,8 +47,9 @@ enum Environment {
     /// Where the IAB consent keys are read from.
     static var consentDefaults: UserDefaults = .standard
     /// Whether a controller has another presented over it: a full-screen cover takes its view out of the
-    /// window, which is not the ad's end.
-    static var isCovered: @MainActor (UIViewController) -> Bool = { $0.presentedViewController != nil }
+    /// window, which is not the ad's end; a sheet hides it from the viewer. An alert does not count: the ad
+    /// stays in view around it.
+    static var isCovered: @MainActor (UIViewController) -> Bool = defaultIsCovered
     /// Whether the app is active, for the clocks that count only time on screen.
     static var isApplicationActive: @MainActor () -> Bool = defaultIsApplicationActive
     /// Whether the scene of a given window is active, for the viewability of an ad in it.
@@ -86,7 +87,7 @@ enum Environment {
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
         isWindowActive = defaultIsWindowActive
-        isCovered = { $0.presentedViewController != nil }
+        isCovered = defaultIsCovered
         trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
         advertisingIdentifier = { ASIdentifierManager.shared().advertisingIdentifier }
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
@@ -133,6 +134,16 @@ enum Environment {
     /// Whether an ad in `window` can be seen: the app is active and so is the window's own scene. On an
     /// iPad one window can go to the background while another stays active, which the app-wide state alone
     /// does not show. A window without a scene (an app without scenes) follows the app.
+    static func defaultIsCovered(_ controller: UIViewController) -> Bool {
+        guard let presented = controller.presentedViewController else { return false }
+        return covers(presented)
+    }
+
+    /// Whether a controller presented over the ad hides it: anything but an alert.
+    static func covers(_ presented: UIViewController) -> Bool {
+        !(presented is UIAlertController)
+    }
+
     private static func defaultIsWindowActive(_ window: UIWindow) -> Bool {
         isWindowActive(appActive: isApplicationActive(), sceneState: window.windowScene?.activationState)
     }
