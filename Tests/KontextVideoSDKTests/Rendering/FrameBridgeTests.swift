@@ -818,6 +818,10 @@ struct FrameBridgeTests {
     @Test func theScriptTakesGetUserMediaOutOfAPage() async throws {
         await WebKitWarmup.ensure()
         FramePageServer().install()
+        // Loaded in a window, as the harness does: outside one, WebKit deprioritizes the page and a CI runner
+        // without a key window never finishes loading it.
+        Environment.isApplicationActive = { true }
+        Environment.parkingWindow = { ParkingWindow.window }
         let probe = "typeof MediaDevices === 'undefined' ? 'none' : typeof MediaDevices.prototype.getUserMedia"
         func readProbe(asks: Bool) async throws -> String? {
             Environment.asksBeforeMediaCapture = { asks }
