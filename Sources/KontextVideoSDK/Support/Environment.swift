@@ -88,6 +88,7 @@ enum Environment {
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
         userAgent = { await NetworkInfoProvider.collect().userAgent }
         NetworkInfo.lookup = nil
+        NetworkInfo.userAgentWait = NetworkInfo.defaultUserAgentWait
         TrackingInfo.warnedAboutUnaskedTracking = false
         Logger.sink = nil
         skAdNetwork = KontextKitSKAdNetwork()

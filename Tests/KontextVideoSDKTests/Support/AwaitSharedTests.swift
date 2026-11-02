@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 /// `awaitShared`: every waiter gets the shared result, a cancelled waiter stops alone, and a cancellation
-/// racing the completion resumes once.
+/// racing the completion resumes once; with a timeout, a waiter gives up alone and the work goes on.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -90,6 +90,25 @@ struct AwaitSharedTests {
             case .failure(let error): #expect(error is CancellationError)
             }
         }
+    }
+
+    @Test func aTimedWaiterGivesUpAloneAndTheWorkGoesOn() async throws {
+        let gate = Gate()
+        defer { gate.open = true }
+        let work = Task<Int, Error> { @MainActor in
+            while !gate.open { try await Task.sleep(nanoseconds: 5_000_000) }
+            return 3
+        }
+        let patient = Task { try await awaitShared(work) }
+        #expect(try await awaitShared(work, timeout: 0.02) == nil, "past its timeout, without the result")
+        gate.open = true
+        #expect(try await patient.value == 3, "the work was not cancelled")
+        #expect(try await awaitShared(work, timeout: 0.02) == .some(3), "a finished task answers at once")
+        let cancelled = Task { () throws -> Int? in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await awaitShared(Task<Int, Error> { 1 }, timeout: 60)
+        }
+        await #expect(throws: CancellationError.self) { try await cancelled.value }
     }
 }
 }

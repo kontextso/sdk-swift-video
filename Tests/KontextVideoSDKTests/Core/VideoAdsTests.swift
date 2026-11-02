@@ -162,6 +162,35 @@ struct VideoAdsTests {
         KontextVideo.shared.regulatory = nil
     }
 
+    @Test func aSlowUserAgentLookupSendsTheRequestWithTheFallbackAndTheNextOneWithTheRealOne() async throws {
+        // A cold device: the WebView's user agent takes far longer than the request may wait.
+        NetworkInfo.userAgentWait = 0.05
+        var lookups = 0
+        var release: CheckedContinuation<Void, Never>?
+        Environment.userAgent = {
+            lookups += 1
+            await withCheckedContinuation { release = $0 }
+            return "Mozilla/5.0 (real)"
+        }
+        let ads = await makeAds()   // the enabled /config starts the lookup
+        let userAgent = { (index: Int) in
+            ((self.harness.adsRequests[index].body?["device"] as? [String: Any])?["network"] as? [String: Any])?["userAgent"] as? String
+        }
+        harness.serve(Fixtures.ad(id: "img-ua-1"))
+        _ = try await ads.format(.pause)
+        #expect(release != nil, "the lookup is still out")
+        #expect(userAgent(0) == NetworkInfo.fallbackUserAgent, "sent without waiting for it: \(userAgent(0) ?? "nil")")
+        #expect(userAgent(0)?.hasPrefix("Mozilla/5.0 (") == true && userAgent(0)?.contains(UIDevice.current.systemVersion.replacingOccurrences(of: ".", with: "_")) == true)
+        // The lookup goes on; the next request carries its answer (waiting as long as it takes, here).
+        NetworkInfo.userAgentWait = 60
+        harness.serve(Fixtures.ad(id: "img-ua-2"))
+        let second = Task { try await ads.format(.pause) }
+        release?.resume()
+        _ = try await second.value
+        #expect(userAgent(1) == "Mozilla/5.0 (real)")
+        #expect(lookups == 1, "one lookup, not restarted by the request that gave up on it")
+    }
+
     @Test func creatingAVideoAdsSendsNothing() async {
         _ = await makeAds()
         await sleepMs(50)

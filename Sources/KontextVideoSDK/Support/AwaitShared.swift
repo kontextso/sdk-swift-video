@@ -1,3 +1,5 @@
+import Foundation
+
 /// Waits for someone else's work without owning it: any number of callers can wait on the same running
 /// task (a request, a creative load), each gets the task's result when it finishes, and a caller that is
 /// cancelled stops waiting immediately (`CancellationError`) without cancelling the task or affecting the
@@ -16,6 +18,34 @@ func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>) async th
             }
             waiter.continuation = continuation
             Task { @MainActor in waiter.resume(with: await task.result.mapError { $0 as Error }) }
+        }
+    } onCancel: {
+        Task { @MainActor in waiter.resume(with: .failure(CancellationError())) }
+    }
+}
+
+/// `awaitShared`, for at most `timeout` seconds: `nil` once they passed, the task going on for whoever
+/// waits next. For work that can take longer than its caller can afford to wait (the user agent lookup).
+@MainActor
+func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>, timeout: TimeInterval) async throws -> T? {
+    let waiter = Waiter<T?>()
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+            guard !Task.isCancelled else {
+                continuation.resume(throwing: CancellationError())
+                return
+            }
+            waiter.continuation = continuation
+            // Whichever comes first resumes the caller; the other finds it resumed and does nothing.
+            let deadline = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                waiter.resume(with: .success(nil))
+            }
+            Task { @MainActor in
+                let result = await task.result.mapError { $0 as Error }
+                waiter.resume(with: result.map { Optional($0) })
+                deadline.cancel()
+            }
         }
     } onCancel: {
         Task { @MainActor in waiter.resume(with: .failure(CancellationError())) }
