@@ -5,8 +5,8 @@ extension KontextVideo {
     /// viewer is and consented to can change later and lives on `KontextVideo.shared` (`user`,
     /// `regulatory`, `variantID`).
     public struct Configuration: Sendable {
-        /// Production ad server base URL.
-        public static let defaultAdServerURL = URL(string: "https://server.megabrain.co")!
+        /// Production ad server base URL. Internal: the host may change, and an app has no use for it.
+        static let defaultAdServerURL = URL(string: "https://server.megabrain.co")!
 
         /// How much the SDK prints to the device console. Each level includes the ones above it.
         public enum LogLevel: Sendable, Comparable {
@@ -37,22 +37,22 @@ extension KontextVideo {
         /// How much the SDK prints to the device console. Console only: `.none` does not stop the debug
         /// reporting the server can switch on.
         public let logLevel: LogLevel
-        /// The ad server base URL, by default the production server: absolute, `https` (or `http` for a
+        /// The ad server base URL, the production server unless `init` was given another: absolute, `https` (or `http` for a
         /// local mock), without a path the SDK adds itself (`/v2/...`). Override it only for testing against
         /// a staging or mock server; a URL without a scheme and host stops a debug build.
         public let adServerURL: URL
 
-        /// Only `publisherToken` is required.
+        /// Only `publisherToken` is required. `adServerURL`: leave it `nil` for the production server.
         public init(
             publisherToken: String,
             requestTrackingAuthorization: Bool = false,
             logLevel: LogLevel = .warning,
-            adServerURL: URL = Configuration.defaultAdServerURL
+            adServerURL: URL? = nil
         ) {
             self.publisherToken = publisherToken
             self.requestTrackingAuthorization = requestTrackingAuthorization
             self.logLevel = logLevel
-            self.adServerURL = adServerURL
+            self.adServerURL = adServerURL ?? Self.defaultAdServerURL
         }
 
         /// What is wrong with the options, one phrase each; empty when they are usable.

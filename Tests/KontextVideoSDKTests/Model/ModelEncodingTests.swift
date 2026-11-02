@@ -160,6 +160,8 @@ struct ModelEncodingTests {
         #expect(configuration.logLevel == .warning)
         #expect(configuration.adServerURL == KontextVideo.Configuration.defaultAdServerURL)
         #expect(KontextVideo.Configuration.defaultAdServerURL.absoluteString == "https://server.megabrain.co")
+        #expect(KontextVideo.Configuration(publisherToken: "pub-dev", adServerURL: nil).adServerURL == KontextVideo.Configuration.defaultAdServerURL,
+                "nil is the production server")
     }
 
     @Test func logLevelsAreOrdered() {
