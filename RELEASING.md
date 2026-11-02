@@ -53,8 +53,9 @@ git push origin main 0.1.0
 ```
 
 The tag is what SPM resolves; publishers pin to it with `from:` or `exact:`. The push of the tag runs the
-`release-tag` CI job, which fails if the tag and `SDKInfo.version` differ. It runs after the tag exists, so a
-failure means the tag is already public: delete it, fix the version, and cut it again, before anyone resolves it.
+`release-tag` CI job, which fails if the tag and `SDKInfo.version` differ or `CHANGELOG.md` has no `## 0.1.0`
+section. It runs after the tag exists, so a failure means the tag is already public: delete it, fix the version
+or the changelog, and cut it again, before anyone resolves it.
 
 ```bash
 git push --delete origin 0.1.0 && git tag -d 0.1.0
@@ -63,9 +64,12 @@ git push --delete origin 0.1.0 && git tag -d 0.1.0
 
 ## 5. Verify
 
-1. A fresh project resolves `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")`,
-   builds, and runs the docs page's walkthrough against the production ad server with a `{publisher}-dev` token.
-2. Tell the publishers waiting for the release; the changelog entry is the release note.
+1. The tag push also runs the **Release consumer** workflow: `extras/spm-consumer` resolves
+   `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")` from GitHub and builds
+   with Xcode 16.0. It must be green; rerun it by hand (Actions → Release consumer → Run workflow) with the tag.
+2. A fresh app with that dependency runs the docs page's walkthrough against the production ad server with a
+   `{publisher}-dev` token.
+3. Tell the publishers waiting for the release; the changelog entry is the release note.
 
 ## Before the first App Store submission that includes the SDK
 

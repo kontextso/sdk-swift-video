@@ -31,7 +31,8 @@ sdk-swift-video/
 │   └── PrivacyInfo.xcprivacy
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
-├── .github/workflows/ci.yml the four CI jobs (see CI)
+├── .github/workflows/      ci.yml, the five CI jobs; release-consumer.yml, the release as a publisher resolves it (see CI)
+├── extras/spm-consumer/     a publisher's package on the released tag, built by release-consumer.yml
 ├── Package.swift            SPM manifest; KontextKit up to the next minor
 ├── AGENTS.md                guidance for coding agents (CLAUDE.md only imports it)
 └── CHANGELOG.md, RELEASING.md
@@ -177,7 +178,28 @@ the example app against the mock covers the real presentation and dismissal.
 - **Example app**: `xcodegen generate` and a build of `Example/` against the local SDK. It is what catches a
   public API change that breaks a real integration.
 - **Test**: `xcodebuild test` on the SDK target, iPhone 16 / iOS 18.5. A test-host restart counts as a failure.
-- **Release tag matches SDKInfo.version**: on a tag push only; fails when the tag and `SDKInfo.version` differ.
+- **Test (iOS 15)**: the same tests on an iPhone 13 with iOS 15.5, downloaded from Apple on every run. iOS 14, the
+  SDK's minimum, cannot run on GitHub's runners: macos-14, the last image with Xcode 15, is retired, and Xcode
+  16 and 26 run iOS 15 or later simulators only. iOS 15.5 is the oldest a runner can test.
+- **Release tag matches SDKInfo.version**: on a tag push only; fails when the tag and `SDKInfo.version` differ,
+  or when `CHANGELOG.md` has no `## <tag>` section.
+
+`.github/workflows/release-consumer.yml` builds `extras/spm-consumer`, a package that depends on the SDK by git
+URL and `exact:` the tag, for a device with Xcode 16.0 (the oldest Xcode on the runner). It runs on a tag push
+and by hand (Actions → Release consumer → Run workflow, with the tag), never on `main` or pull requests: before
+the tag is on GitHub there is nothing to resolve.
+
+## What a publisher needs
+
+From `Package.swift` and the CI above:
+
+- iOS 14 or later as the app's deployment target (`platforms: [.iOS(.v14)]`, KontextKit's too); tested down to
+  iOS 15.5, the oldest simulator a runner can run.
+- Xcode 16.0 or later: the release-consumer build uses Xcode 16.0, CI uses 16.4. The manifest's
+  `swift-tools-version` is 5.9 (Swift 5 language mode, so an app in Swift 5 or 6 mode can use it), but no job
+  builds with Xcode 15, so it is not promised.
+- Swift Package Manager (no CocoaPods), resolving `https://github.com/kontextso/sdk-swift-video.git` and
+  `https://github.com/kontextso/kontextkit-ios.git` (pinned exact by the SDK).
 
 ## Cross-SDK consistency
 

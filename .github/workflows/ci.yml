@@ -80,8 +80,39 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)|Fatal error|precondition|Crash|crashed|Restarting after|exited abnormally|Terminating app"
 
+  # The SDK supports iOS 14, but no runner can run an iOS 14 simulator: macos-14, the last image with Xcode 15,
+  # is retired (November 2026), and the Xcodes left (16.x, 26.x) run iOS 15 or later simulators only. macos-15
+  # comes with iOS 18.5 and later, so this job downloads iOS 15.5, the last iOS 15, from Apple on every run
+  # (a few GB, a few minutes) and runs the whole suite on it: what an API newer than the deployment target
+  # breaks at run time, outside an `if #available`, shows up here and not on iOS 18.
+  test-oldest-ios:
+    name: Test (iOS 15)
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the iOS 15.5 simulator
+        # xcodes is on the runner image; an iOS 15 runtime is a package installer, which needs root.
+        run: |
+          sudo xcodes runtimes install "iOS 15.5"
+          xcrun simctl list runtimes
+      - name: Create an iPhone 13 on iOS 15.5
+        run: |
+          udid=$(xcrun simctl create "iPhone 13 (iOS 15.5)" com.apple.CoreSimulator.SimDeviceType.iPhone-13 com.apple.CoreSimulator.SimRuntime.iOS-15-5)
+          echo "SIMULATOR_ID=$udid" >> "$GITHUB_ENV"
+      - name: Run the tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme KontextVideoSDK \
+            -destination "id=$SIMULATOR_ID" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | grep -E "✔|✘|Test run|error:|TEST (SUCCEEDED|FAILED)|Fatal error|precondition|Crash|crashed|Restarting after|exited abnormally|Terminating app"
+
   # A release tag must be the version the SDK reports (SDKInfo.version), or publishers see one
-  # version on GitHub and another in our logs.
+  # version on GitHub and another in our logs; and the CHANGELOG, which is the release note, needs its section.
   release-tag:
     name: Release tag matches SDKInfo.version
     if: startsWith(github.ref, 'refs/tags/')
@@ -93,3 +124,4 @@ jobs:
           version=$(sed -nE 's/.*static let version = "([^"]+)".*/\1/p' Sources/KontextVideoSDK/Payloads/SDKInfo.swift)
           echo "tag $tag, SDKInfo.version $version"
           [ "$tag" = "$version" ] || { echo "::error::tag $tag does not match SDKInfo.version $version"; exit 1; }
+          grep -qxF "## $tag" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## $tag' section"; exit 1; }

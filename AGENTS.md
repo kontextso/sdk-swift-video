@@ -64,7 +64,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 
 ## Rules
 
-- Commit directly to `main`; no feature branches. Push and watch CI (it runs four jobs; see DEVELOPMENT.md).
+- Commit directly to `main`; no feature branches. Push and watch CI (it runs five jobs; see DEVELOPMENT.md).
 - The lifecycle guarantee is sacred: after a successful `show`, exactly one `didEnd`, whoever ended it; nothing is
   delivered through the delegate before `show`. `VideoAd.end(_:)` is the only terminal path.
 - The page never fires a beacon; `Tracker` does, each entry once, except `click`, `pause`, `resume`, `mute` and
