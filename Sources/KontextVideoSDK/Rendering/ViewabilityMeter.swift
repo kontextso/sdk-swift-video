@@ -45,6 +45,11 @@ final class ViewabilityMeter {
     private var detachedTicks = 0
     /// `stop()` was called: measuring never resumes, whatever `start()` says afterwards.
     private var stopped = false
+    /// The view has been seen laid out in a window, with a size: the first real measurement. Before it, a
+    /// tick reads 0 only because the view is not placed yet (a linear ad's controller mid-layout, a container
+    /// still at zero size), and a page pauses its video on 0: the page hears nothing until then, and every
+    /// change afterwards, a real 0 included.
+    private var hasMeasured = false
     /// Whether exposure counts towards the dwell right now. The owner turns it off while a video creative
     /// is not playing (before its start, while paused): the rule wants continuous seconds of the video
     /// played, so turning it off restarts the dwell at once, even between two ticks. Exposure is still
@@ -94,7 +99,7 @@ final class ViewabilityMeter {
         let stalled = lastTick.map { now - $0 > max(Self.interval * 2, Self.shortestStall) } ?? false
         lastTick = now
         guard let view, let window = view.window else {
-            report(0, visible: .zero)
+            if hasMeasured { report(0, visible: .zero) }
             exposedSince = nil
             // One tick of grace: a view re-parented within the same turn of the run loop is not gone.
             detachedTicks += 1
@@ -104,6 +109,8 @@ final class ViewabilityMeter {
             return
         }
         detachedTicks = 0
+        guard hasMeasured || (view.bounds.width > 0 && view.bounds.height > 0) else { return }
+        hasMeasured = true
         // The ad's own scene, not the app: an iPad window in the background shows nothing.
         let (percentage, visible) = Environment.isWindowActive(window) ? Self.exposure(of: view, in: window) : (0, .null)
         report(percentage, visible: visible.isNull ? .zero : visible)

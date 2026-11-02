@@ -362,14 +362,17 @@ struct ViewabilityMeterTests {
         #expect(sink.exposures.last == 0)
     }
 
-    @Test func aZeroSizedViewOrATransparentWindowIsNotExposed() async {
+    @Test func aViewCollapsedToZeroSizeOrATransparentWindowIsNotExposed() async {
         defer { window.tearDown() }
         _ = frozen()
-        let empty = ViewabilityMeter(view: makeView(.zero), requiredSeconds: 1)
+        let collapsing = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let empty = ViewabilityMeter(view: collapsing, requiredSeconds: 1)
         defer { empty.stop() }
         let emptySink = attach(empty)
         empty.start()
-        #expect(emptySink.exposures.last == 0)
+        collapsing.frame = .zero
+        empty.tick()
+        #expect(emptySink.exposures == [1, 0])
         window.window.alpha = 0
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 1)
         defer { meter.stop() }
@@ -377,6 +380,33 @@ struct ViewabilityMeterTests {
         meter.start()
         #expect(sink.exposures.last == 0)
         window.window.alpha = 1
+    }
+
+    @Test func nothingIsReportedBeforeTheViewIsLaidOutInAWindowThenARealZeroIs() async {
+        defer { window.tearDown() }
+        _ = frozen()
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 100))
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()   // not in a window yet: a linear ad's controller still on its way to the screen
+        meter.tick()
+        #expect(sink.exposures.isEmpty, "a 0 now would make the page pause the video it has just started")
+        view.frame = .zero
+        window.add(view)   // in the window, not laid out yet
+        meter.tick()
+        #expect(sink.exposures.isEmpty, "a view without a size has not been measured")
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 100)
+        meter.tick()
+        #expect(sink.exposures == [1], "the first real measurement")
+        view.isHidden = true   // covered
+        meter.tick()
+        #expect(sink.exposures == [1, 0])
+        view.isHidden = false
+        meter.tick()
+        view.removeFromSuperview()   // detached
+        meter.tick()
+        #expect(sink.exposures == [1, 0, 1, 0], "a real 0 after the first measurement goes out")
     }
 }
 }

@@ -5,7 +5,8 @@ import UIKit
 
 /// Where an overlay or pause ad lands in a player that runs under the notch and the home indicator: cards
 /// and strips stay inside the view's safe area, a full-screen pause ad fills the view; a view the viewer
-/// cannot see is refused; a shown ad follows its view when it resizes.
+/// cannot see is refused; a shown ad follows its view when it resizes; the page hears no exposure before
+/// the ad's view is laid out in a window.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -59,6 +60,24 @@ struct VideoAdPlacementTests {
         let frame = try #require(adFrame(in: player))
         #expect(frame == CGRect(x: 262, y: 390 - 21 - 90, width: 320, height: 90), "centred between the side insets, above the bottom one")
         try ad.dismiss()
+    }
+
+    @Test func aLinearAdSendsNoExposureBeforeItsViewIsLaidOutInAWindow() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i30a"))
+        var exposures: [Double] = []
+        ad.bridge.onSend = { type, payload in if type == "ad.exposure", let value = payload["exposedPercentage"] as? Double { exposures.append(value) } }
+        try ad.show(from: window.root)
+        ad.linearController?.loadViewIfNeeded()
+        // Presented before the WebView reached a window: the meter's first tick, run at once, has nothing
+        // to measure (a second one would take the view as gone).
+        ad.presented()
+        ad.bridge.receive(["adId": ad.id, "type": "video.start", "playhead": 0], from: sender)
+        #expect(exposures.isEmpty, "no exposure 0 before the first layout: \(exposures)")
+        window.add(ad.bridge.webView)
+        #expect(await waitUntil(5) { exposures.first.map { $0 > 0 } == true }, "the first real measurement: \(exposures)")
+        ad.bridge.webView.removeFromSuperview()
+        #expect(await waitUntil(5) { exposures.count >= 2 && exposures.last == 0 }, "a real 0 later still goes out: \(exposures)")
+        ad.bridge.receive(["adId": ad.id, "type": "video.skip", "playhead": 1000], from: sender)
     }
 
     @Test func showRefusesAViewTheViewerCannotSee() async throws {
