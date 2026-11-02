@@ -608,8 +608,9 @@ struct VideoAdContentTests {
     }
 
     @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-none")) { _ in }
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-none")) { _ in }
         try ad.show(in: view)
+        #expect(!ads.playback.isTicking, "no player to watch: no ticks")
         await sleepMs(60)
         #expect(delegate.endReasons.isEmpty)
         try ad.dismiss()

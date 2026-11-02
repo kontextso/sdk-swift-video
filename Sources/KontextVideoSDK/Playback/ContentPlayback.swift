@@ -95,7 +95,7 @@ final class ContentPlayback {
         return min(max(0, value), 315_360_000)
     }
 
-    /// Ticks run while an overlay or pause ad of this `VideoAds` is on screen, and only then.
+    /// Ticks run while a player is tracked and an overlay or pause ad of this `VideoAds` is on screen, and only then.
     var isTicking = false {
         didSet {
             guard isTicking != oldValue else { return }

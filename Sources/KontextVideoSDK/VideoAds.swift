@@ -340,8 +340,8 @@ public final class VideoAds {
     func adDidBeginShowing(_ ad: VideoAd) {
         state.showing = ad
         // An overlay counts its seconds of video, and both it and a pause ad watch a player without a
-        // publisher, on ticks.
-        playback.isTicking = ad.format != .linear
+        // publisher, on ticks. With no player tracked there is nothing to watch; a later `track` starts them.
+        playback.isTicking = ad.format != .linear && playback.isTracking
         adDidLeave(ad)
     }
 
