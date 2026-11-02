@@ -767,7 +767,7 @@ public final class VideoAd {
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
     /// a `load()` in flight throws. For an ad on screen nothing happens; `destroy()` ends that one with
     /// `didEnd(.destroyed)`. No beacon here: `reject` and `destroy` fire `notUsed` themselves, an expired
-    /// ad is the server's to close, a failed creative already fired `error`.
+    /// ad is the server's to close (it knows `expires`), a failed creative already fired `error`.
     func invalidate(_ reason: InvalidationReason) {
         guard !wasShown, invalidationReason == nil else { return }
         invalidationReason = reason

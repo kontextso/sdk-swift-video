@@ -7,7 +7,7 @@ import Foundation
 @MainActor
 final class DebugReporter {
     struct Event: Encodable, Sendable {
-        /// Device time, ISO 8601 with milliseconds in UTC, as every Kontext API writes wall-clock time.
+        /// Device time, ISO 8601 with milliseconds in UTC, as Kontext's APIs write wall-clock time.
         let createdAt: String
         let name: String
         let adId: String?

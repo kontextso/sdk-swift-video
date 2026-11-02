@@ -73,7 +73,7 @@ public final class VideoAds {
         Logger.debug("VideoAds created for video \(content.id)")
     }
 
-    /// Expired ads leave silently, as before a request: the server knows `expires`.
+    /// Expired ads leave silently, as before a request (see `VideoAd.invalidate`).
     private func dropExpiredAds() {
         let expired = state.ads.values.filter { $0.descriptor.isExpired }
         guard !expired.isEmpty else { return }
@@ -114,7 +114,7 @@ public final class VideoAds {
     }
 
     /// The held ad of `format` while it is valid. One that expired since the answer (app code ran before
-    /// this caller resumed) leaves silently, as before a request: the server knows `expires`.
+    /// this caller resumed) leaves silently, as before a request.
     private func validHeld(_ format: AdFormat) -> VideoAd? {
         guard let held = state.ads[format] else { return nil }
         guard held.descriptor.isExpired else { return held }
@@ -135,8 +135,8 @@ public final class VideoAds {
 
     /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()` or the
     /// `VideoAds`' release. It holds its owner weakly and only between its waits, so releasing the object
-    /// mid-request reaches `deinit`, which cancels it. Expired ads are dropped first (silently; the server
-    /// knows `expires`), so `held` lists valid ones.
+    /// mid-request reaches `deinit`, which cancels it. Expired ads are dropped first, silently, so `held`
+    /// lists valid ones.
     private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
         for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
@@ -425,7 +425,7 @@ extension VideoAds {
         var showing: VideoAd?
 
         /// `destroy()`: every valid held ad gets its `notUsed` beacon and ends; the ad on screen ends. A held ad
-        /// that expired meanwhile leaves silently, as everywhere else: the server knows `expires`.
+        /// that expired meanwhile leaves silently, as everywhere else.
         func endAll() {
             for ad in Array(ads.values) {
                 if ad.descriptor.isExpired {

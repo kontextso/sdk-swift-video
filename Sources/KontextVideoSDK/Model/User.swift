@@ -1,7 +1,7 @@
 extension KontextVideo {
     /// What the publisher knows about the viewer. Every field is optional. No demographics: OpenRTB 2.6
-    /// and AdCOM deprecated `user.yob` and `user.gender`, and major ad SDKs dropped them from their
-    /// requests; `keywords` (OpenRTB `kwarray`) and the identity fields are what buyers still read.
+    /// and AdCOM deprecated `user.yob` and `user.gender`; `keywords` (OpenRTB `kwarray`) and the identity
+    /// fields are what buyers still read.
     public struct User: Sendable, Equatable, Hashable {
         /// The publisher's own unique identifier of the viewer. Non-empty when set: an empty id is a
         /// programmer error, which stops a debug build, and is left out of the request.

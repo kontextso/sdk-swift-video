@@ -1,5 +1,5 @@
 /// The moments of an ad on screen, delivered on the main actor. Every method has an empty default, so
-/// implement the ones you need. The delegate is held weakly, as every Apple delegate.
+/// implement the ones you need. The delegate is held weakly, as UIKit's delegates are.
 ///
 /// Nothing is delivered before `show`: an ad that can no longer be shown says so when `load()` or `show`
 /// throws. `show` either throws, and nothing happened, or the presentation is accepted: an overlay or

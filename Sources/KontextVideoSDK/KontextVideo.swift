@@ -149,9 +149,9 @@ public final class KontextVideo {
     /// so it is handled the way Swift handles programmer errors: `assertionFailure` stops a debug build
     /// on the first run with the message, where a log line could be overlooked (a common choice for an
     /// SDK's configure call). A release build only logs and carries on, because the
-    /// order of calls in a real app is not always deterministic and an ad SDK must never take the app
-    /// down in front of users. Not `throws`: that would put `try` on every publisher's call for a mistake
-    /// most never make. Major ad SDKs also stay non-throwing and let the ad load fail instead.
+    /// order of calls in a real app is not always deterministic and the SDK must not take the app down in
+    /// front of users. Not `throws`: that would put `try` on every publisher's call for a mistake most
+    /// never make.
     @discardableResult
     func requireInitialized(_ call: String) -> Bool {
         guard !isInitialized else { return true }

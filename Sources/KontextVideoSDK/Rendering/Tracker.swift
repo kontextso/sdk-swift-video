@@ -5,7 +5,7 @@ import Foundation
 /// and its deprecated twin `[CONTENTPLAYHEAD]`, `[ADPLAYHEAD]`, `[ERRORCODE]`) and our own, prefixed `KONTEXT_`
 /// so they never collide with the IAB registry (`[REASON]` there is an integer for verification pixels). A
 /// macro the SDK does not know stays in place. The page never fires a beacon; the SDK fires every one. No
-/// retries: a beacon that did not leave is lost, as in every ad SDK.
+/// retries: a beacon that did not leave is lost.
 @MainActor
 final class Tracker {
     /// Milliseconds into the ad video, as the page last reported it; `[ADPLAYHEAD]`.
