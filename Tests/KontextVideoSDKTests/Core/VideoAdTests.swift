@@ -651,11 +651,16 @@ struct VideoAdTests {
 
     @Test func dismissingFromInsideTheImpressionCallbackLeavesNothingRunning() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c"))
-        delegate.onImpression = { $0.dismiss() }
+        var clock: ActiveTimeClock?
+        delegate.onImpression = { ad in
+            clock = ad.clock
+            ad.dismiss()
+        }
         try ad.show(in: harness.player.view)
         #expect(delegate.events == ["impression", "end:dismissed"], "ended from inside the impression callback")
-        #expect(ad.clock?.observers.isEmpty == true, "the observers set up at show were removed by the end that followed")
-        #expect(ad.clock?.timer == nil && ad.loadedBridge == nil, "no clock running, no WebView")
+        #expect(clock?.observers.isEmpty == true, "the observers set up at show were removed by the end that followed")
+        #expect(clock?.timer == nil && ad.loadedBridge == nil, "no clock running, no WebView")
+        #expect(ad.presentation == nil && KontextVideo.shared.adOnScreen == nil, "the slot is free")
     }
 
     @Test func aMessageAfterTheEndChangesNothing() async throws {

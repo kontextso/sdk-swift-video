@@ -57,7 +57,7 @@ public final class VideoAd {
     public var duration: TimeInterval? { descriptor.duration }
     /// The size variant `show` chose for the view: the largest that fits without scaling, else the one
     /// with the best scale still at or above 50 %.
-    private(set) var chosenSize: Size?
+    var chosenSize: Size?
 
     /// The page reported the creative ready: `load()` finished.
     public private(set) var isLoaded = false
@@ -156,12 +156,12 @@ public final class VideoAd {
     private var loadContinuation: CheckedContinuation<Void, Error>?
     /// The `VideoAds` it belongs to; told when the ad leaves it, is shown, and ends.
     private(set) weak var owner: VideoAds?
-    /// The view the SDK put into the player's view for an overlay or pause ad.
-    private var hostView: AdHostView?
+    /// The ad on screen, from `show` to `didEnd`: the slot, the host view or controller, the meter, the clock.
+    private(set) var presentation: Presentation?
+    var hostView: AdHostView? { presentation?.hostView }
     /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too.
-    private var extraInsets = UIEdgeInsets.zero
-    /// The controller the SDK presented for a linear ad.
-    private(set) var linearController: LinearViewController?
+    var extraInsets = UIEdgeInsets.zero
+    var linearController: LinearViewController? { presentation?.linearController }
     /// The creative reached the screen (the phase was `onScreen`): the page was told to show, the beacons
     /// of that moment fired. At `show` for an overlay or pause ad; for a linear ad once UIKit presented the
     /// controller. Stays `true` after the end: an ad that was on screen without an impression closes.
@@ -170,15 +170,12 @@ public final class VideoAd {
     private var failure: VideoAdError?
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
-    /// Decides `viewable` / `notViewable` while the ad is on screen.
-    private(set) var meter: ViewabilityMeter?
+    var meter: ViewabilityMeter? { presentation?.meter }
     /// The ad video is playing (from `video.start`, not while paused, over at `complete`): the only time a
     /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
     /// video starts: a linear ad's meter waits for the presentation to finish.
     private var videoPlaying = false
-    /// Time on screen while the app is active, for an overlay or pause ad; it also ends an overlay whose
-    /// `duration` elapsed, unless the overlay follows the content. Made when the ad is presented.
-    private(set) var clock: ActiveTimeClock?
+    var clock: ActiveTimeClock? { presentation?.clock }
     var contentProgress: ContentProgress?   // an overlay that follows the content: `VideoAd+Content`
     var contentPausedSinceShow = false   // a pause ad that follows the content: `VideoAd+Content`
     var contentPausedWhileInactive = false   // an overlay frozen by a pause in the background: `VideoAd+Content`
@@ -346,7 +343,7 @@ public final class VideoAd {
         }
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
         // The host is known before it is added, so an end from the container's hook finds and removes it.
-        hostView = host
+        presentation?.hostView = host
         container.addSubview(host)
         // The hook may have taken the player off screen or paused the content: the ad ends, with no impression.
         if !hasEnded, !AdPlacement.canBeSeen(host) {
@@ -408,7 +405,7 @@ public final class VideoAd {
             Logger.warning("ad \(id.prefix(8)): presentation interrupted")
             end(.interrupted)
         }
-        linearController = controller
+        presentation?.linearController = controller
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
@@ -466,68 +463,13 @@ public final class VideoAd {
         if contentPaused { throw VideoAdError.contentPaused }
     }
 
-    /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
-    /// below 50 %, and not at all for a variant marked not scalable. Picks the variant first (the largest that fits without scaling, else the best scale),
-    /// so a player that changed shape between `load` and `show` gets the size built for it. A card or
-    /// strip stays inside the view's safe area: a full-screen player runs under the notch and the home
-    /// indicator, and an ad there is partly hidden and hard to tap. A full-screen pause ad fills the
-    /// whole view; its page keeps its own controls clear of those areas.
-    private func frame(in fullBounds: CGRect, safeArea: UIEdgeInsets) throws -> CGRect {
-        guard descriptor.position != .fullscreen, let defaultSize = descriptor.size else { return fullBounds }
-        guard let bounds = AdPlacement.room(in: fullBounds, safeArea: safeArea) else {
-            chosenSize = nil
-            throw tooSmall(for: defaultSize, room: nil, safeArea: safeArea)
-        }
-        let fit = { (candidate: Size) in AdPlacement.scale(toFit: candidate, in: bounds) }
-        let unscaled = descriptor.sizes.filter { fit($0) >= 1 }
-        let usable = descriptor.sizes.filter { fit($0) >= AdPlacement.smallestScale(of: $0) }
-        let size = unscaled.max { $0.width * $0.height < $1.width * $1.height }
-            ?? usable.max { fit($0) < fit($1) }
-            ?? descriptor.sizes.max { fit($0) < fit($1) }
-            ?? defaultSize
-        chosenSize = size
-        if size != defaultSize { Logger.debug("ad \(id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
-        guard let frame = AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea) else {
-            chosenSize = nil
-            throw tooSmall(for: size, room: bounds, safeArea: safeArea)
-        }
-        return frame
-    }
-
-    /// `containerTooSmall` with the view that holds `size`, safe area and insets included. `room` is what
-    /// they left of the view, `nil` when they left nothing.
-    private func tooSmall(for size: Size, room: CGRect?, safeArea: UIEdgeInsets) -> VideoAdError {
-        let smallest = AdPlacement.smallestScale(of: size)
-        let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
-                             height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
-        let view = room.map { "view \(Int($0.width))×\(Int($0.height)) is too small for" } ?? "the safe area and insets leave no room for"
-        Logger.warning("ad \(id.prefix(8)): \(view) the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
-        return VideoAdError.containerTooSmall(minimum: minimum)
-    }
-
-    /// The chosen variant fitted again to a view that resized or rotated: the page was told that variant,
-    /// so only its scale changes. `nil` when it no longer fits.
-    private func refit(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
-        if descriptor.position == .fullscreen { return fullscreenFrame(in: fullBounds, safeArea: safeArea) }
-        guard let size = chosenSize else { return fullBounds }
-        return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: AdPlacement.adding(extraInsets, to: safeArea))
-    }
-
-    /// A full-screen pause ad's page: the player less its safe area (the notch or island, the home indicator,
-    /// a landscape cutout), so its text and controls stay clear of them; the host fills the rest in black.
-    /// The app's insets do not apply. A safe area that leaves nothing gives the whole player.
-    private func fullscreenFrame(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect {
-        AdPlacement.room(in: fullBounds, safeArea: safeArea) ?? fullBounds
-    }
-
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
     /// unshown ones; `show` returning is the app's signal. Before any of the app's code can run, so a show
     /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
     private func reserve() {
         transition(to: .reserved)
-        KontextVideo.shared.adOnScreen = self
-        owner?.adDidBeginShowing(self)
+        presentation = Presentation.begin(self, owner: owner)
     }
 
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
@@ -553,7 +495,7 @@ public final class VideoAd {
                 isCompleted = true
                 end(.completed)
             }
-            self.clock = clock
+            presentation?.clock = clock
             clock.start(in: hostView?.window)
             startFollowingContent()
             startFollowingPausedContent()
@@ -611,7 +553,7 @@ public final class VideoAd {
         }
         // A sheet over a linear ad leaves its view in the window, where the meter would still see it whole.
         meter.isCovered = { [weak self] in self?.linearController.map(Environment.isCovered) ?? false }
-        self.meter = meter
+        presentation?.meter = meter
         meter.start()
     }
 
@@ -633,13 +575,14 @@ public final class VideoAd {
     // Every end releases, in this order (an ad ended before show: `invalidate` releases what it ever had, the
     // load waiter, the page and its place in the owner):
     //  1. waiters: none left once shown, the load is over; the presentation watchdog stops on `hasEnded`;
-    //  2. timers and clock: the content recheck, the clock with its timer and scene observers (endNow);
-    //  3. observers and meter: the viewability meter, the SKAdNetwork impression (endNow);
-    //  4. renderer: the page (hidden, released) and the host view (endNow);
+    //  2. timers and clock: the content recheck (endNow), the clock with its timer and scene observers
+    //     (`Presentation.tearDown`);
+    //  3. observers and meter: the viewability meter (`Presentation.tearDown`), the SKAdNetwork impression (endNow);
+    //  4. renderer: the page (hidden, released; endNow) and the host view (`Presentation.tearDown`);
     //  5. presentation: the linear controller dismissed (endNow); there is no registration to undo on iOS;
     //  6. context: none on iOS;
-    //  7. the app-wide on-screen slot, `KontextVideo.adOnScreen` (finish);
-    //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (finish);
+    //  7. the app-wide on-screen slot, `KontextVideo.presentation` (`Presentation.release`, from finish);
+    //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (`Presentation.release`);
     //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
         guard transition(to: .ending(reason)) else { return }
@@ -649,17 +592,13 @@ public final class VideoAd {
         contentRecheck?.cancel()
         contentRecheck = nil
         // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
-        let activeTime = clock?.stop() ?? 0
-        meter?.stop()
-        meter = nil
+        let activeTime = presentation?.tearDown() ?? 0
         skAdNetwork?.end()
         loadedBridge?.hide()
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
-        hostView?.removeFromSuperview()
-        hostView = nil
         var dismissing = false
-        if let controller = linearController {
-            linearController = nil
+        if let controller = presentation?.linearController {
+            presentation?.linearController = nil
             // Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
             // the animation.
             dismissing = LinearPresentation.dismiss(controller, timeout: Self.dismissalTimeout) { [weak self] in
@@ -694,8 +633,8 @@ public final class VideoAd {
     /// dismissal finished for a linear ad. Once.
     private func finish(_ reason: EndReason) {
         guard transition(to: .ended(reason)) else { return }
-        if KontextVideo.shared.adOnScreen === self { KontextVideo.shared.adOnScreen = nil }
-        owner?.adDidEnd(self)
+        presentation?.release()
+        presentation = nil
         delegate?.videoAd(self, didEnd: reason)
     }
 
