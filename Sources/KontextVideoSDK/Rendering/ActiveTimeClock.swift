@@ -1,9 +1,10 @@
 import UIKit
 
-/// The time an overlay or pause ad spends on screen while its window's scene is active (the app, for a
-/// window without a scene): `overlayViewDuration` reports it, and an overlay's `duration` runs on it, so
-/// both freeze in the background, or while another window of the app has the screen, and resume on return.
-/// It only counts and tells; the ad decides what an elapsed duration means.
+/// The time an overlay or pause ad is seen: on screen, as the viewability meter says (`setSeen`), while its
+/// window's scene is active (the app, for a window without a scene). `overlayViewDuration` reports it, and an
+/// overlay's `duration` runs on it, so both freeze in the background, while another window of the app has
+/// the screen, or while the ad is out of sight, and resume on return. It only counts and tells; the ad
+/// decides what an elapsed duration means.
 @MainActor
 final class ActiveTimeClock {
     /// When the duration has run out on active time; called at most once, never after `stop()`.
@@ -29,8 +30,18 @@ final class ActiveTimeClock {
         self.onElapsed = onElapsed
     }
 
-    /// An active stretch is running: the ad is on screen and its scene active.
+    /// An active stretch is running: the ad is seen and its scene active.
     var isCounting: Bool { since != nil }
+    /// The ad's scene is active, whether or not the ad is seen.
+    private(set) var isSceneActive = false
+    /// The meter's last answer: some of the ad on screen. Seen until it says otherwise.
+    private var isSeen = true
+
+    /// The meter's answer changed: the clock counts only while the ad is seen.
+    func setSeen(_ seen: Bool) {
+        isSeen = seen
+        update()
+    }
     /// Called when an active stretch begins after the clock started: the scene came back. An overlay that
     /// counts seconds of video starts its count again from there.
     var onActivate: (() -> Void)?
@@ -50,13 +61,22 @@ final class ActiveTimeClock {
         let resumeName = scene == nil ? UIApplication.didBecomeActiveNotification : UIScene.didActivateNotification
         observers = [
             center.addObserver(forName: pauseName, object: scene, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.pause() }
+                MainActor.assumeIsolated { self?.setSceneActive(false) }
             },
             center.addObserver(forName: resumeName, object: scene, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.resume() }
+                MainActor.assumeIsolated { self?.setSceneActive(true) }
             },
         ]
-        if window.map(Environment.isWindowActive) ?? Environment.isApplicationActive() { resume() }
+        setSceneActive(window.map(Environment.isWindowActive) ?? Environment.isApplicationActive())
+    }
+
+    private func setSceneActive(_ active: Bool) {
+        isSceneActive = active
+        update()
+    }
+
+    private func update() {
+        if isSceneActive, isSeen { resume() } else { pause() }
     }
 
     /// The ad ended: the clock freezes for good and returns the active time it counted.

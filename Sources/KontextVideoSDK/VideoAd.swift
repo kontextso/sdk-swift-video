@@ -496,6 +496,7 @@ public final class VideoAd {
                 end(.completed)
             }
             presentation?.clock = clock
+            clock.setSeen(meter?.isSeen ?? true)
             clock.start(in: hostView?.window)
             startFollowingContent()
             startFollowingPausedContent()
@@ -553,6 +554,15 @@ public final class VideoAd {
         }
         // A sheet over a linear ad leaves its view in the window, where the meter would still see it whole.
         meter.isCovered = { [weak self] in self?.linearController.map(Environment.isCovered) ?? false }
+        // The meter is the one answer to "is it seen": the clock counts only then, and an overlay or pause ad
+        // out of sight in an active scene (a feed cell swiped away) ends, freeing the app's slot. Not a linear
+        // ad: a sheet over it after a click is the viewer's own doing, and it comes back.
+        meter.onSeen = { [weak self] seen in self?.clock?.setSeen(seen) }
+        meter.onOffScreen = { [weak self] in
+            guard let self, format != .linear, !hasEnded else { return }
+            Logger.warning("ad \(id.prefix(8)): out of sight for \(ViewabilityMeter.offScreenGrace) s; ended as interrupted")
+            end(.interrupted)
+        }
         presentation?.meter = meter
         meter.start()
     }

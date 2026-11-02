@@ -42,6 +42,19 @@ struct VideoAdPlacementTests {
         ad.dismiss()
     }
 
+    @Test func aPauseCardOutOfSightEndsAndFreesTheSlot() async throws {
+        ViewabilityMeter.offScreenGrace = 0.2
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-away"))
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 300))
+        window.add(player)
+        try ad.show(in: player)
+        player.frame.origin.x = 10_000   // the feed moved on; the cell stays in the window
+        #expect(await waitUntil(3) { delegate.endReasons == [.interrupted] }, "\(delegate.events)")
+        #expect(KontextVideo.shared.adOnScreen == nil, "the next episode's ad can show")
+    }
+
     @Test func aTopPauseCardStaysBelowTheNotch() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6s"))
         let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))

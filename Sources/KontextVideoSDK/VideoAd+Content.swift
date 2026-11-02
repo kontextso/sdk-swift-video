@@ -78,7 +78,7 @@ extension VideoAd {
             contentRecheck = nil
         }
         guard change == .tick, let contentProgress, !hasEnded else { return }
-        // Seconds of video while the overlay is seen: not while its scene is inactive.
+        // Seconds of video while the overlay is seen: not while its scene is inactive or it is out of sight.
         if contentProgress.advance(to: playback.playhead, counting: clock?.isCounting == true, rate: playback.rate) {
             Logger.debug("ad \(id.prefix(8)): overlay duration of \(contentProgress.duration) s of video elapsed")
             isCompleted = true
@@ -92,7 +92,7 @@ extension VideoAd {
     /// the check after the scene's return. Returns whether the overlay stays. Before its clock exists (the
     /// view still being attached) a pause ends it as always.
     private func freezesOnPause() -> Bool {
-        if clock?.isCounting == false, !contentPausedWhileInactive {
+        if clock?.isSceneActive == false, !contentPausedWhileInactive {
             Logger.info("ad \(id.prefix(8)): the content paused while the scene is not active; the overlay freezes")
             contentPausedWhileInactive = true
         }
@@ -108,7 +108,7 @@ extension VideoAd {
             try? await Task.sleep(nanoseconds: UInt64(Self.contentResumeGrace * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
-            guard followsContent, !hasEnded, contentPausedWhileInactive, clock?.isCounting == true,
+            guard followsContent, !hasEnded, contentPausedWhileInactive, clock?.isSceneActive == true,
                   let playback = owner?.playback else { return }
             contentPausedWhileInactive = false
             if playback.isPlaying {

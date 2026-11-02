@@ -33,6 +33,18 @@ final class ViewabilityMeter {
     /// Whether something the meter cannot see covers the view while it stays in its window: a sheet presented
     /// over a linear ad (the App Store product page after a click). Asked on every tick; covered reads as 0.
     var isCovered: (() -> Bool)?
+    /// The ad became seen (some of it on screen in an active scene) or unseen: the one answer to "is it
+    /// seen" the clock and the slot follow. From the first real measurement on, at every change.
+    var onSeen: ((Bool) -> Void)?
+    /// The view stayed in its window, its scene active, with nothing of it on screen for `offScreenGrace`: a
+    /// feed cell swiped away, a view scrolled or moved out of sight. On every tick while that lasts.
+    var onOffScreen: (() -> Void)?
+    /// How long a view in an active scene may show nothing before `onOffScreen`. Tests shorten it.
+    static var offScreenGrace: TimeInterval = 1
+    /// The last answer `onSeen` gave; `nil` before the first real measurement.
+    private(set) var isSeen: Bool?
+    /// Since when the view, in an active scene, has shown nothing.
+    private var offScreenSince: TimeInterval?
 
     private(set) var verdict: Verdict?
     private weak var view: UIView?
@@ -98,6 +110,7 @@ final class ViewabilityMeter {
         guard let view, let window = view.window else {
             if hasMeasured { report(0, visible: .zero) }
             exposedSince = nil
+            offScreenSince = nil
             // One tick of grace: a view re-parented within the same turn of the run loop is not gone.
             detachedTicks += 1
             if view != nil, detachedTicks >= 2 {
@@ -109,11 +122,21 @@ final class ViewabilityMeter {
         guard hasMeasured || (view.bounds.width > 0 && view.bounds.height > 0) else { return }
         hasMeasured = true
         // The ad's own scene, not the app: an iPad window in the background shows nothing.
-        let seen = Environment.isWindowActive(window) && isCovered?() != true
+        let active = Environment.isWindowActive(window)
+        let seen = active && isCovered?() != true
         let (percentage, visible) = seen ? Self.exposure(of: view, in: window) : (0, .null)
         report(percentage, visible: visible.isNull ? .zero : visible)
         // The page's reaction to the exposure may have ended the ad.
         guard !stopped else { return }
+        if active, percentage == 0 {
+            if offScreenSince == nil || stalled { offScreenSince = now }
+            if let since = offScreenSince, now - since >= Self.offScreenGrace {
+                onOffScreen?()
+                guard !stopped else { return }
+            }
+        } else {
+            offScreenSince = nil
+        }
 
         if percentage >= Self.threshold, countsTime {
             // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
@@ -218,6 +241,10 @@ final class ViewabilityMeter {
     /// are the same percentage and a different `visibleRectangle`.
     private func report(_ percentage: Double, visible: CGRect) {
         let rounded = (percentage * 100).rounded() / 100
+        if isSeen != (rounded > 0) {
+            isSeen = rounded > 0
+            onSeen?(rounded > 0)
+        }
         let place = visible.integral
         guard rounded != lastPercentage || place != lastVisible else { return }
         lastPercentage = rounded

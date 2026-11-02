@@ -34,6 +34,17 @@ struct ActiveTimeClockTests {
         #expect(clock.timer == nil, "no timer waits for a second expiry")
     }
 
+    @Test func itCountsOnlyWhileTheMeterSaysTheAdIsSeen() {
+        let clock = ActiveTimeClock(duration: nil, adId: "clock-seen") {}
+        defer { clock.stop() }
+        clock.start(in: nil)
+        #expect(clock.isCounting)
+        clock.setSeen(false)
+        #expect(!clock.isCounting && clock.isSceneActive, "out of sight in an active app: nothing counts")
+        clock.setSeen(true)
+        #expect(clock.isCounting)
+    }
+
     @Test func aStoppedClockNeverReportsAndKeepsItsTime() async {
         var elapsed = 0
         let clock = ActiveTimeClock(duration: 0.05, adId: "clock-2") { elapsed += 1 }

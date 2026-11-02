@@ -261,6 +261,31 @@ struct ViewabilityMeterTests {
         return clock
     }
 
+    @Test func aViewOutOfSightInAnActiveSceneIsUnseenThenOffScreenAfterTheGrace() async {
+        defer { window.tearDown() }
+        let clock = frozen()
+        let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        defer { meter.stop() }
+        var seen: [Bool] = []
+        var offScreen = 0
+        meter.onSeen = { seen.append($0) }
+        meter.onOffScreen = { offScreen += 1 }
+        meter.start()   // seen, at 1000
+        view.frame.origin.x = 10_000   // a feed cell swiped away: still in the window, nothing of it on screen
+        clock.now = 1000.5
+        meter.tick()
+        clock.now = 1001.25
+        meter.tick()
+        #expect(seen == [true, false] && offScreen == 0, "unseen, within the grace")
+        clock.now = 1001.5
+        meter.tick()
+        #expect(offScreen == 1, "a second out of sight")
+        view.frame.origin.x = 0
+        meter.tick()
+        #expect(seen == [true, false, true] && offScreen == 1)
+    }
+
     @Test func theDwellCountsToTheBoundaryExactly() async {
         defer { window.tearDown() }
         let clock = frozen()
