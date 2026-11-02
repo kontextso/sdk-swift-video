@@ -392,7 +392,8 @@ struct FrameBridgeTests {
     @Test func aClickWithoutAUsableURLOpensItsFallback() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)
-        for given: Any? in [nil, 42] {
+        // Missing, not a string, a space in it, a web link without a host: the same rule as on Android.
+        for given: Any? in [nil, 42, "https://brand.test/a b", "https://", "https:///offer"] {
             bridge.noteTouch()
             var body: [String: Any] = ["fallbackUrl": "https://brand.test/offer"]
             body["url"] = given

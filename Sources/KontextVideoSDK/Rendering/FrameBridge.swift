@@ -512,7 +512,12 @@ final class FrameBridge: NSObject {
     /// percent-encoded first, or `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it
     /// (iOS 17); the tracker reads the encoded form.
     static func url(_ raw: String) -> URL? {
-        URL(string: Tracker.encodingBrackets(raw))
+        // As on Android: a space or a control character makes a URL unusable (iOS 17 would encode it and open
+        // something else), and so does a web link without a host.
+        let unusable = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
+        guard !raw.unicodeScalars.contains(where: unusable.contains), let url = URL(string: Tracker.encodingBrackets(raw)) else { return nil }
+        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host?.isEmpty ?? true { return nil }
+        return url
     }
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
