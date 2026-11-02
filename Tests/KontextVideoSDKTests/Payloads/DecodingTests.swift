@@ -321,6 +321,16 @@ struct DecodingTests {
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.overlayAd(duration: -1)) }
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.linearAd(skipOffset: -1)) }
         #expect(try Fixtures.payload(Fixtures.linearAd(skipOffset: 0)).id == "ad-i", "a Close from the start is fine")
+        // Negative before rounding: -0.4 rounds to 0 and is still broken.
+        var almostZero = Fixtures.overlayAd()
+        almostZero["duration"] = -0.4
+        #expect(throws: DecodingError.self) { try Fixtures.payload(almostZero) }
+        // A linear video of no length: nothing to play.
+        for duration in [0, 0.4, -1000] as [Double] {
+            var linear = Fixtures.linearAd()
+            linear["duration"] = duration
+            #expect(throws: DecodingError.self, "\(duration)") { try Fixtures.payload(linear) }
+        }
     }
 
     @Test func anAbsurdSizeIsRefused() {
@@ -340,11 +350,15 @@ struct DecodingTests {
     }
 
     @Test func theFrameURLMustBeAbsoluteWithAHost() throws {
-        for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1"] {
+        for ok in ["https://server.kontext.so/frame/ad-1", "http://localhost:5175/frame/ad-1", "kontext-test://frames/frame/ad-1",
+                   "https://[::1]:5175/frame/ad-1", "https://frames.test/frame%20ad?q=1#x"] {
             #expect(try Fixtures.payload(Fixtures.ad(frameURL: ok)).rendering == .frame(URL(string: ok)!))
         }
         for bad in ["frame/ad-1", "/frame/ad-1", "file:///etc/passwd", "file://localhost/etc/passwd", "javascript:alert(1)", "data:text/html,hi", "blob:https://x/y", "about:blank",
-                    "ftp://frames.test/frame", "ws://frames.test/frame", "myapp://frames/frame", "https://frames.test:0/frame", "https://frames.test:99999/frame"] {
+                    "ftp://frames.test/frame", "ws://frames.test/frame", "myapp://frames/frame", "https://frames.test:0/frame", "https://frames.test:99999/frame",
+                    // Not a URL as written, though Foundation would encode it into one.
+                    "https://frames.test/fr ame", "https://fr ames.test/frame", "https://frames.test/frame?q=a\u{00A0}b", "https://frames.test/[frame]",
+                    "https://frames.test/frame%zz", "https://frames.test/frame%2", "https://frames.test/a|b", "https://frames.test/a\\b"] {
             #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
         }
     }
@@ -434,6 +448,12 @@ struct DecodingTests {
         let endCard = ad.tracking.first { $0.event == "creativeView" && $0.part == "endCard" }
         #expect(endCard != nil)
         #expect(ad.tracking.filter { $0.event == "click" }.count == 2, "the creative's and the end card's")
+        // A part of the wrong type is no main-creative beacon: the ad is malformed. Null is absent.
+        var numbered = Fixtures.linearAd()
+        numbered["tracking"] = [["event": "click", "url": "https://ads.test/end", "part": 2]]
+        #expect(throws: DecodingError.self) { try Fixtures.payload(numbered) }
+        numbered["tracking"] = [["event": "click", "url": "https://ads.test/end", "part": NSNull()]]
+        #expect(try Fixtures.payload(numbered).tracking.first?.part == nil)
     }
 
     @Test func anAdWithoutAVastUrlDecodes() throws {

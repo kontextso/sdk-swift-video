@@ -52,7 +52,7 @@ struct AdPayload: Decodable, Sendable {
         /// A finite, non-negative CPM in a three-letter currency: the publisher's auction compares it.
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            value = try container.decode(Double.self, forKey: .value)
+            value = try container.decodeNumber(Double.self, forKey: .value)
             guard value.isFinite, value >= 0 else {
                 throw DecodingError.dataCorruptedError(forKey: .value, in: container, debugDescription: "the price must be a finite, non-negative CPM")
             }
@@ -94,11 +94,12 @@ struct AdPayload: Decodable, Sendable {
             event = try container.decode(String.self, forKey: .event)
             url = try container.decode(String.self, forKey: .url)
             part = try container.decodeIfPresent(String.self, forKey: .part)
-            // A string, a boolean or an object is no count of milliseconds either: the entry goes, not the ad.
+            // A string, a boolean or an object is no count of milliseconds either, nor a number no Double holds
+            // (`1e400`): the entry goes, not the ad.
             let raw: Double?
             do {
-                raw = try container.decodeIfPresent(Double.self, forKey: .offset)
-            } catch DecodingError.typeMismatch {
+                raw = try container.decodeNumberIfPresent(Double.self, forKey: .offset)
+            } catch DecodingError.typeMismatch, DecodingError.dataCorrupted {
                 throw InvalidOffset()
             }
             if let raw {
@@ -156,8 +157,8 @@ struct AdPayload: Decodable, Sendable {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            width = try container.decode(Int.self, forKey: .width)
-            height = try container.decode(Int.self, forKey: .height)
+            width = try container.decodeNumber(Int.self, forKey: .width)
+            height = try container.decodeNumber(Int.self, forKey: .height)
             scalable = try container.decodeIfPresent(Bool.self, forKey: .scalable) ?? true
             // Positive, and no larger than any screen could be: an absurd size would only produce absurd geometry.
             guard (1...Self.maxSide).contains(width), (1...Self.maxSide).contains(height) else {
@@ -174,21 +175,52 @@ struct AdPayload: Decodable, Sendable {
     private static let frameSchemes: Set<String> = ["http", "https"]
 
     /// An optional count of milliseconds, refused when negative (a negative overlay duration would end the
-    /// overlay the moment it shows).
+    /// overlay the moment it shows). The sign of the value sent, before rounding: -0.4 is as broken as -1.
     private static func nonNegative(_ key: CodingKeys, in container: KeyedDecodingContainer<CodingKeys>) throws -> Int? {
         guard container.contains(key), try !container.decodeNil(forKey: key) else { return nil }
-        let value = try milliseconds(key, in: container)
-        if value < 0 { throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) must not be negative") }
-        return value
+        let raw = try container.decodeNumber(Double.self, forKey: key)
+        if raw < 0 { throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) must not be negative") }
+        return try milliseconds(raw, key, in: container)
     }
 
     /// A required count of milliseconds, a fraction rounded (`milliseconds(_:)`).
     private static func milliseconds<Key: CodingKey>(_ key: Key, in container: KeyedDecodingContainer<Key>) throws -> Int {
-        guard let value = milliseconds(try container.decode(Double.self, forKey: key)) else {
+        try milliseconds(try container.decodeNumber(Double.self, forKey: key), key, in: container)
+    }
+
+    /// `raw`, the value of `key`, as milliseconds, or an error at `key`.
+    private static func milliseconds<Key: CodingKey>(_ raw: Double, _ key: Key, in container: KeyedDecodingContainer<Key>) throws -> Int {
+        guard let value = milliseconds(raw) else {
             throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "\(key.stringValue) is not a usable count of milliseconds")
         }
         return value
     }
+
+    /// Whether `text` is a URL as written: the characters of RFC 3986, each `%` starting an escape, brackets only
+    /// in the host (an IPv6 literal), and beyond ASCII anything but a space or a control character. Checked on the
+    /// string: Foundation's `URL` (iOS 17 and later) percent-encodes what does not belong in a URL, a space
+    /// included, and would take a URL the server never meant; the Kotlin SDK's parser refuses the same.
+    static func isWellFormedURL(_ text: String) -> Bool {
+        let scalars = Array(text.unicodeScalars)
+        // The authority runs from after `//` to the path, the query or the fragment.
+        let start = text.range(of: "//").map { text.unicodeScalars.distance(from: text.unicodeScalars.startIndex, to: $0.upperBound) } ?? 0
+        let end = scalars[start...].firstIndex { "/?#".unicodeScalars.contains($0) } ?? scalars.count
+        for (index, scalar) in scalars.enumerated() {
+            guard scalar.isASCII else {
+                if CharacterSet.whitespacesAndNewlines.contains(scalar) || CharacterSet.controlCharacters.contains(scalar) { return false }
+                continue
+            }
+            guard urlCharacters.contains(scalar) else { return false }
+            if scalar == "[" || scalar == "]", !(start..<end).contains(index) { return false }
+            if scalar == "%" {
+                guard index + 2 < scalars.count, scalars[index + 1].properties.isASCIIHexDigit, scalars[index + 2].properties.isASCIIHexDigit else { return false }
+            }
+        }
+        return true
+    }
+
+    /// RFC 3986's unreserved and reserved characters, and `%`.
+    private static let urlCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%")
 
     /// `sizes`, at least one entry, the first built for the request's player.
     private static func sizes(from container: KeyedDecodingContainer<CodingKeys>) throws -> [Size] {
@@ -277,8 +309,8 @@ struct AdPayload: Decodable, Sendable {
         case "frame":
             // A web page to load: http or https, with a host and a valid port. Anything else (a local file,
             // inline content, another app's scheme) is not a frame page.
-            let url = try rendering.decode(URL.self, forKey: .url)
-            guard let scheme = url.scheme?.lowercased(),
+            let text = try rendering.decode(String.self, forKey: .url)
+            guard Self.isWellFormedURL(text), let url = URL(string: text), let scheme = url.scheme?.lowercased(),
                   Self.frameSchemes.contains(scheme) || Environment.testFrameSchemes.contains(scheme),
                   let host = url.host, !host.isEmpty, (url.port.map { (1...65_535).contains($0) } ?? true) else {
                 throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be an http or https page with a host")
@@ -299,10 +331,35 @@ struct AdPayload: Decodable, Sendable {
             let position = try container.decode(PausePosition.self, forKey: .position)
             details = .pause(position: position, sizes: position == .fullscreen ? [] : try Self.sizes(from: container))
         case .linear:
-            details = .linear(
-                duration: try Self.milliseconds(.duration, in: container),
-                skipOffset: try Self.nonNegative(.skipOffset, in: container)
-            )
+            let duration = try Self.milliseconds(.duration, in: container)
+            // A video of no length has nothing to play, and its progress beacons no moment to fire at.
+            guard duration > 0 else { throw DecodingError.dataCorruptedError(forKey: .duration, in: container, debugDescription: "duration must be positive") }
+            details = .linear(duration: duration, skipOffset: try Self.nonNegative(.skipOffset, in: container))
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// `decode(_:forKey:)` for a number, a number the type cannot hold (`1e400`, or `320.5` read as an `Int`)
+    /// reported at `key`: the iOS decoder throws its own error for it, not a `DecodingError`, and it reaches the
+    /// caller as corrupted data with no coding path, while the error report must name the field (`price.value`),
+    /// as the Kotlin SDK does.
+    func decodeNumber<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
+        try atKey(key) { try decode(type, forKey: key) }
+    }
+
+    /// `decodeIfPresent(_:forKey:)` for a number, as `decodeNumber(_:forKey:)`.
+    func decodeNumberIfPresent<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T? {
+        try atKey(key) { try decodeIfPresent(type, forKey: key) }
+    }
+
+    private func atKey<T>(_ key: Key, _ decode: () throws -> T) throws -> T {
+        do {
+            return try decode()
+        } catch DecodingError.dataCorrupted(let context) where context.codingPath.count <= codingPath.count {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: context.debugDescription)
+        } catch let error where !(error is DecodingError) {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "\(error)")
         }
     }
 }
