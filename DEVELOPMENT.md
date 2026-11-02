@@ -31,7 +31,7 @@ sdk-swift-video/
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
 ├── .github/workflows/ci.yml the four CI jobs (see CI)
-├── Package.swift            SPM manifest; KontextKit pinned exact
+├── Package.swift            SPM manifest; KontextKit up to the next minor
 ├── AGENTS.md                guidance for coding agents (CLAUDE.md only imports it)
 └── CHANGELOG.md, RELEASING.md
 ```
@@ -183,8 +183,8 @@ type, match the Kotlin counterpart, or leave a comment saying why not. The serve
 ## KontextKit dependency
 
 Device, privacy (ATT, IFA, the IAB consent keys) and StoreKit facts come from
-[KontextKit](https://github.com/kontextso/kontextkit-ios), pinned to an exact version in `Package.swift` while it
-is pre-1.0; the SDK uses its `KontextKit` product only, not the Open Measurement xcframework. What the SDK needs
+[KontextKit](https://github.com/kontextso/kontextkit-ios), pinned up to the next minor version in `Package.swift` while it
+is pre-1.0 (patches are taken, a minor release may break); the SDK uses its `KontextKit` product only, not the Open Measurement xcframework. What the SDK needs
 and KontextKit lacks goes into KontextKit, not into a workaround here. To build against an unreleased KontextKit,
 point `Package.swift` at a sibling checkout and revert before committing:
 
