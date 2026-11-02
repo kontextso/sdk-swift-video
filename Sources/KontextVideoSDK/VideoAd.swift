@@ -744,19 +744,4 @@ public final class VideoAd {
     static func error(for reason: InvalidationReason) -> VideoAdError {
         reason == .destroyed ? .destroyed : .invalidated(reason)
     }
-
-    /// Dropping the last reference releases everything: the bridge tears the page down in its own
-    /// `deinit`, the clock in its own; the meter's timer is stopped here. Never reached while the ad is on
-    /// screen, because the SDK retains it until `didEnd`.
-    deinit {
-        let meter = self.meter
-        let teardown: @MainActor () -> Void = {
-            meter?.stopTimer()
-        }
-        if Thread.isMainThread {
-            MainActor.assumeIsolated { teardown() }
-        } else {
-            Task { @MainActor in teardown() }
-        }
-    }
 }

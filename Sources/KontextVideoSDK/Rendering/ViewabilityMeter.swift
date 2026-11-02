@@ -77,12 +77,6 @@ final class ViewabilityMeter {
         tick()
     }
 
-    /// Stops measuring without a verdict; for the owner's `deinit` teardown, which runs on the main actor.
-    func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
     /// The ad ended: a verdict is still owed when none was reached.
     func stop() {
         stopped = true
