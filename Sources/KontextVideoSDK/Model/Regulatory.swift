@@ -6,7 +6,7 @@ extension KontextVideo {
     /// fills in where the CMP has none usable (a key it did not write, an empty or malformed one), for an
     /// app without an IAB-writing CMP. The SDK carries the signals and interprets none: a `gpp` and `gppSid`
     /// set here must describe the same context. `nil` everywhere means unknown, never `false`.
-    public struct Regulatory: Encodable, Sendable, Equatable {
+    public struct Regulatory: Sendable, Equatable, Hashable {
         /// Whether the request is subject to GDPR; `nil` is unknown, which is not the same as `false`.
         public let gdpr: Bool?
         /// The IAB Transparency and Consent Framework consent string.

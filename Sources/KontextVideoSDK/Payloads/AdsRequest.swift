@@ -8,17 +8,17 @@ struct AdsRequest: Encodable, Sendable {
     let requestId: String
     let publisherToken: String
     let installId: String
-    let user: KontextVideo.User?
+    let user: UserPayload?
     let variantId: String?
     let ifa: IFA?
     let idfv: String?
     let attStatus: String
-    let regulatory: KontextVideo.Regulatory?
+    let regulatory: RegulatoryPayload?
     let sdk: SDKInfo
     let app: AppInfo
     let device: AdsDevice
     let player: PlayerSnapshot
-    let video: KontextVideo.Content
+    let video: ContentPayload
     /// The labels given to `VideoAds(content:labels:)`; left out when there are none.
     let labels: [String: String]?
     /// One per `VideoAds`: the server keeps the bids it gave out per session.
@@ -49,17 +49,17 @@ struct AdsRequest: Encodable, Sendable {
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
-            user: isChild ? sdk.user?.withoutIdentity : sdk.user,
+            user: (isChild ? sdk.user?.withoutIdentity : sdk.user).map(UserPayload.init),
             variantId: sdk.variantId,
             ifa: isChild ? nil : tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
             attStatus: tracking.attStatus,
-            regulatory: regulatory,
+            regulatory: regulatory.map(RegulatoryPayload.init),
             sdk: SDKInfo(),
             app: .current(),
             device: device,
             player: player,
-            video: content,
+            video: ContentPayload(content),
             labels: labels.isEmpty ? nil : labels,
             sessionId: sessionId,
             held: held

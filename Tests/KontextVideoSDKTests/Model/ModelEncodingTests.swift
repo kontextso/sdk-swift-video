@@ -135,6 +135,15 @@ struct ModelEncodingTests {
         #expect(json["coppa"] as? Bool == true)
     }
 
+    @Test func whatTheAppPassesInIsNotEncodable() {
+        // The wire is the SDK's business: an app cannot encode these and depend on the wire form.
+        let values: [Any] = [KontextVideo.Content(id: "v", language: "en"), KontextVideo.Content.Series(id: "s"), KontextVideo.Content.Rating.safe,
+                             KontextVideo.User(id: "u"), KontextVideo.Regulatory(coppa: true), AdFormat.pause]
+        for value in values {
+            #expect(!(value is any Encodable) && !(value is any Decodable), "\(type(of: value))")
+        }
+    }
+
     @Test func adFormatRawValuesMatchTheWire() {
         #expect(AdFormat.overlay.rawValue == "overlay")
         #expect(AdFormat.pause.rawValue == "pause")

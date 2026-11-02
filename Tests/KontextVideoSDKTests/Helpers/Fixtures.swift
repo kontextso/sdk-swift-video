@@ -171,4 +171,9 @@ enum Fixtures {
     static func encode<T: Encodable>(_ value: T) throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as! [String: Any]
     }
+
+    // What the app passes in is not `Encodable`: the request encodes it through its payload.
+    static func encode(_ content: KontextVideo.Content) throws -> [String: Any] { try encode(ContentPayload(content)) }
+    static func encode(_ user: KontextVideo.User) throws -> [String: Any] { try encode(UserPayload(user)) }
+    static func encode(_ regulatory: KontextVideo.Regulatory) throws -> [String: Any] { try encode(RegulatoryPayload(regulatory)) }
 }

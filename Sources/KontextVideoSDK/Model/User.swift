@@ -2,7 +2,7 @@ extension KontextVideo {
     /// What the publisher knows about the viewer. Every field is optional. No demographics: OpenRTB 2.6
     /// and AdCOM deprecated `user.yob` and `user.gender`, and major ad SDKs dropped them from their
     /// requests; `keywords` (OpenRTB `kwarray`) and the identity fields are what buyers still read.
-    public struct User: Encodable, Sendable, Equatable {
+    public struct User: Sendable, Equatable, Hashable {
         /// The publisher's own unique identifier of the viewer. Non-empty when set: an empty id is a
         /// programmer error, which stops a debug build, and is left out of the request.
         public let id: String?
@@ -28,19 +28,6 @@ extension KontextVideo {
             self.email = email
             self.emailHash = emailHash
             self.keywords = keywords
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case id, email, emailHash, keywords
-        }
-
-        /// Empty strings are left out: an empty id, address or hash identifies nobody.
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encodeIfPresent(id.flatMap { $0.isEmpty ? nil : $0 }, forKey: .id)
-            try container.encodeIfPresent(email.flatMap { $0.isEmpty ? nil : $0 }, forKey: .email)
-            try container.encodeIfPresent(emailHash.flatMap { $0.isEmpty ? nil : $0 }, forKey: .emailHash)
-            try container.encodeIfPresent(keywords, forKey: .keywords)
         }
 
         /// The user without what identifies the viewer (id, email, email hash), for a COPPA request; `nil`

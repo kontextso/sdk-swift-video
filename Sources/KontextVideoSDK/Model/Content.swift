@@ -3,11 +3,11 @@ import Foundation
 extension KontextVideo {
     /// The publisher's video the ads are for, "content" in ad-industry terms (VAST
     /// `[CONTENTPLAYHEAD]`). Everything beyond `id` and `language` is contextual signal: send what you have.
-    /// Times are seconds in Swift and milliseconds on the wire.
-    public struct Content: Encodable, Sendable, Equatable {
+    /// Times are seconds in Swift and milliseconds on the wire. A plain value: the SDK encodes it itself.
+    public struct Content: Sendable, Equatable, Hashable {
         /// A simplified rating: `explicit` content gets no ads that require safe content. Leave it unset
         /// when you do not know: OpenRTB's media rating has no "unknown" value, so the SDK never defaults it.
-        public enum Rating: String, Encodable, Sendable {
+        public enum Rating: String, Sendable, Hashable {
             /// Suitable for every advertiser.
             case safe
             /// Mature content: only ads that accept it.
@@ -15,7 +15,7 @@ extension KontextVideo {
         }
 
         /// The series an episode belongs to.
-        public struct Series: Encodable, Sendable, Equatable {
+        public struct Series: Sendable, Equatable, Hashable {
             /// Required and non-empty; a series with an empty id is left out of the request.
             public let id: String
             /// The series' public name.
@@ -31,19 +31,6 @@ extension KontextVideo {
                 self.title = title
                 self.description = description
                 self.episodeCount = episodeCount
-            }
-
-            private enum CodingKeys: String, CodingKey {
-                case id, title, description, episodeCount
-            }
-
-            /// The wire form: absent fields are left out, an `episodeCount` below 1 too.
-            public func encode(to encoder: Encoder) throws {
-                var container = encoder.container(keyedBy: CodingKeys.self)
-                try container.encode(id, forKey: .id)
-                try container.encodeIfPresent(title, forKey: .title)
-                try container.encodeIfPresent(description, forKey: .description)
-                try container.encodeIfPresent(episodeCount.flatMap { $0 >= 1 ? $0 : nil }, forKey: .episodeCount)
             }
         }
 
@@ -102,30 +89,6 @@ extension KontextVideo {
             self.keywords = keywords
             self.genre = genre
             self.series = series
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case id, language, mediaRating, url, title, categories, description, duration, episodeNumber, keywords, genre, series
-        }
-
-        /// The wire form: absent fields are left out, as are numbers the server's schema would refuse
-        /// (see `duration` and `episodeNumber`); `duration` goes as milliseconds.
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(id, forKey: .id)
-            try container.encode(language, forKey: .language)
-            try container.encodeIfPresent(mediaRating, forKey: .mediaRating)
-            try container.encodeIfPresent(url, forKey: .url)
-            try container.encodeIfPresent(title, forKey: .title)
-            try container.encodeIfPresent(categories, forKey: .categories)
-            try container.encodeIfPresent(description, forKey: .description)
-            // A NaN (`AVPlayerItem.duration.seconds` before the item is ready, or live), infinite, negative or
-            // absurd duration is left out rather than trapped on: it is contextual signal, not the ad.
-            try container.encodeIfPresent(durationMs, forKey: .duration)
-            try container.encodeIfPresent(episodeNumber.flatMap { $0 >= 1 ? $0 : nil }, forKey: .episodeNumber)
-            try container.encodeIfPresent(keywords, forKey: .keywords)
-            try container.encodeIfPresent(genre, forKey: .genre)
-            try container.encodeIfPresent(series.flatMap { $0.id.isEmpty ? nil : $0 }, forKey: .series)
         }
 
         /// The duration as the request sends it: positive whole milliseconds, else nothing.
