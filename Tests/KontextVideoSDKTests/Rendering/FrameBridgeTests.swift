@@ -802,6 +802,36 @@ struct FrameBridgeTests {
 
     // MARK: Configuration
 
+    @Test func theCaptureAPIIsRemovedOnlyWhereWebKitCannotAskTheDelegate() {
+        Environment.asksBeforeMediaCapture = { true }
+        #expect(makeBridge().0.webView.configuration.userContentController.userScripts.isEmpty, "iOS 15 on: the delegate denies")
+
+        Environment.asksBeforeMediaCapture = { false }
+        let scripts = makeBridge().0.webView.configuration.userContentController.userScripts
+        #expect(scripts.count == 1, "iOS 14")
+        #expect(scripts.first?.injectionTime == .atDocumentStart, "before the page's own scripts")
+        #expect(scripts.first?.isForMainFrameOnly == false, "in the creative's iframes too")
+        #expect(scripts.first?.source.contains("MediaDevices.prototype.getUserMedia") == true)
+        #expect(scripts.first?.source.contains("webkitGetUserMedia") == true)
+    }
+
+    @Test func theScriptTakesGetUserMediaOutOfAPage() async throws {
+        await WebKitWarmup.ensure()
+        FramePageServer().install()
+        let probe = "typeof MediaDevices === 'undefined' ? 'none' : typeof MediaDevices.prototype.getUserMedia"
+        func readProbe(asks: Bool) async throws -> String? {
+            Environment.asksBeforeMediaCapture = { asks }
+            let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
+            var loaded = false
+            bridge.onEvent = { if case .loaded = $0 { loaded = true } }
+            bridge.load()
+            #expect(await waitUntil(20) { loaded })
+            return try await bridge.webView.evaluateJavaScript(probe) as? String
+        }
+        #expect(try await readProbe(asks: true) == "function", "the control: WebKit has the API")
+        #expect(try await readProbe(asks: false) == "undefined")
+    }
+
     @Test func webViewIsLockedDown() {
         let (bridge, _) = makeBridge()
         let configuration = bridge.webView.configuration

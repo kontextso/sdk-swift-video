@@ -89,6 +89,9 @@ final class FrameBridge: NSObject {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(messageHandler, name: "kontext")
+        if !Environment.asksBeforeMediaCapture() {
+            configuration.userContentController.addUserScript(Self.noMediaCapture)
+        }
         for (scheme, handler) in Environment.schemeHandlers {
             configuration.setURLSchemeHandler(handler, forURLScheme: scheme)
         }
@@ -113,6 +116,16 @@ final class FrameBridge: NSObject {
         }
         #endif
     }
+
+    /// A creative never reaches the camera or microphone. From iOS 15 WebKit asks the UI delegate, which
+    /// denies; on iOS 14 it would ask the viewer directly, so the capture API is taken out of every frame
+    /// before the page's own scripts run: the standard one and the legacy prefixed ones.
+    static let noMediaCapture = WKUserScript(source: """
+        (function () {
+          try { delete MediaDevices.prototype.getUserMedia; } catch (e) {}
+          try { delete Navigator.prototype.getUserMedia; delete Navigator.prototype.webkitGetUserMedia; } catch (e) {}
+        })();
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 
     /// The owner dropped the bridge: the page is stopped and the WebView leaves the window it was parked
     /// in, or the window would keep it alive, invisible. The handler registered with WebKit is a weak

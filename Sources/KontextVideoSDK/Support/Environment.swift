@@ -37,6 +37,9 @@ enum Environment {
     static var parkingWindow: @MainActor () -> UIWindow? = { keyWindow() }
     /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
     static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
+    /// Whether WebKit asks `WKUIDelegate` before a page captures the camera or microphone (iOS 15 on). Below
+    /// that the frame removes the capture API from its pages instead; tests answer either way.
+    static var asksBeforeMediaCapture: @MainActor () -> Bool = defaultAsksBeforeMediaCapture
     /// Opens a URL the page asked for; the completion says whether it could.
     static var openURL: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenURL
     /// A programmer error: stops a debug build. Tests record it instead.
@@ -78,6 +81,7 @@ enum Environment {
         parkingWindow = { keyWindow() }
         schemeHandlers = [:]
         openURL = defaultOpenURL
+        asksBeforeMediaCapture = defaultAsksBeforeMediaCapture
         assertionFailure = { Swift.assertionFailure($0) }
         consentDefaults = .standard
         isApplicationActive = defaultIsApplicationActive
@@ -142,6 +146,11 @@ enum Environment {
         UIApplication.shared.open(url, options: [:]) { opened in
             Task { @MainActor in completion(opened) }
         }
+    }
+
+    private static func defaultAsksBeforeMediaCapture() -> Bool {
+        if #available(iOS 15.0, *) { return true }
+        return false
     }
 
     private static func defaultIsApplicationActive() -> Bool {
