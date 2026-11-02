@@ -490,12 +490,11 @@ public final class VideoAd {
         // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
         // was refused, waits for the viewer's tap as long as it takes; the SDK keeps no start timer, it
         // could not tell the two apart.
-        // Every beacon may read the app's player, which may end the ad: nothing more after that.
+        // Following the content read the app's player above, which may have ended the ad. The beacons
+        // themselves call no app code: they use the playhead read before this operation.
         guard !hasEnded else { return }
         tracker.fire("creativeView")
-        guard !hasEnded else { return }
         tracker.fire("iconView")
-        guard !hasEnded else { return }
         if descriptor.creative != .video {
             recordImpression()
         }
@@ -508,7 +507,6 @@ public final class VideoAd {
         impressionRecorded = true
         tracker.fire("impression")
         Logger.info("ad \(id.prefix(8)): impression")
-        // The beacon read the app's player, which may have ended the ad: `didEnd` stays last.
         guard !hasEnded else { return }
         delegate?.videoAdDidRecordImpression(self)
     }
@@ -668,8 +666,6 @@ public final class VideoAd {
             // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
             let fireId = tracker.fire("click", part: area == .endCard ? "endCard" : nil)
             openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
-            // The beacon read the app's player, which may have ended the ad: the viewer's tap
-            // still opens, but `didEnd` stays the last thing the app hears.
             guard !hasEnded else { return }
             delegate?.videoAd(self, didClick: Click(area: area))
         case .open(let url, let purpose):
