@@ -10,4 +10,11 @@ struct PublicSurfaceTests {
         #expect(price.value >= 2 && price.currency == "USD" && price.precision == .estimated)
         #expect(VideoAd.Click(area: .endCard).area == .endCard)
     }
+
+    @Test func anAppCanReadTheSDKStateAtAnyTime() {
+        // Whatever the other suites left: readable, and one of the documented states.
+        switch KontextVideo.shared.state {
+        case .notInitialized, .initializing, .enabled, .disabled, .failed: break
+        }
+    }
 }

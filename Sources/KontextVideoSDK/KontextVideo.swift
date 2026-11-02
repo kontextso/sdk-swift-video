@@ -5,9 +5,11 @@ import KontextKit
 public final class KontextVideo {
     /// Whether the SDK may request ads.
     public enum State: Sendable, Equatable {
+        /// `initialize(with:)` was not called yet.
         case notInitialized
         /// `/config` is in flight. Ads requests wait for it.
         case initializing
+        /// `/config` succeeded: ads may be requested.
         case enabled
         /// The server switched the SDK off. Final for this app launch.
         case disabled(reason: String)
@@ -30,8 +32,11 @@ public final class KontextVideo {
 
     /// The configuration the SDK was initialised with, or `nil` before `initialize(with:)`.
     private(set) var configuration: Configuration?
-    /// Where `/config` got to. Internal: the app gets it from `initialize(with:)`'s completion or `async` form.
-    private(set) var state: State = .notInitialized
+    /// Where the SDK is, readable at any time. `initialize(with:)` reports it once `/config` answered; it can
+    /// change later: an ads response may switch the SDK off (`.disabled`), and the next `format(_:)` after a
+    /// failed `/config` tries again (`.failed`, then `.initializing`). Read it, for example, to hide your ad UI
+    /// once the SDK is disabled. Nothing notifies a change: read it when you decide.
+    public private(set) var state: State = .notInitialized
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
