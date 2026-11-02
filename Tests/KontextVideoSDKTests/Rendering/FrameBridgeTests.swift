@@ -534,6 +534,11 @@ struct FrameBridgeTests {
         loading.webViewWebContentProcessDidTerminate(loading.webView)
         guard case .error(let code)? = loadingEvents.last else { Issue.record("expected an error"); return }
         #expect(code == 400 && loading.state == .ended, "before it loaded: the load error code")
+        let (loaded, loadedEvents) = makeBridge(isVideo: true)
+        loaded.receive(message("ad.loaded"), from: main)
+        loaded.webViewWebContentProcessDidTerminate(loaded.webView)
+        guard case .error(let notShown)? = loadedEvents.last else { Issue.record("expected an error"); return }
+        #expect(notShown == 400 && loaded.state == .ended, "loaded, never shown: still the load error code, not 405")
         let (shownBridge, shownEvents) = makeBridge()
         shown(shownBridge)
         shownBridge.webViewWebContentProcessDidTerminate(shownBridge.webView)

@@ -600,7 +600,8 @@ extension FrameBridge: WKNavigationDelegate {
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Logger.warning("frame \(adId.prefix(8)): web content process terminated")
-        fail(.error(code: state == .loading ? loadErrorCode : 405), cause: .processTerminated)
+        // 405 is a failure while playing; an ad loaded but never shown gets the load error, like any other.
+        fail(.error(code: state == .shown ? 405 : loadErrorCode), cause: .processTerminated)
     }
 }
 
