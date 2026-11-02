@@ -25,9 +25,10 @@ final class FrameBridge: NSObject {
     /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
     /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
     /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
-    /// `itms-services:`, a shortcut, the Settings app), or are not links to anywhere (`intent:` is Android's,
-    /// the rest load in place). Web, App Store and app deep links open, the host app's own included: which links
-    /// an ad may carry is the ad server's decision.
+    /// `itms-services:`, a shortcut, the Settings app), or lead nowhere a viewer could go: `intent:` is an
+    /// Android launch link with no meaning on iOS, and `javascript:`, `data:`, `file:`, `blob:` and `about:`
+    /// would run or load in place. Web, App Store and app deep links open, the host app's own included: which
+    /// links an ad may carry is the ad server's decision.
     static let refusedSchemes: Set<String> = [
         "tel", "telprompt", "sms", "mms", "facetime", "facetime-audio", "itms-services", "shortcuts",
         "app-settings", "prefs", "app-prefs", "x-apple-reminderkit", "x-apple-health",
@@ -251,18 +252,6 @@ final class FrameBridge: NSObject {
         let host: String
         /// 0 for the scheme's default port.
         let port: Int
-
-        init(isMainFrame: Bool, scheme: String, host: String, port: Int) {
-            self.isMainFrame = isMainFrame
-            self.scheme = scheme
-            self.host = host
-            self.port = port
-        }
-
-        @MainActor
-        init(_ frame: WKFrameInfo) {
-            self.init(isMainFrame: frame.isMainFrame, scheme: frame.securityOrigin.protocol, host: frame.securityOrigin.host, port: frame.securityOrigin.port)
-        }
     }
 
     fileprivate func receive(_ message: WKScriptMessage) {
@@ -389,16 +378,19 @@ final class FrameBridge: NSObject {
     /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
     /// explicit 443 in the URL and the origin's 0 are the same origin.
     func isFrameOrigin(_ sender: Sender) -> Bool {
-        guard sender.scheme.lowercased() == url.scheme?.lowercased(), sender.host.lowercased() == url.host?.lowercased() else { return false }
-        let expected = Self.effectivePort(of: url)
-        return sender.port == expected || (sender.port == 0 && expected == Self.defaultPort(for: url.scheme))
+        isPageOrigin(scheme: sender.scheme, host: sender.host, port: sender.port == 0 ? Self.defaultPort(for: sender.scheme) : sender.port)
     }
 
-    /// Whether `target` is in the page's origin, with the default port and an explicit one the same. Scheme
-    /// and host compare without case, as browsers canonicalize them; Foundation keeps the case as written.
+    /// Whether `target` is in the page's origin, with the default port and an explicit one the same.
     func isSameOrigin(_ target: URL) -> Bool {
-        target.scheme?.lowercased() == url.scheme?.lowercased() && target.host?.lowercased() == url.host?.lowercased()
-            && Self.effectivePort(of: target) == Self.effectivePort(of: url)
+        isPageOrigin(scheme: target.scheme, host: target.host, port: Self.effectivePort(of: target))
+    }
+
+    /// Scheme and host compare without case, as browsers canonicalize them; Foundation keeps the case as
+    /// written. `port` is the effective one, the scheme's default when none was given.
+    private func isPageOrigin(scheme: String?, host: String?, port: Int) -> Bool {
+        scheme?.lowercased() == url.scheme?.lowercased() && host?.lowercased() == url.host?.lowercased()
+            && port == Self.effectivePort(of: url)
     }
 
     private static func effectivePort(of url: URL) -> Int {
@@ -498,7 +490,7 @@ final class FrameBridge: NSObject {
     /// percent-encoded first, or `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it
     /// (iOS 17); the tracker reads the encoded form.
     static func url(_ raw: String) -> URL? {
-        URL(string: raw.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D"))
+        URL(string: Tracker.encodingBrackets(raw))
     }
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
@@ -667,5 +659,13 @@ private final class TouchRecognizer: UIGestureRecognizer, UIGestureRecognizerDel
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         true
+    }
+}
+
+extension FrameBridge.Sender {
+    /// In an extension, so the memberwise initializer the tests use stays synthesized.
+    @MainActor
+    init(_ frame: WKFrameInfo) {
+        self.init(isMainFrame: frame.isMainFrame, scheme: frame.securityOrigin.protocol, host: frame.securityOrigin.host, port: frame.securityOrigin.port)
     }
 }

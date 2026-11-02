@@ -97,13 +97,11 @@ final class Tracker {
         // A macro may arrive with its brackets encoded, one or both (a click-through parsed into a `URL`):
         // normalized first, so detection and substitution see the same string. The end re-encodes whatever
         // is left, so a bracket that was never a macro comes out as it went in.
-        let normalized = template
-            .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
-            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+        let normalized = Self.decodingBrackets(template)
         // The content playhead read once, and only when a URL asks for it: its two names are one moment.
         let content = Self.asksForContentPlayhead(normalized)
             ? Self.encode(Self.playhead(seconds: frozenContentPlayhead ?? contentPlayhead())) : ""
-        return normalized
+        let substituted = normalized
             .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
             .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
             .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: content)
@@ -115,18 +113,27 @@ final class Tracker {
             .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
             .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: Self.encode(notUsed?.winningPrice.map { String($0) } ?? ""))
             .replacingOccurrences(of: "[KONTEXT_WINNER]", with: Self.encode(notUsed?.winner ?? ""))
-            // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
-            // URL, and every `%3A` above would become `%253A`.
-            .replacingOccurrences(of: "[", with: "%5B")
-            .replacingOccurrences(of: "]", with: "%5D")
+        // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
+        // URL, and every `%3A` above would become `%253A`.
+        return Self.encodingBrackets(substituted)
     }
 
     /// Either name of the content playhead, its brackets encoded or not.
     static func asksForContentPlayhead(_ template: String) -> Bool {
-        let normalized = template
-            .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
-            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+        let normalized = decodingBrackets(template)
         return normalized.contains("[MEDIAPLAYHEAD]") || normalized.contains("[CONTENTPLAYHEAD]")
+    }
+
+    /// A macro's brackets as the tracker matches them: `%5B` and `%5D`, in either case, back to `[` and `]`.
+    static func decodingBrackets(_ text: String) -> String {
+        text.replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
+            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+    }
+
+    /// Brackets percent-encoded, as a URL carries them: `URL(string:)` refuses a bare one, or re-encodes the
+    /// whole string around it.
+    static func encodingBrackets(_ text: String) -> String {
+        text.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D")
     }
 
     /// `[TIMESTAMP]`: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone.

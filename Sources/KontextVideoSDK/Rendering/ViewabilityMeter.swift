@@ -128,11 +128,11 @@ final class ViewabilityMeter {
     /// shapes in window coordinates, not on rectangles: a rotated view or ancestor turns a rectangle into a
     /// rotated one, whose bounding box would overstate what is seen. Areas compare in window coordinates,
     /// where a scaled ancestor shrinks the whole and the visible part alike. Overlap by sibling views is not
-    /// seen; nothing cheap sees it.
+    /// measured: only the view's own outline, its ancestors' clipping and the window count.
     private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
         guard !window.isHidden, window.alpha > 0.01 else { return (0, .null) }
         let outline = corners(of: view.bounds).map { view.convert($0, to: window) }
-        let whole = area(of: outline)
+        let whole = abs(signedArea(outline))
         guard whole > 0 else { return (0, .null) }
         var visible = clip(outline, to: corners(of: window.bounds))
         var current: UIView? = view
@@ -143,7 +143,7 @@ final class ViewabilityMeter {
             }
             current = node.superview
         }
-        let seen = area(of: visible)
+        let seen = abs(signedArea(visible))
         guard seen > 0 else { return (0, .null) }
         let inView = visible.map { view.convert($0, from: window) }
         let xs = inView.map(\.x), ys = inView.map(\.y)
@@ -153,17 +153,6 @@ final class ViewabilityMeter {
 
     private static func corners(of rect: CGRect) -> [CGPoint] {
         [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
-    }
-
-    /// The area of a polygon (shoelace formula), whatever its winding.
-    private static func area(of polygon: [CGPoint]) -> CGFloat {
-        guard polygon.count >= 3 else { return 0 }
-        var twice: CGFloat = 0
-        for index in polygon.indices {
-            let a = polygon[index], b = polygon[(index + 1) % polygon.count]
-            twice += a.x * b.y - b.x * a.y
-        }
-        return abs(twice) / 2
     }
 
     /// `subject` cut by the convex polygon `clipper` (Sutherland–Hodgman). Every outline here is the image
@@ -198,6 +187,8 @@ final class ViewabilityMeter {
         return output
     }
 
+    /// The area of a polygon (shoelace formula), its sign the winding: `abs` of it is the area, whatever the
+    /// winding. 0 for fewer than three points.
     private static func signedArea(_ polygon: [CGPoint]) -> CGFloat {
         var twice: CGFloat = 0
         for index in polygon.indices {
