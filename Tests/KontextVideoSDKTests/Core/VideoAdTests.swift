@@ -950,8 +950,7 @@ struct VideoAdTests {
         #expect(delegate.endReasons == [.interrupted])
         #expect(ad.hasEnded)
         let fired = await beacons()
-        #expect(fired.contains("close") && !fired.contains("skip"), "shown, the video never started: close is the outcome")
-        #expect(!fired.contains("impression"))
+        #expect(fired.contains("close") && !fired.contains("skip") && !fired.contains("impression"), "shown, never started: close is the outcome")
         presented.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
         #expect(delegate.endReasons.count == 1)
     }
