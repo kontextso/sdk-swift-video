@@ -29,6 +29,11 @@ public protocol VideoAdsPlayer: AnyObject {
     /// Optional: emits when the player moves to another item, or plays this one to its end: an overlay over
     /// it ends as `.interrupted`. Without it the SDK learns only from `isPlaying`.
     var contentChangedPublisher: AnyPublisher<Void, Never>? { get }
+    /// Optional: a value that stands for the episode playing (an id, a URL), compared with `==`; give a new one
+    /// for each loop of a looped episode. An overlay or pause ad of a `VideoAds` throws
+    /// `invalidated(.contentChanged)` at `show` once it differs from the item at `track`. Without it only the
+    /// player moving to another `VideoAds` is seen.
+    var currentItem: AnyHashable? { get }
 }
 
 /// The defaults of the optional members: the SDK does without, and says so once on the console, so a member
@@ -50,6 +55,13 @@ extension VideoAdsPlayer {
     /// No seeks reported: they are told from the position.
     public var seekPublisher: AnyPublisher<Void, Never>? {
         PlayerFallback.note("seekPublisher", of: Self.self, level: .info, "seeks are told from the position; declare it as AnyPublisher<Void, Never>? to report them")
+        return nil
+    }
+
+    /// No item reported: only the player moving to another `VideoAds` tells another episode.
+    public var currentItem: AnyHashable? {
+        PlayerFallback.note("currentItem", of: Self.self, level: .info,
+                            "another episode is told only by the player moving to another VideoAds; declare it as AnyHashable? to report it")
         return nil
     }
 
@@ -127,6 +139,8 @@ final class ContentPlayback {
     /// of is not this episode playing.
     private weak var episodeItem: AVPlayerItem?
     private var hasEpisodeItem = false
+    /// A custom player's item at `track`, or the first it reported after: this episode.
+    private var customEpisodeItem: AnyHashable?
     /// Another `VideoAds` tracks this one's player now: this episode no longer plays in it, until `track` again.
     private(set) var lostPlayer = false
 
@@ -136,6 +150,12 @@ final class ContentPlayback {
     /// can tell: `false`.
     var playsAnotherEpisode: Bool {
         if lostPlayer { return true }
+        if let customPlayer {
+            // App code: the item is read now, and the first one seen is this episode.
+            guard let item = customPlayer.currentItem else { return false }
+            if customEpisodeItem == nil { customEpisodeItem = item }
+            return item != customEpisodeItem
+        }
         guard hasEpisodeItem, let avPlayer else { return false }
         return episodeItem == nil || avPlayer.currentItem !== episodeItem
     }
@@ -244,6 +264,7 @@ final class ContentPlayback {
         guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
                                          rate: { [weak player] in player?.playbackSpeed }) else { return }
         customPlayer = player
+        customEpisodeItem = player.currentItem
         let generation = self.generation
         // Reading the publishers and subscribing are app code: a `destroy()` or another `track` there wins, and
         // this binding's subscriptions are dropped instead of stored. A seek and another item are what an
@@ -297,6 +318,7 @@ final class ContentPlayback {
         avPlayer = nil
         episodeItem = nil
         hasEpisodeItem = false
+        customEpisodeItem = nil
         lostPlayer = false
         Self.owners.removeAll { $0.playback === self || $0.playback == nil }
         itemEnded = false

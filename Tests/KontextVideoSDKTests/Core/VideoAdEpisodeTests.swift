@@ -113,6 +113,41 @@ struct VideoAdEpisodeTests {
         overlay.dismiss()
     }
 
+    /// A custom player that reports the episode it plays.
+    final class EpisodePlayer: VideoAdsPlayer {
+        var currentTime: TimeInterval = 0
+        var isPlaying = true
+        var currentItem: AnyHashable?
+        init(item: AnyHashable?) { currentItem = item }
+    }
+
+    @Test func aCustomPlayersOtherItemMakesShowThrowItsSameItemShows() async throws {
+        let player = EpisodePlayer(item: "episode-1")
+        let ads = await makeAds("ep-custom")
+        ads.track(player)
+        let same = try loadedAd(Fixtures.overlayAd(id: "o-ep-custom-same"), of: ads)
+        try same.show(in: view)
+        #expect(same.wasShown, "the item at track: this episode")
+        same.dismiss()
+        player.currentItem = "episode-2"
+        let other = try loadedAd(Fixtures.overlayAd(id: "o-ep-custom-other"), of: ads)
+        expectContentChanged(other, "the custom player reports another item")
+    }
+
+    @Test func aCustomPlayerAdoptsTheFirstItemItReportsAfterTrack() async throws {
+        let player = EpisodePlayer(item: nil)
+        let ads = await makeAds("ep-custom-first")
+        ads.track(player)
+        player.currentItem = "episode-1"
+        let first = try loadedAd(Fixtures.overlayAd(id: "o-ep-custom-first"), of: ads)
+        try first.show(in: view)
+        #expect(first.wasShown, "no item at track: the first reported is this episode")
+        first.dismiss()
+        player.currentItem = "episode-1-loop-2"
+        let loop = try loadedAd(Fixtures.overlayAd(id: "o-ep-custom-loop"), of: ads)
+        expectContentChanged(loop, "a new value for the next loop is another item")
+    }
+
     @Test func aLinearAdIsNotChecked() async throws {
         let player = TestPlayer()
         let episodeA = await makeAds("ep-linear")
