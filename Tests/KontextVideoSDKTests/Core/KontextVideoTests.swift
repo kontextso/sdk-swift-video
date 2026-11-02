@@ -248,10 +248,10 @@ struct KontextVideoTests {
         _ = await harness.initialize()
         sdk.user = KontextVideo.User(id: "u1")
         sdk.regulatory = KontextVideo.Regulatory(coppa: true)
-        sdk.variantId = "b"
+        sdk.variantID = "b"
         #expect(sdk.user?.id == "u1")
         #expect(sdk.regulatory?.coppa == true)
-        #expect(sdk.variantId == "b")
+        #expect(sdk.variantID == "b")
         sdk.user = nil
         #expect(sdk.user == nil)
     }

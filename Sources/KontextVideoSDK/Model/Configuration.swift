@@ -3,7 +3,7 @@ import Foundation
 extension KontextVideo {
     /// The options a publisher sets when initialising the SDK. They do not change during a run; what the
     /// viewer is and consented to can change later and lives on `KontextVideo.shared` (`user`,
-    /// `regulatory`, `variantId`).
+    /// `regulatory`, `variantID`).
     public struct Configuration: Sendable {
         /// Production ad server base URL.
         public static let defaultAdServerURL = URL(string: "https://server.megabrain.co")!

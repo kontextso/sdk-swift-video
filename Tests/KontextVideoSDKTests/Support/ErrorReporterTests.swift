@@ -92,7 +92,7 @@ struct ErrorReporterTests {
         #expect(failures.count == 1, "one request, one report, however many callers waited")
         let report = try #require(failures.first)
         #expect(report["httpStatus"] as? Int == 500 && report["stage"] as? String == "request")
-        #expect(report["requestId"] as? String == ads.lastRequestId && ads.lastRequestId != nil, "the id the app can quote")
+        #expect(report["requestId"] as? String == ads.lastRequestID && ads.lastRequestID != nil, "the id the app can quote")
         #expect(report["sessionId"] as? String == ads.sessionId && report["recovery"] as? String == "no_ad")
         let history = (report["history"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
         #expect(history.contains("ads.request"), "what happened just before: \(history)")

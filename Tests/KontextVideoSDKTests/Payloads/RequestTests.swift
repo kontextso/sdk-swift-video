@@ -45,7 +45,7 @@ struct RequestTests {
 
     private func makeAdsRequest(playhead: TimeInterval = 12.345) async -> AdsRequest {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
-        KontextVideo.shared.variantId = "exp-b"
+        KontextVideo.shared.variantID = "exp-b"
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
         return await AdsRequest.make(
             sdk: KontextVideo.shared,
@@ -118,7 +118,7 @@ struct RequestTests {
 
     @Test func anAdsRequestCarriesExactlyWhatWasSetAndNothingElse() async throws {
         KontextVideo.shared.user = nil
-        KontextVideo.shared.variantId = nil
+        KontextVideo.shared.variantID = nil
         KontextVideo.shared.regulatory = nil
         let bare = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration,
@@ -299,7 +299,7 @@ struct RequestTests {
         #expect(regulatory?.gdpr == true)
         #expect(regulatory?.gdprConsent == "TC-STRING")
         #expect(regulatory?.gpp == "GPP-STRING")
-        #expect(regulatory?.gppSid == [2, 7])
+        #expect(regulatory?.gppSID == [2, 7])
         #expect(regulatory?.usPrivacy == "1YNN")
         #expect(regulatory?.coppa == nil, "coppa can only come from the publisher")
     }
@@ -319,7 +319,7 @@ struct RequestTests {
     @Test func consentPrecedenceForEveryField() {
         let defaults = UserDefaults(suiteName: "consent-matrix")!
         defaults.removePersistentDomain(forName: "consent-matrix")
-        let publisher = KontextVideo.Regulatory(gdpr: false, gdprConsent: "PUB-TC", coppa: false, gpp: "PUB-GPP", gppSid: [9], usPrivacy: "1NNN")
+        let publisher = KontextVideo.Regulatory(gdpr: false, gdprConsent: "PUB-TC", coppa: false, gpp: "PUB-GPP", gppSID: [9], usPrivacy: "1NNN")
 
         // The CMP wrote nothing: every field from the publisher, explicit false included.
         let fallback = ConsentStorage.read(merging: publisher, defaults: defaults)
@@ -332,10 +332,10 @@ struct RequestTests {
         defaults.set("2_7", forKey: "IABGPP_GppSID")
         defaults.set("1YNN", forKey: "IABUSPrivacy_String")
         let cmp = ConsentStorage.read(merging: publisher, defaults: defaults)
-        #expect(cmp == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", coppa: false, gpp: "CMP-GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+        #expect(cmp == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", coppa: false, gpp: "CMP-GPP", gppSID: [2, 7], usPrivacy: "1YNN"))
 
         // Clearing the publisher's values leaves the CMP's in place.
-        #expect(ConsentStorage.read(merging: nil, defaults: defaults) == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", gpp: "CMP-GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults) == KontextVideo.Regulatory(gdpr: true, gdprConsent: "CMP-TC", gpp: "CMP-GPP", gppSID: [2, 7], usPrivacy: "1YNN"))
 
         // The CMP's values become unusable: each field falls back to the publisher's.
         defaults.set("yes", forKey: "IABTCF_gdprApplies")
@@ -349,7 +349,7 @@ struct RequestTests {
         defaults.set(0, forKey: "IABTCF_gdprApplies")
         defaults.set("3", forKey: "IABGPP_GppSID")
         let changed = ConsentStorage.read(merging: publisher, defaults: defaults)
-        #expect(changed?.gdpr == false && changed?.gppSid == [3])
+        #expect(changed?.gdpr == false && changed?.gppSID == [3])
     }
 
     @Test func consentStorageReadsGdprAppliesAsCMPsWriteIt() {
@@ -373,13 +373,13 @@ struct RequestTests {
         let defaults = UserDefaults(suiteName: "consent-test-4")!
         defaults.removePersistentDomain(forName: "consent-test-4")
         defaults.set("7", forKey: "IABGPP_GppSID")
-        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [7])
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSID == [7])
         defaults.set("8,10", forKey: "IABGPP_GppSID")
-        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [8, 10])
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSID == [8, 10])
         defaults.set(7, forKey: "IABGPP_GppSID")
-        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == [7], "a CMP writing one section as a number")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSID == [7], "a CMP writing one section as a number")
         defaults.set("x_y", forKey: "IABGPP_GppSID")
-        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSid == nil, "junk is absent, not forwarded")
+        #expect(ConsentStorage.read(merging: nil, defaults: defaults)?.gppSID == nil, "junk is absent, not forwarded")
     }
 }
 }

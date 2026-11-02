@@ -64,7 +64,7 @@ struct VideoAdsTests {
         let report = try #require(reports().first)
         #expect(reports().count == 1, "once per request, not per caller")
         #expect(report["code"] as? String == "ads.decode_failed" && report["detail"] as? String == "linear:price.currency")
-        #expect(report["requestId"] as? String == ads.lastRequestId && report["recovery"] as? String == "no_ad")
+        #expect(report["requestId"] as? String == ads.lastRequestID && report["recovery"] as? String == "no_ad")
     }
 
     @Test func anAnswerWithOneAdIdUnderTwoFormatsIsMalformedAndTheHeldAdComesBack() async throws {
@@ -272,7 +272,7 @@ struct VideoAdsTests {
         Environment.consentDefaults.set("TC-STR", forKey: "IABTCF_TCString")
         let ads = await makeAds()
         KontextVideo.shared.user = KontextVideo.User(id: "someone")
-        KontextVideo.shared.variantId = "b"
+        KontextVideo.shared.variantID = "b"
         harness.serve(Fixtures.ad(id: "img-p3"))
         _ = try await ads.format(.pause)
         let body = harness.adsRequests.first?.body

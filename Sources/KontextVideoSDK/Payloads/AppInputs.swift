@@ -97,7 +97,7 @@ struct RegulatoryPayload: Encodable, Sendable {
         try container.encodeIfPresent(regulatory.gdprConsent, forKey: .gdprConsent)
         try container.encodeIfPresent(regulatory.coppa, forKey: .coppa)
         try container.encodeIfPresent(regulatory.gpp, forKey: .gpp)
-        try container.encodeIfPresent(regulatory.gppSid, forKey: .gppSid)
+        try container.encodeIfPresent(regulatory.gppSID, forKey: .gppSid)
         try container.encodeIfPresent(regulatory.usPrivacy, forKey: .usPrivacy)
     }
 }

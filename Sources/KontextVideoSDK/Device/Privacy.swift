@@ -114,10 +114,10 @@ enum ConsentStorage {
             gdprConsent: stored.gdprConsent ?? explicit?.gdprConsent,
             coppa: explicit?.coppa,
             gpp: stored.gpp ?? explicit?.gpp,
-            gppSid: stored.gppSid ?? explicit?.gppSid,
+            gppSID: stored.gppSid ?? explicit?.gppSID,
             usPrivacy: stored.usPrivacy ?? explicit?.usPrivacy
         )
-        let isEmpty = merged.gdpr == nil && merged.gdprConsent == nil && merged.coppa == nil && merged.gpp == nil && merged.gppSid == nil && merged.usPrivacy == nil
+        let isEmpty = merged.gdpr == nil && merged.gdprConsent == nil && merged.coppa == nil && merged.gpp == nil && merged.gppSID == nil && merged.usPrivacy == nil
         return isEmpty ? nil : merged
     }
 }

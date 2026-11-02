@@ -120,7 +120,7 @@ struct ModelEncodingTests {
     }
 
     @Test func regulatoryEncodesEveryField() throws {
-        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", coppa: false, gpp: "GPP", gppSid: [2, 7], usPrivacy: "1YNN"))
+        let json = try Fixtures.encode(KontextVideo.Regulatory(gdpr: true, gdprConsent: "TC", coppa: false, gpp: "GPP", gppSID: [2, 7], usPrivacy: "1YNN"))
         #expect(json["gdpr"] as? Bool == true)
         #expect(json["gdprConsent"] as? String == "TC")
         #expect(json["coppa"] as? Bool == false)

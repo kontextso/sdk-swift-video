@@ -47,7 +47,7 @@ public final class KontextVideo {
     /// only: the SDK still reads the CMP's shared storage on every request.
     public var regulatory: Regulatory?
     /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
-    public var variantId: String?
+    public var variantID: String?
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
     var isInitialized: Bool {
@@ -174,7 +174,7 @@ public final class KontextVideo {
         state = .notInitialized
         user = nil
         regulatory = nil
-        variantId = nil
+        variantID = nil
         adOnScreen = nil
         reportDebug = false
         DebugReporter.shared.isEnabled = false

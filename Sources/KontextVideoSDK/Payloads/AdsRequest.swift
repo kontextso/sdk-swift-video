@@ -50,7 +50,7 @@ struct AdsRequest: Encodable, Sendable {
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
             user: (isChild ? sdk.user?.withoutIdentity : sdk.user).map(UserPayload.init),
-            variantId: sdk.variantId,
+            variantId: sdk.variantID,
             ifa: isChild ? nil : tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
             attStatus: tracking.attStatus,

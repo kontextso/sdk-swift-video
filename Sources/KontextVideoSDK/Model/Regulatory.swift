@@ -4,7 +4,7 @@ extension KontextVideo {
     /// Except for `coppa`, the SDK reads these from the consent management platform's shared storage
     /// (the IAB keys in `UserDefaults`); a usable CMP value is the live consent and wins. A value set here
     /// fills in where the CMP has none usable (a key it did not write, an empty or malformed one), for an
-    /// app without an IAB-writing CMP. The SDK carries the signals and interprets none: a `gpp` and `gppSid`
+    /// app without an IAB-writing CMP. The SDK carries the signals and interprets none: a `gpp` and `gppSID`
     /// set here must describe the same context. `nil` everywhere means unknown, never `false`.
     public struct Regulatory: Sendable, Equatable, Hashable {
         /// Whether the request is subject to GDPR; `nil` is unknown, which is not the same as `false`.
@@ -18,7 +18,7 @@ extension KontextVideo {
         /// The IAB Global Privacy Platform consent string.
         public let gpp: String?
         /// The sections of the GPP string that apply to this request.
-        public let gppSid: [Int]?
+        public let gppSID: [Int]?
         /// The legacy IAB US Privacy (CCPA) string. Some DSPs still read it.
         public let usPrivacy: String?
 
@@ -28,14 +28,14 @@ extension KontextVideo {
             gdprConsent: String? = nil,
             coppa: Bool? = nil,
             gpp: String? = nil,
-            gppSid: [Int]? = nil,
+            gppSID: [Int]? = nil,
             usPrivacy: String? = nil
         ) {
             self.gdpr = gdpr
             self.gdprConsent = gdprConsent
             self.coppa = coppa
             self.gpp = gpp
-            self.gppSid = gppSid
+            self.gppSID = gppSID
             self.usPrivacy = usPrivacy
         }
     }

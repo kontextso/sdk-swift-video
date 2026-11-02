@@ -50,7 +50,7 @@ format, each shows its ad 3 s in. See
 
 ## Architecture
 
-- `KontextVideo.shared`: initialize (`/config`), `user`, `regulatory`, `variantId`, the one ad on screen.
+- `KontextVideo.shared`: initialize (`/config`), `user`, `regulatory`, `variantID`, the one ad on screen.
 - `VideoAds`: one per video. `format(_:)` asks the server for all formats with the `VideoAds`'s `sessionId` and the
   ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Support/AwaitShared.swift`).
