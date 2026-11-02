@@ -845,12 +845,21 @@ struct FrameBridgeTests {
         let probe = "typeof MediaDevices === 'undefined' ? 'none' : typeof MediaDevices.prototype.getUserMedia"
         func readProbe(asks: Bool) async throws -> String? {
             Environment.asksBeforeMediaCapture = { asks }
-            let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
-            var loaded = false
-            bridge.onEvent = { if case .loaded = $0 { loaded = true } }
-            bridge.load()
-            #expect(await waitUntil(20) { loaded })
-            return try await bridge.webView.evaluateJavaScript(probe) as? String
+            // What the script leaves in the page is the point, not how fast it loads: a CI runner sometimes never
+            // finishes one load, so a second WebView gets a try.
+            for attempt in 1...2 {
+                let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
+                var loaded = false
+                bridge.onEvent = { if case .loaded = $0 { loaded = true } }
+                bridge.load()
+                if await waitUntil(15, { loaded }) {
+                    defer { bridge.hide() }
+                    return try await bridge.webView.evaluateJavaScript(probe) as? String
+                }
+                bridge.hide()
+                if attempt == 2 { Issue.record("the page never loaded, twice") }
+            }
+            return nil
         }
         #expect(try await readProbe(asks: true) == "function", "the control: WebKit has the API")
         #expect(try await readProbe(asks: false) == "undefined")
