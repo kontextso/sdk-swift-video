@@ -1,5 +1,3 @@
-import Foundation
-
 // What the app passes in, as the ads request sends it. The public types (`Content`, `User`, `Regulatory`,
 // `AdFormat`) are plain values with no `Codable` conformance: the wire is the SDK's business, and a change
 // to it must never be a change to the public API.
