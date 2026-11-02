@@ -16,8 +16,8 @@ struct FrameBridgeTests {
 
     init() { SDKHarness.reset() }
 
-    private func makeBridge(isVideo: Bool = false, url: URL? = nil) -> (FrameBridge, Recorder) {
-        let bridge = FrameBridge(adId: "ad-1", url: url ?? self.url, isVideo: isVideo)
+    private func makeBridge(isVideo: Bool = false, url: URL? = nil, videoDuration: TimeInterval? = nil) -> (FrameBridge, Recorder) {
+        let bridge = FrameBridge(adId: "ad-1", url: url ?? self.url, isVideo: isVideo, videoDuration: videoDuration)
         let recorder = Recorder()
         bridge.onEvent = { recorder.events.append($0) }
         return (bridge, recorder)
@@ -38,6 +38,12 @@ struct FrameBridgeTests {
     private func shown(_ bridge: FrameBridge) {
         bridge.receive(message("ad.loaded"), from: main)
         bridge.show()
+    }
+
+    /// Shown, and the page's video started: the video's progress and quartiles count only after `video.start`.
+    private func started(_ bridge: FrameBridge) {
+        shown(bridge)
+        bridge.receive(message("video.start"), from: main)
     }
 
     // MARK: Envelope and sender
@@ -193,18 +199,18 @@ struct FrameBridgeTests {
 
     @Test func progressCarriesTheOffset() {
         let (bridge, recorder) = makeBridge(isVideo: true)
-        shown(bridge)
+        started(bridge)
         bridge.receive(message("video.progress", ["offset": 5000, "playhead": 5010]), from: main)
         guard case .progress(let offset, let playhead) = recorder.last else { Issue.record("expected progress"); return }
         #expect(offset == 5000)
         #expect(playhead == 5010)
         bridge.receive(message("video.progress", ["playhead": 5010]), from: main)
-        #expect(recorder.events.count == 2, "loaded and one progress; the one without an offset is dropped")
+        #expect(recorder.events.count == 3, "loaded, start and one progress; the one without an offset is dropped")
     }
 
     @Test func completeDoesNotEndThePage() {
         let (bridge, recorder) = makeBridge(isVideo: true)
-        shown(bridge)
+        started(bridge)
         bridge.receive(message("video.complete", ["playhead": 10_000]), from: main)
         guard case .complete(let playhead) = recorder.last else { Issue.record("expected complete"); return }
         #expect(playhead == 10_000)
@@ -271,6 +277,56 @@ struct FrameBridgeTests {
         other.receive(message("ad.error", ["code": 403]), from: main)
         guard case .error(let given) = otherRecorder.last else { Issue.record("expected error"); return }
         #expect(given == 403)
+    }
+
+    // MARK: Video order and playhead
+
+    @Test func videoMessagesBeforeStartAreDropped() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        for type in ["video.progress", "video.firstQuartile", "video.midpoint", "video.thirdQuartile", "video.pause", "video.resume", "video.complete"] {
+            bridge.receive(message(type, ["offset": 1000, "playhead": 5000]), from: main)
+        }
+        #expect(recorder.events.count == 1, "only ad.loaded: nothing before video.start")
+        bridge.receive(message("video.mute"), from: main)
+        bridge.receive(message("video.unmute"), from: main)
+        #expect(recorder.events.count == 3, "mute and unmute are the viewer's, before start too")
+        bridge.receive(message("video.start"), from: main)
+        bridge.receive(message("video.firstQuartile", ["playhead": 4000]), from: main)
+        bridge.receive(message("video.complete", ["playhead": 15000]), from: main)
+        #expect(recorder.events.count == 6, "after start everything goes")
+        guard case .complete = recorder.last else { Issue.record("expected complete"); return }
+    }
+
+    @Test func skipBeforeStartStillEndsTheAd() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        bridge.receive(message("video.skip"), from: main)
+        guard case .skip = recorder.last else { Issue.record("expected skip"); return }
+        #expect(bridge.state == .ended)
+    }
+
+    @Test func thePlayheadIsCappedAtTheVideosDurationAndTheGrace() {
+        let (bridge, recorder) = makeBridge(isVideo: true, videoDuration: 15)
+        shown(bridge)
+        bridge.receive(message("video.start", ["playhead": 600_000]), from: main)
+        guard case .video(_, let playhead) = recorder.last else { Issue.record("expected start"); return }
+        #expect(playhead == 15000 + FrameBridge.playheadGraceMs)
+        bridge.receive(message("video.progress", ["offset": 600_000, "playhead": 600_000]), from: main)
+        guard case .progress(let offset, let progressPlayhead) = recorder.last else { Issue.record("expected progress"); return }
+        #expect(offset == 16000)
+        #expect(progressPlayhead == 16000)
+        bridge.receive(message("video.midpoint", ["playhead": 7500]), from: main)
+        guard case .video(_, let within) = recorder.last else { Issue.record("expected midpoint"); return }
+        #expect(within == 7500, "a playhead within the video is kept")
+    }
+
+    @Test func withoutADurationThePlayheadIsCappedAtADay() {
+        let (bridge, recorder) = makeBridge(isVideo: true)
+        shown(bridge)
+        bridge.receive(message("video.start", ["playhead": 1e12]), from: main)
+        guard case .video(_, let playhead) = recorder.last else { Issue.record("expected start"); return }
+        #expect(playhead == 86_400_000)
     }
 
     @Test func aPageCodeOutsideTheVASTRangeGoesAs900() {
@@ -502,7 +558,7 @@ struct FrameBridgeTests {
 
     @Test func aFractionalOffsetOrPlayheadIsRoundedToTheNearestMillisecond() {
         let (bridge, recorder) = makeBridge(isVideo: true)
-        shown(bridge)
+        started(bridge)
         bridge.receive(message("video.progress", ["offset": 4957.59, "playhead": 5010.4]), from: main)
         guard case .progress(let offset, let playhead)? = recorder.last else { Issue.record("expected progress"); return }
         #expect(offset == 4958 && playhead == 5010)
@@ -513,7 +569,7 @@ struct FrameBridgeTests {
 
     @Test func aMalformedProgressOffsetIsDropped() {
         let (bridge, recorder) = makeBridge(isVideo: true)
-        shown(bridge)
+        started(bridge)
         let before = recorder.events.count
         for offset in [1e300, -5, Double.infinity, 86_400_001] as [Double] {
             bridge.receive(message("video.progress", ["offset": offset, "playhead": 0]), from: main)

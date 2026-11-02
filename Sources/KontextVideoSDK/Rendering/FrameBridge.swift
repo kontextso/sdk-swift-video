@@ -20,6 +20,8 @@ final class FrameBridge: NSObject {
     static var loadTimeout: TimeInterval = 10
     /// A URL is opened only if the viewer touched the WebView this recently.
     static let touchWindow: TimeInterval = 1
+    /// How far past the video's duration a page playhead may go: the page's rounding, not more.
+    static let playheadGraceMs = 1000
     /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
     /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
     /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
@@ -53,6 +55,10 @@ final class FrameBridge: NSObject {
     private(set) var failureUnderlying: ErrorReporter.Underlying?
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
     private var reportedProtocolViolation = false
+    /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
+    private var videoStarted = false
+    /// The highest playhead a page may report, in milliseconds: the video's duration and the grace, or a day.
+    private let playheadLimitMs: Int
     var onEvent: ((FrameEvent) -> Void)?
 
     private let url: URL
@@ -63,10 +69,13 @@ final class FrameBridge: NSObject {
     private let messageHandler = MessageHandler()
     private let touchRecognizer = TouchRecognizer()
 
-    init(adId: String, url: URL, isVideo: Bool) {
+    /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
+    /// capped at a day.
+    init(adId: String, url: URL, isVideo: Bool, videoDuration: TimeInterval? = nil) {
         self.adId = adId
         self.url = url
         loadErrorCode = isVideo ? 400 : 500
+        playheadLimitMs = videoDuration.map { min(Int(($0 * 1000).rounded()) + Self.playheadGraceMs, 86_400_000) } ?? 86_400_000
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -286,10 +295,10 @@ final class FrameBridge: NSObject {
             return
         }
         Logger.debug("frame \(adId.prefix(8)): ← \(type)")
-        // Milliseconds into the ad video, a fraction rounded (a page reads `currentTime * 1000`), clamped to a
-        // day: a page value near `Int.max` must not reach arithmetic.
+        // Milliseconds into the ad video, a fraction rounded (a page reads `currentTime * 1000`), clamped to the
+        // video's duration (a day without one): a playhead past the end would fire every checkpoint at once.
         let rawPlayhead = (body["playhead"] as? NSNumber)?.doubleValue ?? 0
-        let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), 86_400_000).rounded()) : 0
+        let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), Double(playheadLimitMs)).rounded()) : 0
 
         switch type {
         case "ad.loaded":
@@ -322,10 +331,10 @@ final class FrameBridge: NSObject {
             end()
             onEvent?(.skip(playhead: playhead))
         case "video.complete":
-            guard state == .shown else { return }
+            guard state == .shown, startedBefore(type) else { return }
             onEvent?(.complete(playhead: playhead))
         case "video.progress":
-            guard state == .shown else { return }
+            guard state == .shown, startedBefore(type) else { return }
             // A checkpoint in milliseconds within a day, a fraction rounded to the nearest; anything else would
             // fire every checkpoint early.
             guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, (0...86_400_000).contains(raw) else {
@@ -333,9 +342,10 @@ final class FrameBridge: NSObject {
                 reportProtocolViolation("progress.offset")
                 return
             }
-            onEvent?(.progress(offset: Int(raw.rounded()), playhead: playhead))
+            onEvent?(.progress(offset: min(Int(raw.rounded()), playheadLimitMs), playhead: playhead))
         case let type where type.hasPrefix("video."):
-            guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))) else { return }
+            guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))),
+                  accepts(event, type) else { return }
             onEvent?(.video(event, playhead: playhead))
         case "ad.error":
             guard state == .loading || state == .loaded || state == .shown else { return }
@@ -442,6 +452,29 @@ final class FrameBridge: NSObject {
     /// from the ad's own page, before the end, can be one. A message from another frame, one after the end, or
     /// one of an unknown type is not: creatives post messages of their own, late messages are expected, and a
     /// newer page may send types this SDK does not know yet.
+    /// `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads; the
+    /// rest need the start before them.
+    private func accepts(_ event: FrameEvent.VideoEvent, _ type: String) -> Bool {
+        switch event {
+        case .start:
+            videoStarted = true
+            return true
+        case .mute, .unmute:
+            return true
+        default:
+            return startedBefore(type)
+        }
+    }
+
+    /// Whether `video.start` came before this video message; one that did not is dropped: progress, quartiles
+    /// or a complete for a video that never started would be billed with no impression.
+    private func startedBefore(_ type: String) -> Bool {
+        guard !videoStarted else { return true }
+        Logger.debug("frame \(adId.prefix(8)): \(type) before video.start dropped")
+        reportProtocolViolation("video.beforeStart")
+        return false
+    }
+
     private func reportProtocolViolation(_ detail: String) {
         guard !reportedProtocolViolation else { return }
         reportedProtocolViolation = true

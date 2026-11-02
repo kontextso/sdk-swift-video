@@ -70,7 +70,9 @@ public final class VideoAd {
     /// the app only looks at, or rejects, costs no WebView.
     var bridge: FrameBridge {
         if let loadedBridge { return loadedBridge }
-        let bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video)
+        // A linear ad's duration is its video's length; an overlay's is its time on screen, not the video's.
+        let bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video,
+                                 videoDuration: descriptor.format == .linear ? descriptor.duration : nil)
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         loadedBridge = bridge
         return bridge
