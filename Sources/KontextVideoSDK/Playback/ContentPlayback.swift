@@ -15,18 +15,69 @@ public protocol VideoAdsPlayer: AnyObject {
     var isPlaying: Bool { get }
     /// Optional: emits whenever `isPlaying` changes, for an immediate reaction. Without it the SDK reads
     /// `isPlaying` four times a second while an overlay or pause ad is on screen, and at every `show`.
+    /// Declare it with exactly this type, `AnyPublisher<Bool, Never>?`: a property of another type (not
+    /// optional, an `@Published` projection) is not this requirement, and the SDK falls back to reading
+    /// `isPlaying`, saying so once on the console.
     var isPlayingPublisher: AnyPublisher<Bool, Never>? { get }
+    /// Optional: the playback speed (1 is normal), when the player knows it. An overlay's `duration` counts
+    /// seconds of video, and the speed tells fast playback from a seek. `nil` (the default) allows up to
+    /// about 4×.
+    var playbackSpeed: Double? { get }
+    /// Optional: emits at each seek (the position jumped): an overlay's count of seconds of video goes on
+    /// from the new position. Without it a seek is told from the position alone, so a small one can count.
+    var seekPublisher: AnyPublisher<Void, Never>? { get }
+    /// Optional: emits when the player moves to another item, or plays this one to its end: an overlay over
+    /// it ends as `.interrupted`. Without it the SDK learns only from `isPlaying`.
+    var contentChangedPublisher: AnyPublisher<Void, Never>? { get }
 }
 
+/// The defaults of the optional members: the SDK does without, and says so once on the console, so a member
+/// declared with another type, which the compiler takes for a different property, does not go unnoticed.
 extension VideoAdsPlayer {
     /// No publisher: the SDK reads `isPlaying` when it needs it.
-    public var isPlayingPublisher: AnyPublisher<Bool, Never>? { nil }
+    public var isPlayingPublisher: AnyPublisher<Bool, Never>? {
+        PlayerFallback.note("isPlayingPublisher", of: Self.self, level: .warning,
+                            "the SDK reads isPlaying four times a second while an ad is on screen; declare it as AnyPublisher<Bool, Never>? to be heard at once")
+        return nil
+    }
+
+    /// No speed: up to about 4× counts as playback.
+    public var playbackSpeed: Double? {
+        PlayerFallback.note("playbackSpeed", of: Self.self, level: .info, "a step up to about 4× counts as playback; declare it as Double? to give the speed")
+        return nil
+    }
+
+    /// No seeks reported: they are told from the position.
+    public var seekPublisher: AnyPublisher<Void, Never>? {
+        PlayerFallback.note("seekPublisher", of: Self.self, level: .info, "seeks are told from the position; declare it as AnyPublisher<Void, Never>? to report them")
+        return nil
+    }
+
+    /// No item changes reported: `isPlaying` tells the end.
+    public var contentChangedPublisher: AnyPublisher<Void, Never>? {
+        PlayerFallback.note("contentChangedPublisher", of: Self.self, level: .info,
+                            "another item or the end is told from isPlaying only; declare it as AnyPublisher<Void, Never>? to report them")
+        return nil
+    }
+}
+
+/// Says once per process, per member, that a `VideoAdsPlayer` left an optional member to its default.
+@MainActor
+enum PlayerFallback {
+    /// The members already said. Tests empty it.
+    static var noted: Set<String> = []
+
+    static func note(_ member: String, of type: Any.Type, level: KontextVideo.Configuration.LogLevel, _ consequence: String) {
+        guard noted.insert(member).inserted else { return }
+        let message = "\(type) has no \(member) of the protocol's type, so the default is used: \(consequence)"
+        if level == .warning { Logger.warning(message) } else { Logger.info(message) }
+    }
 }
 
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
 /// an overlay, which lives only while the content plays, and a pause ad, which lives only while it is paused. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
-/// `VideoAdsPlayer` (its publisher, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
+/// `VideoAdsPlayer` (its publishers, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
 /// `AVPlayer` weakly (the app owns it) and a `VideoAdsPlayer` strongly (often a wrapper only the SDK holds);
 /// `stop()` drops every observer, subscription and timer, and the player. Every callback carries the binding
 /// it came from: one queued from a player tracked before is dropped.
@@ -68,14 +119,15 @@ final class ContentPlayback {
     private var readTime: (() -> TimeInterval?)?
     /// Whether the content plays, `nil` once the player is gone.
     private var readPlaying: (() -> Bool?)?
-    /// The playback speed when the player tells it (an `AVPlayer`'s `rate`), for telling fast playback from a seek.
+    /// The playback speed when the player tells it (an `AVPlayer`'s `rate`, a `VideoAdsPlayer`'s `playbackSpeed`),
+    /// for telling fast playback from a seek.
     private var readRate: (() -> Double?)?
     private weak var avPlayer: AVPlayer?
     /// The tracked `VideoAdsPlayer`, kept alive until `stop()`.
     private var customPlayer: (any VideoAdsPlayer)?
     private var observations: [NSKeyValueObservation] = []
     private var itemObservers: [any NSObjectProtocol] = []
-    private var subscription: AnyCancellable?
+    private var subscriptions: [AnyCancellable] = []
     private var ticker: Task<Void, Never>?
 
     /// Whether the content plays. `true` when nothing was tracked: nothing to follow, an overlay runs as it
@@ -168,22 +220,31 @@ final class ContentPlayback {
     }
 
     func track(_ player: some VideoAdsPlayer) {
-        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying }) else { return }
+        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
+                                         rate: { [weak player] in player?.playbackSpeed }) else { return }
         customPlayer = player
         let generation = self.generation
-        // Reading the publisher and subscribing are app code: a `destroy()` or another `track` there wins, and
-        // this binding's subscription is dropped instead of stored.
-        let subscription = player.isPlayingPublisher?
+        // Reading the publishers and subscribing are app code: a `destroy()` or another `track` there wins, and
+        // this binding's subscriptions are dropped instead of stored. A seek and another item are what an
+        // `AVPlayer`'s time jump and item change are.
+        let playing = player.isPlayingPublisher?
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] playing in
                 MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: playing), from: generation) }
             }
+        let seeks = player.seekPublisher?
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in MainActor.assumeIsolated { self?.deliver(.jumped, from: generation) } }
+        let changes = player.contentChangedPublisher?
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in MainActor.assumeIsolated { self?.deliver(.contentChanged, from: generation) } }
+        let subscriptions = [playing, seeks, changes].compactMap { $0 }
         guard generation == self.generation else {
-            subscription?.cancel()
+            subscriptions.forEach { $0.cancel() }
             return
         }
-        self.subscription = subscription
+        self.subscriptions = subscriptions
         finishBinding(overlayWasShown: overlayWasShown)
     }
 
@@ -201,9 +262,9 @@ final class ContentPlayback {
         observations = []
         itemObservers.forEach(NotificationCenter.default.removeObserver)
         itemObservers = []
-        // Kept, not released here: releasing cancels it, and its cancellation runs the app's code.
-        let subscription = self.subscription
-        self.subscription = nil
+        // Kept, not released here: releasing cancels them, and their cancellation runs the app's code.
+        let subscriptions = self.subscriptions
+        self.subscriptions = []
         // Released after the cancellation, for the same reason: its deinit is the app's code too.
         let customPlayer = self.customPlayer
         self.customPlayer = nil
@@ -215,7 +276,7 @@ final class ContentPlayback {
         isTracking = false
         isTicking = false
         // Last, with every property settled: a `track` or `destroy()` in the cancellation finds a stopped playback.
-        withExtendedLifetime(customPlayer) { subscription?.cancel() }
+        withExtendedLifetime(customPlayer) { subscriptions.forEach { $0.cancel() } }
     }
 
     /// The end and the time jumps of the item the player has now; the previous item's go, and its callbacks

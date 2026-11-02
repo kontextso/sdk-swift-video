@@ -262,6 +262,7 @@ struct SDKHarness {
         Environment.reset()
         StubServer.uninstall()
         FrameBridge.loadTimeout = 10
+        PlayerFallback.noted = []
         ViewabilityMeter.interval = 0.25
         // The runner never completes a modal transition: a linear ad's didEnd comes from the fallback.
         VideoAd.dismissalTimeout = 0.05

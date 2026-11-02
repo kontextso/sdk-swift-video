@@ -35,6 +35,24 @@ struct VideoAdContentTests {
         }
     }
 
+    /// A custom player that reports what it does: its speed, its seeks and its item changes.
+    final class ReportingPlayer: VideoAdsPlayer {
+        var currentTime: TimeInterval = 0
+        var isPlaying = true
+        var playbackSpeed: Double? = 1
+        let seeks = PassthroughSubject<Void, Never>()
+        let changes = PassthroughSubject<Void, Never>()
+        var seekPublisher: AnyPublisher<Void, Never>? { seeks.eraseToAnyPublisher() }
+        var contentChangedPublisher: AnyPublisher<Void, Never>? { changes.eraseToAnyPublisher() }
+    }
+
+    /// A custom player that declares its publisher with the wrong type: not the protocol's requirement.
+    final class MistypedPlayer: VideoAdsPlayer {
+        var currentTime: TimeInterval = 0
+        var isPlaying = true
+        var isPlayingPublisher: AnyPublisher<Bool, Never> { Just(true).eraseToAnyPublisher() }
+    }
+
     init() {
         ContentPlayback.tickInterval = 0.02
         Environment.isWindowActive = { _ in true }
@@ -73,6 +91,57 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         player.isPlaying = false
         #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] })
+    }
+
+    @Test func aMistypedPublisherFallsBackWithOneWarning() async throws {
+        let player = MistypedPlayer()
+        let (_, _, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-mistyped")) { $0.track(player) }
+        var lines: [(KontextVideo.Configuration.LogLevel, String)] = []
+        Logger.level = .warning
+        Logger.sink = { lines.append(($0, $1)) }
+        defer { Logger.sink = nil }
+        ads.track(player)
+        ads.track(player)
+        let warnings = lines.filter { $0.0 == .warning && $0.1.contains("isPlayingPublisher") }
+        // The first track, in makeAd, already said it: once per process. Said again after a reset only.
+        #expect(warnings.isEmpty, "\(lines)")
+        PlayerFallback.noted = []
+        ads.track(player)
+        ads.track(player)
+        let again = lines.filter { $0.0 == .warning && $0.1.contains("isPlayingPublisher") }
+        #expect(again.count == 1 && again[0].1.contains("MistypedPlayer"), "once, naming the type: \(lines)")
+    }
+
+    @Test func aReportedSeekCountsNothingOfTheOverlaysDuration() async throws {
+        ContentPlayback.tickInterval = 30   // the ticks below are delivered by hand
+        let player = ReportingPlayer()
+        player.currentTime = 10
+        let (ad, _, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-seek", duration: 1000)) { $0.track(player) }
+        try ad.show(in: view)
+        let elapsed = { ad.contentProgress?.elapsed ?? -1 }
+        await sleepMs(100)
+        player.currentTime = 10.3   // small enough to pass for playback
+        player.seeks.send()
+        #expect(await waitUntil { ads.playback.isTracking })
+        await sleepMs(50)   // the seek is delivered on the main queue
+        ads.playback.onChange?(.tick)
+        #expect(elapsed() == 0, "the seek was reported: nothing counts")
+        await sleepMs(100)
+        player.currentTime = 10.4
+        ads.playback.onChange?(.tick)
+        #expect(abs(elapsed() - 0.1) < 0.001, "playback after it counts")
+        ad.dismiss()
+    }
+
+    @Test func aReportedItemChangeEndsTheOverlayAndTheSpeedIsRead() async throws {
+        ContentPlayback.tickInterval = 30
+        let player = ReportingPlayer()
+        player.playbackSpeed = 2
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-item")) { $0.track(player) }
+        #expect(ads.playback.rate == 2, "the player's own speed, not the 4× guess")
+        try ad.show(in: view)
+        player.changes.send()
+        #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] }, "without waiting for a tick")
     }
 
     @Test func showOverPausedContentThrowsAndTheAdStaysReady() async throws {
