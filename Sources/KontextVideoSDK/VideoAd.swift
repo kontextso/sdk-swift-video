@@ -70,7 +70,10 @@ public final class VideoAd {
     }
 
     /// Why the ad ended before it was shown, once it did; `load()` and `show` throw it.
-    public private(set) var invalidationReason: InvalidationReason?
+    public var invalidationReason: InvalidationReason? {
+        if case .invalidated(let reason) = phase { return reason }
+        return nil
+    }
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
         descriptor.isExpired
@@ -80,14 +83,57 @@ public final class VideoAd {
     public weak var delegate: (any VideoAdDelegate)?
 
     /// `true` from a successful `show` on; an ad is shown at most once.
-    public private(set) var wasShown = false
+    public var wasShown: Bool {
+        switch phase {
+        case .offered, .invalidated: false
+        case .reserved, .onScreen, .ending, .ended: true
+        }
+    }
     /// `true` once the ad began to end. For an overlay or pause ad the creative is already gone and `didEnd`
     /// follows at once; a linear ad may still be dismissing, and `didEnd` follows once that finished.
-    public private(set) var hasEnded = false
+    public var hasEnded: Bool {
+        switch phase {
+        case .ending, .ended: true
+        case .offered, .invalidated, .reserved, .onScreen: false
+        }
+    }
     /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
     /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
     public internal(set) var isCompleted = false
+
+    /// Where the ad is in its life. Every public flag above derives from it, and it moves only forward,
+    /// through `transition(to:)`.
+    enum Phase: Equatable {
+        /// Returned by `format(_:)`; `isLoaded` says whether the creative is ready.
+        case offered
+        /// Ended before `show`: nothing was delivered.
+        case invalidated(InvalidationReason)
+        /// `show` committed and took the app's one slot; a linear ad waits for UIKit to present it.
+        case reserved
+        /// The creative is presented: the page was told to show, the meter and the clock run.
+        case onScreen
+        /// The ad is ending; a linear ad is being dismissed, and `didEnd` follows once that finished.
+        case ending(EndReason)
+        /// `didEnd` was delivered.
+        case ended(EndReason)
+    }
+    private(set) var phase = Phase.offered
+
+    /// Moves to `next` when that is a legal step, and says whether it did: offered → invalidated or reserved,
+    /// reserved → on screen or ending, on screen → ending, ending → ended. Anything else (a late event, a
+    /// second end) changes nothing.
+    @discardableResult
+    private func transition(to next: Phase) -> Bool {
+        switch (phase, next) {
+        case (.offered, .invalidated), (.offered, .reserved), (.reserved, .onScreen), (.reserved, .ending),
+             (.onScreen, .ending), (.ending, .ended):
+            phase = next
+            return true
+        default:
+            return false
+        }
+    }
 
     /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
     /// move it.
@@ -116,11 +162,10 @@ public final class VideoAd {
     private var extraInsets = UIEdgeInsets.zero
     /// The controller the SDK presented for a linear ad.
     private(set) var linearController: LinearViewController?
-    /// The creative is on screen: the page was told to show, the beacons of that moment fired. At `show`
-    /// for an overlay or pause ad; for a linear ad once UIKit presented the controller.
+    /// The creative reached the screen (the phase was `onScreen`): the page was told to show, the beacons
+    /// of that moment fired. At `show` for an overlay or pause ad; for a linear ad once UIKit presented the
+    /// controller. Stays `true` after the end: an ad that was on screen without an impression closes.
     private(set) var isPresented = false
-    /// `didEnd` was delivered. For a linear ad that is after its dismissal, so this lags `hasEnded`.
-    private var finished = false
     /// What broke, for the `didFail` that `end(.failed)` delivers first.
     private var failure: VideoAdError?
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
@@ -368,7 +413,7 @@ public final class VideoAd {
         // exposure 0 and make the page pause the video it has just started.
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
         LinearPresentation.present(controller, from: presenter, adId: id, timeout: Self.presentationTimeout) { [weak self] in
-            self.map { !$0.hasEnded && !$0.isPresented } ?? false
+            self?.phase == .reserved
         } onPresented: { [weak self] in
             self?.presented()
         } onFailed: { [weak self] in
@@ -480,7 +525,7 @@ public final class VideoAd {
     /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
     private func reserve() {
-        wasShown = true
+        transition(to: .reserved)
         KontextVideo.shared.adOnScreen = self
         owner?.adDidBeginShowing(self)
     }
@@ -493,7 +538,7 @@ public final class VideoAd {
     }
 
     private func presentNow() {
-        guard !hasEnded, !isPresented else { return }
+        guard transition(to: .onScreen) else { return }
         isPresented = true
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
@@ -597,8 +642,7 @@ public final class VideoAd {
     //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (finish);
     //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
-        guard wasShown, !hasEnded else { return }
-        hasEnded = true
+        guard transition(to: .ending(reason)) else { return }
         if reason == .failed, let failure {
             delegate?.videoAd(self, didFail: failure)
         }
@@ -619,7 +663,7 @@ public final class VideoAd {
             // Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
             // the animation.
             dismissing = LinearPresentation.dismiss(controller, timeout: Self.dismissalTimeout) { [weak self] in
-                self.map { !$0.finished } ?? false
+                self.map { $0.phase == .ending(reason) } ?? false
             } completion: { [weak self] timedOut in
                 guard let self else { return }
                 if timedOut {
@@ -649,8 +693,7 @@ public final class VideoAd {
     /// The screen is free and the app hears `didEnd`: at once for an overlay or pause ad, once the
     /// dismissal finished for a linear ad. Once.
     private func finish(_ reason: EndReason) {
-        guard !finished else { return }
-        finished = true
+        guard transition(to: .ended(reason)) else { return }
         if KontextVideo.shared.adOnScreen === self { KontextVideo.shared.adOnScreen = nil }
         owner?.adDidEnd(self)
         delegate?.videoAd(self, didEnd: reason)
@@ -783,8 +826,7 @@ public final class VideoAd {
     /// `didEnd(.destroyed)`. No beacon here: `reject` and `destroy` fire `notUsed` themselves, an expired
     /// ad is the server's to close (it knows `expires`), a failed creative already fired `error`.
     func invalidate(_ reason: InvalidationReason) {
-        guard !wasShown, invalidationReason == nil else { return }
-        invalidationReason = reason
+        guard transition(to: .invalidated(reason)) else { return }
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
         DebugReporter.shared.event("ad.invalidated", adId: id, state: reason.reportState)
         loadedBridge?.hide()
