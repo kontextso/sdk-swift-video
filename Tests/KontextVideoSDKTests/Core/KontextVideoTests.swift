@@ -71,16 +71,32 @@ struct KontextVideoTests {
         #expect(assertions == ["KontextVideo.User: id is empty"])
     }
 
-    @Test func secondInitializeIsIgnored() async {
+    @Test func secondInitializeIsIgnoredButStillCallsBack() async {
         _ = await harness.initialize()
-        var completions = 0
-        sdk.initialize(with: KontextVideo.Configuration(publisherToken: "other", adServerURL: harness.server.baseURL)) { _ in completions += 1 }
-        await sleepMs(50)
+        var reported: [KontextVideo.State] = []
+        sdk.initialize(with: KontextVideo.Configuration(publisherToken: "other", adServerURL: harness.server.baseURL)) { reported.append($0) }
+        #expect(await waitUntil(2) { !reported.isEmpty })
         #expect(sdk.configuration?.publisherToken == "test-dev", "the first configuration stays")
-        #expect(completions == 0, "an ignored call runs no completion")
+        #expect(reported == [.enabled], "the ignored call still hears, with the first call's state")
         #expect(harness.server.requests(to: "/v2/config").count == 1)
         let again = await sdk.initialize(with: harness.configuration)
         #expect(again == .enabled, "the async form answers with the state the first call produced")
+    }
+
+    @Test func aSecondInitializeDuringTheFirstCallsBackOnceConfigAnswers() async {
+        var first: [KontextVideo.State] = []
+        var second: [KontextVideo.State] = []
+        sdk.initialize(with: harness.configuration) { first.append($0) }
+        sdk.initialize(with: harness.configuration) { second.append($0) }
+        #expect(await waitUntil(5) { !first.isEmpty && !second.isEmpty })
+        #expect(first == [.enabled] && second == [.enabled], "both hear once, after /config, not .initializing")
+        #expect(harness.server.requests(to: "/v2/config").count == 1)
+    }
+
+    @Test func theAsyncInitializeCanBeCalledForItsEffectAlone() async {
+        // Compiles without `_ =`: the docs' one-liner in async code.
+        await sdk.initialize(with: harness.configuration)
+        #expect(sdk.state == .enabled)
     }
 
     @Test func initializeAppliesTheLogLevel() async {

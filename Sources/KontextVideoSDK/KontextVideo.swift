@@ -71,11 +71,19 @@ public final class KontextVideo {
     private init() {}
 
     /// Starts the SDK: stores the configuration and calls `/config` in the background.
-    /// Call it once, at app launch; later calls are ignored. `completion` runs on the main thread
-    /// once `/config` has answered or failed.
+    /// Call it once, at app launch; a later call's configuration is ignored. `completion` runs on the main
+    /// thread once `/config` has answered or failed, for a later call too: with the first call's state.
     public func initialize(with configuration: Configuration, completion: ((State) -> Void)? = nil) {
         guard !isInitialized else {
-            Logger.warning("initialize(with:) was already called; this call is ignored")
+            Logger.warning("initialize(with:) was already called; this call's configuration is ignored")
+            // A caller waiting on its callback must still hear: once the first call's `/config` is done.
+            if let completion {
+                let first = initTask
+                Task {
+                    await first?.value
+                    completion(state)
+                }
+            }
             return
         }
         self.configuration = configuration
@@ -102,6 +110,7 @@ public final class KontextVideo {
 
     /// The same, for `async` code: returns the state once `/config` has answered or failed. Swift picks
     /// this overload in an `async` context and the fire-and-forget one elsewhere.
+    @discardableResult
     public func initialize(with configuration: Configuration) async -> State {
         initialize(with: configuration, completion: nil)
         await initTask?.value
