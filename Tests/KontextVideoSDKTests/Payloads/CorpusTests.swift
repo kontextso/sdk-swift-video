@@ -14,13 +14,13 @@ struct CorpusTests {
 
     @Test(arguments: CorpusCase.load("ads"))
     func adsAnswer(_ corpusCase: CorpusCase) throws {
-        try corpusCase.check { try Self.outcome(of: JSONDecoder().decode(AdsResponse.self, from: $0)) }
+        try corpusCase.check { try Self.outcome(of: APIClient.decode(AdsResponse.self, from: $0)) }
     }
 
     @Test(arguments: CorpusCase.load("config"))
     func configAnswer(_ corpusCase: CorpusCase) throws {
         try corpusCase.check { data in
-            switch try JSONDecoder().decode(ConfigResponse.self, from: data) {
+            switch try APIClient.decode(ConfigResponse.self, from: data) {
             case .enabled(let reportDebug, let reportErrors): return ["result": "enabled", "reportDebug": reportDebug, "reportErrors": reportErrors]
             case .disabled(let reason): return ["result": "disabled", "disabledReason": reason]
             }
@@ -100,8 +100,19 @@ struct CorpusCase: Sendable, CustomTestStringConvertible {
         } catch is DecodingError {
             actual = ["result": "malformed"]
         }
+        if #unavailable(iOS 17), Self.olderDecoderDifferences.contains(name) {
+            withKnownIssue("\(name): the decoder before iOS 17 differs", isIntermittent: true) { compare(expect, actual) }
+            return
+        }
         compare(expect, actual)
     }
+
+    /// Cases the platform's decoder before iOS 17 answers differently, a malformed answer either way: a number
+    /// past `Double`'s range fails the whole answer, not only its field, and a missing or mistyped field in a
+    /// nested object is reported by its own key only (`to`, not `trigger.to`).
+    private static let olderDecoderDifferences: Set<String> = [
+        "ads/price-overflow", "ads/tracking-offset-1e400", "ads/trigger-window-without-to", "ads/url-number",
+    ]
 
     private func answer(_ spec: [String: Any]) throws -> Data {
         if let raw = spec["responseFile"] as? String {

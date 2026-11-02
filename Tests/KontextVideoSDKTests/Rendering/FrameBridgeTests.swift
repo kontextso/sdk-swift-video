@@ -790,10 +790,10 @@ struct FrameBridgeTests {
         var foreground = false
         Environment.isApplicationActive = { foreground }
         Environment.parkingWindow = { foreground ? window.window : nil }
-        // A page that loads and never reports ready: an unreachable URL fails fast on some iOS versions (15),
-        // and the test needs the page still loading when the app comes back.
+        // A page that loads and never reports ready (`dead-`): an unreachable URL fails fast on some iOS versions
+        // (15), and a page that reports ready stops the parking; the test needs it still loading on return.
         FramePageServer().install()
-        let (bridge, _) = makeBridge(isVideo: true, url: URL(string: "\(Fixtures.frameOrigin)/frame/ad-1")!)
+        let (bridge, _) = makeBridge(isVideo: true, url: URL(string: "\(Fixtures.frameOrigin)/frame/dead-1")!)
         bridge.load()
         await sleepMs(300)
         #expect(bridge.webView.superview == nil, "no window to park in while in the background")

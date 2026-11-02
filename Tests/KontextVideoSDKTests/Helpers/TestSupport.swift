@@ -299,6 +299,12 @@ enum WebKitWarmup {
         done = true
         // A page server of its own, so no suite sees the warm-up page in what its server served.
         let previous = Environment.schemeHandlers
+        // In a window of an active app, as the bridge parks a page: outside one, WebKit deprioritizes it, and a CI
+        // runner without a key window never finished the warm-up.
+        let (parking, active) = (Environment.parkingWindow, Environment.isApplicationActive)
+        Environment.parkingWindow = { ParkingWindow.window }
+        Environment.isApplicationActive = { true }
+        defer { (Environment.parkingWindow, Environment.isApplicationActive) = (parking, active) }
         FramePageServer().install()
         let bridge = FrameBridge(adId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
         var loaded = false

@@ -69,10 +69,49 @@ struct APIClient: Sendable {
             return empty
         }
         do {
-            return try JSONDecoder().decode(Response.self, from: data)
+            return try Self.decode(Response.self, from: data)
         } catch {
             throw APIError.decoding(error)
         }
+    }
+
+    /// The deepest nesting of arrays and objects a server answer may have, as the Kotlin SDK reads it. No answer
+    /// of the contract comes near it. Checked here for every iOS version: the platform's decoder has this limit
+    /// only from iOS 17, and decodes deeper answers before it.
+    static let maxNestingDepth = 512
+
+    /// A server answer decoded: refused as `dataCorrupted` when nested deeper than `maxNestingDepth`, read
+    /// before decoding, so a deep answer costs no stack.
+    static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for byte in data {
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if byte == UInt8(ascii: "\\") {
+                    escaped = true
+                } else if byte == UInt8(ascii: "\"") {
+                    inString = false
+                }
+                continue
+            }
+            switch byte {
+            case UInt8(ascii: "\""):
+                inString = true
+            case UInt8(ascii: "["), UInt8(ascii: "{"):
+                depth += 1
+                if depth > maxNestingDepth {
+                    throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "nested deeper than \(maxNestingDepth) levels"))
+                }
+            case UInt8(ascii: "]"), UInt8(ascii: "}"):
+                depth -= 1
+            default:
+                break
+            }
+        }
+        return try JSONDecoder().decode(type, from: data)
     }
 }
 
