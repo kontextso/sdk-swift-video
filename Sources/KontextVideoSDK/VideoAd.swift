@@ -428,8 +428,9 @@ public final class VideoAd {
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
         LinearPresentation.present(controller, from: presenter, adId: id, timeout: Self.presentationTimeout) { [weak self] in
             self?.phase == .reserved
-        } onPresented: { [weak self] in
-            self?.presented()
+        } onPresented: { [weak self, weak controller] in
+            guard case .ending? = self?.phase else { return self?.presented() ?? () } // ended mid-animation: UIKit dropped that dismiss
+            if controller?.isBeingDismissed == false { controller?.presentingViewController?.dismiss(animated: true) }
         } onFailed: { [weak self] in
             guard let self else { return }
             ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
@@ -440,9 +441,8 @@ public final class VideoAd {
 
     /// How long a linear presentation may take to reach the screen before the ad gives up on it.
     static var presentationTimeout: TimeInterval = 2
-    /// How long a linear dismissal may take before `didEnd` is delivered anyway, once the controller has
-    /// left the screen (five times that if it has not): a completion UIKit never calls must not keep the
-    /// app waiting, and a dismissal still running must not be reported over.
+    /// How long a linear dismissal may take before `didEnd` comes anyway, once the controller left the screen (five
+    /// times that if not): a completion UIKit never calls must not keep the app waiting, nor one still running be cut.
     static var dismissalTimeout: TimeInterval = 1
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
