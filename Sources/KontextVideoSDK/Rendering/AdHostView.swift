@@ -11,6 +11,11 @@ final class AdHostView: UIView {
     var place: ((CGRect, UIEdgeInsets) -> CGRect?)?
     /// The player became too small for the creative. Once.
     var onUnfit: (() -> Void)?
+    /// A full-screen ad: the host fills the player in black and takes every touch on it, the creative sits
+    /// inside the safe area, clear of the notch, the island and the home indicator.
+    var coversWhole = false {
+        didSet { backgroundColor = coversWhole ? .black : .clear }
+    }
     let content: UIView
 
     init(frame: CGRect, content: UIView) {
@@ -44,9 +49,9 @@ final class AdHostView: UIView {
         setNeedsLayout()
     }
 
-    /// Only the creative takes touches; the rest of the player stays the player's.
+    /// Only the creative takes touches; the rest of the player stays the player's, except under a full-screen ad.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
-        return hit === self ? nil : hit
+        return hit === self && !coversWhole ? nil : hit
     }
 }

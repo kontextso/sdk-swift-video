@@ -276,7 +276,9 @@ public final class VideoAd {
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
         extraInsets = AdPlacement.cleaned(insets)
-        let adFrame = try frame(in: area, safeArea: AdPlacement.adding(extraInsets, to: container.safeAreaInsets))
+        let adFrame = descriptor.position == .fullscreen
+            ? fullscreenFrame(in: area, safeArea: container.safeAreaInsets)
+            : try frame(in: area, safeArea: AdPlacement.adding(extraInsets, to: container.safeAreaInsets))
         // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
@@ -286,6 +288,7 @@ public final class VideoAd {
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
         let host = AdHostView(frame: container.bounds, content: webView)
+        host.coversWhole = descriptor.position == .fullscreen
         host.content.frame = adFrame
         host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
         host.onUnfit = { [weak self] in
@@ -460,8 +463,16 @@ public final class VideoAd {
     /// The chosen variant fitted again to a view that resized or rotated: the page was told that variant,
     /// so only its scale changes. `nil` when it no longer fits.
     private func refit(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
-        guard descriptor.position != .fullscreen, let size = chosenSize else { return fullBounds }
+        if descriptor.position == .fullscreen { return fullscreenFrame(in: fullBounds, safeArea: safeArea) }
+        guard let size = chosenSize else { return fullBounds }
         return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: AdPlacement.adding(extraInsets, to: safeArea))
+    }
+
+    /// A full-screen pause ad's page: the player less its safe area (the notch or island, the home indicator,
+    /// a landscape cutout), so its text and controls stay clear of them; the host fills the rest in black.
+    /// The app's insets do not apply. A safe area that leaves nothing gives the whole player.
+    private func fullscreenFrame(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect {
+        AdPlacement.room(in: fullBounds, safeArea: safeArea) ?? fullBounds
     }
 
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s

@@ -228,7 +228,7 @@ struct VideoAdPlacementTests {
         try ad.show(in: player)
         player.frame.size = CGSize(width: 390, height: 220)
         player.layoutIfNeeded()
-        #expect(adFrame(in: player) == player.bounds)
+        #expect(adFrame(in: player) == player.bounds.inset(by: player.safeAreaInsets), "the resized player less its safe area")
         ad.dismiss()
     }
 
@@ -271,7 +271,7 @@ struct VideoAdPlacementTests {
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.add(player)
         try ad.show(in: player, insets: UIEdgeInsets(top: 40, left: 10, bottom: 80, right: 10))
-        #expect(adFrame(in: player) == player.bounds)
+        #expect(adFrame(in: player) == player.bounds.inset(by: player.safeAreaInsets), "the safe area only, not the app's insets")
         ad.dismiss()
     }
 
@@ -355,12 +355,16 @@ struct VideoAdPlacementTests {
         ad.dismiss()
     }
 
-    @Test func aFullscreenPauseAdFillsThePlayerEvenUnderTheSafeArea() async throws {
+    @Test func aFullscreenPauseAdKeepsItsPageInsideTheSafeAreaOnBlack() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6f", position: "fullscreen", size: nil))
-        let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), insets: UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0))
+        // A landscape iPhone: the island's cutout on the left, the home indicator at the bottom.
+        let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 844, height: 390), insets: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59))
         window.add(player)
         try ad.show(in: player)
-        #expect(try #require(adFrame(in: player)) == player.bounds)
+        #expect(try #require(adFrame(in: player)) == CGRect(x: 59, y: 0, width: 726, height: 369), "the page stays clear of the cutout")
+        let host = try #require(player.subviews.compactMap { $0 as? AdHostView }.first)
+        #expect(host.frame == player.bounds && host.backgroundColor == .black, "the host fills the player in black")
+        #expect(host.hitTest(CGPoint(x: 20, y: 200), with: nil) === host, "a touch by the cutout stays with the ad, not the player")
         ad.dismiss()
     }
 }
