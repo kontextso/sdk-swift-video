@@ -785,7 +785,10 @@ struct VideoAdsTests {
         #expect(delegate.endReasons == [.destroyed])
         #expect(Set(await notUsedBeacons(expecting: 2).map(\.adId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
         #expect(await notUsedBeacons().allSatisfy { $0.reason == "destroyed" })
-        #expect(throws: VideoAdError.self) { try loaded.show(in: harness.player.view) }
+        #expect(loaded.invalidationReason == .destroyed && unloaded.invalidationReason == .destroyed)
+        do { try loaded.show(in: harness.player.view) } catch VideoAdError.destroyed {} catch {
+            Issue.record("one spelling: destroyed, never invalidated(.destroyed); got \(error)")
+        }
         let unloadedLoad = await error { try await unloaded.load() }
         guard case .destroyed = unloadedLoad else { Issue.record("expected destroyed"); return }
         let after = await error { try await ads.format(.pause) }

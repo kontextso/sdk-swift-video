@@ -52,7 +52,8 @@ extension VideoAd {
         case expired
         /// The app called `reject()`.
         case rejected
-        /// The `VideoAds` was destroyed.
+        /// The `VideoAds` was destroyed, or an ads response switched the SDK off. Read here only: the calls
+        /// throw `VideoAdError.destroyed` (or `disabled(reason:)`), never `invalidated(.destroyed)`.
         case destroyed
         /// The creative failed to load, or died while the ad waited to be shown (for example the web
         /// content process was terminated). `code` is the VAST error code the SDK fired.

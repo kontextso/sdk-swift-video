@@ -39,7 +39,8 @@ public enum VideoAdError: Error, Sendable {
     /// and still ready: show it once the other one ended.
     case anotherAdShowing
     /// The ad ended before it was shown: it expired, was rejected, or its creative died. `load()`, `show`
-    /// and `reject()` throw it from then on.
+    /// and `reject()` throw it from then on. Never with `.destroyed`: the ads of a destroyed `VideoAds`
+    /// throw `destroyed`, the one spelling.
     case invalidated(VideoAd.InvalidationReason)
 
     /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.

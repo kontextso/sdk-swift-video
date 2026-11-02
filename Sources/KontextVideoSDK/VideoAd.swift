@@ -744,6 +744,8 @@ public final class VideoAd {
         owner?.adDidLeave(self)
     }
 
+    /// What a call on an ad that ended before `show` throws. A destroyed one throws `destroyed`, never
+    /// `invalidated(.destroyed)`: one error for one fact, whichever call finds it.
     static func error(for reason: InvalidationReason) -> VideoAdError {
         reason == .destroyed ? .destroyed : .invalidated(reason)
     }
