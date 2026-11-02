@@ -345,6 +345,8 @@ struct FrameBridgeTests {
     }
 
     @Test func loadTimeoutFailsWithTheGeneralCode() async {
+        // The timeout counts active time only; a CI runner's test app is not always active.
+        Environment.isApplicationActive = { true }
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge(isVideo: true)
         bridge.load()
@@ -788,7 +790,10 @@ struct FrameBridgeTests {
         var foreground = false
         Environment.isApplicationActive = { foreground }
         Environment.parkingWindow = { foreground ? window.window : nil }
-        let (bridge, _) = makeBridge(isVideo: true)
+        // A page that loads and never reports ready: an unreachable URL fails fast on some iOS versions (15),
+        // and the test needs the page still loading when the app comes back.
+        FramePageServer().install()
+        let (bridge, _) = makeBridge(isVideo: true, url: URL(string: "\(Fixtures.frameOrigin)/frame/ad-1")!)
         bridge.load()
         await sleepMs(300)
         #expect(bridge.webView.superview == nil, "no window to park in while in the background")
