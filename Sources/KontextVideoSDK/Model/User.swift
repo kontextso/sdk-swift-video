@@ -43,6 +43,12 @@ extension KontextVideo {
             try container.encodeIfPresent(keywords, forKey: .keywords)
         }
 
+        /// The user without what identifies the viewer (id, email, email hash), for a COPPA request; `nil`
+        /// when nothing else is left.
+        var withoutIdentity: User? {
+            keywords == nil ? nil : User(keywords: keywords)
+        }
+
         /// Fields set to an empty string, which the request leaves out; an empty `id` is also an assertion.
         var emptyFields: [String] {
             [("id", id), ("email", email), ("emailHash", emailHash)].compactMap { $0.1?.isEmpty == true ? $0.0 : nil }

@@ -12,7 +12,8 @@ extension KontextVideo {
         /// The IAB Transparency and Consent Framework consent string.
         public let gdprConsent: String?
         /// Whether the request is subject to COPPA; `nil` is unspecified, not `false`. Cannot be read from
-        /// the device, so only the publisher sets it.
+        /// the device, so only the publisher sets it. When `true`, ads requests carry no advertising id and no
+        /// user id, email or email hash.
         public let coppa: Bool?
         /// The IAB Global Privacy Platform consent string.
         public let gpp: String?

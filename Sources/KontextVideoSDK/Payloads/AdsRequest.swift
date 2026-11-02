@@ -40,18 +40,21 @@ struct AdsRequest: Encodable, Sendable {
                      labels: [String: String], player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
         let device = await AdsDevice.current()
         let tracking = tracking()
+        // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
+        let regulatory = ConsentStorage.read(merging: sdk.regulatory)
+        // A child's request carries no identifier for advertising: no advertising id, no user id or email.
+        let isChild = regulatory?.coppa == true
         return AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
-            user: sdk.user,
+            user: isChild ? sdk.user?.withoutIdentity : sdk.user,
             variantId: sdk.variantId,
-            ifa: tracking.ifa,
+            ifa: isChild ? nil : tracking.ifa,
             idfv: UIDevice.current.identifierForVendor?.uuidString,
             attStatus: tracking.attStatus,
-            // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
-            regulatory: ConsentStorage.read(merging: sdk.regulatory),
+            regulatory: regulatory,
             sdk: SDKInfo(),
             app: .current(),
             device: device,

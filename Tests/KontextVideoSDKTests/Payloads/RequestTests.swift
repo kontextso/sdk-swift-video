@@ -59,6 +59,33 @@ struct RequestTests {
         )
     }
 
+    @Test func aCOPPARequestCarriesNoIdentifierForAdvertising() async throws {
+        KontextVideo.shared.user = KontextVideo.User(id: "u1", email: "kid@example.com", emailHash: "h", keywords: ["cartoons"])
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: true)
+        let request = await AdsRequest.make(
+            sdk: KontextVideo.shared,
+            configuration: configuration,
+            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
+            content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
+            labels: [:],
+            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: 0),
+            sessionId: "s-1",
+            held: []
+        )
+        let json = try Fixtures.encode(request)
+        #expect(json["ifa"] == nil, "no advertising id for a child")
+        #expect(json["user"] as? [String: [String]] == ["keywords": ["cartoons"]], "no id, email or hash; keywords stay")
+        #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == true)
+
+        KontextVideo.shared.user = KontextVideo.User(id: "u1")
+        let withoutKeywords = try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
+            content: KontextVideo.Content(id: "v1", language: "en", duration: 92), labels: [:],
+            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: 0), sessionId: "s-1", held: []
+        ))
+        #expect(withoutKeywords["user"] == nil, "nothing left of the user")
+    }
+
     @Test func adsRequestBodyHasEveryField() async throws {
         let json = try Fixtures.encode(await makeAdsRequest())
         #expect(json["adServerURL"] == nil, "where to send it is not part of the body")
