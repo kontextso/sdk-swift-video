@@ -140,7 +140,9 @@ final class FrameBridge: NSObject {
     }
 
     /// Loads the page. `ad.loaded` must arrive within `loadTimeout` of active time: WebKit does not run a
-    /// page in the background, so time there does not count.
+    /// page in the background, so time there does not count. A load started in the background finds no window
+    /// to park in; the same active-time check parks it on the first tick the app is active again, or a video
+    /// creative would never buffer and the timeout would fail a working ad.
     func load() {
         Logger.debug("frame \(adId.prefix(8)): loading \(url)")
         parkOffscreen()
@@ -151,7 +153,10 @@ final class FrameBridge: NSObject {
             while waited < Self.loadTimeout {
                 try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
                 guard !Task.isCancelled else { return }
-                if Environment.isApplicationActive() { waited += step }
+                if Environment.isApplicationActive() {
+                    waited += step
+                    if let self, state == .loading, !isParked { parkOffscreen() }
+                }
             }
             guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")

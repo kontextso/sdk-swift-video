@@ -782,6 +782,24 @@ struct FrameBridgeTests {
         #expect(bridge.state == .loading)
     }
 
+    @Test func aLoadStartedInTheBackgroundParksOnceTheAppIsActiveAgain() async {
+        let window = TestWindow()
+        defer { window.tearDown() }
+        var foreground = false
+        Environment.isApplicationActive = { foreground }
+        Environment.parkingWindow = { foreground ? window.window : nil }
+        let (bridge, _) = makeBridge(isVideo: true)
+        bridge.load()
+        await sleepMs(300)
+        #expect(bridge.webView.superview == nil, "no window to park in while in the background")
+        #expect(bridge.state == .loading)
+        foreground = true
+        #expect(await waitUntil(5) { bridge.webView.superview === window.window }, "parked on return, so the video can buffer")
+        #expect(bridge.webView.alpha == 0 && bridge.webView.isUserInteractionEnabled == false)
+        bridge.hide()
+        #expect(bridge.webView.superview == nil)
+    }
+
     // MARK: Configuration
 
     @Test func webViewIsLockedDown() {
