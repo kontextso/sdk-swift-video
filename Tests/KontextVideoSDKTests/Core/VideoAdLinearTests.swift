@@ -119,7 +119,7 @@ struct VideoAdLinearTests {
         let (controller, window) = try await presentLinear(ad, from: presenter)
         defer { window.isHidden = true; window.rootViewController = nil }
         send(ad, "video.start", ["playhead": 0])
-        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "on screen: \(exposures)")
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 50 } == true }, "on screen: \(exposures)")
         // The app presents its own screen, or an install click the App Store sheet, full screen over the ad. The
         // runner refuses a presentation over a controller whose own never finished, so the check is told; what
         // UIKit then does to the ad's controller is done by hand: viewDidDisappear, its view out of the window.
@@ -140,7 +140,7 @@ struct VideoAdLinearTests {
         // The cover goes: the view is back, the page hears the exposure, and the dwell starts again.
         covered = false
         window.addSubview(controller.view)
-        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "exposed again: \(exposures)")
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 50 } == true }, "exposed again: \(exposures)")
         for _ in 0..<25 {
             advanceClock(by: 0.1)
             ad.meter?.tick()
@@ -162,7 +162,7 @@ struct VideoAdLinearTests {
         let (controller, window) = try await presentLinear(ad, from: presenter)
         defer { window.isHidden = true; window.rootViewController = nil }
         send(ad, "video.start", ["playhead": 0])
-        #expect(await waitUntil(5) { exposures.last.map { $0 > 0.5 } == true }, "on screen: \(exposures)")
+        #expect(await waitUntil(5) { exposures.last.map { $0 > 50 } == true }, "on screen: \(exposures)")
         // A sheet (the App Store product page after a click) leaves the ad's view in its window.
         var covered = true
         Environment.isCovered = { $0 === controller && covered }
@@ -181,7 +181,7 @@ struct VideoAdLinearTests {
             advanceClock(by: 0.1)
             ad.meter?.tick()
         }
-        #expect(exposures.last.map { $0 > 0.5 } == true, "exposed again: \(exposures)")
+        #expect(exposures.last.map { $0 > 50 } == true, "exposed again: \(exposures)")
         #expect(ad.meter?.verdict == .viewable)
     }
 }

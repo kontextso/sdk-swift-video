@@ -382,6 +382,29 @@ struct ViewabilityMeterTests {
         window.window.alpha = 1
     }
 
+    @Test func transparencyMultipliesAlongTheAncestors() async {
+        defer { window.tearDown() }
+        _ = frozen()
+        // Three ancestors at 0.1 each: 0.001 on screen, though none of them alone is below the cutoff.
+        let outer = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let middle = UIView(frame: outer.bounds), inner = UIView(frame: outer.bounds), view = UIView(frame: outer.bounds)
+        outer.addSubview(middle)
+        middle.addSubview(inner)
+        inner.addSubview(view)
+        [outer, middle, inner].forEach { $0.alpha = 0.1 }
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        defer { meter.stop() }
+        let sink = attach(meter)
+        meter.start()
+        #expect(sink.exposures.last == 0, "\(sink.exposures)")
+        #expect(!AdPlacement.canBeSeen(view), "show refuses it by the same rule")
+        outer.alpha = 1
+        middle.alpha = 1
+        meter.tick()
+        #expect(sink.exposures.last == 1, "one ancestor at 0.1 is still seen: \(sink.exposures)")
+        #expect(AdPlacement.canBeSeen(view))
+    }
+
     @Test func nothingIsReportedBeforeTheViewIsLaidOutInAWindowThenARealZeroIs() async {
         defer { window.tearDown() }
         _ = frozen()

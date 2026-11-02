@@ -550,7 +550,9 @@ public final class VideoAd {
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
+        // At most one verdict per ad, after its impression: an ad never counted has nothing to be viewable.
         meter.onVerdict = { [weak self] verdict in
+            guard self?.impressionRecorded == true else { return }
             self?.withContentPlayhead { self?.tracker.fire(verdict.rawValue) }
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
@@ -701,9 +703,10 @@ public final class VideoAd {
             }
         case .click(let url, let fallbackUrl, let area):
             Logger.info("ad \(id.prefix(8)): click (\(area)) \(Logger.describe(url))")
-            // The end card selects its own `click` entries; anything else is the creative's.
+            // The end card selects its own `click` entries; anything else, and an end-card click on an ad without
+            // them (an overlay or pause ad), is the creative's: every accepted click is counted.
             // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
-            let fireId = tracker.fire("click", part: area == .endCard ? "endCard" : nil)
+            let fireId = tracker.fire("click", part: area == .endCard && tracker.has("click", part: "endCard") ? "endCard" : nil)
             openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
             guard !hasEnded else { return }
             delegate?.videoAd(self, didClick: Click(area: area))
@@ -783,7 +786,7 @@ public final class VideoAd {
         guard !wasShown, invalidationReason == nil else { return }
         invalidationReason = reason
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
-        DebugReporter.shared.event("ad.invalidated", adId: id, state: ["reason": .string("\(reason)")])
+        DebugReporter.shared.event("ad.invalidated", adId: id, state: reason.reportState)
         loadedBridge?.hide()
         loadedBridge = nil
         if let continuation = loadContinuation {

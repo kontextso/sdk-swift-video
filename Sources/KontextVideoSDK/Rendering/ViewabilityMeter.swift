@@ -130,7 +130,8 @@ final class ViewabilityMeter {
     /// its outline cut by the window and by every ancestor that clips (a scroll view, a container with
     /// `clipsToBounds`); nothing when it or an ancestor is hidden or transparent. Measured on the actual
     /// shapes in window coordinates, not on rectangles: a rotated view or ancestor turns a rectangle into a
-    /// rotated one, whose bounding box would overstate what is seen. Areas compare in window coordinates,
+    /// rotated one, whose bounding box would overstate what is seen. Transparency multiplies along the chain,
+    /// as it does on screen: three ancestors at 0.1 leave the ad at 0.001, unseen. Areas compare in window coordinates,
     /// where a scaled ancestor shrinks the whole and the visible part alike. Overlap by sibling views is not
     /// measured: only the view's own outline, its ancestors' clipping and the window count.
     private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
@@ -139,9 +140,11 @@ final class ViewabilityMeter {
         let whole = abs(signedArea(outline))
         guard whole > 0 else { return (0, .null) }
         var visible = clip(outline, to: corners(of: window.bounds))
+        var opacity = window.alpha
         var current: UIView? = view
         while let node = current, node !== window, !visible.isEmpty {
-            if node.isHidden || node.alpha <= 0.01 { return (0, .null) }
+            opacity *= node.alpha
+            if node.isHidden || opacity <= 0.01 { return (0, .null) }
             if node !== view, node.clipsToBounds {
                 visible = clip(visible, to: corners(of: node.bounds).map { node.convert($0, to: window) })
             }

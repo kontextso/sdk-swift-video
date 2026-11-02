@@ -84,6 +84,7 @@ struct VideoAdUnstartedTests {
         #expect(fired.filter { $0 == "close" }.count == 1)
         #expect(fired.contains("creativeView") && fired.contains("overlayViewDuration"))
         #expect(!fired.contains("impression") && !fired.contains("error"))
+        #expect(!fired.contains { ["viewable", "notViewable", "viewUndetermined"].contains($0) }, "no verdict without an impression: \(fired)")
     }
 
     @Test func aLinearAdDestroyedBeforeItsFirstFrameFiresClose() async throws {

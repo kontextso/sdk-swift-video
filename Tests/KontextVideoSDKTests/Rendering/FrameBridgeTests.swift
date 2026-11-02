@@ -389,6 +389,20 @@ struct FrameBridgeTests {
         #expect(recorder.events.count == 1, "a click the viewer did not make is a forced redirect")
     }
 
+    @Test func aClickWithoutAUsableURLOpensItsFallback() {
+        let (bridge, recorder) = makeBridge()
+        shown(bridge)
+        for given: Any? in [nil, 42] {
+            bridge.noteTouch()
+            var body: [String: Any] = ["fallbackUrl": "https://brand.test/offer"]
+            body["url"] = given
+            bridge.receive(message("ad.click", body), from: main)
+            guard case .click(let url, let fallback, _) = recorder.last else { Issue.record("expected click for \(String(describing: given))"); return }
+            #expect(url.absoluteString == "https://brand.test/offer" && fallback == nil)
+            recorder.events.removeAll()
+        }
+    }
+
     @Test func clickKeepsTheFallbackAndDefaultsTheArea() {
         let (bridge, recorder) = makeBridge()
         shown(bridge)
@@ -726,9 +740,9 @@ struct FrameBridgeTests {
         bridge.exposure(percentage: 1, visibleRectangle: .zero)
         #expect(payloads.isEmpty)
         shown(bridge)
-        bridge.exposure(percentage: 0.5, visibleRectangle: CGRect(x: 1, y: 2, width: 3, height: 4))
+        bridge.exposure(percentage: 0.5, visibleRectangle: CGRect(x: 1, y: 2, width: 3, height: 4))   // a share; the page gets 0–100
         #expect(payloads.count == 1)
-        #expect(payloads[0]["exposedPercentage"] as? Double == 0.5)
+        #expect(payloads[0]["exposedPercentage"] as? Double == 50)
         let rect = payloads[0]["visibleRectangle"] as? [String: CGFloat]
         #expect(rect?["x"] == 1 && rect?["width"] == 3)
     }

@@ -224,11 +224,12 @@ final class FrameBridge: NSObject {
         }
     }
 
-    /// How much of the box is on screen, from the viewability meter.
+    /// How much of the box is on screen, from the viewability meter: `percentage` is a share (0–1), the page
+    /// gets 0–100, as in MRAID's `exposureChange`, which it relays.
     func exposure(percentage: Double, visibleRectangle: CGRect) {
         guard state == .shown else { return }
         send("ad.exposure", [
-            "exposedPercentage": percentage,
+            "exposedPercentage": (percentage * 100).rounded(),
             "visibleRectangle": ["x": visibleRectangle.minX, "y": visibleRectangle.minY, "width": visibleRectangle.width, "height": visibleRectangle.height],
         ])
     }
@@ -314,9 +315,12 @@ final class FrameBridge: NSObject {
             state = .loaded
             onEvent?(.loaded)
         case "ad.click", "ad.open":
-            guard state == .shown, let raw = body["url"] as? String, let url = Self.url(raw) else { return }
+            guard state == .shown else { return }
+            // A click whose `url` is missing or unusable but whose `fallbackUrl` is good opens the fallback.
+            let given = (body["url"] as? String).flatMap(Self.url)
             let fallback = type == "ad.click" ? (body["fallbackUrl"] as? String).flatMap(Self.url) : nil
-            guard let target = Self.target(url, fallback: fallback) else {
+            guard let url = given ?? fallback else { return }
+            guard let target = Self.target(url, fallback: given == nil ? nil : fallback) else {
                 Logger.warning("frame \(adId.prefix(8)): \(type) to \(Logger.describe(url)) dropped, scheme refused")
                 return
             }

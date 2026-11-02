@@ -226,6 +226,9 @@ struct ErrorReporterTests {
         #expect(process["adId"] as? String == "o-er-t" && process["sessionId"] as? String == ads.sessionId)
         let creative = try #require(reports("ad.creative_failed").first)
         #expect(creative["stage"] as? String == "load" && creative["recovery"] as? String == "ad_dropped_before_show", "failed while waiting to be shown")
+        // The history names the reason as both SDKs write it, the code as a key of its own.
+        let invalidated = DebugReporter.shared.recentHistory().last { $0.name == "ad.invalidated" && $0.adId == "p-er-e" }?.state
+        #expect(invalidated?["reason"]?.description == "creativeFailed" && invalidated?["code"]?.description == "405", "\(String(describing: invalidated))")
     }
 
     @Test func aPageThatBreaksTheMessageContractIsReportedOncePerAd() async throws {

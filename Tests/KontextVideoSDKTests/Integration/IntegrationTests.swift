@@ -56,7 +56,7 @@ struct IntegrationTests {
         let impression = harness.server.beacons.first { $0.adId == "img-pause" && $0.event == "impression" }
         #expect(impression?.query["cph"] == "00:00:03.250", "the content playhead at the impression")
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double
-        #expect(exposure == 1, "the page heard ad.exposure")
+        #expect(exposure == 100, "the page heard ad.exposure, in percent")
 
         ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])

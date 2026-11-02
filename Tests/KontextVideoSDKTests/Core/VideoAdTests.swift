@@ -442,56 +442,6 @@ struct VideoAdTests {
         ad.dismiss()
     }
 
-    @Test func aClickThroughWithTheFireIdMacroOpensWithTheClickBeaconsFireId() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p14b"))
-        var opened: [URL] = []
-        Environment.openURL = { url, completion in opened.append(url); completion(true) }
-        try ad.show(in: harness.player.view)
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "https://ads.test/redirect?fid=[KONTEXT_FIREID]&cb=[CACHEBUSTING]"])
-        _ = await beacons()
-        let click = try #require(harness.server.beacons.first { $0.event == "click" })
-        let fid = try #require(click.query["fid"])
-        #expect(opened.count == 1 && opened[0].query?.contains("fid=\(fid)") == true, "one occurrence, the redirect and the beacon: \(opened)")
-        #expect(opened[0].absoluteString.contains("[") == false && opened[0].absoluteString.contains("%25") == false, "macros filled, nothing re-encoded")
-    }
-
-    @Test func clickOpensTheURLFiresClickAndTellsTheDelegate() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p14"))
-        var opened: [URL] = []
-        Environment.openURL = { url, completion in opened.append(url); completion(true) }
-        try ad.show(in: harness.player.view)
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "https://brand.test/offer", "area": "cta"])
-        #expect(delegate.clicks == [VideoAd.Click(area: .other("cta"))], "where the viewer tapped; the URL is the SDK's to open")
-        #expect(opened.map(\.absoluteString) == ["https://brand.test/offer"])
-        #expect(await beacons().contains("click"))
-        #expect(ad.hasEnded == false, "a click does not end the ad")
-    }
-
-    @Test func clickFallsBackWhenTheDeepLinkCannotOpen() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p15"))
-        var opened: [String] = []
-        Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(url.scheme == "https") }
-        try ad.show(in: harness.player.view)
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "brandapp://offer", "fallbackUrl": "https://brand.test/offer"])
-        #expect(opened == ["brandapp://offer", "https://brand.test/offer"])
-    }
-
-    @Test func aRefusedClickOpensItsWebFallbackInstead() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p15b"))
-        var opened: [String] = []
-        Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(true) }
-        try ad.show(in: harness.player.view)
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "tel:+15555550100", "fallbackUrl": "https://brand.test/offer"])
-        #expect(opened == ["https://brand.test/offer"], "a call is never placed from an ad")
-        #expect(delegate.clicks.count == 1)
-        let fired = await beacons()
-        #expect(fired.contains("click"))
-    }
-
     @Test func adChoicesOpensWithoutAClickAndFiresIconClick() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16"))
         var opened: [URL] = []
@@ -665,19 +615,6 @@ struct VideoAdTests {
         send(ad, "ad.close", ["reason": "close"])
         #expect(await waitUntil { delegate.endReasons == [.closed] }, "the ✕ is .closed in every format; isCompleted says the video was watched")
         #expect(ad.isCompleted)
-    }
-
-    @Test func endCardClickUsesTheEndCardsEntry() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i6"))
-        Environment.openURL = { _, completion in completion(true) }
-        try presentLinear(ad)
-        send(ad, "video.start", ["playhead": 0])
-        send(ad, "video.complete", ["playhead": 10_000])
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "https://brand.test", "area": "endCard"])
-        let fired = await beacons()
-        #expect(fired.contains("click(endCard)"))
-        #expect(!fired.contains("click"), "the creative's own click entry stays unfired")
     }
 
     @Test func skipEndsWithSkipped() async throws {

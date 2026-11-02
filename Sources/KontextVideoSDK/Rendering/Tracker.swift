@@ -59,6 +59,11 @@ final class Tracker {
         return fireId
     }
 
+    /// Whether the ad has any entry named `event` for `part`.
+    func has(_ event: String, part: String?) -> Bool {
+        entries.contains { $0.event == event && $0.part == part }
+    }
+
     private func send(_ url: URL, event: String, part: String?) {
         var request = URLRequest(url: url)
         request.timeoutInterval = 10

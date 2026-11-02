@@ -58,13 +58,15 @@ enum AdPlacement {
     }
 
     /// Whether the viewer could see `view`: in a window (or a window itself), with an area, and neither it,
-    /// an ancestor nor the window hidden or transparent. What covers it is not known here; the meter measures
-    /// that once the ad is shown.
+    /// an ancestor nor the window hidden or transparent; transparency multiplies along the chain, as in the
+    /// meter. What covers it is not known here; the meter measures that once the ad is shown.
     static func canBeSeen(_ view: UIView) -> Bool {
         guard window(of: view) != nil, view.bounds.width > 0, view.bounds.height > 0 else { return false }
+        var opacity: CGFloat = 1
         var node: UIView? = view
         while let current = node {
-            if current.isHidden || current.alpha <= 0.01 { return false }
+            opacity *= current.alpha
+            if current.isHidden || opacity <= 0.01 { return false }
             node = current.superview
         }
         return true

@@ -70,5 +70,17 @@ extension VideoAd {
         /// The creative failed to load, or died while the ad waited to be shown (for example the web
         /// content process was terminated). `code` is the VAST error code the SDK fired.
         case creativeFailed(code: Int)
+
+        /// The reason in an error report's history, as both SDKs write it: the case name, and `code` as a
+        /// key of its own.
+        var reportState: [String: DebugReporter.Value] {
+            switch self {
+            case .expired: ["reason": .string("expired")]
+            case .rejected: ["reason": .string("rejected")]
+            case .destroyed: ["reason": .string("destroyed")]
+            case .contentChanged: ["reason": .string("contentChanged")]
+            case .creativeFailed(let code): ["reason": .string("creativeFailed"), "code": .number(Double(code))]
+            }
+        }
     }
 }
