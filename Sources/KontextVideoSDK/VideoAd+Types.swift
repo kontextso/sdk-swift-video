@@ -63,6 +63,10 @@ extension VideoAd {
         /// The `VideoAds` was destroyed, or an ads response switched the SDK off. Read here only: the calls
         /// throw `VideoAdError.destroyed` (or `disabled(reason:)`), never `invalidated(.destroyed)`.
         case destroyed
+        /// An overlay or pause ad, at `show`: its episode no longer plays in the tracked player. Another
+        /// `VideoAds` tracks that player now, or the `AVPlayer` moved to another item than the one it played
+        /// at `track`. Shown, the ad would be counted for its own episode over another one.
+        case contentChanged
         /// The creative failed to load, or died while the ad waited to be shown (for example the web
         /// content process was terminated). `code` is the VAST error code the SDK fired.
         case creativeFailed(code: Int)

@@ -406,7 +406,7 @@ struct VideoAdContentTests {
     @Test func anOverlaysDidEndThatDestroysTheIncomingAdsOwnerStopsItsShow() async throws {
         ContentPlayback.tickInterval = 30
         let (overlay, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-re1"))
-        let (pause, pauseDelegate, pauseOwner) = try await makeAd(Fixtures.ad(id: "p-c-re1"))
+        let (pause, pauseDelegate, pauseOwner) = try await makeAd(Fixtures.ad(id: "p-c-re1")) { $0.track(TestPlayer()) }   // a player is one VideoAds's
         let hook = EndHook()
         hook.onEnd = { pauseOwner.destroy() }
         overlay.delegate = hook
@@ -436,7 +436,7 @@ struct VideoAdContentTests {
     @Test func anAdShownAndEndedInsideTheHandoverIsNotReservedAgain() async throws {
         ContentPlayback.tickInterval = 30
         let (overlay, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-re3"))
-        let (pause, pauseDelegate, owner) = try await makeAd(Fixtures.ad(id: "p-c-re3"))
+        let (pause, pauseDelegate, owner) = try await makeAd(Fixtures.ad(id: "p-c-re3")) { $0.track(TestPlayer()) }   // a player is one VideoAds's
         let hook = EndHook()
         hook.onEnd = {
             try? pause.show(in: self.view)
@@ -500,6 +500,8 @@ struct VideoAdContentTests {
         try #require(Self.wait(for: posted))
         player.replaceCurrentItem(with: AVPlayerItem(url: Self.movie))
         #expect(firstDelegate.endReasons == [.interrupted])
+        // Another item is another episode: its ads come once it is tracked for it.
+        ads.track(player)
         let (second, delegate) = try loadedAd(Fixtures.overlayAd(id: "o-c-item2"), of: ads)
         player.play()
         try second.show(in: view)

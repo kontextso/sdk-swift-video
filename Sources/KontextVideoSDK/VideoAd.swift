@@ -241,7 +241,8 @@ public final class VideoAd {
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
     /// Throws when presentation cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
-    /// `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`, `presenterUnavailable`
+    /// `alreadyShown`, `anotherAdShowing`, `invalidated` (`.contentChanged` too: show an episode's ads only in
+    /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `presenterUnavailable`
     /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent;
     /// or the app is not active or the view's window scene is not in the foreground and active: the content
     /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
@@ -406,6 +407,12 @@ public final class VideoAd {
         let contentPaused = runAppCodeBeforeShow()
         if wasShown { throw VideoAdError.alreadyShown }
         try checkUsable()
+        // An episode's ads only in that episode: one requested for it is counted for it.
+        if format != .linear, owner?.playback.playsAnotherEpisode == true {
+            Logger.warning("ad \(id.prefix(8)): cannot show, its episode no longer plays in the tracked player; ended as contentChanged")
+            invalidate(.contentChanged)
+            throw VideoAdError.invalidated(.contentChanged)
+        }
         if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
         guard isLoaded else { throw VideoAdError.notLoaded }
         if contentPaused { throw VideoAdError.contentPaused }

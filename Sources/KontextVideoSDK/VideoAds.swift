@@ -310,6 +310,14 @@ public final class VideoAds {
     /// `AVPlayer` reused across episodes, call it when this episode starts playing in it, not at creation:
     /// before that the player's time belongs to the previous episode. Without a player the playhead is 0
     /// (right for a prefetch), an overlay runs on its own time and a pause ad stays until it is closed or dismissed.
+    ///
+    /// Show an episode's ads only in that episode: an ad requested for it is counted for it. A player belongs
+    /// to one `VideoAds` at a time: tracking it in another one lets go of it here, as if this one had never
+    /// tracked a player (an overlay of it on screen ends as `.interrupted`), and from then on its overlay and
+    /// pause ads throw `invalidated(.contentChanged)` at `show`, until this one tracks a player again. So do they
+    /// once the `AVPlayer` moved to another item than the one it played at `track` (or, with none then, the
+    /// first it got): another episode, or a looper's next loop. Linear ads are not checked: they cover the
+    /// content. Without a tracked player nothing can be checked.
     public func track(_ player: AVPlayer) {
         guard !isDestroyed else { return }   // destroy() is terminal: nothing would release a new binding
         playback.track(player)
@@ -321,6 +329,11 @@ public final class VideoAds {
     /// that owns it (your player model), makes a cycle: both stay alive, with the ads they hold and their
     /// WebViews, until `destroy()`. Call `destroy()` when the viewer leaves the video, as always, or keep
     /// the reference out of the adapter (or weak).
+    ///
+    /// Show an episode's ads only in that episode, as with an `AVPlayer`: the same object tracked by another
+    /// `VideoAds` is let go of here, and this one's overlay and pause ads then throw
+    /// `invalidated(.contentChanged)` at `show`. The SDK cannot see a custom player's item, so a wrapper reused
+    /// across episodes is not checked for that: track it from each episode's `VideoAds` as it starts.
     public func track(_ player: some VideoAdsPlayer) {
         guard !isDestroyed else { return }
         playback.track(player)

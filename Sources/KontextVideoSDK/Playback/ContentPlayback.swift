@@ -123,6 +123,22 @@ final class ContentPlayback {
     /// for telling fast playback from a seek.
     private var readRate: (() -> Double?)?
     private weak var avPlayer: AVPlayer?
+    /// The `AVPlayer`'s item at `track`, or the first it got after: this episode. Weak: an item the app let go
+    /// of is not this episode playing.
+    private weak var episodeItem: AVPlayerItem?
+    private var hasEpisodeItem = false
+    /// Another `VideoAds` tracks this one's player now: this episode no longer plays in it, until `track` again.
+    private(set) var lostPlayer = false
+
+    /// Whether the tracked content is no longer this `VideoAds`'s episode: another `VideoAds` took its player,
+    /// or the `AVPlayer` moved to another item than this episode's. An overlay or pause ad shown now would be
+    /// counted for this episode over another one. Without a player, or for a custom player's item, nothing
+    /// can tell: `false`.
+    var playsAnotherEpisode: Bool {
+        if lostPlayer { return true }
+        guard hasEpisodeItem, let avPlayer else { return false }
+        return episodeItem == nil || avPlayer.currentItem !== episodeItem
+    }
     /// The tracked `VideoAdsPlayer`, kept alive until `stop()`.
     private var customPlayer: (any VideoAdsPlayer)?
     private var observations: [NSKeyValueObservation] = []
@@ -198,6 +214,7 @@ final class ContentPlayback {
                                          playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.itemEnded != true } },
                                          rate: { [weak player] in player.map { Double($0.rate) } }) else { return }
         avPlayer = player
+        adoptEpisodeItem(player.currentItem)
         let generation = self.generation
         observations = [
             player.observe(\.rate, options: [.new]) { [weak self] _, change in
@@ -210,6 +227,7 @@ final class ContentPlayback {
                 let playback = self
                 Self.onMain {
                     guard let playback, playback.generation == generation else { return }
+                    playback.adoptEpisodeItem(playback.avPlayer?.currentItem)
                     playback.observeItem(playback.avPlayer?.currentItem)
                     playback.deliver(.contentChanged, from: generation)
                 }
@@ -217,6 +235,9 @@ final class ContentPlayback {
         ]
         observeItem(player.currentItem)
         finishBinding(overlayWasShown: overlayWasShown)
+        // The overlay's `didEnd` there is app code: a `track` or `destroy()` in it won.
+        guard generation == self.generation else { return }
+        claim(player)
     }
 
     func track(_ player: some VideoAdsPlayer) {
@@ -246,6 +267,8 @@ final class ContentPlayback {
         }
         self.subscriptions = subscriptions
         finishBinding(overlayWasShown: overlayWasShown)
+        guard generation == self.generation else { return }
+        claim(player)
     }
 
     /// A playhead and no playing state: an overlay runs on its own time. For the tests, which read the
@@ -272,11 +295,51 @@ final class ContentPlayback {
         readPlaying = nil
         readRate = nil
         avPlayer = nil
+        episodeItem = nil
+        hasEpisodeItem = false
+        lostPlayer = false
+        Self.owners.removeAll { $0.playback === self || $0.playback == nil }
         itemEnded = false
         isTracking = false
         isTicking = false
         // Last, with every property settled: a `track` or `destroy()` in the cancellation finds a stopped playback.
         withExtendedLifetime(customPlayer) { subscriptions.forEach { $0.cancel() } }
+    }
+
+    /// Which playback tracks which player: a player belongs to one `VideoAds` at a time.
+    private struct Owner {
+        weak var playback: ContentPlayback?
+        weak var player: AnyObject?
+    }
+
+    private static var owners: [Owner] = []
+
+    /// The player is this playback's now: another one that tracks it lets go, as if it had never tracked one,
+    /// except that its overlay and pause ads can no longer be shown (`playsAnotherEpisode`).
+    private func claim(_ player: AnyObject) {
+        Self.owners.removeAll { $0.playback == nil || $0.player == nil || $0.playback === self }
+        let others = Self.owners.filter { $0.player === player }.compactMap(\.playback)
+        Self.owners.removeAll { $0.player === player }
+        Self.owners.append(Owner(playback: self, player: player))
+        for other in others { other.losePlayer() }
+    }
+
+    /// Another `VideoAds` took the player. An overlay or pause ad on screen hears `contentChanged` first, as
+    /// for another item: an overlay ends. Its `didEnd` is app code: a `track` there wins.
+    private func losePlayer() {
+        let generation = self.generation
+        if isFollowerShown() { deliver(.contentChanged, from: generation) }
+        guard generation == self.generation else { return }
+        Logger.info("the player is tracked by another VideoAds now; this one no longer tracks it")
+        stop()
+        lostPlayer = true
+    }
+
+    /// The first item seen from `track` on is this episode's: one there at `track`, or the first the player got.
+    private func adoptEpisodeItem(_ item: AVPlayerItem?) {
+        guard !hasEpisodeItem, let item else { return }
+        episodeItem = item
+        hasEpisodeItem = true
     }
 
     /// The end and the time jumps of the item the player has now; the previous item's go, and its callbacks
