@@ -21,6 +21,7 @@ sdk-swift-video/
 │   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the page's events, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
+│   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
@@ -47,6 +48,9 @@ is what happens on screen (the Notion hub's "Rendering" section), `Support/` is 
 
 ```bash
 xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
+
+# The API reference: the doc comments and the DocC catalog (KontextVideoSDK.docc); it must build without warnings
+xcodebuild docbuild -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
 ```
 
 ## Running the example
@@ -63,7 +67,7 @@ pnpm install && pnpm dev
 xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
-The home screen lists three videos, one per format. Opening one plays a bundled clip full screen, prepares that
+The home screen lists four videos: an inline and a full-screen pause ad, an overlay and a linear ad. Opening one plays a bundled clip full screen, prepares that
 format's ad (`format` then `load`). 3 s in, a linear ad shows over the screen or an overlay inside the player; a
 pause ad waits until the viewer taps to pause, a tap resumes, and the next pause gets its own ad. Leaving the screen
 calls `destroy()`. The whole integration is `Example/PlayerScreen.swift`.
@@ -151,7 +155,7 @@ Rules the suites follow:
   `Support/Environment.swift`, and production never sets them.
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
 - Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the ad clock. A test that sleeps to
-  let something expire is flaky on a slow runner and goes against the suite's budget, about 60 s in all.
+  let something expire is flaky on a slow runner and goes against the suite's budget, about 2 minutes in all.
 - The stub server routes each session's requests to the server that created it, so a beacon a previous test's
   `VideoAds` fires from `deinit` never lands in the next test's recordings.
 
@@ -177,7 +181,17 @@ the example app against the mock covers the real presentation and dismissal.
 The Kotlin twin is [sdk-kotlin-video](https://github.com/kontextso/sdk-kotlin-video): the same formats, the same
 lifecycle (the Notion page *SDK Lifecycle*), the same wire contract, and file-structure parity where the languages
 allow it (`VideoAds.swift` / `VideoAds.kt`, `VideoAd.swift` / `VideoAd.kt`, ...). When adding or renaming a public
-type, match the Kotlin counterpart, or leave a comment saying why not. The server both talk to is mocked by
+type, match the Kotlin counterpart, or leave a comment saying why not.
+
+Where the two differ on purpose, each language's convention wins:
+
+- Initialisms: Swift cases them as Swift does (`variantID`, `lastRequestID`, `gppSID`), Kotlin keeps `Id`.
+- `dismiss()` does not throw (Kotlin drops its checked exception the same way); `reject(_:)` does not throw
+  in Swift, where an ad already ended or shown makes it a no-op with a console line.
+- The custom player: Swift's `VideoAdsPlayer` reports through optional publishers (`isPlayingPublisher`,
+  `seekPublisher`, `contentChangedPublisher`) and `playbackSpeed`; Kotlin's through a `Listener`
+  (`onIsPlayingChanged`, `onSeek`, `onContentChanged`) and `playbackSpeed`. Same meaning, member for member.
+- The public value types are plain values in Swift, not `Codable`: the wire goes through `Payloads/AppInputs.swift`. The server both talk to is mocked by
 `sdk-video-mock-server` (internal).
 
 ## KontextKit dependency

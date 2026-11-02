@@ -30,7 +30,7 @@ simulator. Pick any available iPhone by name (`xcrun simctl list devices availab
 # Build
 xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
 
-# Tests: all (about 60 s), or one suite (suites under SerialSuites need that prefix)
+# Tests: all (about 2 min locally, 4 on CI), or one suite (suites under SerialSuites need that prefix)
 xcodebuild test -scheme KontextVideoSDK -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
 xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
 xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/DecodingTests
@@ -44,8 +44,8 @@ swiftlint analyze --strict --compiler-log-path xcodebuild.log
 
 Check the exit status of `xcodebuild` itself, not of a `grep` piped after it: a red test run must not pass for
 green. CI builds with Xcode 16.4 (iOS 18 SDK), which can warn where a newer local Xcode does not. The example (`Example/`, XcodeGen) talks to
-the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: three videos, one per
-format, each shows its ad 3 s in. See
+the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: four videos (two pause, one
+overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when the viewer pauses. See
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Architecture
@@ -81,7 +81,7 @@ format, each shows its ad 3 s in. See
 - Comments say *why*, in prose; a doc comment on every public declaration. No ticket or PR references.
 - Facts about the device, consent and attribution come from KontextKit; what the SDK needs and KontextKit lacks
   goes into KontextKit, not into a workaround here.
-- Tests: Swift Testing, about 60 s for the whole suite, deterministic: no wall-clock bounds a slow CI runner
+- Tests: Swift Testing, about 2 minutes for the whole suite, deterministic: no wall-clock bounds a slow CI runner
   breaks. Suites touching process-wide state nest
   under `SerialSuites`; expiry moves the clock (`advanceClock(by:)`), never sleeps; beacon expectations use
   `waitUntil`. A new behavior comes with its test, races included.
