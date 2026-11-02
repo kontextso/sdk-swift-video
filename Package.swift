@@ -30,7 +30,11 @@ let package = Package(
         .testTarget(
             name: "KontextVideoSDKTests",
             dependencies: ["KontextVideoSDK"],
-            path: "Tests/KontextVideoSDKTests"
+            path: "Tests/KontextVideoSDKTests",
+            resources: [
+                // The shared malformed-answer corpus, a copy of the video-sdk-corpus repo (its sync.sh writes it).
+                .copy("Corpus"),
+            ]
         ),
     ]
 )

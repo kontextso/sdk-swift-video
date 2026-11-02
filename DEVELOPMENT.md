@@ -141,7 +141,10 @@ Tests/KontextVideoSDKTests/
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
 ├── Network/      the client: transport, status codes, the error body
-├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included)
+├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);
+│                 CorpusTests runs the shared malformed-answer corpus
+├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
+│                 here; its README has the format and how to add a case
 ├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen), support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
