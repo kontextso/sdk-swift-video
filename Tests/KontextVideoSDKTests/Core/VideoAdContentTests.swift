@@ -182,6 +182,19 @@ struct VideoAdContentTests {
         pause.dismiss()
     }
 
+    @Test func aPauseAdEndsWhenTheNextPageOfAFeedTakesThePlayer() async throws {
+        harness.player.isPlaying = false
+        let (pause, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-feed"))
+        try pause.show(in: view)
+        // The next page, still attached in the pager, takes the one shared player and plays it.
+        let next = VideoAds(content: .init(id: "ep-next", language: "en"))
+        owners.all.append(next)
+        next.track(harness.player)
+        harness.player.isPlaying = true
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "its episode is gone from the player")
+        #expect(KontextVideo.shared.adOnScreen == nil, "the next page's ad can show")
+    }
+
     @Test func aPlayingOverlayStillBlocksAnotherAd() async throws {
         let (overlay, _, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-block"))
         let pause = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p-c-block")), owner: ads)

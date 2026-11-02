@@ -131,14 +131,19 @@ extension VideoAd {
     }
 
     /// The tracked player changed or a tick came, for a pause ad on screen: it ends once the content plays
-    /// again after a pause, whoever resumed it.
+    /// again after a pause, whoever resumed it, and at once when its episode is gone from the player: another
+    /// `VideoAds` took the player (the next page of a feed sharing one player) or it plays another item. Shown
+    /// on, it would hold the app's one slot over content it is not for.
     private func pauseContentDidChange(_ change: ContentPlayback.Change) {
         guard pauseFollowsContent, isPresented, !hasEnded, let playback = owner?.playback else { return }
         let playing: Bool
         switch change {
+        case .contentChanged:
+            Logger.info("ad \(id.prefix(8)): the content changed or another VideoAds took the player; the pause ad ends")
+            return end(.interrupted)
         case .playback(isPlaying: let value?): playing = value
         case .contentEnded: playing = false
-        case .playback(isPlaying: nil), .contentChanged, .jumped, .tick: playing = playback.isPlaying
+        case .playback(isPlaying: nil), .jumped, .tick: playing = playback.isPlaying
         }
         endIfContentResumed(playing: playing)
     }
