@@ -201,7 +201,9 @@ struct VideoAdTests {
 
     @Test func showInOnALinearAdThrowsWrongPresentation() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i2"))
+        let assertions = AssertionLog()
         do { try ad.show(in: harness.player.view) } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
+        #expect(assertions.all == ["VideoAd.show(in:) on a linear ad; use show(from:)"], "a programmer error stops a debug build at the call")
         #expect(ad.isReady, "untouched")
     }
 
@@ -922,17 +924,17 @@ struct VideoAdTests {
 
     @Test func showFromOnAPauseAdThrowsWrongPresentation() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p19"))
+        let assertions = AssertionLog()
         do { try ad.show(from: window.root) } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
-        #expect(ad.isReady)
+        #expect(assertions.all == ["VideoAd.show(from:) on a pause ad; use show(in:)"] && ad.isReady)
     }
 
     @Test func dismissOnALinearAdIsAProgrammerErrorAndDoesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i19"))
         try presentLinear(ad)
-        var assertions: [String] = []
-        Environment.assertionFailure = { assertions.append($0) }
+        let assertions = AssertionLog()
         ad.dismiss()
-        #expect(assertions.count == 1, "stops a debug build: \(assertions)")
+        #expect(assertions.all.count == 1, "stops a debug build: \(assertions.all)")
         #expect(delegate.endReasons.isEmpty, "still on screen")
         send(ad, "video.skip", ["playhead": 1000])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })

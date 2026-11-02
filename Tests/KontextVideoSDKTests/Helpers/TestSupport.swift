@@ -24,6 +24,16 @@ final class TestPlayer: VideoAdsPlayer {
     }
 }
 
+/// Records the SDK's programmer-error assertions instead of stopping, from its creation until the next reset.
+@MainActor
+final class AssertionLog {
+    private(set) var all: [String] = []
+
+    init() {
+        Environment.assertionFailure = { [weak self] in self?.all.append($0) }
+    }
+}
+
 extension VideoAds {
     /// A playhead from a closure and no playing state: what the SDK reads at requests and beacons, while an
     /// overlay runs on its own time. Replaces whatever was tracked.

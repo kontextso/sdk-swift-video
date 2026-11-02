@@ -16,6 +16,12 @@ import UIKit
 /// }
 /// ```
 ///
+/// One type serves every format, so `format(_:)` and an auction read the same way for all three; the format
+/// decides how it is shown: `show(in:)` for an overlay or pause ad, `show(from:)` for a linear ad. The
+/// other call is a programmer error, caught at that call: it stops a debug build and throws
+/// `wrongPresentation` in a release build. Code that shows an ad of a format it does not fix switches on
+/// `format`.
+///
 /// ## State
 ///
 /// The public flags move one way and only in these combinations; any other is impossible:
@@ -256,7 +262,7 @@ public final class VideoAd {
     }
 
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
-        guard format != .linear else { throw VideoAdError.wrongPresentation }
+        guard format != .linear else { throw wrongPresentation("show(in:)", use: "show(from:)") }
         try checkShowable()
         guard AdPlacement.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
@@ -318,7 +324,7 @@ public final class VideoAd {
     }
 
     private func showLinear(from viewController: UIViewController?) throws {
-        guard format == .linear else { throw VideoAdError.wrongPresentation }
+        guard format == .linear else { throw wrongPresentation("show(from:)", use: "show(in:)") }
         try checkShowable()
         let presenter: UIViewController
         if let viewController {

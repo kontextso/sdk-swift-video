@@ -64,8 +64,8 @@ public enum VideoAdError: Error, Sendable {
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable
-    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad.
-    /// The ad stays as it was.
+    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad. A
+    /// programmer error: a debug build already stopped on an assertion at the call. The ad stays as it was.
     case wrongPresentation
 }
 
