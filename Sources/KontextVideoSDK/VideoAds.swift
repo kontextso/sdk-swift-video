@@ -302,8 +302,9 @@ public final class VideoAds {
     /// The player this episode plays in. The SDK reads its time for requests and the `[CONTENTPLAYHEAD]`
     /// macro of beacons, and follows its playback for an overlay and a pause ad: an overlay is shown over
     /// playing content only (`show(in:)` throws `contentPaused` otherwise), ends as `.interrupted` when the
-    /// content pauses, ends or the player moves to another item, and its `duration` counts seconds of video; a
-    /// pause ad ends as `.interrupted` when the content plays again after a pause, whoever resumed it (the
+    /// content pauses, ends or the player moves to another item, and its `duration` counts seconds of video
+    /// (a pause in the background, where iOS pauses the player, freezes it instead: it goes on if the content
+    /// plays again within a second of the app's return, and ends as `.interrupted` otherwise); a pause ad ends as `.interrupted` when the content plays again after a pause, whoever resumed it (the
     /// lock screen, Control Center, a headset, PiP or your own code). The SDK observes
     /// the player's `rate` and `currentItem`; it holds the player weakly (the app keeps it) and lets go at `destroy()`, after which `track` does nothing. With one
     /// `AVPlayer` reused across episodes, call it when this episode starts playing in it, not at creation:

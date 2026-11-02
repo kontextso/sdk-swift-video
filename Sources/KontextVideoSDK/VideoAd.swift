@@ -110,6 +110,8 @@ public final class VideoAd {
     private(set) var clock: ActiveTimeClock?
     var contentProgress: ContentProgress?   // an overlay that follows the content: `VideoAd+Content`
     var contentPausedSinceShow = false   // a pause ad that follows the content: `VideoAd+Content`
+    var contentPausedWhileInactive = false   // an overlay frozen by a pause in the background: `VideoAd+Content`
+    var contentRecheck: Task<Void, Never>?   // that overlay's check after its scene came back: `VideoAd+Content`
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
@@ -212,7 +214,8 @@ public final class VideoAd {
     /// three. Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it. The ad follows the
     /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
     /// with `.interrupted`. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
-    /// stops, and a pause ad when the content plays again, both as `.interrupted`.
+    /// stops, and a pause ad when the content plays again, both as `.interrupted`; an overlay whose content
+    /// paused in the background stays until a second after the app's return, and goes on if it plays again.
     ///
     /// `insets` keep an overlay or a pause card clear of your own controls: they add to the view's safe area,
     /// as UIKit's `additionalSafeAreaInsets` do, so `bottom: 80` places a bottom strip 80 points above the

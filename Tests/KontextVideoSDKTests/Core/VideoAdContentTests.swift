@@ -483,6 +483,114 @@ struct VideoAdContentTests {
         try ad.dismiss()
     }
 
+    /// The scene of the test window leaves (the app goes to the background) or comes back.
+    private func setSceneActive(_ active: Bool) throws {
+        let scene = try #require(window.window.windowScene)
+        NotificationCenter.default.post(name: active ? UIScene.didActivateNotification : UIScene.willDeactivateNotification, object: scene)
+    }
+
+    @Test func aPauseInTheBackgroundFreezesTheOverlayAndItGoesOnWhenTheAppPlaysOnReturn() async throws {
+        VideoAd.contentResumeGrace = 0.1
+        defer { VideoAd.contentResumeGrace = 1 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-on", duration: 1000))
+        try ad.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false   // iOS paused the player as the app left
+        ad.contentDidChange(.playback(isPlaying: false))
+        ad.contentDidChange(.tick)
+        await sleepMs(60)   // the ticks read the pause too
+        #expect(delegate.endReasons.isEmpty && view.subviews.count == 1, "frozen, not ended")
+        try setSceneActive(true)
+        harness.player.isPlaying = true   // the app plays the content again on return
+        ad.contentDidChange(.tick)
+        #expect(!ad.contentPausedWhileInactive)
+        await sleepMs(250)   // past the grace
+        #expect(delegate.endReasons.isEmpty)
+        harness.player.playhead = 0.5
+        #expect(await waitUntil { abs((ad.contentProgress?.elapsed ?? 0) - 0.5) < 0.001 }, "the duration counts on")
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playback(isPlaying: false))
+        #expect(delegate.endReasons == [.interrupted], "a pause in the foreground ends it at once, as always")
+    }
+
+    @Test func theCheckAfterTheGraceLetsAnOverlayGoOnOverContentPlayingAgain() async throws {
+        ContentPlayback.tickInterval = 30   // no tick and no publisher: only the check after the grace reads it
+        VideoAd.contentResumeGrace = 0.05
+        defer { VideoAd.contentResumeGrace = 1 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-check"))
+        try ad.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playback(isPlaying: false))
+        try setSceneActive(true)
+        harness.player.isPlaying = true
+        #expect(await waitUntil { !ad.contentPausedWhileInactive && ad.contentRecheck == nil })
+        #expect(delegate.endReasons.isEmpty)
+        ad.contentDidChange(.playback(isPlaying: false))
+        #expect(delegate.endReasons == [.interrupted])
+    }
+
+    @Test func anOverlayStillPausedAfterTheGraceOnReturnEndsAsInterrupted() async throws {
+        VideoAd.contentResumeGrace = 0.3
+        defer { VideoAd.contentResumeGrace = 1 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-off"))
+        try ad.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playback(isPlaying: false))
+        try setSceneActive(true)
+        // Within the grace the pause holds, however the content reports it.
+        ad.contentDidChange(.tick)
+        ad.contentDidChange(.playback(isPlaying: false))
+        #expect(delegate.endReasons.isEmpty)
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "still paused after the grace")
+        #expect(view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+    }
+
+    @Test func aSceneThatLeavesAgainDuringTheGraceKeepsTheOverlayFrozen() async throws {
+        VideoAd.contentResumeGrace = 0.05
+        defer { VideoAd.contentResumeGrace = 1 }
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-again"))
+        try ad.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playback(isPlaying: false))
+        try setSceneActive(true)
+        try setSceneActive(false)
+        await sleepMs(200)
+        #expect(delegate.endReasons.isEmpty && ad.contentPausedWhileInactive)
+        try setSceneActive(true)
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
+    }
+
+    @Test func otherContentChangesInTheBackgroundEndTheOverlayAsBefore() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-other1"))
+        try ad.show(in: view)
+        try setSceneActive(false)
+        ad.contentDidChange(.jumped)
+        #expect(delegate.endReasons.isEmpty, "a jump never ended it")
+        ad.contentDidChange(.contentChanged)
+        #expect(delegate.endReasons == [.interrupted])
+        try setSceneActive(true)
+        let (frozen, frozenDelegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-other2"))
+        try frozen.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        frozen.contentDidChange(.playback(isPlaying: false))
+        frozen.contentDidChange(.contentEnded)
+        #expect(frozenDelegate.endReasons == [.interrupted], "the end of the content ends a frozen overlay too")
+        try setSceneActive(true)
+        let (third, thirdDelegate) = try loadedAd(Fixtures.overlayAd(id: "o-c-bg-other3"), of: ads)
+        harness.player.isPlaying = true
+        try third.show(in: view)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        third.contentDidChange(.playback(isPlaying: false))
+        ads.destroy()
+        #expect(thirdDelegate.endReasons == [.destroyed], "destroy ends a frozen overlay")
+        try setSceneActive(true)
+    }
+
     @Test func fasterPlaybackCountsItsVideoSeconds() {
         let unknown = ContentProgress(duration: 10, at: 0)
         let known = ContentProgress(duration: 100, at: 0)

@@ -96,7 +96,8 @@ extension VideoAd {
         /// was dismissed under a linear ad, the view holding an overlay or pause ad left the window (the
         /// app navigated away without `dismiss()`), or that view became too small for the ad (it shrank or
         /// rotated). A view that left is noticed within about two measuring intervals (0.5 s). For an overlay
-        /// with a player tracked by `track(_:)`, also the content pausing, ending or moving to another item; for a
+        /// with a player tracked by `track(_:)`, also the content pausing (a pause in the background counts
+        /// only if the content is still paused a second after the app's return), ending or moving to another item; for a
         /// pause ad with a tracked player, the content playing again, resumed from anywhere (Resume tapped on
         /// the ad is `.resumed`). The reason alone does not say which: a pause ad ending this way may leave the
         /// content playing or still paused, so check the player before resuming or pausing it.

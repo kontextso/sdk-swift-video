@@ -1,12 +1,21 @@
+import Foundation
+
 /// With a player tracked by `track(_:)`, overlay and pause ads follow the content. An overlay lives only
 /// while the content plays: a pause, the end of the content, another item, another player or a player that
 /// is gone ends it as `.interrupted`; its `duration` counts seconds of video; and it cannot be shown over
-/// paused content. A pause ad lives only while the content is paused: once the content plays again, resumed
-/// from anywhere (the lock screen, Control Center, a headset, PiP, the app's own code), it ends as
-/// `.interrupted`; `.resumed` stays the viewer's Resume on the ad. `.interrupted` has other causes too (the
+/// paused content. A pause while the overlay's scene is not active (the app in the background, where iOS
+/// pauses the player itself and apps often pause their own) does not end it: the overlay freezes, as its
+/// clock does, and once the scene is active again the content has `contentResumeGrace` to play again
+/// before that pause ends it as any other. A pause ad lives only while the content is paused: once the
+/// content plays again, resumed from anywhere (the lock screen, Control Center, a headset, PiP, the app's
+/// own code), it ends as `.interrupted`; `.resumed` stays the viewer's Resume on the ad. `.interrupted` has other causes too (the
 /// view leaving the window, too little room), so the app reads its player's state rather than the reason.
 /// Without a tracked player both run on active time and the app's calls alone.
 extension VideoAd {
+    /// How long, once its scene is active again, an overlay frozen by a pause in the background waits for
+    /// the app to play the content again before the pause ends it. Tests shorten it.
+    static var contentResumeGrace: TimeInterval = 1
+
     /// This overlay follows the content: its `VideoAds` tracks a player, alive or gone.
     var followsContent: Bool { format == .overlay && owner?.playback.isTracking == true }
 
@@ -23,12 +32,14 @@ extension VideoAd {
 
     /// The overlay is on screen: its `duration`, if any, counts from the playhead now, and starts again from
     /// the playhead whenever its scene comes back: video played while it could not be seen counts nothing.
+    /// A pause while the scene was away is checked again once it is back.
     func startFollowingContent() {
-        guard followsContent, let duration, let owner else { return }
-        contentProgress = ContentProgress(duration: duration, at: owner.playback.playhead)
+        guard followsContent, let owner else { return }
+        if let duration { contentProgress = ContentProgress(duration: duration, at: owner.playback.playhead) }
         clock?.onActivate = { [weak self] in
             guard let self, let playback = self.owner?.playback else { return }
             contentProgress?.resync(to: playback.playhead)
+            if contentPausedWhileInactive { recheckContentAfterGrace() }
         }
     }
 
@@ -43,6 +54,7 @@ extension VideoAd {
             end(.interrupted)
             return
         case .playback(isPlaying: false):
+            if freezesOnPause() { return }
             Logger.info("ad \(id.prefix(8)): the content paused; the overlay ends")
             end(.interrupted)
             return
@@ -53,9 +65,17 @@ extension VideoAd {
             break
         }
         guard playback.isPlaying else {
+            if freezesOnPause() { return }
             Logger.info("ad \(id.prefix(8)): the content paused or its player is gone; the overlay ends")
             end(.interrupted)
             return
+        }
+        if contentPausedWhileInactive {
+            // The content plays again: the frozen overlay goes on where it stopped.
+            Logger.info("ad \(id.prefix(8)): the content plays again; the overlay goes on")
+            contentPausedWhileInactive = false
+            contentRecheck?.cancel()
+            contentRecheck = nil
         }
         guard change == .tick, let contentProgress, !hasEnded else { return }
         // Seconds of video while the overlay is seen: not while its scene is inactive.
@@ -63,6 +83,40 @@ extension VideoAd {
             Logger.debug("ad \(id.prefix(8)): overlay duration of \(contentProgress.duration) s of video elapsed")
             isCompleted = true
             end(.completed)
+        }
+    }
+
+    /// A pause while the overlay's scene is not active freezes the overlay instead of ending it: leaving the
+    /// app pauses an `AVPlayer` and, often, the app's own player, and the viewer coming back expects the
+    /// overlay still there. It stays frozen, whatever the content reports, until the content plays again or
+    /// the check after the scene's return. Returns whether the overlay stays. Before its clock exists (the
+    /// view still being attached) a pause ends it as always.
+    private func freezesOnPause() -> Bool {
+        if clock?.isCounting == false, !contentPausedWhileInactive {
+            Logger.info("ad \(id.prefix(8)): the content paused while the scene is not active; the overlay freezes")
+            contentPausedWhileInactive = true
+        }
+        return contentPausedWhileInactive
+    }
+
+    /// The scene is back over an overlay frozen by a pause: the app may be about to play the content again,
+    /// so the pause is read once more after `contentResumeGrace`. Still paused, with the scene still active,
+    /// the overlay ends as on any pause; a scene that left again waits for its next return.
+    private func recheckContentAfterGrace() {
+        contentRecheck?.cancel()
+        contentRecheck = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.contentResumeGrace * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            contentRecheck = nil
+            guard followsContent, !hasEnded, contentPausedWhileInactive, clock?.isCounting == true,
+                  let playback = owner?.playback else { return }
+            contentPausedWhileInactive = false
+            if playback.isPlaying {
+                Logger.info("ad \(id.prefix(8)): the content plays again; the overlay goes on")
+                return
+            }
+            Logger.info("ad \(id.prefix(8)): the content is still paused after the scene came back; the overlay ends")
+            end(.interrupted)
         }
     }
 
