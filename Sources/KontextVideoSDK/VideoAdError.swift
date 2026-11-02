@@ -8,7 +8,7 @@ import Foundation
 /// - Delivered through `videoAd(_:didFail:)`, after a `show` that was accepted: the ad broke on screen
 ///   (`creativeFailed`), or UIKit never presented a linear ad (`presenterUnavailable`). `didEnd(.failed)`
 ///   follows and the ad is over.
-public enum VideoAdError: Error, Sendable {
+public enum VideoAdError: Error, Sendable, Equatable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion; a release build
     /// gets this error instead, and works once `initialize` runs.
     case notInitialized
@@ -23,9 +23,11 @@ public enum VideoAdError: Error, Sendable {
     /// The request succeeded and the server had nothing for this format. Not a failure, and never retried
     /// by the SDK; the app decides when to ask again.
     case noFill(reason: NoFillReason)
-    /// The request failed: no network, a timeout, a server error, an unexpected answer. Thrown only when
-    /// the SDK holds no valid ad for the format; otherwise `format()` returns that one.
-    case request(Error)
+    /// The request failed: its `RequestFailure` says why (no network, a timeout, a server error, an
+    /// unexpected answer). Thrown only when the SDK holds no valid ad for the format; otherwise `format()`
+    /// returns that one. Never retried by the SDK; the app decides when to ask again. The underlying error
+    /// is in the SDK's console log, with the request's id.
+    case request(RequestFailure)
     /// The creative failed. Thrown by `load()` when the frame page failed or did not report `ad.loaded`
     /// within 10 s of active time; delivered through `didFail` when it broke on screen. `code` is the VAST
     /// error code the SDK fired (400 for a video, 500 otherwise, 405 after show, or the page's own).
@@ -125,6 +127,66 @@ extension VideoAdError {
     }
 }
 
+extension VideoAdError {
+    /// Why an ads request failed, in four outcomes an app can act on. Unlike a no-fill, the server's answer
+    /// for the moment is unknown: asking again later may fill.
+    public enum RequestFailure: Sendable, Equatable, CustomStringConvertible {
+        /// The request did not get through: no connection, the connection lost, the server's name or
+        /// address unreachable, a secure connection that failed (often a captive portal). Ask again once
+        /// the device is back online, for example at the next episode or the next pause.
+        case offline
+        /// The server did not answer in time (10 s). The network is slow or the server is busy: ask again
+        /// later, not straight away.
+        case timedOut
+        /// The server answered with an error status: `status` is the HTTP status (5xx, or any other the
+        /// contract does not expect, 4xx included). Ask again later; quote `VideoAds.lastRequestID` to
+        /// Kontext when it repeats.
+        case server(status: Int)
+        /// An answer arrived and the SDK could not use it: not the JSON of the contract, malformed (one bid
+        /// under two formats, for example), cut off or over the size limit. Asking again soon is unlikely
+        /// to help; quote `VideoAds.lastRequestID` to Kontext.
+        case badResponse
+
+        /// From what the request threw: `APIClient`'s errors, and a bare `URLError` the same way. Cancellation
+        /// never reaches the app (only `destroy()` or the release cancels a request, and that throws
+        /// `destroyed`), so a cancelled transfer reads as `offline`. Anything else is a request the SDK
+        /// could not complete as the contract says: `badResponse`.
+        init(_ error: Error) {
+            switch error {
+            case APIError.transport(let urlError): self.init(urlError.code)
+            case APIError.http(let status, _): self = status > 0 ? .server(status: status) : .badResponse
+            case APIError.decoding: self = .badResponse
+            case let urlError as URLError: self.init(urlError.code)
+            default: self = .badResponse
+            }
+        }
+
+        /// A transport failure: an answer that arrived broken is `badResponse`, a timeout `timedOut`, and
+        /// every other way of not getting through `offline`.
+        init(_ code: URLError.Code) {
+            switch code {
+            case .timedOut:
+                self = .timedOut
+            case .badServerResponse, .cannotParseResponse, .cannotDecodeRawData, .cannotDecodeContentData,
+                 .dataLengthExceedsMaximum, .zeroByteResource:
+                self = .badResponse
+            default:
+                self = .offline
+            }
+        }
+
+        /// The case's name, for logs: `offline`, `timedOut`, `server(503)`, `badResponse`.
+        public var description: String {
+            switch self {
+            case .offline: return "offline"
+            case .timedOut: return "timedOut"
+            case .server(let status): return "server(\(status))"
+            case .badResponse: return "badResponse"
+            }
+        }
+    }
+}
+
 extension VideoAdError: CustomStringConvertible, LocalizedError {
     /// A sentence for logs and crash reports: what went wrong and, where it helps, what to do.
     public var description: String {
@@ -139,8 +201,8 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the SDK is disabled by the server (\(reason))"
         case .noFill(let reason):
             return "no fill (\(reason))"
-        case .request(let error):
-            return "request failed: \(error)"
+        case .request(let failure):
+            return "request failed (\(failure))"
         case .creativeFailed(let code):
             return "the creative failed (VAST error \(code))"
         case .alreadyShown:

@@ -32,11 +32,56 @@ struct PublicTypesTests {
             #expect(error.errorDescription == expected)
             #expect("\(error)" == expected, "string interpolation uses the description")
         }
-        struct Underlying: Error, CustomStringConvertible { var description: String { "the server said no" } }
-        let request = VideoAdError.request(Underlying())
-        for text in [request.description, request.errorDescription, "\(request)"] {
-            #expect(text == "request failed: the server said no", "the underlying error is kept: \(String(describing: text))")
+        let requests: [(VideoAdError.RequestFailure, String)] = [
+            (.offline, "request failed (offline)"), (.timedOut, "request failed (timedOut)"),
+            (.server(status: 503), "request failed (server(503))"), (.badResponse, "request failed (badResponse)"),
+        ]
+        for (failure, expected) in requests {
+            let error = VideoAdError.request(failure)
+            #expect(error.description == expected && error.errorDescription == expected && "\(error)" == expected)
         }
+    }
+
+    // MARK: RequestFailure
+
+    @Test func everyTransportFailureMapsToAReason() {
+        let offline: [URLError.Code] = [
+            .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
+            .internationalRoamingOff, .dataNotAllowed, .callIsActive, .secureConnectionFailed, .serverCertificateUntrusted,
+            .appTransportSecurityRequiresSecureConnection, .cancelled, .unknown,
+        ]
+        let badResponse: [URLError.Code] = [
+            .badServerResponse, .cannotParseResponse, .cannotDecodeRawData, .cannotDecodeContentData,
+            .dataLengthExceedsMaximum, .zeroByteResource,
+        ]
+        let cases = offline.map { ($0, VideoAdError.RequestFailure.offline) } + badResponse.map { ($0, .badResponse) } + [(.timedOut, .timedOut)]
+        for (code, reason) in cases {
+            #expect(VideoAdError.RequestFailure(APIError.transport(URLError(code))) == reason, "\(code.rawValue)")
+            #expect(VideoAdError.RequestFailure(URLError(code)) == reason, "a bare URLError, the same: \(code.rawValue)")
+        }
+    }
+
+    @Test func everyStatusIsAServerFailureWithItsStatus() {
+        for status in [400, 404, 410, 429, 500, 502, 503, 504, 302] {
+            #expect(VideoAdError.RequestFailure(APIError.http(status: status, errors: [])) == .server(status: status), "\(status)")
+        }
+        #expect(VideoAdError.RequestFailure(APIError.http(status: 0, errors: [])) == .badResponse, "not an HTTP answer")
+    }
+
+    @Test func anAnswerTheSDKCannotUseIsABadResponse() {
+        let decoding = DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "nope"))
+        #expect(VideoAdError.RequestFailure(APIError.decoding(decoding)) == .badResponse)
+        #expect(VideoAdError.RequestFailure(decoding) == .badResponse, "anything else the request threw")
+        #expect(VideoAdError.RequestFailure(CancellationError()) == .badResponse)
+    }
+
+    @Test func errorsCompareByCaseAndPayload() {
+        #expect(VideoAdError.request(.server(status: 503)) == .request(.server(status: 503)))
+        #expect(VideoAdError.request(.server(status: 503)) != .request(.server(status: 500)))
+        #expect(VideoAdError.request(.offline) != .request(.timedOut))
+        #expect(VideoAdError.noFill(reason: .noAdMatch) == .noFill(reason: .noAdMatch))
+        #expect(VideoAdError.noFill(reason: .noAdMatch) != .request(.offline))
+        #expect(VideoAdError.containerTooSmall(minimum: CGSize(width: 1, height: 2)) == .containerTooSmall(minimum: CGSize(width: 1, height: 2)))
     }
 
     @Test func aMinimumSizeIsDescribedWithoutATrap() {

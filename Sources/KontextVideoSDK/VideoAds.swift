@@ -88,9 +88,10 @@ public final class VideoAds {
     /// (`held`); the server returns those unchanged until they expire, so the same ad (loaded or not) comes
     /// back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
     /// request runs share it (`async let` for several formats at once). A failed request returns the held
-    /// ad when it is still valid. Throws `noFill(reason:)`, `request` (nothing valid held), `destroyed`,
-    /// `disabled(reason:)`, `notInitialized`, `initializationFailed`, or `CancellationError` when the
-    /// calling task is cancelled (the request itself continues).
+    /// ad when it is still valid. Throws `noFill(reason:)`, `request(_:)` (nothing valid held; its
+    /// `RequestFailure` says why), `destroyed`, `disabled(reason:)`, `notInitialized`,
+    /// `initializationFailed`, or `CancellationError` when the calling task is cancelled (the request
+    /// itself continues).
     public func format(_ format: AdFormat) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
@@ -98,14 +99,14 @@ public final class VideoAds {
         let noFill: [AdFormat: VideoAdError.NoFillReason]
         do {
             noFill = try await awaitShared(task)
-        } catch VideoAdError.request(let error) {
+        } catch VideoAdError.request(let failure) {
             // Destroyed or switched off between the failure and this caller's turn: no held ad comes back.
             try checkStillUsable()
             if let held = validHeld(format) {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
             }
-            throw VideoAdError.request(error)
+            throw VideoAdError.request(failure)
         }
         try checkStillUsable()
         if let ad = validHeld(format) { return ad }
@@ -195,7 +196,7 @@ public final class VideoAds {
                 let recovery: ErrorReporter.Recovery = try owner().holdsAds ? .heldAdsKept : .noAd
                 ErrorReporter.shared.report(decoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
                                             sessionId: sessionId, failure: failure, recovery: recovery)
-                throw VideoAdError.request(error)
+                throw VideoAdError.request(VideoAdError.RequestFailure(error))
             }
             return try owner().receive(response, requestId: body.requestId)
         }

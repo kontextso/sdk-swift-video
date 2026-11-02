@@ -17,4 +17,22 @@ struct PublicSurfaceTests {
         case .notInitialized, .initializing, .enabled, .disabled, .failed: break
         }
     }
+
+    @Test func anAppCanTellWhyARequestFailedAndCompareErrors() {
+        // Exhaustive without a default: the app sees every reason, and a new one would be a compile error.
+        func advice(_ failure: VideoAdError.RequestFailure) -> String {
+            switch failure {
+            case .offline: return "when online"
+            case .timedOut: return "later"
+            case .server(let status): return "later (\(status))"
+            case .badResponse: return "report"
+            }
+        }
+        let error: Error = VideoAdError.request(.server(status: 503))
+        guard case VideoAdError.request(let failure)? = error as? VideoAdError else { Issue.record("not a request error"); return }
+        #expect(advice(failure) == "later (503)")
+        #expect(error as? VideoAdError == .request(.server(status: 503)))
+        #expect(VideoAdError.noFill(reason: .noAdMatch) == .noFill(reason: .noAdMatch))
+        #expect(VideoAdError.RequestFailure.offline.description == "offline")
+    }
 }

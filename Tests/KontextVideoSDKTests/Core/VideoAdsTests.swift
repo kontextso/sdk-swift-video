@@ -78,7 +78,7 @@ struct VideoAdsTests {
                 }])
             }
             let error = await error { try await ads.format(.overlay) }
-            guard case .request? = error else { Issue.record("\(order): expected request, got \(String(describing: error))"); continue }
+            #expect(error == .request(.badResponse), "\(order): a malformed answer")
             #expect(try await ads.format(.pause) === held, "\(order): the held ad comes back")
         }
     }
@@ -93,7 +93,7 @@ struct VideoAdsTests {
             // The next answer leaves the held format out (so its ad is kept) and brings the same id under the other.
             harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
             let failure = await error { try await ads.format(askedFormat) }
-            guard case .request? = failure else { Issue.record("\(heldFormat): expected request, got \(String(describing: failure))"); continue }
+            #expect(failure == .request(.badResponse), "\(heldFormat): a malformed answer")
             #expect(held.invalidationReason == nil, "\(heldFormat): the held ad stays")
             #expect(try await ads.format(heldFormat) === held, "\(heldFormat): a malformed answer, the held ad comes back")
             held.reject()
@@ -438,14 +438,14 @@ struct VideoAdsTests {
         harness.server.on("/v2/video/ads", .failure(.timedOut))
         #expect(try await ads.format(.pause) === held)
         let nothing = await error { try await ads.format(.linear) }
-        guard case .request = nothing else { Issue.record("expected request, got \(String(describing: nothing))"); return }
+        #expect(nothing == .request(.timedOut))
     }
 
     @Test func aFailedRequestLeavesNothingBehindAndTheNextCallSendsAFreshOne() async throws {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .failure(.timedOut))
         let failure = await error { try await ads.format(.pause) }
-        guard case .request = failure else { Issue.record("expected request, got \(String(describing: failure))"); return }
+        #expect(failure == .request(.timedOut))
         harness.serve(Fixtures.ad(id: "img-after-failure"))
         #expect(try await ads.format(.pause).id == "img-after-failure", "the failed request is not reused")
         #expect(harness.adsRequests.count == 2)
@@ -456,8 +456,28 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.server.on("/v2/video/ads", .json(Fixtures.errors("invalidRequest"), status: 400))
         let failure = await error { try await ads.format(.pause) }
-        guard case .request = failure else { Issue.record("expected request, got \(String(describing: failure))"); return }
+        #expect(failure == .request(.server(status: 400)))
         #expect(harness.adsRequests.count == 1)
+    }
+
+    /// What the app reads from a failed `format(_:)`, end to end: each kind of failure as its reason.
+    @Test func aFailedRequestSaysWhy() async {
+        let ads = await makeAds()
+        let failures: [(StubServer.Response, VideoAdError.RequestFailure)] = [
+            (.failure(.notConnectedToInternet), .offline),
+            (.failure(.networkConnectionLost), .offline),
+            (.failure(.cannotFindHost), .offline),
+            (.failure(.timedOut), .timedOut),
+            (.empty(503), .server(status: 503)),
+            (.json(Fixtures.errors("invalidRequest"), status: 422), .server(status: 422)),
+            (.json([1, 2]), .badResponse),
+            (StubServer.Response(status: 200, body: Data("<html></html>".utf8)), .badResponse),
+        ]
+        for (response, reason) in failures {
+            harness.server.on("/v2/video/ads", response)
+            let failure = await error { try await ads.format(.pause) }
+            #expect(failure == .request(reason), "\(reason)")
+        }
     }
 
     @Test func anEmptyIdOrLanguageStopsADebugBuildAndBadMetadataDoesNot() async {
