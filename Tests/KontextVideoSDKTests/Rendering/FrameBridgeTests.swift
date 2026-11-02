@@ -273,6 +273,21 @@ struct FrameBridgeTests {
         #expect(given == 403)
     }
 
+    @Test func aPageCodeOutsideTheVASTRangeGoesAs900() {
+        for (sent, expected) in [(0, 900), (-1, 900), (42, 900), (99, 900), (100, 100), (999, 999), (1000, 900), (Int(Int32.max), 900)] {
+            let (bridge, recorder) = makeBridge(isVideo: true)
+            shown(bridge)
+            bridge.receive(message("ad.error", ["code": sent]), from: main)
+            guard case .error(let code) = recorder.last else { Issue.record("expected error for \(sent)"); return }
+            #expect(code == expected, "code \(sent)")
+        }
+        let (huge, hugeRecorder) = makeBridge(isVideo: true)
+        shown(huge)
+        huge.receive(message("ad.error", ["code": 1e300]), from: main)
+        guard case .error(let hugeCode) = hugeRecorder.last else { Issue.record("expected error"); return }
+        #expect(hugeCode == 900)
+    }
+
     @Test func loadTimeoutFailsWithTheGeneralCode() async {
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge(isVideo: true)

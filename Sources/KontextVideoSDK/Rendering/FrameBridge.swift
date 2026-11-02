@@ -339,7 +339,10 @@ final class FrameBridge: NSObject {
             onEvent?(.video(event, playhead: playhead))
         case "ad.error":
             guard state == .loading || state == .loaded || state == .shown else { return }
-            fail(.error(code: (body["code"] as? NSNumber)?.intValue ?? (state == .shown ? 405 : loadErrorCode)), cause: .page)
+            // A VAST error code has three digits; any other code from the page goes as 900, undefined error.
+            let given = (body["code"] as? NSNumber)?.doubleValue
+            let code = given.map { (100...999).contains($0) ? Int($0) : 900 } ?? (state == .shown ? 405 : loadErrorCode)
+            fail(.error(code: code), cause: .page)
         default:
             Logger.debug("frame \(adId.prefix(8)): unknown message \(type) dropped")
         }
