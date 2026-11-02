@@ -162,14 +162,18 @@ final class FrameBridge: NSObject {
         webView.load(URLRequest(url: url))
         loadTimeoutTask = Task { [weak self] in
             let step = min(0.25, Self.loadTimeout)
+            // Active time as it passed, not the step asked for: a tick that fires late counts what it waited.
             var waited: TimeInterval = 0
+            var last = ProcessInfo.processInfo.systemUptime
             while waited < Self.loadTimeout {
                 try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
                 guard !Task.isCancelled else { return }
+                let now = ProcessInfo.processInfo.systemUptime
                 if Environment.isApplicationActive() {
-                    waited += step
+                    waited += now - last
                     if let self, state == .loading, !isParked { parkOffscreen() }
                 }
+                last = now
             }
             guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")

@@ -52,6 +52,38 @@ struct VideoAdLoadingTests {
         return harness.server.beacons.filter { $0.event == event }.map(\.query)
     }
 
+    // MARK: Deferred lifecycle fixes
+
+    @Test func aLoadedAdIsNotReadyOnceTheSDKIsSwitchedOff() async throws {
+        let (ad, _) = try await make(Fixtures.ad(id: "img-off"))
+        try await ad.load()
+        #expect(ad.isReady)
+        KontextVideo.shared.disable(reason: "publisherDisabled")
+        #expect(!ad.isReady, "show would throw disabled, so it is not ready, whichever VideoAds holds it")
+    }
+
+    @Test func anErrorRightAfterLoadedMakesLoadThrowCreativeFailed() async throws {
+        let (ad, _) = try await make(Fixtures.ad(id: "dead-late"))
+        let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+        let loading = Task { try await ad.load() }
+        #expect(await waitUntil { ad.loadedBridge?.state == .loading })
+        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["adId": ad.id, "type": "ad.error", "code": 405], from: sender)
+        for failure in [await error { try await loading.value }, await error { try await ad.load() }] {
+            guard case .creativeFailed(let code)? = failure else { Issue.record("expected creativeFailed, got \(String(describing: failure))"); continue }
+            #expect(code == 405)
+        }
+    }
+
+    @Test func loadOnAShownAdReturnsWhateverItsExpiry() async throws {
+        let (ad, _) = try await make(Fixtures.ad(id: "img-shown"))
+        try await ad.load()
+        try ad.show(in: harness.player.view)
+        advanceClock(by: 3600)
+        try await ad.load()
+        ad.dismiss()
+    }
+
     // MARK: Facts and load
 
     @Test func anAdGivesTheFactsAndRendersNothing() async throws {

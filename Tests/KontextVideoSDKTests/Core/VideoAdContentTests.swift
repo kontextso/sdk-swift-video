@@ -84,6 +84,16 @@ struct VideoAdContentTests {
         #expect(KontextVideo.shared.adOnScreen == nil)
     }
 
+    @Test func theFirstTrackWhileAnOverlayIsUpLeavesItOnScreen() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-late")) { _ in }
+        try ad.show(in: view)
+        ads.track(harness.player)   // a player made after the overlay went up
+        await sleepMs(100)
+        #expect(delegate.endReasons.isEmpty, "only a player replacing another hands the overlay over")
+        ads.track(TestPlayer())
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "another player: the overlay ends")
+    }
+
     @Test func aPublisherEndsTheOverlayWithoutWaitingForATick() async throws {
         ContentPlayback.tickInterval = 30
         let player = PublishingPlayer()

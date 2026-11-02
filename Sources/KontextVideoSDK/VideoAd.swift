@@ -62,11 +62,12 @@ public final class VideoAd {
     /// The page reported the creative ready: `load()` finished.
     public private(set) var isLoaded = false
 
-    /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated.
+    /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated, and
+    /// the server has not switched the SDK off.
     /// A hint for "show or load" decisions, not the authority: the box is measured only at `show`, and
     /// `show` throws when it cannot begin.
     public var isReady: Bool {
-        isLoaded && !wasShown && invalidationReason == nil && !isExpired
+        isLoaded && !wasShown && invalidationReason == nil && !isExpired && KontextVideo.shared.disabledReason == nil
     }
 
     /// Why the ad ended before it was shown, once it did; `load()` and `show` throw it.
@@ -204,10 +205,22 @@ public final class VideoAd {
     /// `invalidated(.rejected)` after `reject()`, `destroyed`, `disabled(reason:)`, or `CancellationError`
     /// when the calling task is cancelled (the load itself continues).
     public func load() async throws {
-        try checkUsable()
+        // Shown already: the creative was loaded, and its expiry no longer matters.
+        if wasShown { return }
+        try checkLoadable()
         if isLoaded, loading == nil { return }
         let task = loading ?? startLoading()
         try await awaitShared(task)
+    }
+
+    /// `checkUsable` as `load()` reports it: a creative that failed is `creativeFailed(code:)`, whenever it
+    /// failed, never `invalidated(.creativeFailed)` (an `ad.error` right after `ad.loaded` included).
+    private func checkLoadable() throws {
+        do {
+            try checkUsable()
+        } catch VideoAdError.invalidated(.creativeFailed(let code)) {
+            throw VideoAdError.creativeFailed(code: code)
+        }
     }
 
     /// The app does not use the ad: the SDK sends the `notUsed` beacon (the server tells the DSP), drops the
@@ -265,11 +278,11 @@ public final class VideoAd {
                 throw VideoAdError.creativeFailed(code: code)
             } catch {
                 // The ad ended meanwhile: say why in the order the app expects (destroyed, disabled, rejected, ...).
-                try checkUsable()
+                try checkLoadable()
                 throw error
             }
-            // Expired while the page loaded: the result is dropped.
-            try checkUsable()
+            // Expired while the page loaded, or failed right after it: the result is dropped.
+            try checkLoadable()
             let durationMs = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
             Logger.info("\(format) ad \(id.prefix(8)): ready in \(durationMs) ms")
             DebugReporter.shared.event("ad.loaded", adId: id, state: ["durationMs": .number(Double(durationMs))])
@@ -289,7 +302,9 @@ public final class VideoAd {
     /// or the app is not active or the view's window scene is not in the foreground and active: the content
     /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
     /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
-    /// three. Succeeds once the ad is on screen; from then until `didEnd` the SDK retains it. The ad follows the
+    /// three. Otherwise `show` was accepted: the ad is on screen, or, if code of yours that UIKit or the player
+    /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`); from `show` until `didEnd`
+    /// the SDK retains it. The ad follows the
     /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
     /// with `.interrupted`. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
     /// stops, and a pause ad when the content plays again, both as `.interrupted`; an overlay whose content
@@ -363,7 +378,9 @@ public final class VideoAd {
     /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,
     /// `presenterUnavailable` (the controller cannot present, or the app or its window scene is not in the
     /// foreground and active; the ad stays ready: try again once the app is back, or pass the right
-    /// controller). Only the SDK dismisses it: the video completing, a skip, a close, an error, or an
+    /// controller). Otherwise `show` was accepted: the ad is being presented, or, if code of yours that UIKit
+    /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`). Only the SDK dismisses it:
+    /// the video completing, a skip, a close, an error, or an
     /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
         try withContentPlayhead { try showLinear(from: viewController) }
@@ -694,14 +711,7 @@ public final class VideoAd {
                 invalidate(.creativeFailed(code: code))
             }
         case .click(let url, let fallbackUrl, let area):
-            Logger.info("ad \(id.prefix(8)): click (\(area)) \(Logger.describe(url))")
-            // The end card selects its own `click` entries; anything else, and an end-card click on an ad without
-            // them (an overlay or pause ad), is the creative's: every accepted click is counted.
-            // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
-            let fireId = tracker.fire("click", part: area == .endCard && tracker.has("click", part: "endCard") ? "endCard" : nil)
-            openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
-            guard !hasEnded else { return }
-            delegate?.videoAd(self, didClick: Click(area: area))
+            click(url, fallback: fallbackUrl, area: area)
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(Logger.describe(url))")
             if purpose == "adChoices" {
@@ -721,6 +731,7 @@ public final class VideoAd {
             } else {
                 switch reason {
                 case .complete:
+                    isCompleted = true
                     end(.completed)
                 case .resume:
                     tracker.fire("close")

@@ -120,6 +120,8 @@ final class ContentPlayback {
     var isFollowerShown: () -> Bool = { false }
     /// `track` was called and `stop()` was not since: a player was given, alive or not.
     private(set) var isTracking = false
+    /// A binding is stopping the player it replaces: a `track` from that player's cancellation replaces it too.
+    private var isReplacing = false
     /// Which binding is current; a callback from an older one is dropped.
     private var generation = 0
     /// Which item of an `AVPlayer` its item callbacks belong to; one from an item before is dropped.
@@ -206,7 +208,13 @@ final class ContentPlayback {
     /// the playback itself: that call won.
     private func bind(time: @escaping () -> TimeInterval?, playing: @escaping () -> Bool?, rate: @escaping () -> Double? = { nil }) -> Bool? {
         let expected = generation + 1
+        // Only a player that replaces another hands the overlay over: the first `track` while an overlay runs on
+        // its own time (a player made late) leaves it on screen, following the content from here.
+        // A `track` from the old player's cancellation, inside `stop()`, replaces it too.
+        let replacesPlayer = isTracking || isReplacing
+        isReplacing = replacesPlayer
         stop()
+        isReplacing = false
         // The old subscription's cancellation is app code: a `track` or `destroy()` there won, and this binding stops.
         guard generation == expected else { return nil }
         // Asked of the ad on screen, not of the ticks: a `track` nested in the cancellation runs after `stop()`
@@ -217,7 +225,7 @@ final class ContentPlayback {
         readPlaying = playing
         readRate = rate
         isTicking = overlayShown
-        return overlayShown
+        return overlayShown && replacesPlayer
     }
 
     /// The binding is complete: an overlay that followed the old player ends. Last, because its `didEnd` is

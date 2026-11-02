@@ -617,6 +617,13 @@ struct VideoAdTests {
         #expect(ad.isCompleted)
     }
 
+    @Test func aPageThatEndsItselfAsCompleteIsCompleted() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-self"))
+        try ad.show(in: harness.player.view)
+        send(ad, "ad.close", ["reason": "complete"])
+        #expect(delegate.endReasons == [.completed] && ad.isCompleted)
+    }
+
     @Test func skipEndsWithSkipped() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i7"))
         try presentLinear(ad)

@@ -39,6 +39,13 @@ In progress.
 * Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device facts sent as ad inputs (Other Data Types) are declared apart from error and debug reports (Other Diagnostic Data); device ids, ad data and diagnostics are linked (the install id joins them). Nothing is declared as tracking: no Kontext server uses the data for tracking yet. Publishers' App Store privacy labels should be checked against it.
 
 ### Fixed
+* An overlay or pause ad out of sight for a second while its scene is active (a feed cell swiped away, a view moved off screen) ends `.interrupted` and frees the app's slot; `overlayViewDuration` and an overlay's `duration` count only time the ad is seen.
+* `isReady` is `false` while the server has switched the SDK off, for every `VideoAds`.
+* `load()` throws `creativeFailed(code:)` for a creative that failed, also when the page's error came right after `ad.loaded`; on an ad already shown it returns at once.
+* The first `track(_:)` while an overlay is on screen leaves it there; only a player replacing another ends it.
+* A page that ends itself after its video completed (`reason: complete`) leaves `isCompleted == true`.
+* An ads request lists as `held` only the ads still unshown and valid when it leaves, not when it was started (before `/config` or the ATT dialog).
+* The 10 s creative load timeout counts the active time that actually passed.
 * `ad.exposure` tells the page `exposedPercentage` in 0–100, as MRAID's `exposureChange` does, not 0–1.
 * No viewability verdict (`viewable`, `notViewable`, `viewUndetermined`) for an ad that never had an impression, such as a video overlay nobody started.
 * Transparency multiplies along the view's ancestors, for `show` and for viewability: three ancestors at 0.1 leave the ad unseen.

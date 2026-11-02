@@ -122,6 +122,12 @@ public final class VideoAds {
         return nil
     }
 
+    /// The ids of the valid unshown ads, by format; expired ones leave silently first.
+    private func validHeldIds() -> [String] {
+        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
+        return AdFormat.allCases.compactMap { state.ads[$0]?.id }
+    }
+
     /// Whether a valid unshown ad is held: what a failed request leaves the app with (an expired one is not).
     private var holdsAds: Bool {
         state.ads.values.contains { !$0.descriptor.isExpired }
@@ -135,11 +141,9 @@ public final class VideoAds {
 
     /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()` or the
     /// `VideoAds`' release. It holds its owner weakly and only between its waits, so releasing the object
-    /// mid-request reaches `deinit`, which cancels it. Expired ads are dropped first, silently, so `held`
-    /// lists valid ones.
+    /// mid-request reaches `deinit`, which cancels it. `held` is read after the waits, just before the body is
+    /// built, with expired ads dropped silently, so it lists the valid ones of that moment.
     private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
-        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
-        let held = AdFormat.allCases.compactMap { state.ads[$0]?.id }
         let content = content
         let labels = labels
         let sessionId = sessionId
@@ -174,6 +178,9 @@ public final class VideoAds {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
+            // What is held is read after the waits (`/config`, the ATT dialog): an ad shown, rejected or expired
+            // during them is not sent as held, or the server would re-serve it and the format answer no-fill.
+            let held = try owner().validHeldIds()
             let playhead = try owner().playhead
             let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered), content: content,
                                              labels: labels, player: .make(playhead: playhead), sessionId: sessionId, held: held)

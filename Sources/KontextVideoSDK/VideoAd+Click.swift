@@ -2,6 +2,18 @@ import Foundation
 
 /// Where a click goes: the App Store sheet of an app-install ad, or the URL.
 extension VideoAd {
+    /// The page's `ad.click`: the `click` beacon, the click-through with the same fire id, then `didClick`.
+    func click(_ url: URL, fallback fallbackUrl: URL?, area: Click.Area) {
+        Logger.info("ad \(id.prefix(8)): click (\(area)) \(Logger.describe(url))")
+        // The end card selects its own `click` entries; anything else, and an end-card click on an ad without
+        // them (an overlay or pause ad), is the creative's: every accepted click is counted.
+        // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
+        let fireId = tracker.fire("click", part: area == .endCard && tracker.has("click", part: "endCard") ? "endCard" : nil)
+        openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
+        guard !hasEnded else { return }
+        delegate?.videoAd(self, didClick: Click(area: area))
+    }
+
     /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
     /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
     func openClick(_ url: URL, fallback: URL?) {
