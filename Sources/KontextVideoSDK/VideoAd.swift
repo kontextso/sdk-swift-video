@@ -360,9 +360,9 @@ public final class VideoAd {
         // The host is known before it is added, so an end from the container's hook finds and removes it.
         presentation?.hostView = host
         container.addSubview(host)
-        // The hook may have taken the player off screen or paused the content: the ad ends, with no impression.
-        if !hasEnded, !AdPlacement.canBeSeen(host) {
-            Logger.warning("ad \(id.prefix(8)): the view left the screen as the ad was added; ended as interrupted")
+        // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
+        if !hasEnded, !AdPlacement.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
+            Logger.warning("ad \(id.prefix(8)): nothing of the ad is on screen where it was placed; ended as interrupted")
             end(.interrupted)
             return
         }

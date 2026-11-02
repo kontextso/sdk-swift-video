@@ -39,6 +39,7 @@ In progress.
 * Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device facts sent as ad inputs (Other Data Types) are declared apart from error and debug reports (Other Diagnostic Data); device ids, ad data and diagnostics are linked (the install id joins them). Nothing is declared as tracking: no Kontext server uses the data for tracking yet. Publishers' App Store privacy labels should be checked against it.
 
 ### Fixed
+* An overlay or pause ad whose own box is wholly off screen where it is placed (a feed scrolled so the player's middle shows, not its top card) ends `.interrupted` at `show`, with no impression.
 * A pause ad on screen ends `.interrupted` when another `VideoAds` takes its player (the next page of a feed that shares one player) or the player moves to another item; it no longer holds the app's slot over content it is not for.
 * An overlay or pause ad out of sight for a second while its scene is active (a feed cell swiped away, a view moved off screen) ends `.interrupted` and frees the app's slot; `overlayViewDuration` and an overlay's `duration` count only time the ad is seen.
 * `isReady` is `false` while the server has switched the SDK off, for every `VideoAds`.

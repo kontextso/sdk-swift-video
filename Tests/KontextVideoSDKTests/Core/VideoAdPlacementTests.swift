@@ -42,6 +42,23 @@ struct VideoAdPlacementTests {
         ad.dismiss()
     }
 
+    @Test func anAdWhollyClippedWhereItIsPlacedIsNeverCounted() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-clip", position: "top"))
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        // A feed's viewport 100 high, scrolled so the 800 high player's middle shows and its top does not.
+        let viewport = UIView(frame: CGRect(x: 0, y: 100, width: 390, height: 100))
+        viewport.clipsToBounds = true
+        window.add(viewport)
+        let player = UIView(frame: CGRect(x: 0, y: -350, width: 390, height: 800))
+        viewport.addSubview(player)
+        try ad.show(in: player)
+        #expect(delegate.endReasons == [.interrupted] && !delegate.events.contains("impression"), "\(delegate.events)")
+        await sleepMs(80)
+        #expect(!harness.server.beacons.contains { $0.adId == "o-clip" && $0.event == "impression" })
+        #expect(KontextVideo.shared.adOnScreen == nil)
+    }
+
     @Test func aPauseCardOutOfSightEndsAndFreesTheSlot() async throws {
         ViewabilityMeter.offScreenGrace = 0.2
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-away"))

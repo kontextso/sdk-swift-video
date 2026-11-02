@@ -157,6 +157,13 @@ final class ViewabilityMeter {
     /// as it does on screen: three ancestors at 0.1 leave the ad at 0.001, unseen. Areas compare in window coordinates,
     /// where a scaled ancestor shrinks the whole and the visible part alike. Overlap by sibling views is not
     /// measured: only the view's own outline, its ancestors' clipping and the window count.
+    /// The share of `view` on screen now, as the meter measures it: 0 when nothing of it can be seen (outside
+    /// the window, clipped away by an ancestor, hidden or transparent).
+    static func visibleShare(of view: UIView) -> Double {
+        guard let window = view.window else { return 0 }
+        return exposure(of: view, in: window).0
+    }
+
     private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
         guard !window.isHidden, window.alpha > 0.01 else { return (0, .null) }
         let outline = corners(of: view.bounds).map { view.convert($0, to: window) }
