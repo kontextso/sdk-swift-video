@@ -111,7 +111,7 @@ struct VideoAdLoadingTests {
         #expect(ad.invalidationReason == nil, "untouched: load() still works")
         try await ad.load()
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func loadsAtOnceShareTheSameError() async throws {
@@ -254,7 +254,7 @@ struct VideoAdLoadingTests {
 
     @Test func rejectBeforeLoadFiresNotUsedAndLoadThrows() async throws {
         let (ad, ads) = try await make(Fixtures.ad(id: "img-15"))
-        try ad.reject()
+        ad.reject()
         #expect(await beacons("notUsed").map { $0["reason"] } == ["notUsed"])
         let failure = await error { try await ad.load() }
         guard case .invalidated(.rejected) = failure else { Issue.record("expected invalidated(.rejected), got \(String(describing: failure))"); return }
@@ -265,13 +265,13 @@ struct VideoAdLoadingTests {
 
     @Test func rejectOutbidCarriesTheWinningPriceAndTheWinner() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-17"))
-        try ad.reject(.outbid(winningPrice: 2.4, winner: "Other Network"))
+        ad.reject(.outbid(winningPrice: 2.4, winner: "Other Network"))
         let beacon = await beacons("notUsed").first
         #expect(beacon?["reason"] == "outbid")
         #expect(beacon?["wp"] == "2.4")
         #expect(beacon?["winner"] == "Other Network", "percent-encoded on the wire, decoded here")
         let (other, _) = try await make(Fixtures.ad(id: "img-17b"))
-        try other.reject(.outbid())
+        other.reject(.outbid())
         let bare = await beacons("notUsed").last
         #expect(bare?["wp"]?.isEmpty == true && bare?["winner"]?.isEmpty == true, "both optional")
     }
@@ -280,7 +280,7 @@ struct VideoAdLoadingTests {
         let (ad, _) = try await make(Fixtures.ad(id: "dead-18"))
         let load = Task { try await ad.load() }
         await sleepMs(100)
-        try ad.reject()
+        ad.reject()
         do {
             _ = try await load.value
             Issue.record("expected invalidated(.rejected)")
@@ -293,7 +293,7 @@ struct VideoAdLoadingTests {
     @Test func rejectAfterLoadMakesShowThrow() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-19"))
         try await ad.load()
-        try ad.reject()
+        ad.reject()
         #expect(ad.invalidationReason == .rejected)
         #expect(ad.isReady == false)
         do {
@@ -305,35 +305,29 @@ struct VideoAdLoadingTests {
         #expect(await beacons("notUsed").count == 1)
     }
 
-    @Test func rejectAfterShowThrowsAlreadyShown() async throws {
+    @Test func rejectAfterShowDoesNothing() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-20"))
         try await ad.load()
         try ad.show(in: harness.player.view)
-        do {
-            try ad.reject()
-            Issue.record("expected alreadyShown, reject succeeded")
-        } catch VideoAdError.alreadyShown {} catch { Issue.record("expected alreadyShown, got \(error)") }
+        ad.reject()
+        #expect(ad.invalidationReason == nil && !ad.hasEnded, "the ad on screen is untouched")
         #expect(await beacons("notUsed").isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
-    @Test func rejectTwiceThrowsAndSendsOneNotice() async throws {
+    @Test func rejectTwiceSendsOneNotice() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-21"))
-        try ad.reject()
-        do {
-            try ad.reject()
-            Issue.record("expected invalidated(.rejected), reject succeeded")
-        } catch VideoAdError.invalidated(let reason) { #expect(reason == .rejected) } catch { Issue.record("expected invalidated, got \(error)") }
+        ad.reject()
+        ad.reject()
+        #expect(ad.invalidationReason == .rejected)
         #expect(await beacons("notUsed").count == 1)
     }
 
-    @Test func rejectAnExpiredAdThrowsWithoutANotice() async throws {
+    @Test func rejectAnExpiredAdSendsNoNotice() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "img-22", expires: 30_000))
         advanceClock(by: 31)
-        do {
-            try ad.reject()
-            Issue.record("expected invalidated(.expired), reject succeeded")
-        } catch VideoAdError.invalidated(let reason) { #expect(reason == .expired) } catch { Issue.record("expected invalidated, got \(error)") }
+        ad.reject()
+        #expect(ad.invalidationReason == .expired)
         #expect(await beacons("notUsed").isEmpty, "the server closes an expired ad itself")
     }
 
@@ -344,7 +338,8 @@ struct VideoAdLoadingTests {
         ads.destroy()
         let failure = await error { try await ad.load() }
         guard case .destroyed = failure else { Issue.record("expected destroyed, got \(String(describing: failure))"); return }
-        do { try ad.reject() } catch VideoAdError.destroyed {} catch { Issue.record("expected destroyed, got \(error)") }
+        ad.reject()
+        #expect(ad.invalidationReason == .destroyed, "nothing to reject: the destroy sent the notice")
     }
 
     @Test func destroyDuringTheLoadThrowsDestroyed() async throws {

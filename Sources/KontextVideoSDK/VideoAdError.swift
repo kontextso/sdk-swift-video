@@ -2,7 +2,7 @@ import Foundation
 
 /// Why the SDK could not do its job, reached two ways.
 ///
-/// - Thrown by a call (`format`, `load`, `show`, `reject`, `dismiss`): that call did not happen. Nothing is
+/// - Thrown by a call (`format`, `load`, `show`): that call did not happen. Nothing is
 ///   shown; the only beacon a failed call fires is a failed `load()`'s VAST `error`. Whether the ad stays
 ///   usable is said per case.
 /// - Delivered through `videoAd(_:didFail:)`, after a `show` that was accepted: the ad broke on screen
@@ -31,15 +31,15 @@ public enum VideoAdError: Error, Sendable {
     /// error code the SDK fired (400 for a video, 500 otherwise, 405 after show, or the page's own).
     case creativeFailed(code: Int)
 
-    // `show`, `reject`, `dismiss`
+    // `show`
 
-    /// The ad was already shown: it cannot be shown again, nor rejected.
+    /// The ad was already shown: it cannot be shown again.
     case alreadyShown
     /// Another ad is on screen, from any `VideoAds`: at most one in the whole app. This ad is untouched
     /// and still ready: show it once the other one ended.
     case anotherAdShowing
-    /// The ad ended before it was shown: it expired, was rejected, or its creative died. `load()`, `show`
-    /// and `reject()` throw it from then on. Never with `.destroyed`: the ads of a destroyed `VideoAds`
+    /// The ad ended before it was shown: it expired, was rejected, or its creative died. `load()` and
+    /// `show` throw it from then on. Never with `.destroyed`: the ads of a destroyed `VideoAds`
     /// throw `destroyed`, the one spelling.
     case invalidated(VideoAd.InvalidationReason)
 
@@ -64,8 +64,8 @@ public enum VideoAdError: Error, Sendable {
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case presenterUnavailable
-    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad,
-    /// `dismiss()` on a linear ad. The ad stays as it was.
+    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad.
+    /// The ad stays as it was.
     case wrongPresentation
 }
 
@@ -158,7 +158,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .presenterUnavailable:
             return "no view controller can present the ad now"
         case .wrongPresentation:
-            return "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear; dismiss() only for overlay and pause)"
+            return "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear)"
         }
     }
 

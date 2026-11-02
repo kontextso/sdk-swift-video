@@ -58,7 +58,7 @@ struct IntegrationTests {
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double
         #expect(exposure == 1, "the page heard ad.exposure")
 
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(harness.player.view.subviews.isEmpty)
         #expect(await waitUntil { self.events(for: "img-pause").contains("overlayViewDuration") })
@@ -97,7 +97,7 @@ struct IntegrationTests {
         #expect(await waitUntil { opened.count == 1 })
         #expect(delegate.clicks.first?.area == .creative)
         #expect(await waitUntil { self.events(for: "img-click").contains("click") })
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aPageNavigatingAwayIsAClickOnlyAfterATouchAndNeverLeavesTheWebView() async throws {
@@ -122,7 +122,7 @@ struct IntegrationTests {
         #expect(opened.first?.absoluteString == "https://brand.test/tap")
         #expect(delegate.clicks.first?.area == .creative)
         #expect(ad.bridge.webView.url?.scheme == FramePageServer.scheme, "still our page, the URL opened outside")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aShownPageCannotReloadOrReplaceItselfButMayChangeItsFragment() async throws {
@@ -157,7 +157,7 @@ struct IntegrationTests {
         #expect(await waitUntil { ad.bridge.webView.url?.fragment == "endcard" }, "a fragment change goes through")
         #expect(await marker() == "kept", "within the same document")
         #expect(ad.wasShown && !ad.hasEnded, "the ad is still on screen")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aPagesDialogsAreAnsweredAtOnceAsDismissed() async throws {
@@ -170,7 +170,7 @@ struct IntegrationTests {
         let answers = try await ad.bridge.webView.evaluateJavaScript("JSON.stringify([alert('a') === undefined, confirm('c'), prompt('p', 'd')])") as? String
         #expect(answers == "[true,false,null]", "alert returns, confirm is declined, prompt is cancelled")
         #expect(ad.wasShown && !ad.hasEnded)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     // MARK: Linear, video creative
@@ -304,13 +304,13 @@ struct IntegrationTests {
         try await pause.load()
         try pause.show(in: harness.player.view)
         #expect(await waitUntil { self.events(for: "img-loop1").contains("impression") })
-        try pause.dismiss()
+        pause.dismiss()
 
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-loop2"), "overlay": Fixtures.overlayAd(id: "img-loopo")])
         let next = try await ads.format(.pause)
         #expect(next.id == "img-loop2", "the shown bid is never served again")
         #expect(harness.server.requests(to: "/v2/video/ads").last?.body?["held"] as? [String] == ["img-loopo"], "the overlay bid is still held")
-        try next.reject(.outbid(winningPrice: 3))
+        next.reject(.outbid(winningPrice: 3))
         #expect(await waitUntil { self.events(for: "img-loop2") == ["notUsed"] }, "nothing rendered, one notice")
         let overlay = try await ads.format(.overlay)
         #expect(overlay.id == "img-loopo", "re-served unchanged")

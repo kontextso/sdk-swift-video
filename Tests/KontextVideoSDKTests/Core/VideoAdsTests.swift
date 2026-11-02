@@ -96,7 +96,7 @@ struct VideoAdsTests {
             guard case .request? = failure else { Issue.record("\(heldFormat): expected request, got \(String(describing: failure))"); continue }
             #expect(held.invalidationReason == nil, "\(heldFormat): the held ad stays")
             #expect(try await ads.format(heldFormat) === held, "\(heldFormat): a malformed answer, the held ad comes back")
-            try held.reject()
+            held.reject()
             // One bid, rejected once: nothing of it is left, under either format.
             harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
             guard case .noFill(let reason)? = await error({ try await ads.format(askedFormat) }) else { Issue.record("\(heldFormat): expected noFill"); continue }
@@ -728,7 +728,7 @@ struct VideoAdsTests {
         let linear = Task { try await ads.format(.linear) }
         #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         #expect(Set(harness.adsRequests.last?.body?["held"] as? [String] ?? []) == ["img-p20", "vid-l20"], "the request listed it before the reject")
-        try ad.reject()
+        ad.reject()
         gate.open()
         do {
             _ = try await pause.value

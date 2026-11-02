@@ -39,7 +39,7 @@ struct VideoAdPlacementTests {
         try ad.show(in: player)
         let frame = try #require(adFrame(in: player))
         #expect(frame == CGRect(x: 35, y: 844 - 34 - 90, width: 320, height: 90), "the strip ends where the home indicator begins")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aTopPauseCardStaysBelowTheNotch() async throws {
@@ -49,7 +49,7 @@ struct VideoAdPlacementTests {
         try ad.show(in: player)
         let frame = try #require(adFrame(in: player))
         #expect(frame == CGRect(x: 45, y: 59, width: 300, height: 300), "the card starts where the notch's safe area ends")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func anAdFitsBetweenTheSideInsetsInLandscape() async throws {
@@ -59,7 +59,7 @@ struct VideoAdPlacementTests {
         try ad.show(in: player)
         let frame = try #require(adFrame(in: player))
         #expect(frame == CGRect(x: 262, y: 390 - 21 - 90, width: 320, height: 90), "centred between the side insets, above the bottom one")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aLinearAdSendsNoExposureBeforeItsViewIsLaidOutInAWindow() async throws {
@@ -132,7 +132,7 @@ struct VideoAdPlacementTests {
         // A window has no `window` of its own: it is its own, on screen while visible and its scene in front.
         try ad.show(in: window.window)
         #expect(ad.wasShown && window.window.subviews.contains { $0 is AdHostView })
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         let hiddenWindow = TestWindow()
         defer { hiddenWindow.tearDown() }
@@ -198,7 +198,7 @@ struct VideoAdPlacementTests {
         Environment.isWindowActive = { _ in true }
         try pause.show(in: player)
         #expect(pause.wasShown)
-        try pause.dismiss()
+        pause.dismiss()
     }
 
     @Test func aShownAdFollowsTheViewWhenItResizesAndEndsWhenItNoLongerFits() async throws {
@@ -229,7 +229,7 @@ struct VideoAdPlacementTests {
         player.frame.size = CGSize(width: 390, height: 220)
         player.layoutIfNeeded()
         #expect(adFrame(in: player) == player.bounds)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func theMinimumOfContainerTooSmallIncludesTheSafeArea() async throws {
@@ -247,7 +247,7 @@ struct VideoAdPlacementTests {
         player.frame.size = try #require(minimum)
         try ad.show(in: player)
         #expect(adFrame(in: player) == CGRect(x: 0, y: 59, width: 150, height: 150), "a view of the minimum holds it")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     // MARK: The app's insets
@@ -259,11 +259,11 @@ struct VideoAdPlacementTests {
         window.add(player)
         try strip.show(in: player, insets: UIEdgeInsets(top: 0, left: 0, bottom: 80, right: 0))
         #expect(adFrame(in: player) == CGRect(x: 35, y: 844 - 34 - 80 - 90, width: 320, height: 90), "80 points above the safe area's bottom")
-        try strip.dismiss()
+        strip.dismiss()
         let (card, _, _) = try await makeAd(Fixtures.ad(id: "p-in-t"))
         try card.show(in: player, insets: UIEdgeInsets(top: 20, left: 0, bottom: 0, right: 0))
         #expect(adFrame(in: player) == CGRect(x: 45, y: 59 + 20, width: 300, height: 300), "20 points below the safe area's top")
-        try card.dismiss()
+        card.dismiss()
     }
 
     @Test func aFullscreenPauseAdIgnoresTheInsets() async throws {
@@ -272,7 +272,7 @@ struct VideoAdPlacementTests {
         window.add(player)
         try ad.show(in: player, insets: UIEdgeInsets(top: 40, left: 10, bottom: 80, right: 10))
         #expect(adFrame(in: player) == player.bounds)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func theInsetsStayThroughAResize() async throws {
@@ -284,7 +284,7 @@ struct VideoAdPlacementTests {
         player.frame.size = CGSize(width: 390, height: 220)
         player.layoutIfNeeded()
         #expect(adFrame(in: player) == CGRect(x: 35, y: 220 - 50 - 90, width: 320, height: 90), "still 50 points above the bottom")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func theMinimumOfContainerTooSmallIncludesTheInsets() async throws {
@@ -352,7 +352,7 @@ struct VideoAdPlacementTests {
         window.add(player)
         try ad.show(in: player, insets: UIEdgeInsets(top: -10, left: .nan, bottom: .infinity, right: -5))
         #expect(adFrame(in: player) == CGRect(x: 35, y: 844 - 34 - 90, width: 320, height: 90))
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aFullscreenPauseAdFillsThePlayerEvenUnderTheSafeArea() async throws {
@@ -361,7 +361,7 @@ struct VideoAdPlacementTests {
         window.add(player)
         try ad.show(in: player)
         #expect(try #require(adFrame(in: player)) == player.bounds)
-        try ad.dismiss()
+        ad.dismiss()
     }
 }
 }

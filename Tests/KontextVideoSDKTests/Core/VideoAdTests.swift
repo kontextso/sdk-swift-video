@@ -212,7 +212,7 @@ struct VideoAdTests {
         try ad.show(in: other)
         #expect(other.subviews.count == 1, "the SDK's host view went into the view passed to show(in:)")
         #expect(harness.player.view.subviews.isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
         #expect(other.subviews.isEmpty, "and is removed at the end")
     }
 
@@ -226,7 +226,7 @@ struct VideoAdTests {
         do { try pause.show(in: harness.player.view) } catch VideoAdError.anotherAdShowing {} catch { Issue.record("expected anotherAdShowing, got \(error)") }
         #expect(pause.isReady, "untouched")
         #expect(pause.wasShown == false)
-        try overlay.dismiss()
+        overlay.dismiss()
         try pause.show(in: harness.player.view)
         #expect(pause.wasShown)
     }
@@ -284,14 +284,14 @@ struct VideoAdTests {
         let fired = await beacons()
         #expect(fired.contains("overlayViewDuration"))
         #expect(!fired.contains("close"))
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons.count == 1, "exactly once")
     }
 
     @Test func dismissBeforeTheDurationEndsAnOverlayEarlyAndStopsTheClock() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10b", duration: 150))
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(ad.isCompleted == false, "ended before its duration")
         await sleepMs(250)
@@ -304,7 +304,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         await sleepMs(150)
         #expect(delegate.endReasons.isEmpty, "no clock runs")
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(await beacons().contains("overlayViewDuration"))
     }
@@ -315,7 +315,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         await sleepMs(150)
         #expect(delegate.endReasons.isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func dismissEndsWithDismissedAndFiresOverlayViewDurationNotClose() async throws {
@@ -323,7 +323,7 @@ struct VideoAdTests {
         var sent: [String] = []
         ad.bridge.onSend = { type, _ in if type != "ad.exposure" { sent.append(type) } }
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(ad.hasEnded)
         #expect(sent == ["ad.show", "ad.hide"])
@@ -331,14 +331,14 @@ struct VideoAdTests {
         let fired = await beacons()
         #expect(fired.contains("overlayViewDuration"))
         #expect(!fired.contains("close"))
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons.count == 1, "exactly once")
         #expect(ads.isDestroyed == false)
     }
 
     @Test func dismissBeforeShowDoesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p11"))
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.events.isEmpty)
         #expect(ad.isReady)
     }
@@ -380,7 +380,7 @@ struct VideoAdTests {
         let shownAt = ProcessInfo.processInfo.systemUptime
         try ad.show(in: harness.player.view)
         await sleepMs(120)
-        try ad.dismiss()
+        ad.dismiss()
         let onScreenMs = Int((ProcessInfo.processInfo.systemUptime - shownAt) * 1000)   // what the test itself saw, on any machine
         _ = await beacons()
         let ovd = try #require(harness.server.beacons.first { $0.event == "overlayViewDuration" }?.query["ovd"].flatMap(Int.init))
@@ -403,7 +403,7 @@ struct VideoAdTests {
         try other.show(in: harness.player.view)
         #expect(other.chosenSize == VideoAd.Size(width: 250, height: 250), "the variant that may shrink is used instead")
         #expect(adFrame(in: harness.player.view)?.height == 220)
-        try other.dismiss()
+        other.dismiss()
     }
 
     @Test func aCreativeThatMayNotShrinkShowsAtItsOwnSizeWhenItFits() async throws {
@@ -412,7 +412,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         let frame = try #require(adFrame(in: harness.player.view))
         #expect(frame.size == CGSize(width: 200, height: 200), "never enlarged, never shrunk")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func showPicksTheLargestSizeThatFitsTheViewUnscaled() async throws {
@@ -428,7 +428,7 @@ struct VideoAdTests {
         #expect((ad.chosenSize ?? ad.descriptor.size) == VideoAd.Size(width: 728, height: 90), "the player turned out wide: the wide variant")
         #expect((shown?["size"] as? [String: Int]) == ["width": 728, "height": 90], "the page is told which variant")
         #expect(try #require(adFrame(in: landscape)) == CGRect(x: 58, y: 300, width: 728, height: 90))
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func showFallsBackToTheBestScaledSizeWhenNoneFits() async throws {
@@ -437,7 +437,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)   // 390 wide: 600×100 fits at 0.65, 728×90 at 0.54
         #expect((ad.chosenSize ?? ad.descriptor.size) == VideoAd.Size(width: 600, height: 100), "the variant with the best scale")
         #expect(try #require(adFrame(in: harness.player.view)).width == 390)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aClickThroughWithTheFireIdMacroOpensWithTheClickBeaconsFireId() async throws {
@@ -712,7 +712,7 @@ struct VideoAdTests {
 
     @Test func dismissingFromInsideTheImpressionCallbackLeavesNothingRunning() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c"))
-        delegate.onImpression = { try? $0.dismiss() }
+        delegate.onImpression = { $0.dismiss() }
         try ad.show(in: harness.player.view)
         #expect(delegate.events == ["impression", "end:dismissed"], "ended from inside the impression callback")
         #expect(ad.clock?.observers.isEmpty == true, "the observers set up at show were removed by the end that followed")
@@ -811,7 +811,7 @@ struct VideoAdTests {
         // Two seconds of the video played while exposed; a slow runner's ticks come late (it takes 4-5 s locally),
         // so wait with room, not sleep.
         #expect(await waitUntil(15) { harness.server.beacons.contains { $0.event == "viewable" } })
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aVideosViewabilityClockStopsAtComplete() async throws {
@@ -821,7 +821,7 @@ struct VideoAdTests {
         #expect(ad.meter?.countsTime == true)
         send(ad, "video.complete", ["playhead": 1_500])
         #expect(ad.meter?.countsTime == false, "an end card on screen is not the video playing")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aVideoThatStartedBeforeTheLinearMeterExistsStillCountsAsPlaying() async throws {
@@ -926,10 +926,13 @@ struct VideoAdTests {
         #expect(ad.isReady)
     }
 
-    @Test func dismissOnALinearAdThrowsWrongPresentation() async throws {
+    @Test func dismissOnALinearAdIsAProgrammerErrorAndDoesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i19"))
         try presentLinear(ad)
-        do { try ad.dismiss() } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
+        var assertions: [String] = []
+        Environment.assertionFailure = { assertions.append($0) }
+        ad.dismiss()
+        #expect(assertions.count == 1, "stops a debug build: \(assertions)")
         #expect(delegate.endReasons.isEmpty, "still on screen")
         send(ad, "video.skip", ["playhead": 1000])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
@@ -1044,7 +1047,7 @@ struct VideoAdTests {
         }
         #expect(weakAd != nil, "retained while showing")
         #expect(KontextVideo.shared.adOnScreen === weakAd)
-        try weakAd?.dismiss()
+        weakAd?.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         #expect(KontextVideo.shared.adOnScreen == nil)
         #expect(await waitUntil { weakAd == nil }, "released after didEnd")
@@ -1057,7 +1060,7 @@ struct VideoAdTests {
         advanceClock(by: 31)
         #expect(delegate.endReasons.isEmpty, "expiry does not touch an ad on screen")
         #expect(ad.invalidationReason == nil)
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
     }
 
@@ -1081,14 +1084,14 @@ struct VideoAdTests {
         await sleepMs(200)
         #expect(delegate.endReasons.isEmpty)
         #expect(ad.wasShown && !ad.hasEnded)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func dismissAfterTheEndDoesNothing() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p22"))
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
-        try ad.dismiss()
+        ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
     }
 }

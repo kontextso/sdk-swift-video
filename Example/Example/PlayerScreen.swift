@@ -171,7 +171,7 @@ final class Playback: ObservableObject {
 
     private func resume() {
         if video.format == .pause {
-            try? ad?.dismiss()
+            ad?.dismiss()
             Task { await prepare() }       // the next pause gets its own ad
         }
         player.play()

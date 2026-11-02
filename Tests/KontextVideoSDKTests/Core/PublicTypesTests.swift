@@ -25,7 +25,7 @@ struct PublicTypesTests {
             (.notLoaded, "the ad is not loaded yet; call load() first"),
             (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the view is too small for the ad; at least 150×150 points are needed"),
             (.presenterUnavailable, "no view controller can present the ad now"),
-            (.wrongPresentation, "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear; dismiss() only for overlay and pause)"),
+            (.wrongPresentation, "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear)"),
         ]
         for (error, expected) in cases {
             #expect(error.description == expected)

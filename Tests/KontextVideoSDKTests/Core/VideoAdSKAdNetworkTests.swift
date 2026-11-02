@@ -61,14 +61,14 @@ struct VideoAdSKAdNetworkTests {
         #expect(skanCalls.isEmpty, "nothing before show")
         try ad.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls == ["init s1", "start"] })
-        try ad.dismiss()
+        ad.dismiss()
         #expect(await waitUntil { skanCalls == ["init s1", "start", "end", "dispose"] })
     }
 
     @Test func anAdWithoutAttributionNeverTouchesSKAdNetwork() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "s2"))
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
         await sleepMs(50)
         #expect(skanCalls.isEmpty && ad.skAdNetwork == nil)
     }
@@ -101,7 +101,7 @@ struct VideoAdSKAdNetworkTests {
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s5"), itunesItem: "s5"))
         try ad.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls == ["init s5", "start"] })
-        try ad.dismiss()
+        ad.dismiss()
         await sleepMs(60)
         #expect(skanCalls == ["init s5", "start"], "end waits until Apple answered the start")
         gate.open = true
@@ -115,14 +115,14 @@ struct VideoAdSKAdNetworkTests {
         let (second, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s6b"), itunesItem: "s6b"))
         try first.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls.count == 2 })
-        try first.dismiss()
+        first.dismiss()
         try second.show(in: harness.player.view)
         await sleepMs(60)
         #expect(skanCalls == ["init s6a", "start", "end"], "the next ad's init waits for the end in flight")
         gate.open = true
         #expect(await waitUntil { skanCalls.count == 6 })
         #expect(skanCalls == ["init s6a", "start", "end", "dispose", "init s6b", "start"], "one impression at a time, in order")
-        try second.dismiss()
+        second.dismiss()
     }
 
     @Test func aFailedRegistrationIsLoggedAndTheAdGoesOn() async throws {
@@ -130,7 +130,7 @@ struct VideoAdSKAdNetworkTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s7"), itunesItem: "s7"))
         try ad.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls == ["init s7"] })
-        try ad.dismiss()
+        ad.dismiss()
         await sleepMs(60)
         #expect(skanCalls == ["init s7"], "nothing to end when Apple refused the impression")
         #expect(delegate.events == ["impression", "end:dismissed"])
@@ -143,11 +143,11 @@ struct VideoAdSKAdNetworkTests {
         let (second, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s11b"), itunesItem: "s11b"))
         try first.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls.count == 2 })
-        try first.dismiss()
+        first.dismiss()
         try second.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls.count == 6 })
         #expect(skanCalls == ["init s11a", "start", "end", "dispose", "init s11b", "start"], "dispose runs whatever the end did")
-        try second.dismiss()
+        second.dismiss()
     }
 
     @Test func anAdThatEndedWhileAppleRegisteredItIsNeverStarted() async throws {
@@ -155,7 +155,7 @@ struct VideoAdSKAdNetworkTests {
         harness.skAdNetwork.onInit = { while !gate.open { await sleepMs(5) } }
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s12"), itunesItem: "s12"))
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
         gate.open = true
         #expect(await waitUntil { skanCalls.count == 3 })
         await sleepMs(30)
@@ -170,7 +170,7 @@ struct VideoAdSKAdNetworkTests {
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s12b"), itunesItem: "s12b"))
         try ad.show(in: harness.player.view)
         #expect(await waitUntil { entered })
-        try ad.dismiss()
+        ad.dismiss()
         gate.open = true
         #expect(await waitUntil { skanCalls.count == 3 })
         await sleepMs(30)
@@ -185,7 +185,7 @@ struct VideoAdSKAdNetworkTests {
         let (first, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s16a"), itunesItem: "s16a"))
         try first.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls.count == 2 })
-        try first.dismiss()
+        first.dismiss()
         #expect(await waitUntil { skanCalls.count == 4 })
         // A failed dispose does not block the next ad.
         harness.skAdNetwork.onStart = nil
@@ -199,7 +199,7 @@ struct VideoAdSKAdNetworkTests {
         #expect(await waitUntil(5) { failures().count == 3 })
         #expect(failures().compactMap { ($0["state"] as? [String: Any])?["step"] as? String } == ["start", "end", "dispose"], "each failure once, with its step")
         #expect(failures().compactMap { $0["adId"] as? String } == ["s16a", "s16a", "s16a"], "and the ad it belongs to")
-        try second.dismiss()
+        second.dismiss()
     }
 
     @Test func aClickWhoseSheetIsLoadingWhenTheAdEndsIsStillHonored() async throws {
@@ -215,7 +215,7 @@ struct VideoAdSKAdNetworkTests {
         ad?.bridge.noteTouch()
         if let ad { send(ad, "ad.click", ["url": "https://apps.apple.com/app/id17"]) }
         #expect(await waitUntil { harness.storeProduct.presented.count == 1 })
-        try ad?.dismiss()   // the ad ends while the sheet is still loading, and is released
+        ad?.dismiss()   // the ad ends while the sheet is still loading, and is released
         ad = nil
         #expect(await waitUntil { released == nil }, "the ad is gone")
         gate.open = true
@@ -229,7 +229,7 @@ struct VideoAdSKAdNetworkTests {
         #expect(await waitUntil { skanCalls == ["init s18", "start"] })
         let other = RecordingSKAdNetwork()
         Environment.skAdNetwork = other   // the next test's manager, say
-        try ad.dismiss()
+        ad.dismiss()
         #expect(await waitUntil { skanCalls == ["init s18", "start", "end", "dispose"] }, "start and end on the same manager")
         await sleepMs(50)
         #expect(other.calls.isEmpty, "the replacement hears nothing of it")
@@ -240,7 +240,7 @@ struct VideoAdSKAdNetworkTests {
         let (ad, _, _) = try await makeAd(Fixtures.installAd(Fixtures.ad(id: "s13"), itunesItem: "s13"))
         try ad.show(in: harness.player.view)
         #expect(await waitUntil { skanCalls.count == 2 })
-        try ad.dismiss()
+        ad.dismiss()
         #expect(await waitUntil { skanCalls == ["init s13", "start", "end", "dispose"] }, "Apple asks for the end even after a failed start")
     }
 
@@ -251,7 +251,7 @@ struct VideoAdSKAdNetworkTests {
         impression.start()
         impression.start()
         #expect(await waitUntil { skanCalls.count == 2 })
-        try ad.dismiss()
+        ad.dismiss()
         impression.end()
         impression.end()
         await sleepMs(60)
@@ -297,7 +297,7 @@ struct VideoAdSKAdNetworkTests {
         ad.bridge.noteTouch()
         send(ad, "ad.click", ["url": "https://apps.apple.com/app/id1"])
         #expect(await waitUntil { harness.storeProduct.presented.count == 1 })
-        try ad.dismiss()
+        ad.dismiss()
         await sleepMs(60)
         #expect(skanCalls.isEmpty && opened.isEmpty, "nothing to register, nothing to log; the sheet carries the attribution")
     }

@@ -12,7 +12,7 @@ import UIKit
 /// if ad.price.value >= otherNetworkPrice {
 ///     try await ad.load()
 /// } else {
-///     try ad.reject(.outbid(winningPrice: otherNetworkPrice))
+///     ad.reject(.outbid(winningPrice: otherNetworkPrice))
 /// }
 /// ```
 @MainActor
@@ -43,7 +43,7 @@ public final class VideoAd {
         isLoaded && !wasShown && invalidationReason == nil && !isExpired
     }
 
-    /// Why the ad ended before it was shown, once it did; `load()`, `show` and `reject()` throw it.
+    /// Why the ad ended before it was shown, once it did; `load()` and `show` throw it.
     public private(set) var invalidationReason: InvalidationReason?
     /// On the monotonic clock, as the SDK decides it.
     var isExpired: Bool {
@@ -144,15 +144,24 @@ public final class VideoAd {
 
     /// The app does not use the ad: the SDK sends the `notUsed` beacon (the server tells the DSP), drops the
     /// ad and releases its WebView, if any. Works until `show`, loading or loaded; a `load()` in flight
-    /// throws `invalidated(.rejected)`, a later `show` too. Synchronous and fire-and-forget. Throws
-    /// `alreadyShown` after `show`, `invalidated(reason)` or `destroyed` when the ad already ended.
-    public func reject(_ reason: RejectReason = .notUsed) throws {
-        try withContentPlayhead {
-            if wasShown { throw VideoAdError.alreadyShown }
-            if let invalidationReason { throw Self.error(for: invalidationReason) }
+    /// throws `invalidated(.rejected)`, a later `show` too. Synchronous and fire-and-forget. Not `throws`:
+    /// an ad that already ended (expired, rejected, destroyed, failed) needs no notice and one that was
+    /// shown cannot be rejected, so both are no-ops, with a console line; nothing is left to handle.
+    public func reject(_ reason: RejectReason = .notUsed) {
+        withContentPlayhead {
+            if wasShown {
+                Logger.warning("\(format) ad \(id.prefix(8)): reject() after show does nothing; the ad was shown")
+                return
+            }
+            if let invalidationReason {
+                Logger.info("\(format) ad \(id.prefix(8)): reject() does nothing, the ad already ended (\(invalidationReason))")
+                return
+            }
             if descriptor.isExpired {
+                // No notice: the server closes an expired ad itself.
                 invalidate(.expired)
-                throw VideoAdError.invalidated(.expired)
+                Logger.info("\(format) ad \(id.prefix(8)): reject() does nothing, the ad expired")
+                return
             }
             Logger.info("\(format) ad \(id.prefix(8)): rejected (\(reason))")
             // Committed before the beacon: the rejection is final the moment the app asked for it.
@@ -352,10 +361,16 @@ public final class VideoAd {
     /// overlay with a `duration` this is the way to end it earlier (the content ended, a seek); left alone,
     /// the SDK removes it when the duration elapses, with `didEnd(.completed)`. An overlay without one,
     /// like a pause ad, stays until this, the viewer's close control or `destroy()`. Before `show` and
-    /// after `didEnd` it does nothing. Throws `wrongPresentation` for a linear ad: it ends by itself or by
-    /// the viewer's Skip or close; `destroy()` is the way to force it off.
-    public func dismiss() throws {
-        guard format != .linear else { throw VideoAdError.wrongPresentation }
+    /// after `didEnd` it does nothing. A linear ad ignores it: it ends by itself or by the viewer's Skip or
+    /// close, and `destroy()` is the way to force it off. Calling it on one is a programmer error, which
+    /// stops a debug build and is logged in a release build. Not `throws`: nothing here can fail at run
+    /// time, and a `try` would only hide that mistake behind a `try?`.
+    public func dismiss() {
+        guard format != .linear else {
+            Environment.assertionFailure("VideoAd.dismiss() on a linear ad; it ends by itself, destroy() forces it off")
+            Logger.error("ad \(id.prefix(8)): dismiss() on a linear ad does nothing; it ends by itself or by the viewer, destroy() forces it off")
+            return
+        }
         guard wasShown, !hasEnded else { return }
         Logger.debug("ad \(id.prefix(8)): dismissed by the app")
         end(.dismissed)
@@ -414,23 +429,6 @@ public final class VideoAd {
     private func refit(in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
         guard descriptor.position != .fullscreen, let size = chosenSize else { return fullBounds }
         return AdPlacement.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: AdPlacement.adding(extraInsets, to: safeArea))
-    }
-
-    /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
-    /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
-    /// every beacon inside uses that value. Nested calls share the outer read; nothing is read when no URL
-    /// asks for it (`urls`: the operation's, a click's destinations). While the player is read, the last value
-    /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
-    @discardableResult
-    func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
-        let asked = tracker.readsContentPlayhead || urls.contains { Tracker.asksForContentPlayhead($0.absoluteString) }
-        guard tracker.frozenContentPlayhead == nil, asked else { return try work() }
-        tracker.frozenContentPlayhead = tracker.lastContentPlayhead
-        defer { tracker.frozenContentPlayhead = nil }
-        let playhead = tracker.contentPlayhead()
-        tracker.lastContentPlayhead = playhead
-        tracker.frozenContentPlayhead = playhead
-        return try work()
     }
 
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
@@ -711,21 +709,6 @@ public final class VideoAd {
 
     // MARK: Ending before show
 
-    /// The creative's error as a fault report. The bridge says why it failed: the page, a load timeout, a page
-    /// that could not load, or a terminated web process all fire the same VAST codes.
-    private func reportCreativeError(vastCode: Int) {
-        let code: ErrorReporter.Code
-        switch loadedBridge?.failureCause ?? .page {
-        case .page: code = .creativeFailed
-        case .loadTimeout: code = .loadTimeout
-        case .loadFailed: code = .frameLoadFailed
-        case .processTerminated: code = .processTerminated
-        }
-        let recovery: ErrorReporter.Recovery = wasShown ? .adEndedFailed : .adDroppedBeforeShow
-        ErrorReporter.shared.report(code, stage: wasShown ? .playback : .load, sessionId: owner?.sessionId, adId: id, vastCode: vastCode,
-                                    underlying: loadedBridge?.failureUnderlying, recovery: recovery)
-    }
-
     /// The ad ends before `show`: it leaves its `VideoAds` (never served again), its WebView is released,
     /// a `load()` in flight throws. For an ad on screen nothing happens; `destroy()` ends that one with
     /// `didEnd(.destroyed)`. No beacon here: `reject` and `destroy` fire `notUsed` themselves, an expired
@@ -742,11 +725,5 @@ public final class VideoAd {
             continuation.resume(throwing: Self.error(for: reason))
         }
         owner?.adDidLeave(self)
-    }
-
-    /// What a call on an ad that ended before `show` throws. A destroyed one throws `destroyed`, never
-    /// `invalidated(.destroyed)`: one error for one fact, whichever call finds it.
-    static func error(for reason: InvalidationReason) -> VideoAdError {
-        reason == .destroyed ? .destroyed : .invalidated(reason)
     }
 }

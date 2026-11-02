@@ -20,7 +20,7 @@ sdk-swift-video/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantId
 │   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the page's events, the one didEnd
-│   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load, show, reject and dismiss throw
+│   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
 │   ├── Network/      talking to the server, any route: APIClient, APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), ErrorResponse, SDKInfo

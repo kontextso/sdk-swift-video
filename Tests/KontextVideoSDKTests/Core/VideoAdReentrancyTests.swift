@@ -80,7 +80,7 @@ struct VideoAdReentrancyTests {
         #expect(await waitUntil { shows().count == 3 })
         let playheads = Set(shows().compactMap { $0.query["cph"] })
         #expect(playheads == ["00:00:01.000"], "creativeView, iconView and the impression: one moment, \(playheads)")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aProviderThatDestroysAtAClickDropsTheClickAndKeepsDidEndLast() async throws {
@@ -105,10 +105,10 @@ struct VideoAdReentrancyTests {
         var reads = 0
         ads.usePlayhead { [weak ad] in
             reads += 1
-            if reads < 20 { try? ad?.dismiss() }   // bounded only so a regression fails instead of overflowing the stack
+            if reads < 20 { ad?.dismiss() }   // bounded only so a regression fails instead of overflowing the stack
             return 0
         }
-        try ad.dismiss()
+        ad.dismiss()
         #expect(reads == 1, "the provider's own dismiss reads nothing more: \(reads) reads")
         #expect(delegate.events == ["impression", "end:dismissed"], "ended once: \(delegate.events)")
     }
@@ -162,7 +162,7 @@ struct VideoAdReentrancyTests {
         #expect(first.wasShown && !second.wasShown && second.isReady)
         #expect(firstDelegate.events == ["impression"] && secondDelegate.events.isEmpty)
         #expect(other.subviews.isEmpty && KontextVideo.shared.adOnScreen === first)
-        try first.dismiss()
+        first.dismiss()
     }
 
     @Test func aDestroyFromTheParkingWindowsHookEndsALinearAdBeforeUIKitPresentsIt() async throws {
@@ -212,14 +212,14 @@ struct VideoAdReentrancyTests {
                     case .destroyOwner: ads?.destroy()
                     case .showThisAd: try? ad?.show(in: harness.player.view)
                     case .showAnotherAd: try? another?.show(in: other)
-                    case .dismissThisAd: try? ad?.dismiss()
+                    case .dismissThisAd: ad?.dismiss()
                     }
                     return 0
                 }
                 switch operation {
                 case .show: try? ad.show(in: harness.player.view)
-                case .reject: try? ad.reject()
-                case .dismiss: try? ad.dismiss()
+                case .reject: ad.reject()
+                case .dismiss: ad.dismiss()
                 case .errorBeforeShow, .errorAfterShow: send(ad, "ad.error", ["code": 405])
                 case .click:
                     ad.bridge.noteTouch()
@@ -229,7 +229,7 @@ struct VideoAdReentrancyTests {
                 }
                 check([(ad, delegate, harness.player.view), (another, anotherDelegate, other)], label)
                 ads.playback.stop()
-                for shown in [ad, another] where shown.wasShown && !shown.hasEnded { try? shown.dismiss() }
+                for shown in [ad, another] where shown.wasShown && !shown.hasEnded { shown.dismiss() }
                 ads.destroy()
                 otherAds.destroy()
                 #expect(KontextVideo.shared.adOnScreen == nil, "\(label): the slot is free afterwards")
@@ -269,7 +269,7 @@ struct VideoAdReentrancyTests {
         #expect(firstDelegate.events == ["impression"] && secondDelegate.events.isEmpty)
         #expect(other.subviews.isEmpty, "the refused show left nothing behind")
         #expect(KontextVideo.shared.adOnScreen === first)
-        try first.dismiss()
+        first.dismiss()
     }
 
     @Test func aDestroyFromInsideTheContainersAddHookEndsTheAdWithNothingLeft() async throws {

@@ -165,4 +165,21 @@ extension VideoAd {
         Logger.info("ad \(id.prefix(8)): the content paused; the overlay ends")
         end(.interrupted)
     }
+
+    /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
+    /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
+    /// every beacon inside uses that value. Nested calls share the outer read; nothing is read when no URL
+    /// asks for it (`urls`: the operation's, a click's destinations). While the player is read, the last value
+    /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
+    @discardableResult
+    func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
+        let asked = tracker.readsContentPlayhead || urls.contains { Tracker.asksForContentPlayhead($0.absoluteString) }
+        guard tracker.frozenContentPlayhead == nil, asked else { return try work() }
+        tracker.frozenContentPlayhead = tracker.lastContentPlayhead
+        defer { tracker.frozenContentPlayhead = nil }
+        let playhead = tracker.contentPlayhead()
+        tracker.lastContentPlayhead = playhead
+        tracker.frozenContentPlayhead = playhead
+        return try work()
+    }
 }

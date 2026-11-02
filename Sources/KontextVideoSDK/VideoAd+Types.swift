@@ -45,8 +45,8 @@ extension VideoAd {
         case outbid(winningPrice: Double? = nil, winner: String? = nil)
     }
 
-    /// Why an ad ended before it was shown. Found out at the next call (`format`, `load`, `show`,
-    /// `reject`), which throws it; nothing is delivered through the delegate.
+    /// Why an ad ended before it was shown. Found out at the next call (`format`, `load`, `show`), which
+    /// throws it; nothing is delivered through the delegate.
     public enum InvalidationReason: Sendable, Equatable {
         /// The ad's lifetime ran out (or the server replaced it, which it does only after that).
         case expired

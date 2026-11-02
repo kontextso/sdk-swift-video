@@ -86,7 +86,7 @@ struct VideoAdContentTests {
         harness.player.isPlaying = true
         try ad.show(in: view)
         #expect(ad.wasShown)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     @Test func aPauseAdShownRightAfterThePauseFindsTheScreenFree() async throws {
@@ -100,7 +100,7 @@ struct VideoAdContentTests {
         try pause.show(in: view)
         #expect(overlayDelegate.endReasons == [.interrupted], "the overlay ended first")
         #expect(KontextVideo.shared.adOnScreen === pause)
-        try pause.dismiss()
+        pause.dismiss()
     }
 
     @Test func aPlayingOverlayStillBlocksAnotherAd() async throws {
@@ -113,7 +113,7 @@ struct VideoAdContentTests {
             try pause.show(in: view)
             Issue.record("expected anotherAdShowing")
         } catch VideoAdError.anotherAdShowing {}
-        try overlay.dismiss()
+        overlay.dismiss()
     }
 
     @Test func theDurationCountsSecondsOfVideoNotSeeksOrStalls() async throws {
@@ -203,7 +203,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         await sleepMs(300)
         #expect(delegate.endReasons.isEmpty, "the old player's item change belongs to a binding that is gone")
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     private nonisolated static func wait(for signal: DispatchSemaphore) -> Bool {
@@ -283,7 +283,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         await sleepMs(60)
         #expect(delegate.endReasons.isEmpty, "the content still plays under the overlay")
-        try ad.dismiss()
+        ad.dismiss()
         ads.track(TestPlayer())
         #expect(released == nil, "the next track lets go of it")
         weak var second: TestPlayer?
@@ -371,7 +371,7 @@ struct VideoAdContentTests {
         let hook = EndHook()
         hook.onEnd = {
             try? pause.show(in: self.view)
-            try? pause.dismiss()
+            pause.dismiss()
         }
         overlay.delegate = hook
         try overlay.show(in: view)
@@ -413,7 +413,7 @@ struct VideoAdContentTests {
         middle.isPlaying = false
         await sleepMs(150)
         #expect(delegate.endReasons.isEmpty, "the player tracked first and replaced does not end the last one's overlay")
-        try second.dismiss()
+        second.dismiss()
     }
 
     @Test func aQueuedEndOfTheItemBeforeEndsNothingOnTheNextItem() async throws {
@@ -436,7 +436,7 @@ struct VideoAdContentTests {
         try second.show(in: view)
         await sleepMs(300)
         #expect(delegate.endReasons.isEmpty, "the end belonged to the item before")
-        try second.dismiss()
+        second.dismiss()
     }
 
     @Test func anEndedItemRefusesTheNextOverlayUntilItPlaysAgain() async throws {
@@ -465,7 +465,7 @@ struct VideoAdContentTests {
         await player.seek(to: .zero)   // the app plays it again
         #expect(await waitUntil(2) { ads.playback.isPlaying })
         try next.show(in: view)
-        try next.dismiss()
+        next.dismiss()
     }
 
     @Test func videoPlayedWhileTheSceneWasInactiveCountsNothingOnReturn() async throws {
@@ -480,7 +480,7 @@ struct VideoAdContentTests {
         NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)
         ad.contentDidChange(.tick)
         #expect(ad.contentProgress?.elapsed == 0 && delegate.endReasons.isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     /// The scene of the test window leaves (the app goes to the background) or comes back.
@@ -721,7 +721,7 @@ struct VideoAdContentTests {
         #expect(!ads.playback.isTicking, "no player to watch: no ticks")
         await sleepMs(60)
         #expect(delegate.endReasons.isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     // MARK: A pause ad follows the content the other way
@@ -781,7 +781,7 @@ struct VideoAdContentTests {
         try overlay.show(in: view)
         #expect(pauseDelegate.endReasons == [.interrupted], "the pause ad ended first")
         #expect(KontextVideo.shared.adOnScreen === overlay)
-        try overlay.dismiss()
+        overlay.dismiss()
     }
 
     @Test func withoutATrackedPlayerThePauseAdIgnoresPlayback() async throws {
@@ -789,7 +789,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         await sleepMs(60)
         #expect(delegate.endReasons.isEmpty)
-        try ad.dismiss()
+        ad.dismiss()
     }
 
     /// A player model that owns its `VideoAds` and is its tracked player: the cycle the docs warn about.
