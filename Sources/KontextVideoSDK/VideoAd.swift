@@ -572,12 +572,25 @@ public final class VideoAd {
         withContentPlayhead { endNow(reason) }
     }
 
+    // Every end releases, in this order (an ad ended before show: `invalidate` releases what it ever had, the
+    // load waiter, the page and its place in the owner):
+    //  1. waiters: none left once shown, the load is over; the presentation watchdog stops on `hasEnded`;
+    //  2. timers and clock: the content recheck, the clock with its timer and scene observers (endNow);
+    //  3. observers and meter: the viewability meter, the SKAdNetwork impression (endNow);
+    //  4. renderer: the page (hidden, released) and the host view (endNow);
+    //  5. presentation: the linear controller dismissed (endNow); there is no registration to undo on iOS;
+    //  6. context: none on iOS;
+    //  7. the app-wide on-screen slot, `KontextVideo.adOnScreen` (finish);
+    //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (finish);
+    //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
         guard wasShown, !hasEnded else { return }
         hasEnded = true
         if reason == .failed, let failure {
             delegate?.videoAd(self, didFail: failure)
         }
+        contentRecheck?.cancel()
+        contentRecheck = nil
         // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
         let activeTime = clock?.stop() ?? 0
         meter?.stop()
