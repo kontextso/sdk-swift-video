@@ -19,6 +19,6 @@ It is never shipped or run: `Sources/ReleaseCheck/Integration.swift` only has to
 Set the version in `Package.swift` (`exact: "X.Y.Z"`) to a pushed tag, then:
 
 ```bash
-cd extras/release-check
+cd Extras/ReleaseCheck
 xcodebuild build -scheme ReleaseCheck -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 ```

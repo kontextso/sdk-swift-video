@@ -32,7 +32,7 @@ sdk-swift-video/
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
 ├── .github/workflows/      ci.yml, the five CI jobs; release-consumer.yml, the release as a publisher resolves it (see CI)
-├── extras/release-check/    a publisher's package on the released tag, built by release-consumer.yml (see its README)
+├── Extras/ReleaseCheck/     a publisher's package on the released tag, built by release-consumer.yml (see its README)
 ├── Package.swift            SPM manifest; KontextKit up to the next minor
 ├── AGENTS.md                guidance for coding agents (CLAUDE.md only imports it)
 └── CHANGELOG.md, RELEASING.md
@@ -184,7 +184,7 @@ the example app against the mock covers the real presentation and dismissal.
 - **Release tag matches SDKInfo.version**: on a tag push only; fails when the tag and `SDKInfo.version` differ,
   or when `CHANGELOG.md` has no `## <tag>` section.
 
-`.github/workflows/release-consumer.yml` builds `extras/release-check`, a package that depends on the SDK by git
+`.github/workflows/release-consumer.yml` builds `Extras/ReleaseCheck`, a package that depends on the SDK by git
 URL and `exact:` the tag, for a device with Xcode 16.0 (the oldest Xcode on the runner). It runs on a tag push
 and by hand (Actions → Release consumer → Run workflow, with the tag), never on `main` or pull requests: before
 the tag is on GitHub there is nothing to resolve.

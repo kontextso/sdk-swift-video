@@ -1,6 +1,6 @@
 name: Release consumer
 
-# The release check (extras/release-check): a publisher's package that gets the SDK by git URL and an exact
+# The release check (Extras/ReleaseCheck): a publisher's package that gets the SDK by git URL and an exact
 # release tag, as a publisher does: it catches a release that builds here but not when resolved from GitHub (a file left out of
 # the tag, a dependency that does not resolve, a public API the integration guide uses and the tag lacks).
 # It needs the tag on GitHub, so it runs on a tag push and on demand for a tag already pushed; CI on main and
@@ -28,12 +28,12 @@ jobs:
         with:
           ref: refs/tags/${{ inputs.version || github.ref_name }}
       - name: Pin the release check to the tag
-        working-directory: extras/release-check
+        working-directory: Extras/ReleaseCheck
         run: |
           sed -i '' -E "s/exact: \"[^\"]+\"/exact: \"$VERSION\"/" Package.swift
           grep -F "exact: \"$VERSION\"" Package.swift
       - name: Build for a device
-        working-directory: extras/release-check
+        working-directory: Extras/ReleaseCheck
         run: |
           set -o pipefail
           xcodebuild build \
