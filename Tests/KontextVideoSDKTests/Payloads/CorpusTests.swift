@@ -73,9 +73,10 @@ struct CorpusCase: Sendable, CustomTestStringConvertible {
 
     static let root: URL = Bundle.module.resourceURL!.appendingPathComponent("Corpus")
 
-    /// The cases of one route's folder, by name; `*.raw.json` are answers a case points to, not cases.
+    /// The cases of one route's folder (`Ads/`, `Config/`), named by route (`ads/…`); `*.raw.json` are answers a
+    /// case points to, not cases.
     static func load(_ route: String) -> [CorpusCase] {
-        let folder = root.appendingPathComponent(route)
+        let folder = root.appendingPathComponent(route.capitalized)
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" && !$0.lastPathComponent.hasSuffix(".raw.json") }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
