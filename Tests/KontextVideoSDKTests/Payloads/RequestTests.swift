@@ -74,6 +74,8 @@ struct RequestTests {
         )
         let json = try Fixtures.encode(request)
         #expect(json["ifa"] == nil, "no advertising id for a child")
+        #expect(json["idfv"] == nil, "no IDFV for a child")
+        #expect(json["installId"] is String, "the install id stays")
         #expect(json["user"] as? [String: [String]] == ["keywords": ["cartoons"]], "no id, email or hash; keywords stay")
         #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == true)
 

@@ -23,6 +23,7 @@ In progress.
 * `VideoAdError.request` carries a `VideoAdError.RequestFailure` instead of an internal error: `offline` (no connection, the connection lost, the host unreachable), `timedOut`, `server(status:)` (an error status), or `badResponse` (an answer the SDK could not use). `VideoAdError` is `Equatable`, so `error == .request(.offline)` works in an app's tests. The underlying error stays in the SDK's console log.
 
 ### Added
+* A COPPA request (`Regulatory(coppa: true)`) also leaves out the IDFV, besides the advertising id, the user id, the email and its hash; the install id stays.
 * Every request, the SDK's own and beacons alike, follows at most 10 redirects (as the Kotlin SDK); beacons are sent by a `BeaconClient` of their own, out of `Tracker`.
 * `VideoAdHost`, a SwiftUI view: set its `ad` to show a loaded ad (an overlay or pause ad where it is placed, a linear ad full screen), `nil` to dismiss it; `onEnd`, `onImpression`, `onClick`, `onShowFailed` replace the delegate.
 * `KontextVideoTTSDK`, an optional product: `ads.track(ttVideoEngine:)` follows a TTSDK `TTVideoEngine`, read through its Objective-C properties, with no TTSDK dependency.
