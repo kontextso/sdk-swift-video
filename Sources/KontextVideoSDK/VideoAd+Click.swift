@@ -4,7 +4,7 @@ import Foundation
 extension VideoAd {
     /// The page's `ad.click`: the `click` beacon, the click-through with the same fire id, then `didClick`.
     func click(_ url: URL, fallback fallbackUrl: URL?, area: Click.Area) {
-        Logger.info("ad \(id.prefix(8)): click (\(area)) \(Logger.describe(url))")
+        Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.absoluteString)")
         // The end card selects its own `click` entries; anything else, and an end-card click on an ad without
         // them (an overlay or pause ad), is the creative's: every accepted click is counted.
         // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).

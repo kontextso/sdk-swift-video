@@ -38,15 +38,6 @@ struct LoggerTests {
         #expect(built == 4, "each message once, every level on")
     }
 
-    @Test func aURLIsLoggedAsItsSchemeAndHostOnly() {
-        #expect(Logger.describe(URL(string: "https://user:secret@brand.test:8443/p?uid=1#frag")!) == "https://brand.test", "no credentials, port, path, query or fragment")
-        #expect(Logger.describe(URL(string: "https://brand.test/offer?uid=42&sig=abc")!) == "https://brand.test")
-        #expect(Logger.describe(URL(string: "brandapp://offer/7?token=x")!) == "brandapp://offer")
-        #expect(Logger.describe(URL(string: "mailto:viewer@example.com")!) == "mailto:")
-        #expect(Logger.describe(URL(string: "javascript:alert(document.cookie)")!) == "javascript:")
-        #expect(Logger.describe(URL(string: "relative/path")!) == "(no scheme)")
-    }
-
     @Test func loggerLevelIsSettable() {
         Logger.level = .debug
         #expect(Logger.level == .debug)

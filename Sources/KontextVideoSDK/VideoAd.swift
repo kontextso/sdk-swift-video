@@ -713,7 +713,7 @@ public final class VideoAd {
         case .click(let url, let fallbackUrl, let area):
             click(url, fallback: fallbackUrl, area: area)
         case .open(let url, let purpose):
-            Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(Logger.describe(url))")
+            Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.absoluteString)")
             if purpose == "adChoices" {
                 tracker.fire("iconClick")
             }

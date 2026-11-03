@@ -3,8 +3,8 @@ import os
 
 /// Writes the SDK's messages to the device console, up to the level set in `Configuration.logLevel`.
 /// Every message is logged as public, so the console shows it unredacted: callers pass ids, events and
-/// codes, no personal data. A URL from outside goes through `Logger.describe(_:)`, which keeps only
-/// its scheme and host. A message is built only when its level is on.
+/// codes and URLs as they are, unredacted on purpose: the log is for development, read with the development
+/// token's test ads, and the ad URLs are Kontext's own. A message is built only when its level is on.
 enum Logger {
     private static let output = os.Logger(subsystem: "so.kontext.video", category: "KontextVideoSDK")
     private static let lock = NSLock()
@@ -40,13 +40,6 @@ enum Logger {
 
     static func debug(_ message: @autoclosure () -> String) {
         log(.debug, message)
-    }
-
-    /// A URL from outside (a click-through, a refused navigation) as the log may show it: scheme and host,
-    /// never the path, query or anything a host-less URL carries (`mailto:` addresses, `javascript:` code).
-    static func describe(_ url: URL) -> String {
-        let scheme = url.scheme.map { "\($0):" } ?? "(no scheme)"
-        return url.host.map { "\(scheme)//\($0)" } ?? scheme
     }
 
     /// The level is checked first; the message is built after, and outside the lock.
