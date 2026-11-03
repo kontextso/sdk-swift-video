@@ -58,7 +58,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show()` for
   linear; `dismiss()`; the page's events mapped to beacons and the delegate; `end(_:)` is the only terminal path.
 - `Rendering/`: `FrameBridge` (the WebView and the Kontext Frame Protocol), `Tracker` (beacons), `ViewabilityMeter`,
-  `LinearViewController`, `LinearPresentation` (its present and dismiss, each with a watchdog). `Payloads/` is the
+  `LinearViewController`, `LinearPresentation` (its present and dismiss, each with a watchdog), `Presentation`,
+  `VideoAd+Click`, `VideoAd+Placement`. `Playback/`: `ContentPlayback` and `VideoAd+Content` (the content rules). `Payloads/` is the
   wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Device/` what the SDK reads, `Support/Environment.swift` the
   seams the tests replace.
 
