@@ -227,20 +227,21 @@ struct VideoAdsTests {
         #expect(harness.adsRequests[2].body?["labels"] == nil, "none: left out")
     }
 
-    @Test func labelsThatBreakTheRulesAreDroppedWithAWarning() async throws {
+    @Test func labelsAreSentExactlyAsGivenWithoutChecks() async throws {
         _ = await harness.initialize()
         Logger.level = .warning
         defer { Logger.level = .warning }
         var warnings: [String] = []
-        Logger.sink = { level, message in if level == .warning, message.contains("labels of video") { warnings.append(message) } }
-        let labels = ["stage": "unlock", "Player_Layout2": String(repeating: "é", count: 40), "bad-key": "x", "naïve": "x", "": "x", "empty": ""]
+        Logger.sink = { level, message in if level == .warning { warnings.append(message) } }
+        // A free format on purpose: any key, any value, any number of them.
+        var labels = ["stage": "unlock", "my-ad": "x", "Player Layout": String(repeating: "é", count: 80), "empty": ""]
+        for index in 1...25 { labels["k\(index)"] = "v" }
         let ads = VideoAds(content: .init(id: "ep-d", language: "en"), labels: labels)
-        #expect(ads.labels == ["stage": "unlock", "Player_Layout2": String(repeating: "é", count: 40)], "a-z, A-Z, 0-9 and _; no length limit")
-        #expect(warnings.count == 1, "one warning names them all")
-        #expect(["bad-key", "naïve", "empty"].allSatisfy { warnings.first?.contains($0) == true })
+        #expect(ads.labels == labels)
+        #expect(!warnings.contains { $0.contains("label") }, "no warning: \(warnings)")
         harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
         _ = try await ads.format(.linear)
-        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == ads.labels, "what the property holds is what goes")
+        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == labels, "what the app gave is what goes")
     }
 
     @Test func everyVideoAdsHasItsOwnSession() async throws {

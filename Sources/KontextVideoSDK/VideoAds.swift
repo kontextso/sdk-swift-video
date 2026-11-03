@@ -13,7 +13,9 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
-    /// The labels given at creation, less what `Labels.checked` dropped: what every request carries.
+    /// The labels given at creation, exactly as given: what every request carries. A free format on purpose:
+    /// Kontext defines them per publisher and the server ignores the ones it does not use, so the SDK sends what
+    /// the app gives, with no checks (any key, any value, any number).
     let labels: [String: String]
 
     /// The content player set by `track(_:)`: the playhead, and the playing state an overlay follows.
@@ -36,12 +38,12 @@ public final class VideoAds {
     /// wait for it. `labels`: key-values that say where these ads play, such as the viewer's stage in the
     /// series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every request
     /// of this object carries them, and the server's configuration decides what they change, such as which
-    /// formats it offers; they are fixed for the object's life. Keys of `a-z`, `A-Z`, `0-9` and `_`, values
-    /// not empty: anything else is dropped with a console warning.
+    /// formats it offers; they are fixed for the object's life. They are sent as given: use the names and values
+    /// Kontext gives you.
     /// They describe the screen, never the viewer: no personal data.
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
-        self.labels = Labels.checked(labels, for: content.id)
+        self.labels = labels
         KontextVideo.shared.requireInitialized("VideoAds(content:)")
         // What the publisher passed wrong, said once here rather than as a server 400 later. An empty id or
         // language makes every request fail: a programmer error, which stops a debug build. The rest is
