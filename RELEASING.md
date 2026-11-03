@@ -64,7 +64,7 @@ git push --delete origin 0.1.0 && git tag -d 0.1.0
 
 ## 5. Verify
 
-1. The tag push also runs the **Release consumer** workflow: `extras/spm-consumer` resolves
+1. The tag push also runs the **Release consumer** workflow: `extras/release-check` resolves
    `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")` from GitHub and builds
    with Xcode 16.0. It must be green; rerun it by hand (Actions → Release consumer → Run workflow) with the tag.
 2. A fresh app with that dependency runs the docs page's walkthrough against the production ad server with a

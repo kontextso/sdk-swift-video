@@ -1,7 +1,7 @@
 name: Release consumer
 
-# A publisher's package (extras/spm-consumer) that gets the SDK by git URL and an exact release tag, as a
-# publisher does: it catches a release that builds here but not when resolved from GitHub (a file left out of
+# The release check (extras/release-check): a publisher's package that gets the SDK by git URL and an exact
+# release tag, as a publisher does: it catches a release that builds here but not when resolved from GitHub (a file left out of
 # the tag, a dependency that does not resolve, a public API the integration guide uses and the tag lacks).
 # It needs the tag on GitHub, so it runs on a tag push and on demand for a tag already pushed; CI on main and
 # pull requests never runs it.
@@ -15,29 +15,29 @@ on:
         required: true
 
 jobs:
-  spm-consumer:
-    name: SPM consumer of the release
+  release-check:
+    name: Release check of the release tag
     runs-on: macos-15
     env:
       # The oldest Xcode on the runner, so the toolchain minimum in DEVELOPMENT.md is the one that builds.
       DEVELOPER_DIR: /Applications/Xcode_16.0.app/Contents/Developer
       VERSION: ${{ inputs.version || github.ref_name }}
     steps:
-      # The consumer as it was at that tag, so it calls the API that release has.
+      # The release check as it was at that tag, so it calls the API that release has.
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ inputs.version || github.ref_name }}
-      - name: Pin the consumer to the tag
-        working-directory: extras/spm-consumer
+      - name: Pin the release check to the tag
+        working-directory: extras/release-check
         run: |
           sed -i '' -E "s/exact: \"[^\"]+\"/exact: \"$VERSION\"/" Package.swift
           grep -F "exact: \"$VERSION\"" Package.swift
       - name: Build for a device
-        working-directory: extras/spm-consumer
+        working-directory: extras/release-check
         run: |
           set -o pipefail
           xcodebuild build \
-            -scheme SPMConsumer \
+            -scheme ReleaseCheck \
             -destination 'generic/platform=iOS' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
