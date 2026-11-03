@@ -36,8 +36,8 @@ public final class VideoAds {
     /// wait for it. `labels`: key-values that say where these ads play, such as the viewer's stage in the
     /// series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every request
     /// of this object carries them, and the server's configuration decides what they change, such as which
-    /// formats it offers; they are fixed for the object's life. Keys of `a-z`, `0-9` and `_`, values not
-    /// empty, both at most 64 bytes, at most 20 pairs: anything else is dropped with a console warning.
+    /// formats it offers; they are fixed for the object's life. Keys of `a-z`, `A-Z`, `0-9` and `_`, values
+    /// not empty: anything else is dropped with a console warning.
     /// They describe the screen, never the viewer: no personal data.
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content

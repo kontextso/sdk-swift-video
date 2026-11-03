@@ -233,15 +233,11 @@ struct VideoAdsTests {
         defer { Logger.level = .warning }
         var warnings: [String] = []
         Logger.sink = { level, message in if level == .warning, message.contains("labels of video") { warnings.append(message) } }
-        var labels = ["stage": "unlock", "Stage": "x", "bad-key": "x", "empty": "", "long": String(repeating: "é", count: 33)]
-        for index in 0..<25 { labels["k\(index)"] = "v" }   // 26 valid keys with "stage": 20 are kept
+        let labels = ["stage": "unlock", "Player_Layout2": String(repeating: "é", count: 40), "bad-key": "x", "naïve": "x", "": "x", "empty": ""]
         let ads = VideoAds(content: .init(id: "ep-d", language: "en"), labels: labels)
-        #expect(ads.labels.count == Labels.maxCount)
-        #expect(ads.labels["Stage"] == nil && ads.labels["bad-key"] == nil && ads.labels["empty"] == nil)
-        #expect(ads.labels["long"] == nil, "66 bytes: dropped, not cut")
+        #expect(ads.labels == ["stage": "unlock", "Player_Layout2": String(repeating: "é", count: 40)], "a-z, A-Z, 0-9 and _; no length limit")
         #expect(warnings.count == 1, "one warning names them all")
-        #expect(warnings.first?.contains("bad-key") == true && warnings.first?.contains("more than 20") == true)
-        #expect(Labels.isValidKey(String(repeating: "a", count: 64)) && !Labels.isValidKey(String(repeating: "a", count: 65)))
+        #expect(["bad-key", "naïve", "empty"].allSatisfy { warnings.first?.contains($0) == true })
         harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
         _ = try await ads.format(.linear)
         #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == ads.labels, "what the property holds is what goes")
