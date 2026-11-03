@@ -23,7 +23,7 @@ sdk-swift-video/
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
-│   ├── Network/      talking to the server, any route: APIClient, APIError
+│   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
@@ -98,7 +98,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - The lifecycle, in one line: `load` returns a ready ad; `show` either throws or presentation begins; then zero or
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
-- The page never fires a beacon; `Tracker` fires every entry once, except `click`, `pause`, `resume`, `mute` and
+- The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView
   invisibly in the key window and hands it over with `takeWebView()` at show.

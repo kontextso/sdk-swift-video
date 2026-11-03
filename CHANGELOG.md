@@ -23,6 +23,7 @@ In progress.
 * `VideoAdError.request` carries a `VideoAdError.RequestFailure` instead of an internal error: `offline` (no connection, the connection lost, the host unreachable), `timedOut`, `server(status:)` (an error status), or `badResponse` (an answer the SDK could not use). `VideoAdError` is `Equatable`, so `error == .request(.offline)` works in an app's tests. The underlying error stays in the SDK's console log.
 
 ### Added
+* Every request, the SDK's own and beacons alike, follows at most 10 redirects (as the Kotlin SDK); beacons are sent by a `BeaconClient` of their own, out of `Tracker`.
 * `VideoAdHost`, a SwiftUI view: set its `ad` to show a loaded ad (an overlay or pause ad where it is placed, a linear ad full screen), `nil` to dismiss it; `onEnd`, `onImpression`, `onClick`, `onShowFailed` replace the delegate.
 * `KontextVideoTTSDK`, an optional product: `ads.track(ttVideoEngine:)` follows a TTSDK `TTVideoEngine`, read through its Objective-C properties, with no TTSDK dependency.
 * `show(in:insets:)`: insets that keep an overlay or a pause card clear of your own controls, added to the view's safe area (`bottom: 80` puts a bottom strip 80 points above it). Kept through resizes and rotations, counted in `containerTooSmall`'s minimum; a full-screen pause ad ignores them. `show(in:)` is unchanged. Insets that leave no width or height throw `containerTooSmall` (or end a shown ad as `.interrupted` on a resize), however large.

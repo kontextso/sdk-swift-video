@@ -16,7 +16,8 @@ enum Environment {
     /// server sends is stored, and the app's own cookie store and cache are not touched. `deadline` bounds
     /// a whole request: `URLRequest.timeoutInterval` is an idle timeout only, so a server that trickles
     /// bytes would otherwise hold a request (and every `format()` call that joined it) for as long as it
-    /// likes; the session default is seven days. Tests build theirs here too, adding the stub protocol.
+    /// likes; the session default is seven days. At most `RedirectLimit.maxRedirects` redirects. Tests build
+    /// theirs here too, adding the stub protocol.
     static func makeSession(deadline: TimeInterval = APIClient.defaultTimeout, configure: (URLSessionConfiguration) -> Void = { _ in }) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForResource = deadline
@@ -24,7 +25,7 @@ enum Environment {
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configure(configuration)
-        return URLSession(configuration: configuration)
+        return URLSession(configuration: configuration, delegate: RedirectLimit(), delegateQueue: nil)
     }
 
     private static let defaultSession = makeSession()

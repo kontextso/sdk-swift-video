@@ -65,14 +65,8 @@ final class Tracker {
     }
 
     private func send(_ url: URL, event: String, part: String?) {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 10
-        request.cachePolicy = .reloadIgnoringLocalCacheData
         let label = part.map { "\(event) (\($0))" } ?? event
-        Logger.debug("ad \(adId.prefix(8)): beacon \(label)")
-        let task = BeaconTransport.session(over: session).dataTask(with: request)
-        task.taskDescription = "ad \(adId.prefix(8)): \(label) beacon"
-        task.resume()
+        BeaconClient.send(url, label: "ad \(adId.prefix(8)): \(label)", over: session)
     }
 
     /// Fires every `progress` entry the ad video has passed (`offset` at or below `playheadMs`) and not fired
@@ -214,44 +208,4 @@ extension Tracker {
 private extension CharacterSet {
     /// RFC 3986 unreserved: letters, digits, `-._~`.
     static let urlQueryValueAllowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-}
-
-/// Fires beacons without keeping what the server answers: the status is all a beacon needs, and a body
-/// (a tracking pixel, or a misconfigured endpoint sending megabytes) must never be accumulated in the app.
-/// A completion-handler task buffers the whole body before it calls back, so beacons go through a session
-/// whose delegate cancels each transfer as soon as the response head arrives, after logging an error
-/// status. Fire and forget, as before: nothing waits for the outcome. A session delegate rather than a
-/// per-task one (iOS 15+), so iOS 14 behaves the same.
-final class BeaconTransport: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    // `@unchecked Sendable`: no stored state; URLSession calls it on its own queue.
-
-    /// The beacon session derived from `base` (the SDK's session, `Environment.session`): its configuration,
-    /// this delegate. Made again only when the base changes, which only the tests do.
-    @MainActor private static var current: (base: URLSession, beacons: URLSession)?
-
-    @MainActor
-    static func session(over base: URLSession) -> URLSession {
-        if let current, current.base === base { return current.beacons }
-        current?.beacons.finishTasksAndInvalidate()
-        let beacons = URLSession(configuration: base.configuration, delegate: BeaconTransport(), delegateQueue: nil)
-        current = (base, beacons)
-        return beacons
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
-                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
-        if let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
-            Logger.warning("\(dataTask.taskDescription ?? "beacon") answered \(status)")
-        }
-        // The server answered: the beacon arrived. The body is never read.
-        completionHandler(.cancel)
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error else { return }
-        let nsError = error as NSError
-        // Our own cancellation after the response head, not a failure.
-        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
-        Logger.warning("\(task.taskDescription ?? "beacon") failed, \(error.localizedDescription)")
-    }
 }
