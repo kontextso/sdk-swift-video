@@ -81,7 +81,11 @@ struct APIClient: Sendable {
     static let maxNestingDepth = 512
 
     /// A server answer decoded: refused as `dataCorrupted` when nested deeper than `maxNestingDepth`, read
-    /// before decoding, so a deep answer costs no stack.
+    /// before decoding, so a deep answer costs no stack. The decoder is recursive, one call per level: an
+    /// answer like `[[[[…]]]]` nested 100 000 deep would overflow the stack and crash the app from an ad
+    /// request, which no `catch` stops. The measure is one pass with no recursion; brackets inside strings
+    /// (text such as `"Watch [Episode 2]"`, escaped quotes included) are not counted, only the JSON's own
+    /// structure is. A real answer nests about 6 deep.
     static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         var depth = 0
         var inString = false

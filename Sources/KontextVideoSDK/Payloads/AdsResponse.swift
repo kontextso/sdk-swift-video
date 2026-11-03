@@ -1,6 +1,14 @@
 /// The answer to `POST /video/ads`: one entry per format (the SDK always asks for all of them), each with
 /// its ads or its no-fill reason; or the kill switch. `nextRequestAt` (timed mode) is on the wire but
 /// not read: the SDK has no timed mode yet, every ad is shown at a moment the app picks.
+///
+/// Read at two levels. The envelope (`enabled`, `formats`, each entry's `format` and `ads`) is strict: it says
+/// what the answer is, so a broken one cannot be trusted at all and the whole answer fails (`badResponse`, no
+/// ads). Each ad is lenient: it is self-contained, so one bad ad (no price, a bad URL) is dropped and reported
+/// while every other ad and format is used, and a format left with no valid ad is a no-fill. An unknown format
+/// is skipped, so a newer server offering a format this SDK version lacks never breaks an older app. For
+/// example, a valid overlay, a pause ad without a price and a `banner` entry give the overlay, a pause no-fill
+/// and nothing for `banner`. The shared malformed-answer corpus checks these rules in both SDKs.
 enum AdsResponse: Decodable, Sendable {
     /// Stands in for a `disabledReason` the server left out or sent malformed; the answer itself is
     /// still understood. (`NoFillReason.unknown` is the same for a no-fill.)
