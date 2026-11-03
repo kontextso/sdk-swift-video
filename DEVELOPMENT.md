@@ -29,6 +29,7 @@ sdk-swift-video/
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter
 │   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
 │   └── PrivacyInfo.xcprivacy
+├── Sources/KontextVideoTTSDK/   the optional KontextVideoTTSDK product: ads.track(ttVideoEngine:), TTSDK read through Objective-C (see its README)
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
 ├── Example/                 SwiftUI app with a real AVPlayer; `project.yml` for XcodeGen, the .xcodeproj is generated
 ├── .github/workflows/      ci.yml, the five CI jobs; release-consumer.yml, the release as a publisher resolves it (see CI)
@@ -48,7 +49,7 @@ is what happens on screen (the Notion hub's "Rendering" section), `Support/` is 
 ## Building
 
 ```bash
-xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
+xcodebuild build -scheme KontextVideoSDK-Package -destination 'generic/platform=iOS Simulator'
 
 # The API reference: the doc comments and the DocC catalog (KontextVideoSDK.docc); it must build without warnings
 xcodebuild docbuild -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
@@ -125,11 +126,11 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 Swift Testing, run on a simulator (the SDK imports UIKit and WebKit):
 
 ```bash
-xcodebuild test -scheme KontextVideoSDK -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
+xcodebuild test -scheme KontextVideoSDK-Package -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
 
 # One suite, or with coverage
-xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
-xcodebuild test -scheme KontextVideoSDK -destination '…' -enableCodeCoverage YES -resultBundlePath cov.xcresult
+xcodebuild test -scheme KontextVideoSDK-Package -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
+xcodebuild test -scheme KontextVideoSDK-Package -destination '…' -enableCodeCoverage YES -resultBundlePath cov.xcresult
 xcrun xccov view --report --files-for-target KontextVideoSDK cov.xcresult
 ```
 

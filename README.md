@@ -26,6 +26,7 @@ dependencies: [
 ],
 targets: [
     .target(name: "YourApp", dependencies: [.product(name: "KontextVideoSDK", package: "sdk-swift-video")]),
+    // optional, for a TTSDK player: .product(name: "KontextVideoTTSDK", package: "sdk-swift-video")
 ]
 ```
 

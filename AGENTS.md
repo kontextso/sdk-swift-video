@@ -28,17 +28,17 @@ simulator. Pick any available iPhone by name (`xcrun simctl list devices availab
 
 ```bash
 # Build
-xcodebuild build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator'
+xcodebuild build -scheme KontextVideoSDK-Package -destination 'generic/platform=iOS Simulator'
 
 # Tests: all (about 2 min locally, 4 on CI), or one suite (suites under SerialSuites need that prefix)
-xcodebuild test -scheme KontextVideoSDK -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
-xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
-xcodebuild test -scheme KontextVideoSDK -destination '…' -only-testing:KontextVideoSDKTests/DecodingTests
+xcodebuild test -scheme KontextVideoSDK-Package -destination 'platform=iOS Simulator,OS=latest,name=iPhone 17 Pro'
+xcodebuild test -scheme KontextVideoSDK-Package -destination '…' -only-testing:KontextVideoSDKTests/SerialSuites/VideoAdTests
+xcodebuild test -scheme KontextVideoSDK-Package -destination '…' -only-testing:KontextVideoSDKTests/DecodingTests
 
 # Lint, the compiler-warnings rule, and the analyzer, as CI runs them
 swiftlint lint --strict
-xcodebuild clean build -scheme KontextVideoSDK -destination 'generic/platform=iOS Simulator' > xcodebuild.log 2>&1
-grep -E "Sources/KontextVideoSDK/.*: warning:" xcodebuild.log   # must print nothing
+xcodebuild clean build -scheme KontextVideoSDK-Package -destination 'generic/platform=iOS Simulator' > xcodebuild.log 2>&1
+grep -E "Sources/KontextVideo(SDK|TTSDK)/.*: warning:" xcodebuild.log   # must print nothing
 swiftlint analyze --strict --compiler-log-path xcodebuild.log
 ```
 

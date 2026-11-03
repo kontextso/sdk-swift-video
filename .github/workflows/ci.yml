@@ -25,17 +25,17 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild clean build \
-            -scheme KontextVideoSDK \
+            -scheme KontextVideoSDK-Package \
             -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation \
             > xcodebuild.log 2>&1 || (tail -100 xcodebuild.log; exit 1)
       - name: No compiler warnings in the SDK
         # The analyzer does not fail on compiler warnings; a Swift 6 isolation warning is tomorrow's error.
         run: |
-          if grep -E "Sources/KontextVideoSDK/.*: warning:" xcodebuild.log | sort -u | tee warnings.txt | grep -q .; then
+          if grep -E "Sources/KontextVideo(SDK|TTSDK)/.*: warning:" xcodebuild.log | sort -u | tee warnings.txt | grep -q .; then
             echo "::error::compiler warnings in the SDK"
             # With the compiler's notes under each warning, which name the expected types.
-            grep -E -A4 "Sources/KontextVideoSDK/.*: warning:" xcodebuild.log; exit 1
+            grep -E -A4 "Sources/KontextVideo(SDK|TTSDK)/.*: warning:" xcodebuild.log; exit 1
           fi
       - name: Analyze
         run: swiftlint analyze --strict --compiler-log-path xcodebuild.log --reporter github-actions-logging
@@ -74,7 +74,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme KontextVideoSDK \
+            -scheme KontextVideoSDK-Package \
             -destination 'platform=iOS Simulator,OS=18.5,name=iPhone 16' \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -105,7 +105,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme KontextVideoSDK \
+            -scheme KontextVideoSDK-Package \
             -destination "id=$SIMULATOR_ID" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
