@@ -38,7 +38,8 @@ final class ViewabilityMeter {
         case viewUndetermined
     }
 
-    /// How often the box is measured. A constant in spirit; a variable so the tests can shrink it.
+    /// How often the box is measured. A constant in spirit: only tests set it, shorter to run fast. (Swift has no
+    /// test-only marker as Android's `@VisibleForTesting`; nothing in the SDK writes it.)
     static var interval: TimeInterval = 0.25
     /// A gap between ticks shorter than this is a scheduling hiccup, not a stall: two intervals in production
     /// (0.25 s each), and still half a second when a test shrinks the interval to a few milliseconds.
@@ -64,7 +65,8 @@ final class ViewabilityMeter {
     /// The view stayed in its window, its scene active, with nothing of it on screen for `offScreenGrace`: a
     /// feed cell swiped away, a view scrolled or moved out of sight. On every tick while that lasts.
     var onOffScreen: (() -> Void)?
-    /// How long a view in an active scene may show nothing before `onOffScreen`. Tests shorten it.
+    /// How long a view in an active scene may show nothing before `onOffScreen`. A constant in spirit: only
+    /// tests set it, shorter to run fast.
     static var offScreenGrace: TimeInterval = 1
     /// The last answer `onSeen` gave; `nil` before the first real measurement.
     private(set) var isSeen: Bool?
