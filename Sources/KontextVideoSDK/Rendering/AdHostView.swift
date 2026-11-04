@@ -4,6 +4,20 @@ import UIKit
 /// holds the creative at its place. Covering the player is what lets it follow a resize or a rotation,
 /// which only reach a subview through its own bounds; touches outside the creative pass through to the
 /// player.
+///
+/// ```
+/// ┌────────── AdHostView = the whole player, e.g. 800×400 ──────────┐
+/// │                                                                 │
+/// │                (transparent, taps pass through)                 │
+/// │                                                                 │
+/// │                  ┌──── WebView 320×80 ────┐                     │
+/// │                  └────────────────────────┘                     │
+/// │                      ↑ above the bottom inset                   │
+/// └─────────────────────────────────────────────────────────────────┘
+/// ```
+///
+/// The web view is only as big as the ad (its size from the server, shrunk at most to half when it does not
+/// fit), placed by `place` at every layout pass, so it follows a resize or a rotation.
 @MainActor
 final class AdHostView: UIView {
     /// The creative's frame for the player's bounds and safe area, in this view's coordinates; `nil` when
