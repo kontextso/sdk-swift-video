@@ -689,11 +689,20 @@ public final class VideoAd {
             Self.open(url, fallback: nil)
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
-            // outcome of a video that never started (`endNow`). The reason is
-            // the gesture, the same in every format; `isCompleted` says whether the video ran to its
-            // end. A linear ad's close before `complete` is a skip. `reason: complete` is the page ending
-            // itself after the video completed with no end card: nobody closed anything, so no VAST
-            // `close` fires. A fact of the linear format, not of its screen.
+            // outcome of a video that never started (`endNow`). A fact of the linear format, not of its screen.
+            //
+            // How a page's close and skip end an ad, and why a linear ad's close can be a skip:
+            //
+            //   what the viewer does (linear ad)        message        result
+            //   taps Skip, after the skip offset        ad.skip        `skip` beacon, .skipped
+            //   taps Close before the video finished    ad.close       `skip` beacon, .skipped
+            //   closes the end card after the video     ad.close       `close` beacon, .closed
+            //   nothing: the video ended, no end card   ad.close       .completed, no `close` (nobody closed anything)
+            //
+            // For a video ad what counts is whether the viewer watched it to the end. Leaving early is a skip, through
+            // Skip or through Close alike, as video ad tracking counts it; `close` is for closing what already finished.
+            // `isCompleted` is set only by the page's `complete` event, never by a close. Overlay and pause ads have no
+            // "watch to the end": a close is .closed, or .resumed when it resumed the content.
             if format == .linear, !isCompleted {
                 tracker.fire("skip")
                 end(.skipped)
