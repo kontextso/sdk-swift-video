@@ -177,10 +177,9 @@ public final class VideoAd {
     /// video starts: a linear ad's meter waits for the presentation to finish.
     private var videoPlaying = false
     var clock: ActiveTimeClock? { presentation?.clock }
-    var contentProgress: ContentProgress?   // an overlay that follows the content: `VideoAd+Content`
-    var contentPausedSinceShow = false   // a pause ad that follows the content: `VideoAd+Content`
-    var contentPausedWhileInactive = false   // an overlay frozen by a pause in the background: `VideoAd+Content`
-    var contentRecheck: Task<Void, Never>?   // that overlay's check after its scene came back: `VideoAd+Content`
+    /// How the ad follows the tracked content player, by format (`Playback/ContentRule.swift`). Made on first
+    /// use: it holds the ad, which `init` cannot hand out.
+    private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)
     /// The impression fires once: at `show` for an image, at the first frame for a video.
     private var impressionRecorded = false
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
@@ -366,7 +365,7 @@ public final class VideoAd {
             end(.interrupted)
             return
         }
-        endIfContentStopped()
+        contentRule.endIfContentStopped()
         presented()
     }
 
@@ -470,7 +469,7 @@ public final class VideoAd {
         if wasShown { throw VideoAdError.alreadyShown }
         try checkUsable()
         // An episode's ads only in that episode: one requested for it is counted for it.
-        if format != .linear, owner?.playback.playsAnotherEpisode == true {
+        if contentRule.checksEpisode, owner?.playback.playsAnotherEpisode == true {
             Logger.warning("ad \(id.prefix(8)): cannot show, its episode no longer plays in the tracked player; ended as contentChanged")
             invalidate(.contentChanged)
             throw VideoAdError.invalidated(.contentChanged)
@@ -506,7 +505,7 @@ public final class VideoAd {
         // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
         skAdNetwork?.start()
         if format != .linear {
-            let clock = ActiveTimeClock(duration: format == .overlay && !followsContent ? duration : nil, adId: id) { [weak self] in
+            let clock = ActiveTimeClock(duration: contentRule.wallClockDuration, adId: id) { [weak self] in
                 guard let self, !hasEnded else { return }
                 Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
                 isCompleted = true
@@ -515,8 +514,7 @@ public final class VideoAd {
             presentation?.clock = clock
             clock.setSeen(meter?.isSeen ?? true)
             clock.start(in: hostView?.window)
-            startFollowingContent()
-            startFollowingPausedContent()
+            contentRule.started(clock: clock)
         }
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for
@@ -616,8 +614,7 @@ public final class VideoAd {
         if reason == .failed, let failure {
             delegate?.videoAd(self, didFail: failure)
         }
-        contentRecheck?.cancel()
-        contentRecheck = nil
+        contentRule.cancel()
         // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
         let activeTime = presentation?.tearDown() ?? 0
         skAdNetwork?.end()

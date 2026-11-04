@@ -27,7 +27,7 @@ sdk-swift-video/
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter, Presentation, VideoAd+Click and VideoAd+Placement (where an overlay or pause ad goes)
-│   ├── Playback/     the tracked content player (ContentPlayback) and VideoAd+Content (overlay and pause ads follow the content)
+│   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows the content)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
 │   └── PrivacyInfo.xcprivacy
