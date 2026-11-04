@@ -16,10 +16,15 @@ enum AdPlacement {
 
     /// Where `size` goes inside `fullBounds` less `safeArea`; `nil` when it does not fit.
     static func frame(of size: VideoAd.Size, at position: VideoAd.Position?, in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
+        // 1. The free space: the view less the safe area and the app's insets. Nothing left: it does not fit.
         guard let bounds = room(in: fullBounds, safeArea: safeArea) else { return nil }
+        // 2. The largest scale at which the ad fits that space, at most 1 (full size, never enlarged).
         let scale = scale(toFit: size, in: bounds)
+        // 3. It would have to shrink below its limit (half, or not at all for a fixed ad): it does not fit.
         guard scale >= smallestScale(of: size) else { return nil }
+        // 4. Its size in points at that scale.
         let scaled = CGSize(width: (CGFloat(size.width) * scale).rounded(), height: (CGFloat(size.height) * scale).rounded())
+        // 5. Centred across, at the top or the bottom (the default) of the free space.
         let x = (bounds.minX + (bounds.width - scaled.width) / 2).rounded()
         let y = position == .top ? bounds.minY : bounds.maxY - scaled.height
         return CGRect(x: x, y: y, width: scaled.width, height: scaled.height)
