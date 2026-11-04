@@ -165,7 +165,7 @@ final class ViewabilityMeter {
     }
 
     private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
-        guard !window.isHidden, window.alpha > 0.01 else { return (0, .null) }
+        guard !window.isHidden, window.alpha > AdPlacement.transparent else { return (0, .null) }
         let outline = corners(of: view.bounds).map { view.convert($0, to: window) }
         let whole = abs(signedArea(outline))
         guard whole > 0 else { return (0, .null) }
@@ -174,7 +174,7 @@ final class ViewabilityMeter {
         var current: UIView? = view
         while let node = current, node !== window, !visible.isEmpty {
             opacity *= node.alpha
-            if node.isHidden || opacity <= 0.01 { return (0, .null) }
+            if node.isHidden || opacity <= AdPlacement.transparent { return (0, .null) }
             if node !== view, node.clipsToBounds {
                 visible = clip(visible, to: corners(of: node.bounds).map { node.convert($0, to: window) })
             }

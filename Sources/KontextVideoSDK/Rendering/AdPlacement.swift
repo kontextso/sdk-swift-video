@@ -8,6 +8,12 @@ enum AdPlacement {
     /// Below this share of the nominal size a scalable ad is not shown.
     static let minimumScale: CGFloat = 0.5
 
+    /// At most this opacity (1 %) a view counts as invisible, though it is shown: its alpha times every
+    /// ancestor's, as UIKit draws it. Not 0: three ancestors at 0.1 make 0.001, which nobody can see, yet no
+    /// single view is transparent; an ad drawn like that (by accident, or to fake views) must not be shown, get
+    /// an impression or count as seen. 1 % is invisible to the eye, and far below any fade a real UI rests at.
+    nonisolated static let transparent: CGFloat = 0.01
+
     /// Where `size` goes inside `fullBounds` less `safeArea`; `nil` when it does not fit.
     static func frame(of size: VideoAd.Size, at position: VideoAd.Position?, in fullBounds: CGRect, safeArea: UIEdgeInsets) -> CGRect? {
         guard let bounds = room(in: fullBounds, safeArea: safeArea) else { return nil }
@@ -66,7 +72,7 @@ enum AdPlacement {
         var node: UIView? = view
         while let current = node {
             opacity *= current.alpha
-            if current.isHidden || opacity <= 0.01 { return false }
+            if current.isHidden || opacity <= transparent { return false }
             node = current.superview
         }
         return true
