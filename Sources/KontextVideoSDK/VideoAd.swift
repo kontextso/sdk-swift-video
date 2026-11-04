@@ -644,9 +644,13 @@ public final class VideoAd {
         }
     }
 
-    /// What the page reports, mapped to the beacons and the delegate.
+    /// What the page reports, mapped to the beacons and the delegate: `handleNow` with the content playhead
+    /// read once first, when any URL of the moment asks for it (`[CONTENTPLAYHEAD]`), so every beacon of one
+    /// event carries the same time and the app's player is asked once. The tracking URLs came from the ad
+    /// server, and the tracker knows by itself whether one asks. A click is the one event that brings URLs of its
+    /// own, the click-through and its fallback, which the SDK fills in too (`Tracker.clickThrough`): they are
+    /// passed so a macro in them alone is found. An `open`'s URL is opened as it is, with no macros.
     private func handle(_ event: FrameEvent) {
-        // A click brings its own URLs, which may ask for the playhead though no tracking entry does.
         var urls: [URL] = []
         if case .click(let url, let fallbackUrl, _) = event { urls = [url] + (fallbackUrl.map { [$0] } ?? []) }
         withContentPlayhead(alsoFor: urls) { handleNow(event) }
