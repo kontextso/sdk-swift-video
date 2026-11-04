@@ -19,14 +19,16 @@ sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantID
 │   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
-│   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the page's events, the one didEnd
+│   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
-│   ├── Rendering/    the WebView bridge and its events (frame protocol), AdScreen (where an ad is on screen: InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller, the tracker, the viewability meter, Presentation (the slot, the screen, the meter), VideoAd+Click and VideoAd+Placement (where an overlay or pause ad goes)
+│   ├── Frame/        the ad's web page and its messages: the WebView bridge and its events (frame protocol), VideoAd+FrameEvents (what the ad does with each message), VideoAd+Click, the SKAdNetwork impression
+│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller and its presentation, Presentation (the slot, the screen, the meter), the host view, VideoAd+Placement (where an overlay or pause ad goes)
+│   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
@@ -45,8 +47,8 @@ The lifecycle these files implement is the Notion page *SDK Lifecycle*: every `f
 with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns the bid state and re-serves held bids
 until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
-The rule for the tree: the root is what the app calls, `Model/` is the model, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Rendering/`
-is what happens on screen (the Notion hub's "Rendering" section), `Support/` is plumbing.
+The rule for the tree: the root is what the app calls, `Model/` is the model, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
+web page and its messages, `Screen/` puts the ad on screen, `Measurement/` measures and reports (together the Notion hub's "Rendering" section), `Support/` is plumbing.
 
 ## Building
 
@@ -100,7 +102,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
 - What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
-  `Rendering/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
+  `Screen/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
   checks, the public format guards (`wrongPresentation`, `dismiss()` on a linear ad) and the facts of the linear
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
   goes into a rule or a screen, not into an `if format` in `VideoAd`.
@@ -154,7 +156,9 @@ Tests/KontextVideoSDKTests/
 │                 CorpusTests runs the shared malformed-answer corpus
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
 │                 here; its README has the format and how to add a case
-├── Rendering/    the bridge's state machine, the tracker, the meter, the linear-ad controller
+├── Frame/        the bridge's state machine
+├── Screen/       the linear-ad controller
+├── Measurement/  the tracker, the meter, the active-time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen), support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```

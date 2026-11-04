@@ -1,0 +1,118 @@
+import Foundation
+
+/// What the frame page reports, as beacons, the ad's state and the delegate: `VideoAd`'s half of the frame
+/// protocol, the bridge (`FrameBridge`) being the other.
+extension VideoAd {
+    /// What the page reports, mapped to the beacons and the delegate: `handleNow` with the content playhead
+    /// read once first, when any URL of the moment asks for it (`[CONTENTPLAYHEAD]`), so every beacon of one
+    /// event carries the same time and the app's player is asked once. The tracking URLs came from the ad
+    /// server, and the tracker knows by itself whether one asks. A click is the one event that brings URLs of its
+    /// own, the click-through and its fallback, which the SDK fills in too (`Tracker.clickThrough`): they are
+    /// passed so a macro in them alone is found. An `open`'s URL is opened as it is, with no macros.
+    func handle(_ event: FrameEvent) {
+        var urls: [URL] = []
+        if case .click(let url, let fallbackUrl, _) = event { urls = [url] + (fallbackUrl.map { [$0] } ?? []) }
+        withContentPlayhead(alsoFor: urls) { handleNow(event) }
+    }
+
+    private func handleNow(_ event: FrameEvent) {
+        // The bridge stops delivering once hidden; this is the same rule at the ad's own door.
+        guard !hasEnded, invalidationReason == nil else { return }
+        switch event {
+        case .loaded:
+            isLoaded = true
+            tracker.fire("loaded")
+            loadContinuation?.resume()
+            loadContinuation = nil
+        case .error(let code):
+            tracker.fire("error", errorCode: code)
+            reportCreativeError(vastCode: code)
+            if let continuation = loadContinuation {
+                loadContinuation = nil
+                Logger.warning("ad \(id.prefix(8)): creative failed to load, VAST error \(code)")
+                continuation.resume(throwing: VideoAdError.creativeFailed(code: code))
+            } else if wasShown {
+                Logger.warning("ad \(id.prefix(8)): creative failed after show, VAST error \(code)")
+                fail(.creativeFailed(code: code))
+            } else {
+                // Died while waiting to be shown: the ad ends; `show` will throw.
+                invalidate(.creativeFailed(code: code))
+            }
+        case .click(let url, let fallbackUrl, let area):
+            click(url, fallback: fallbackUrl, area: area)
+        case .open(let url, let purpose):
+            Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.absoluteString)")
+            if purpose == "adChoices" {
+                tracker.fire("iconClick")
+            }
+            Self.open(url, fallback: nil)
+        case .close(let reason):
+            // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
+            // outcome of a video that never started (`endNow`). A fact of the linear format, not of its screen.
+            //
+            // How a page's close and skip end an ad, and why a linear ad's close can be a skip:
+            //
+            //   what the viewer does (linear ad)        message        result
+            //   taps Skip, after the skip offset        ad.skip        `skip` beacon, .skipped
+            //   taps Close before the video finished    ad.close       `skip` beacon, .skipped
+            //   closes the end card after the video     ad.close       `close` beacon, .closed
+            //   nothing: the video ended, no end card   ad.close       .completed, no `close` (nobody closed anything)
+            //
+            // For a video ad what counts is whether the viewer watched it to the end. Leaving early is a skip, through
+            // Skip or through Close alike, as video ad tracking counts it; `close` is for closing what already finished.
+            // `isCompleted` is set only by the page's `complete` event, never by a close. Overlay and pause ads have no
+            // "watch to the end": a close is .closed, or .resumed when it resumed the content.
+            if format == .linear, !isCompleted {
+                tracker.fire("skip")
+                end(.skipped)
+            } else {
+                switch reason {
+                case .complete:
+                    isCompleted = true
+                    end(.completed)
+                case .resume:
+                    tracker.fire("close")
+                    end(.resumed)
+                case .close:
+                    tracker.fire("close")
+                    end(.closed)
+                }
+            }
+        case .skip(let playhead):
+            tracker.adPlayhead = playhead
+            // Checkpoints the video passed before the skip that the page never reported, then the skip.
+            tracker.fireProgress(upTo: playhead)
+            tracker.fire("skip")
+            end(.skipped)
+        case .video(let event, let playhead):
+            tracker.adPlayhead = playhead
+            Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
+            switch event {
+            case .start, .resume: videoPlaying = true
+            case .pause: videoPlaying = false
+            default: break
+            }
+            meter?.countsTime = videoPlaying
+            tracker.fire(event.rawValue)
+            tracker.fireProgress(upTo: playhead)
+            // The delegate last: it may end the ad on the spot, and everything above was the event's own.
+            if event == .start {
+                recordImpression()
+            }
+        case .progress(let offset, let playhead):
+            tracker.adPlayhead = playhead
+            tracker.fireProgress(upTo: max(offset, playhead))
+        case .complete(let playhead):
+            tracker.adPlayhead = playhead
+            isCompleted = true
+            videoPlaying = false
+            meter?.countsTime = false   // the end card is not the video playing
+            // Checkpoints before the end that the page never reported, then the end itself.
+            tracker.fireProgress(upTo: playhead)
+            tracker.fire("complete")
+            // The end card, when there is one, becomes visible now.
+            tracker.fire("creativeView", part: "endCard")
+            Logger.info("ad \(id.prefix(8)): complete")
+        }
+    }
+}
