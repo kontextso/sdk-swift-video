@@ -1,6 +1,6 @@
 import Foundation
 
-/// How an ad on screen follows the app's content player: one rule per format, chosen when the ad is made.
+/// How an ad on screen follows the app's content player: one rule per format, chosen once per ad.
 ///
 /// Why: with a player tracked by `VideoAds.track(_:)`, an overlay and a pause ad live by the content, in
 /// opposite ways, and a linear ad does not care. Each format's way lives in its own type, so `VideoAd`

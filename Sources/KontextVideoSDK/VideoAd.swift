@@ -43,6 +43,15 @@ import UIKit
 /// - A linear ad's `hasEnded` comes when it begins to end; `didEnd` follows once its dismissal finished.
 @MainActor
 public final class VideoAd {
+    // Format differences. One type serves the three formats; what differs lives in two places, chosen once
+    // per ad, so this class asks "which format?" only for the public guards and the linear facts below:
+    //
+    //   how it follows the content   ContentRule   OverlayRule / PauseRule / NoContentRule (linear)
+    //   where it is on screen        AdScreen      InlineScreen (overlay, pause) / LinearScreen (linear)
+    //
+    // This class keeps what every format shares: show's checks, the page's events and beacons, and the
+    // one terminal path, end(_:) then finish(_:). Rules and screens end an ad only through end(_:).
+
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     // business at `show`; nothing of that is exposed.
 

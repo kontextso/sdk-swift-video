@@ -26,8 +26,8 @@ sdk-swift-video/
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
-│   ├── Rendering/    the WebView bridge and its events (frame protocol), the linear-ad controller, the tracker, the viewability meter, Presentation, VideoAd+Click and VideoAd+Placement (where an overlay or pause ad goes)
-│   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows the content)
+│   ├── Rendering/    the WebView bridge and its events (frame protocol), AdScreen (where an ad is on screen: InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller, the tracker, the viewability meter, Presentation (the slot, the screen, the meter), VideoAd+Click and VideoAd+Placement (where an overlay or pause ad goes)
+│   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for)
 │   └── PrivacyInfo.xcprivacy
@@ -99,6 +99,11 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - The lifecycle, in one line: `load` returns a ready ad; `show` either throws or presentation begins; then zero or
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
+- What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
+  `Rendering/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
+  checks, the public format guards (`wrongPresentation`, `dismiss()` on a linear ad) and the facts of the linear
+  format (its video's duration for the page, a close before `complete` is a skip). A new format difference
+  goes into a rule or a screen, not into an `if format` in `VideoAd`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView
