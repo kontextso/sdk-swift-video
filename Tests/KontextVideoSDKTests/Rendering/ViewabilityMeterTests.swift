@@ -124,6 +124,35 @@ struct ViewabilityMeterTests {
         meter.stop()
     }
 
+    @Test func aViewInAScrolledParentIsMeasuredWhereItShows() {
+        defer { window.tearDown() }
+        // A scroll view at (0, 100), 320×300, holding the ad 320×80 at (40, 300).
+        let scroll = UIScrollView(frame: CGRect(x: 0, y: 100, width: 320, height: 300))   // clipsToBounds by default
+        scroll.contentSize = CGSize(width: 320, height: 2_000)
+        window.add(scroll)
+        let view = UIView(frame: CGRect(x: 40, y: 300, width: 320, height: 80))
+        scroll.addSubview(view)
+        // Scrolled down by 200: the ad sits at y 100–180 in the scroll view, whole in height; the scroll view
+        // cuts the 40 pt it sticks out on the right.
+        scroll.contentOffset = CGPoint(x: 0, y: 200)
+        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.875) < 0.001, "280×80 of 320×80")
+        // Scrolled by 350: the ad sits at y −50 to 30, only its bottom 30 rows show.
+        scroll.contentOffset = CGPoint(x: 0, y: 350)
+        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.328) < 0.001, "280×30 of 320×80")
+    }
+
+    @Test func aParentThatDoesNotClipLetsTheAdShowBeyondIt() {
+        defer { window.tearDown() }
+        // The ad, 120×80 at x 100 in a 160×200 parent, sticks out 60 pt; UIKit does not clip by default.
+        let parent = UIView(frame: CGRect(x: 0, y: 0, width: 160, height: 200))
+        window.add(parent)
+        let view = UIView(frame: CGRect(x: 100, y: 0, width: 120, height: 80))
+        parent.addSubview(view)
+        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 1) < 0.001, "all of it inside the window")
+        parent.clipsToBounds = true
+        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.5) < 0.001, "cut at the parent's edge: 60 of 120")
+    }
+
     @Test func aScaledAncestorDoesNotShrinkTheShare() async {
         defer { window.tearDown() }
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 400, height: 400))
