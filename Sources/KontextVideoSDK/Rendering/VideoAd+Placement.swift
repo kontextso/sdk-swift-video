@@ -1,7 +1,18 @@
 import UIKit
 
-/// Where an overlay or pause ad goes in the player's view, at `show` and at every resize: the size variant,
-/// its scale, and the frame inside the view's safe area and the app's insets.
+/// Where an overlay or pause ad goes in the player's view: the ad's own choices, made with `AdGeometry`'s
+/// arithmetic (which knows no ad).
+///
+/// ```
+/// show(in: view, insets:)
+///   └─ frame(in:safeArea:)   once: which of the server's size variants fits; none: containerTooSmall,
+///                             the ad stays ready
+/// every layout pass of AdHostView (first show, rotation, resize, safe area change)
+///   └─ refit(in:safeArea:)   where the chosen variant goes now; nil: it no longer fits, and the ad ends
+///
+/// tooSmall                    the containerTooSmall error, with the smallest view that would do
+/// fullscreenFrame             a full-screen pause ad: the whole view less the safe area, no variants
+/// ```
 extension VideoAd {
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
     /// below 50 %, and not at all for a variant marked not scalable. Picks the variant first (the largest that fits without scaling, else the best scale),
