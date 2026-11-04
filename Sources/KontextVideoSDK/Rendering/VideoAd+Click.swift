@@ -10,6 +10,8 @@ extension VideoAd {
         // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
         let fireId = tracker.fire("click", part: area == .endCard && tracker.has("click", part: "endCard") ? "endCard" : nil)
         openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
+        // The delegate hears nothing after `didEnd`. Opening the click-through does not end the ad today; the check
+        // keeps that rule if it ever does.
         guard !hasEnded else { return }
         delegate?.videoAd(self, didClick: Click(area: area))
     }
