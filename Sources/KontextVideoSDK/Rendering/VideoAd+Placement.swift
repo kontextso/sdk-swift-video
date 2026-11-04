@@ -1,18 +1,46 @@
 import UIKit
 
-/// Where an overlay or pause ad goes in the player's view: the ad's own choices, made with `AdGeometry`'s
-/// arithmetic (which knows no ad).
+/// Where an overlay or pause ad goes in the player's view. Two layers: this file decides, `AdGeometry`
+/// calculates.
 ///
 /// ```
-/// show(in: view, insets:)
-///   └─ frame(in:safeArea:)   once: which of the server's size variants fits; none: containerTooSmall,
-///                             the ad stays ready
-/// every layout pass of AdHostView (first show, rotation, resize, safe area change)
-///   └─ refit(in:safeArea:)   where the chosen variant goes now; nil: it no longer fits, and the ad ends
-///
-/// tooSmall                    the containerTooSmall error, with the smallest view that would do
-/// fullscreenFrame             a full-screen pause ad: the whole view less the safe area, no variants
+/// VideoAd.show(in: view, insets:)   ─┐
+/// AdHostView.layoutSubviews (each)  ─┤
+///                                    ▼
+/// ┌─ VideoAd+Placement (knows this ad) ────────────────────────────┐
+/// │  frame(in:safeArea:)   which variant, and where   (at show)    │
+/// │  refit(in:safeArea:)   where it goes now          (each pass)  │
+/// │  tooSmall              the containerTooSmall error             │
+/// │  fullscreenFrame       full-screen pause ad: view less its     │
+/// │                        safe area                               │
+/// └──────────────────────────────┬─────────────────────────────────┘
+///                                │ asks with plain numbers
+///                                ▼
+/// ┌─ AdGeometry (knows no ad, pure arithmetic) ────────────────────┐
+/// │  room           the view less the safe area and insets         │
+/// │  scale          how much the ad must shrink, at most 1         │
+/// │  smallestScale  0.5, or 1 for a fixed ad                       │
+/// │  frame          the rectangle: room, scale, check, place       │
+/// │  adding         the app's insets on top of the safe area       │
+/// └────────────────────────────────────────────────────────────────┘
 /// ```
+///
+/// 1. At `show`, once: `frame(in:safeArea:)`. `AdGeometry.room` gives the free space (none:
+///    `containerTooSmall`). For each size variant from the server `AdGeometry.scale` says how much it would
+///    shrink; the pick is the biggest variant that fits at full size, else the one that shrinks least within its
+///    limit, else the closest (which then fails). `AdGeometry.frame` checks it; `nil`: `tooSmall` and `show`
+///    throws, the ad stays ready. The pick is kept as `chosenSize`.
+/// 2. At every layout pass of `AdHostView`: `refit(in:safeArea:)`. A full-screen pause ad takes the view less
+///    its safe area, no variants. Otherwise `AdGeometry.frame` of `chosenSize`, inside the safe area plus the
+///    app's insets, gives where `AdHostView` puts the web view; `nil`: it no longer fits, `AdHostView` calls
+///    `onUnfit` and the ad ends `.interrupted`.
+///
+/// Example: variants 320×80 and 300×50 pt, an inline player of 393×221 pt, the app's controls 44 pt at the
+/// bottom. The room is 393×177; both variants fit at full size, so the biggest: 320×80, centred, just above
+/// the controls. Rotated to a full-screen player, `refit` runs again: same variant, new numbers.
+///
+/// The split keeps `AdGeometry` testable with numbers alone, and the ad's rules (variants, full screen,
+/// errors, logs) here.
 extension VideoAd {
     /// Where the ad goes in the player's view: the best variant for the box, scaled down to fit, never
     /// below 50 %, and not at all for a variant marked not scalable. Picks the variant first (the largest that fits without scaling, else the best scale),
