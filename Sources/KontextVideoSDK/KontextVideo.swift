@@ -79,6 +79,9 @@ public final class KontextVideo {
     /// Starts the SDK: stores the configuration and calls `/config` in the background.
     /// Call it once, at app launch; a later call's configuration is ignored. `completion` runs on the main
     /// thread once `/config` has answered or failed, for a later call too: with the first call's state.
+    /// It is the optional "tell me when the SDK is ready", rarely needed: ads wait for `/config` by themselves,
+    /// so an app may initialize and request ads at once. For an app that wants the result, to log it or to skip
+    /// ad UI when the SDK is disabled; the `async` overload returns the same state.
     public func initialize(with configuration: Configuration, completion: ((State) -> Void)? = nil) {
         guard !isInitialized else {
             Logger.warning("initialize(with:) was already called; this call's configuration is ignored")
