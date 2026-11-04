@@ -46,13 +46,17 @@ final class AdHostView: UIView {
         fatalError("init(coder:) is not supported")
     }
 
+    /// Called by UIKit at every layout pass (first show, rotation, resize, safe area change): places the ad.
     override func layoutSubviews() {
         super.layoutSubviews()
-        // The player's safe area, not this view's: a player may report its own insets.
+        // 1. Ask VideoAd: for this size and the safe area, where does the ad go? The player's safe area, not this
+        //    view's: a player may report its own insets.
         guard let place, let player = superview else { return }
         if let frame = place(bounds, player.safeAreaInsets) {
+            // 2. It fits: put the web view there, at exactly that size.
             content.frame = frame
         } else if let onUnfit {
+            // 3. It no longer fits: tell VideoAd, once (it ends the ad).
             self.onUnfit = nil
             onUnfit()
         }
