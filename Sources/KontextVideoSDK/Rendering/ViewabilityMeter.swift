@@ -129,14 +129,18 @@ final class ViewabilityMeter {
 
     /// One measurement. Internal so tests can drive it with a frozen clock; the timer calls it otherwise.
     func tick() {
+        // 1. Did the loop stall (more than two ticks, and at least half a second, since the last: the app froze or
+        //    slept)? Then the 50 % stretch cannot be called continuous, and it starts again below.
         let now = Environment.now()
         let stalled = lastTick.map { now - $0 > max(Self.interval * 2, Self.shortestStall) } ?? false
         lastTick = now
+        // 2. Is the view still there, in a window? Held weakly: the meter never keeps a view alive.
         guard let view, let window = view.window else {
             if hasMeasured { report(0, visible: .zero) }
             exposedSince = nil
             offScreenSince = nil
-            // One tick of grace: a view re-parented within the same turn of the run loop is not gone.
+            // One tick of grace: a view re-parented within the same turn of the run loop is not gone. Two in a
+            // row: the ad ends.
             detachedTicks += 1
             if view != nil, detachedTicks >= 2 {
                 onDetached?()
@@ -146,13 +150,17 @@ final class ViewabilityMeter {
         detachedTicks = 0
         guard hasMeasured || (view.bounds.width > 0 && view.bounds.height > 0) else { return }
         hasMeasured = true
-        // The ad's own scene, not the app: an iPad window in the background shows nothing.
+        // 3. Measure: the share on screen and its rectangle; 0 while the ad's own scene is not active (not the
+        //    app: an iPad window in the background shows nothing) or something covers it.
         let active = Environment.isWindowActive(window)
         let seen = active && isCovered?() != true
         let (percentage, visible) = seen ? Self.exposure(of: view, in: window) : (0, .null)
+        // 4. Tell: onExposure when it changed, onSeen when "any of it visible" flipped. First, so the page and
+        //    the clock are current before the rules below may end the ad.
         report(percentage, visible: visible.isNull ? .zero : visible)
         // The page's reaction to the exposure may have ended the ad.
         guard !stopped else { return }
+        // 5. Nothing seen for a second while its scene is active: onOffScreen, the ad ends.
         if active, percentage == 0 {
             if offScreenSince == nil || stalled { offScreenSince = now }
             if let since = offScreenSince, now - since >= Self.offScreenGrace {
@@ -163,6 +171,7 @@ final class ViewabilityMeter {
             offScreenSince = nil
         }
 
+        // 6. The 50 % rule: the continuous time at 50 % or more; long enough, the verdict .viewable, once.
         if percentage >= Self.threshold, countsTime {
             // A gap between ticks breaks the continuity the rule asks for: the clock starts again.
             if exposedSince == nil || stalled { exposedSince = now }
