@@ -159,10 +159,10 @@ public final class VideoAd {
     private(set) weak var owner: VideoAds?
     /// The ad on screen, from `show` to `didEnd`: the slot, the host view or controller, the meter, the clock.
     private(set) var presentation: Presentation?
-    var hostView: AdHostView? { presentation?.hostView }
+    var hostView: AdHostView? { (presentation?.screen as? InlineScreen)?.hostView }
     /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too.
     var extraInsets = UIEdgeInsets.zero
-    var linearController: LinearViewController? { presentation?.linearController }
+    var linearController: LinearViewController? { (presentation?.screen as? LinearScreen)?.controller }
     /// The creative reached the screen (the phase was `onScreen`): the page was told to show, the beacons
     /// of that moment fired. At `show` for an overlay or pause ad; for a linear ad once UIKit presented the
     /// controller. Stays `true` after the end: an ad that was on screen without an impression closes.
@@ -176,7 +176,7 @@ public final class VideoAd {
     /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
     /// video starts: a linear ad's meter waits for the presentation to finish.
     private var videoPlaying = false
-    var clock: ActiveTimeClock? { presentation?.clock }
+    var clock: ActiveTimeClock? { (presentation?.screen as? InlineScreen)?.clock }
     /// How the ad follows the tracked content player, by format (`Playback/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
     private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)
@@ -340,25 +340,12 @@ public final class VideoAd {
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
         // step below checks for that. One bridge throughout: after an end, `bridge` would make a new one.
         let bridge = self.bridge
-        reserve()
+        let screen = InlineScreen(ad: self)
+        reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
-        let host = AdHostView(frame: container.bounds, content: webView)
-        host.coversWhole = descriptor.position == .fullscreen
-        host.content.frame = adFrame
-        host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
-        host.onUnfit = { [weak self] in
-            // Not inside UIKit's layout pass: ending removes the view being laid out.
-            Task { @MainActor [weak self] in
-                guard let self, !hasEnded else { return }
-                Logger.warning("ad \(id.prefix(8)): the view became too small for the ad; ended as interrupted")
-                end(.interrupted)
-            }
-        }
         bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
-        // The host is known before it is added, so an end from the container's hook finds and removes it.
-        presentation?.hostView = host
-        container.addSubview(host)
+        let host = screen.attach(webView, to: container, adFrame: adFrame, coversWhole: descriptor.position == .fullscreen)
         // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
         if !hasEnded, !ViewabilityMeter.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
             Logger.warning("ad \(id.prefix(8)): nothing of the ad is on screen where it was placed; ended as interrupted")
@@ -412,16 +399,11 @@ public final class VideoAd {
         // there finds the slot taken; a destroy ends this ad, checked below). The page is shown, and the
         // beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit refused must never
         // record an impression.
-        reserve()
+        let screen = LinearScreen(ad: self)
+        reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
-        let controller = LinearViewController(webView: webView)
-        controller.onInterrupted = { [weak self] in
-            guard let self else { return }
-            Logger.warning("ad \(id.prefix(8)): presentation interrupted")
-            end(.interrupted)
-        }
-        presentation?.linearController = controller
+        let controller = screen.attach(webView)
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
@@ -483,9 +465,9 @@ public final class VideoAd {
     /// unshown ones; `show` returning is the app's signal. Before any of the app's code can run, so a show
     /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
-    private func reserve() {
+    private func reserve(on screen: any AdScreen) {
         transition(to: .reserved)
-        presentation = Presentation.begin(self, owner: owner)
+        presentation = Presentation.begin(self, owner: owner, screen: screen)
     }
 
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
@@ -504,18 +486,8 @@ public final class VideoAd {
         startMeter()
         // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
         skAdNetwork?.start()
-        if format != .linear {
-            let clock = ActiveTimeClock(duration: contentRule.wallClockDuration, adId: id) { [weak self] in
-                guard let self, !hasEnded else { return }
-                Logger.debug("ad \(id.prefix(8)): overlay duration of \(duration ?? 0) s on screen elapsed")
-                isCompleted = true
-                end(.completed)
-            }
-            presentation?.clock = clock
-            clock.setSeen(meter?.isSeen ?? true)
-            clock.start(in: hostView?.window)
-            contentRule.started(clock: clock)
-        }
+        // An inline ad's clock starts, and its content rule with it.
+        presentation?.screen.presented()
         // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
         // HTML creative, while a video's waits for its first frame. A video's impression waits for
         // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
@@ -560,24 +532,16 @@ public final class VideoAd {
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
         // The app took the view away (navigated off without dismiss()): the ad ends, or it would block every
-        // show in the app. Not a linear ad covered full screen: UIKit removes its view until the cover goes.
+        // show in the app. Not a linear ad covered full screen (the screen's `isCovered`): UIKit removes its view
+        // until the cover goes.
         meter.onDetached = { [weak self] in
             guard let self, !hasEnded else { return }
-            if let controller = linearController, Environment.isCovered(controller) { return }   // asked again each tick
+            if self.meter?.isCovered?() == true { return }   // asked again each tick
             Logger.warning("ad \(id.prefix(8)): its view left the window; ended as interrupted")
             end(.interrupted)
         }
-        // A sheet over a linear ad leaves its view in the window, where the meter would still see it whole.
-        meter.isCovered = { [weak self] in self?.linearController.map(Environment.isCovered) ?? false }
-        // The meter is the one answer to "is it seen": the clock counts only then, and an overlay or pause ad
-        // out of sight in an active scene (a feed cell swiped away) ends, freeing the app's slot. Not a linear
-        // ad: a sheet over it after a click is the viewer's own doing, and it comes back.
-        meter.onSeen = { [weak self] seen in self?.clock?.setSeen(seen) }
-        meter.onOffScreen = { [weak self] in
-            guard let self, format != .linear, !hasEnded else { return }
-            Logger.warning("ad \(id.prefix(8)): out of sight for \(ViewabilityMeter.offScreenGrace) s; ended as interrupted")
-            end(.interrupted)
-        }
+        // What the screen adds: the clock and the off-screen rule inline, the covered check full screen.
+        presentation?.screen.configure(meter: meter)
         presentation?.meter = meter
         meter.start()
     }
@@ -600,11 +564,11 @@ public final class VideoAd {
     // Every end releases, in this order (an ad ended before show: `invalidate` releases what it ever had, the
     // load waiter, the page and its place in the owner):
     //  1. waiters: none left once shown, the load is over; the presentation watchdog stops on `hasEnded`;
-    //  2. timers and clock: the content recheck (endNow), the clock with its timer and scene observers
-    //     (`Presentation.tearDown`);
-    //  3. observers and meter: the viewability meter (`Presentation.tearDown`), the SKAdNetwork impression (endNow);
-    //  4. renderer: the page (hidden, released; endNow) and the host view (`Presentation.tearDown`);
-    //  5. presentation: the linear controller dismissed (endNow); there is no registration to undo on iOS;
+    //  2. timers and clock: the content rule's recheck (endNow), the clock with its timer and scene observers
+    //     (`InlineScreen.tearDown`);
+    //  3. observers and meter: the viewability meter (the screen's `tearDown`), the SKAdNetwork impression (endNow);
+    //  4. renderer: the page (hidden, released; endNow) and the host view (`InlineScreen.tearDown`);
+    //  5. presentation: the linear controller dismissed (`LinearScreen.close`); there is no registration to undo on iOS;
     //  6. context: none on iOS;
     //  7. the app-wide on-screen slot, `KontextVideo.presentation` (`Presentation.release`, from finish);
     //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (`Presentation.release`);
@@ -620,32 +584,25 @@ public final class VideoAd {
         skAdNetwork?.end()
         loadedBridge?.hide()
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
-        var dismissing = false
-        if let controller = presentation?.linearController {
-            presentation?.linearController = nil
-            // Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
-            // the animation.
-            dismissing = LinearPresentation.dismiss(controller, timeout: Self.dismissalTimeout) { [weak self] in
-                self.map { $0.phase == .ending(reason) } ?? false
-            } completion: { [weak self] timedOut in
-                guard let self else { return }
-                if timedOut {
-                    // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
-                    Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
-                    DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
-                    ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                                recovery: .didEndDelivered)
-                }
-                finish(reason)
+        // A linear ad's controller is dismissed, and `didEnd` waits for it; an inline ad is gone already.
+        let dismissing = presentation?.screen.close { [weak self] timedOut in
+            guard let self else { return }
+            if timedOut {
+                // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
+                Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
+                DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
+                ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                            recovery: .didEndDelivered)
             }
-        }
+            finish(reason)
+        } ?? false
         // On screen but never an impression (a video that ended before its first frame, by the app, the viewer
         // or an interruption): `close` is the outcome the server counts as shown, not billed. A failure already
         // fired `error`, the other outcome; an ad that never reached the screen fired nothing to close.
         if isPresented, !impressionRecorded, reason != .failed {
             tracker.fire("close")
         }
-        if format != .linear {
+        if presentation?.screen.isInline == true {
             tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
