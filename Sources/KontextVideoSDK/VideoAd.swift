@@ -144,6 +144,7 @@ public final class VideoAd {
     var bridge: FrameBridge {
         if let loadedBridge { return loadedBridge }
         // A linear ad's duration is its video's length; an overlay's is its time on screen, not the video's.
+        // A fact of the linear format, not of its screen.
         let bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video,
                                  videoDuration: descriptor.format == .linear ? descriptor.duration : nil)
         bridge.onEvent = { [weak self] event in self?.handle(event) }
@@ -319,6 +320,7 @@ public final class VideoAd {
     }
 
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
+        // The public call fits the format: a fact of the linear format, not of its screen.
         guard format != .linear else { throw wrongPresentation("show(in:)", use: "show(from:)") }
         try checkShowable()
         guard ViewabilityMeter.canBeSeen(view) else {
@@ -373,6 +375,7 @@ public final class VideoAd {
     }
 
     private func showLinear(from viewController: UIViewController?) throws {
+        // The public call fits the format: a fact of the linear format, not of its screen.
         guard format == .linear else { throw wrongPresentation("show(from:)", use: "show(in:)") }
         try checkShowable()
         let presenter: UIViewController
@@ -436,6 +439,7 @@ public final class VideoAd {
     /// stops a debug build and is logged in a release build. Not `throws`: nothing here can fail at run
     /// time, and a `try` would only hide that mistake behind a `try?`.
     public func dismiss() {
+        // A fact of the linear format, not of its screen: the public API leaves its end to the ad and the viewer.
         guard format != .linear else {
             Environment.assertionFailure("VideoAd.dismiss() on a linear ad; it ends by itself, destroy() forces it off")
             Logger.error("ad \(id.prefix(8)): dismiss() on a linear ad does nothing; it ends by itself or by the viewer, destroy() forces it off")
@@ -678,7 +682,7 @@ public final class VideoAd {
             // the gesture, the same in every format; `isCompleted` says whether the video ran to its
             // end. A linear ad's close before `complete` is a skip. `reason: complete` is the page ending
             // itself after the video completed with no end card: nobody closed anything, so no VAST
-            // `close` fires.
+            // `close` fires. A fact of the linear format, not of its screen.
             if format == .linear, !isCompleted {
                 tracker.fire("skip")
                 end(.skipped)
