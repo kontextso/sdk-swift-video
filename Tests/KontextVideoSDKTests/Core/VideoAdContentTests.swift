@@ -94,6 +94,20 @@ struct VideoAdContentTests {
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "another player: the overlay ends")
     }
 
+    @Test func anOverlayShownBeforeTheFirstTrackFollowsTheContentFromThenOnActiveTime() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-late2", duration: 60_000)) { _ in }
+        try ad.show(in: view)
+        let clock = try #require(ad.clock)
+        #expect(clock.timer != nil, "no player at show: the duration counts active time")
+        ads.track(harness.player)   // a player made after the overlay went up
+        #expect(ads.playback.isTicking, "the track starts the ticks")
+        await sleepMs(60)
+        #expect(delegate.endReasons.isEmpty)
+        #expect(ad.contentProgress == nil && clock.timer != nil, "the duration stays on active time, as chosen at show")
+        harness.player.isPlaying = false
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "from the track on it follows the content: a pause ends it")
+    }
+
     @Test func aPublisherEndsTheOverlayWithoutWaitingForATick() async throws {
         ContentPlayback.tickInterval = 30
         let player = PublishingPlayer()

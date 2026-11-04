@@ -320,6 +320,18 @@ struct VideoAdTests {
         ad.dismiss()
     }
 
+    @Test func aPauseAdsClockCountsActiveTimeButNeverEndsItOnTime() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p10d", duration: 100))
+        #expect(ad.duration == nil, "a pause ad has no duration, whatever the wire says")
+        try ad.show(in: harness.player.view)
+        let clock = try #require(ad.clock, "its active time is counted, for overlayViewDuration")
+        #expect(clock.timer == nil, "the clock has no duration: nothing ends a pause ad on time")
+        await sleepMs(200)
+        #expect(delegate.endReasons.isEmpty && !ad.isCompleted)
+        ad.dismiss()
+        #expect(delegate.endReasons == [.dismissed])
+    }
+
     @Test func dismissEndsWithDismissedAndFiresOverlayViewDurationNotClose() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: "p10"))
         var sent: [String] = []
