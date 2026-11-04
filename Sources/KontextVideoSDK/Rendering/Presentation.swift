@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 
 /// One ad on screen, from `show` to `didEnd`: the app's one slot, the screen it is on (`AdScreen`: an
 /// overlay's or pause ad's host view and clock, or a linear ad's controller) and the viewability meter.

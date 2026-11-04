@@ -169,10 +169,8 @@ public final class VideoAd {
     private(set) weak var owner: VideoAds?
     /// The ad on screen, from `show` to `didEnd`: the slot, the host view or controller, the meter, the clock.
     private(set) var presentation: Presentation?
-    var hostView: AdHostView? { (presentation?.screen as? InlineScreen)?.hostView }
     /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too.
     var extraInsets = UIEdgeInsets.zero
-    var linearController: LinearViewController? { (presentation?.screen as? LinearScreen)?.controller }
     /// The creative reached the screen (the phase was `onScreen`): the page was told to show, the beacons
     /// of that moment fired. At `show` for an overlay or pause ad; for a linear ad once UIKit presented the
     /// controller. Stays `true` after the end: an ad that was on screen without an impression closes.
