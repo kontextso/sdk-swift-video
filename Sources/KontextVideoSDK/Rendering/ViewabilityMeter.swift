@@ -1,10 +1,35 @@
 import UIKit
 
-/// Measures how much of an ad's view is on screen while it is shown, and decides the one viewability
-/// event: `viewable` once at least 50 % of the box was on screen for the required continuous time (1 s
-/// for an image, 2 s for a video), `notViewable` when the ad ended before that, `viewUndetermined` when
-/// it could not measure. Keeps measuring after the verdict, until the ad ends: it also reports exposure
-/// changes, which the page relays to the creative, and notices the view leaving the window.
+/// A measuring loop: every 250 ms (`interval`) it asks how much of the ad's view the viewer can see right now,
+/// and turns the answer into a few signals. It decides the one viewability event, the industry's (MRC) rule:
+/// `viewable` once at least 50 % of the ad was on screen without a break for 1 s (2 s for a video),
+/// `notViewable` when the ad ended before that, `viewUndetermined` when it could not measure.
+///
+/// ```
+/// every 250 ms: tick()
+///   ├─ measure:   exposure(of:in:): share on screen (0–1) and the visible rectangle   (static: geometry)
+///   ├─ report:    changed? onExposure(share, rect)       → the page, which tells the creative
+///   │             any of it seen? changed: onSeen(bool)  → ActiveTimeClock
+///   ├─ off-screen: nothing seen for 1 s while its scene is active: onOffScreen  → the ad ends
+///   └─ dwell:     ≥ 50 % without a break for the required time: onVerdict(.viewable), once
+/// stop() at the ad's end: no verdict yet? .notViewable (.viewUndetermined when the view is gone)
+/// ```
+///
+/// Outputs: `onVerdict` (the beacon), `onExposure` (`ad.exposure` to the page), `onSeen` (the clock),
+/// `onOffScreen` and `onDetached` (the ad ends). Inputs: `isCovered` (something it cannot measure covers the
+/// ad, such as a sheet over a linear ad) and `countsTime` (off while a video creative is not playing: a paused
+/// video does not count towards its 2 s).
+///
+/// The two hard parts. The geometry, `exposure(of:in:)`: the view's corners are carried through every
+/// ancestor's transform (rotation, scale), and the shape is cut by every ancestor that clips its subviews and
+/// by the window; visible area over full area is the share. Real shapes, not rectangles, so a rotated view is
+/// not over-counted. The timing: the 50 % stretch starts again when the share drops, the video pauses, or the
+/// loop stalled (a frozen app cannot prove the time was continuous).
+///
+/// Also here: `canBeSeen` (could the viewer see a view at all, before showing an ad in it), `isInFront`
+/// and the 1 % `transparent` threshold.
+///
+/// Not `ActiveTimeClock`: that one adds up any time seen, with breaks; this one judges the 50 % rule.
 @MainActor
 final class ViewabilityMeter {
     enum Verdict: String {
