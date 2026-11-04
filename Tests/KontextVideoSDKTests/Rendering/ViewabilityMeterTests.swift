@@ -422,12 +422,12 @@ struct ViewabilityMeterTests {
         let sink = attach(meter)
         meter.start()
         #expect(sink.exposures.last == 0, "\(sink.exposures)")
-        #expect(!AdPlacement.canBeSeen(view), "show refuses it by the same rule")
+        #expect(!ViewabilityMeter.canBeSeen(view), "show refuses it by the same rule")
         outer.alpha = 1
         middle.alpha = 1
         meter.tick()
         #expect(sink.exposures.last == 1, "one ancestor at 0.1 is still seen: \(sink.exposures)")
-        #expect(AdPlacement.canBeSeen(view))
+        #expect(ViewabilityMeter.canBeSeen(view))
     }
 
     @Test func nothingIsReportedBeforeTheViewIsLaidOutInAWindowThenARealZeroIs() async {

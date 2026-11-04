@@ -322,20 +322,20 @@ public final class VideoAd {
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
         guard format != .linear else { throw wrongPresentation("show(in:)", use: "show(from:)") }
         try checkShowable()
-        guard AdPlacement.canBeSeen(view) else {
+        guard ViewabilityMeter.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
             throw VideoAdError.presenterUnavailable
         }
-        guard AdPlacement.isInFront(view) else {
+        guard ViewabilityMeter.isInFront(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
             throw VideoAdError.presenterUnavailable
         }
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
-        extraInsets = AdPlacement.cleaned(insets)
+        extraInsets = AdGeometry.cleaned(insets)
         let adFrame = descriptor.position == .fullscreen
             ? fullscreenFrame(in: area, safeArea: container.safeAreaInsets)
-            : try frame(in: area, safeArea: AdPlacement.adding(extraInsets, to: container.safeAreaInsets))
+            : try frame(in: area, safeArea: AdGeometry.adding(extraInsets, to: container.safeAreaInsets))
         // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
@@ -361,7 +361,7 @@ public final class VideoAd {
         presentation?.hostView = host
         container.addSubview(host)
         // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
-        if !hasEnded, !AdPlacement.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
+        if !hasEnded, !ViewabilityMeter.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
             Logger.warning("ad \(id.prefix(8)): nothing of the ad is on screen where it was placed; ended as interrupted")
             end(.interrupted)
             return
@@ -391,20 +391,20 @@ public final class VideoAd {
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
-            guard AdPlacement.canBeSeen(viewController.view), viewController.presentedViewController == nil,
+            guard ViewabilityMeter.canBeSeen(viewController.view), viewController.presentedViewController == nil,
                   !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
                 throw VideoAdError.presenterUnavailable
             }
             presenter = viewController
         } else {
-            guard let top = LinearViewController.topPresenter(), AdPlacement.canBeSeen(top.view) else {
+            guard let top = LinearViewController.topPresenter(), ViewabilityMeter.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
                 throw VideoAdError.presenterUnavailable
             }
             presenter = top
         }
-        guard AdPlacement.isInFront(presenter.view) else {
+        guard ViewabilityMeter.isInFront(presenter.view) else {
             Logger.warning("ad \(id.prefix(8)): cannot present, the app or the presenter's scene is not in front; the ad stays ready")
             throw VideoAdError.presenterUnavailable
         }
