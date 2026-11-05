@@ -5,7 +5,7 @@
 In progress.
 
 ### Breaking
-* `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `VideoAdsPlayer` protocol (`currentTime`, `isPlaying`, and optional `isPlayingPublisher`, `playbackSpeed`, `seekPublisher`, `contentChangedPublisher` and `currentItem`, the episode it plays, so an episode's ads are shown only in that episode). The SDK reads the playhead from it as before, and now also follows its playback. It holds an `AVPlayer` weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
+* `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `ContentPlayer` protocol (`currentTime`, `isPlaying`, and optional `isPlayingPublisher`, `playbackSpeed`, `seekPublisher`, `contentChangedPublisher` and `currentItem`, the episode it plays, so an episode's ads are shown only in that episode). The SDK reads the playhead from it as before, and now also follows its playback. It holds an `AVPlayer` weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
 * An overlay lives only while the content plays, when a player is tracked:
   * The overlay ends as `.interrupted` when the content pauses (a published pause counts even if playback resumes before it is delivered), the item plays to its end (whatever `actionAtItemEnd` does; until the item plays again, the next overlay is refused), the player moves to another item, `track(_:)` is called with another player, or the tracked player is gone. A pause while the overlay's scene is not active, such as iOS pausing the player as the app goes to the background, freezes the overlay instead, and counts only if the content is still paused a second after the scene is active again.
   * The overlay's `duration` counts seconds of video while it is seen. A stall, or video played while its scene was inactive, counts nothing. An `AVPlayer`'s time jumps count nothing, and its own speed tells fast playback from a seek; a custom player tells both with `playbackSpeed` and `seekPublisher`, and otherwise a step faster than 4.25× real time is taken as a seek.
@@ -15,7 +15,9 @@ In progress.
 * An episode's ads show only in that episode. A player belongs to one `VideoAds` at a time: `track(_:)` on another one lets go of it in the first, and the first one's overlay and pause ads then throw `invalidated(.contentChanged)` at `show`; so do they once the tracked `AVPlayer` plays another item than at `track`. Linear ads are not checked.
 * `VideoAd.Click` no longer has `url`: `didClick` says where the viewer tapped (`area`), not what opened, as established ad SDKs do. The page's target was the advertiser's tracking link, often not what opened (a fallback, the App Store sheet), and the SDK opens it itself.
 * `VideoAd.dismiss()` and `reject(_:)` no longer throw: drop the `try`. `dismiss()` on a linear ad is a programmer error (a debug build stops, a release build logs); `reject()` of an ad that was shown or already ended does nothing.
-* `show(in:)` on a linear ad and `show(from:)` on an overlay or pause ad stop a debug build at the call; a release build still throws `wrongPresentation`.
+* `show(in:)` on a linear ad and `show(from:)` on an overlay or pause ad stop a debug build at the call; a release build throws `wrongShowMethod`.
+* `VideoAdError.wrongPresentation` is now `wrongShowMethod`: the call (`show(in:)` or `show(from:)`) does not fit the ad's format.
+* `VideoAdError.presenterUnavailable` is now `cannotShowNow`: nothing on screen can hold the ad now.
 * Initialisms are cased as in Swift: `KontextVideo.variantID`, `VideoAds.lastRequestID`, `Regulatory.gppSID`. The wire keeps its names.
 * `Content`, `User`, `Regulatory` and `AdFormat` are no longer `Codable` (`Content`, `User` and `Regulatory` are `Hashable` now): the wire form is the SDK's own.
 * `Configuration.defaultAdServerURL` is no longer public; `adServerURL` is an optional `URL?`, `nil` for the production server.
@@ -32,7 +34,7 @@ In progress.
 * Error reports: when the server turns them on in `/config` (`reportErrors`), the SDK sends its faults (a failed request, a creative or frame page that broke, a presentation UIKit refused, an integration mistake) to `/v2/error`, as codes and ids, never personal data. New `VideoAds.lastRequestID`: quote it to Kontext when an ad or a no-fill looks wrong.
 * `KontextVideo.shared.state` is public and read-only: readable at any time, for example to hide your ad UI once the server switched the SDK off.
 * Public initializers for `VideoAd.Price` and `VideoAd.Click`, for your own tests.
-* A `VideoAdsPlayer` that leaves an optional member to its default (often one declared with another type) says so once on the console.
+* A `ContentPlayer` that leaves an optional member to its default (often one declared with another type) says so once on the console.
 * A DocC catalog: the API reference builds with `xcodebuild docbuild`.
 
 ### Changed

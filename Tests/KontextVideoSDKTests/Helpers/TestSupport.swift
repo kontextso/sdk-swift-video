@@ -7,7 +7,7 @@ import UIKit
 /// makes a `VideoAds` that reads the playhead from here, without a playing state: an overlay runs on its
 /// own time. `isPlaying` is for tests that pass the player to `track(_:)`.
 @MainActor
-final class TestPlayer: VideoAdsPlayer {
+final class TestPlayer: ContentPlayer {
     let view: UIView
     var playhead: TimeInterval = 0
     var isPlaying = true

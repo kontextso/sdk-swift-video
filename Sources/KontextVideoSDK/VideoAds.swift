@@ -333,7 +333,7 @@ public final class VideoAds {
         playback.track(player)
     }
 
-    /// The same for any other player: conform it to `VideoAdsPlayer`, or wrap it in a small type that does.
+    /// The same for any other player: conform it to `ContentPlayer`, or wrap it in a small type that does.
     /// Unlike an `AVPlayer`, it is held strongly, until `destroy()` or the next `track`: a wrapper needs no
     /// other reference. A player or wrapper that references this `VideoAds`, directly or through the object
     /// that owns it (your player model), makes a cycle: both stay alive, with the ads they hold and their
@@ -344,7 +344,7 @@ public final class VideoAds {
     /// `VideoAds` is let go of here, and this one's overlay and pause ads then throw
     /// `invalidated(.contentChanged)` at `show`. The SDK cannot see a custom player's item, so a wrapper reused
     /// across episodes is not checked for that: track it from each episode's `VideoAds` as it starts.
-    public func track(_ player: some VideoAdsPlayer) {
+    public func track(_ player: some ContentPlayer) {
         guard !isDestroyed else { return }
         playback.track(player)
     }

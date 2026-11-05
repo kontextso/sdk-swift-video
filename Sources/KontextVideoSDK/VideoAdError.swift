@@ -6,7 +6,7 @@ import Foundation
 ///   shown; the only beacon a failed call fires is a failed `load()`'s VAST `error`. Whether the ad stays
 ///   usable is said per case.
 /// - Delivered through `videoAd(_:didFail:)`, after a `show` that was accepted: the ad broke on screen
-///   (`creativeFailed`), or UIKit never presented a linear ad (`presenterUnavailable`). `didEnd(.failed)`
+///   (`creativeFailed`), or UIKit never presented a linear ad (`cannotShowNow`). `didEnd(.failed)`
 ///   follows and the ad is over.
 public enum VideoAdError: Error, Sendable, Equatable {
     /// `initialize(with:)` was not called. A debug build already stopped on an assertion; a release build
@@ -65,10 +65,10 @@ public enum VideoAdError: Error, Sendable, Equatable {
     /// over the app): show once the app is back in front. The ad stays ready: try
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
-    case presenterUnavailable
+    case cannotShowNow
     /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad. A
     /// programmer error: a debug build already stopped on an assertion at the call. The ad stays as it was.
-    case wrongPresentation
+    case wrongShowMethod
 }
 
 extension VideoAdError {
@@ -217,9 +217,9 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
             return "the content is paused; show the overlay once it plays"
         case .containerTooSmall(let minimum):
             return "the view is too small for the ad; at least \(Self.points(minimum.width))×\(Self.points(minimum.height)) points are needed"
-        case .presenterUnavailable:
+        case .cannotShowNow:
             return "no view controller can present the ad now"
-        case .wrongPresentation:
+        case .wrongShowMethod:
             return "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear)"
         }
     }

@@ -10,10 +10,10 @@ extension VideoAd {
     /// `show(in:)` on a linear ad, `show(from:)` on an overlay or pause ad: a programmer error, found as early as
     /// the single `VideoAd` type allows, at the call. It stops a debug build with the call to use; a release
     /// build logs it and throws, and the ad stays as it was.
-    func wrongPresentation(_ call: String, use other: String) -> VideoAdError {
+    func wrongShowMethod(_ call: String, use other: String) -> VideoAdError {
         Environment.assertionFailure("VideoAd.\(call) on a \(format) ad; use \(other)")
         Logger.error("ad \(id.prefix(8)): \(call) on a \(format) ad does nothing; a \(format) ad is shown with \(other)")
-        return .wrongPresentation
+        return .wrongShowMethod
     }
 
     /// The creative's error as a fault report. The bridge says why it failed: the page, a load timeout, a page

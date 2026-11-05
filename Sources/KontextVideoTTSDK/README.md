@@ -1,7 +1,7 @@
 # KontextVideoTTSDK
 
 An optional product for apps that play content with TTSDK (`TTVideoEngine`, the BytePlus / Volcengine VOD player)
-instead of `AVPlayer`. One call replaces a hand-written `VideoAdsPlayer` wrapper:
+instead of `AVPlayer`. One call replaces a hand-written `ContentPlayer` wrapper:
 
 ```swift
 import KontextVideoTTSDK

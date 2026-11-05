@@ -202,7 +202,7 @@ struct VideoAdTests {
     @Test func showInOnALinearAdThrowsWrongPresentation() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i2"))
         let assertions = AssertionLog()
-        do { try ad.show(in: harness.player.view) } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
+        do { try ad.show(in: harness.player.view) } catch VideoAdError.wrongShowMethod {} catch { Issue.record("expected wrongShowMethod, got \(error)") }
         #expect(assertions.all == ["VideoAd.show(in:) on a linear ad; use show(from:)"], "a programmer error stops a debug build at the call")
         #expect(ad.isReady, "untouched")
     }
@@ -251,8 +251,8 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10d", duration: 150))
         do {
             try ad.show(in: harness.player.view)
-            Issue.record("expected presenterUnavailable")
-        } catch VideoAdError.presenterUnavailable {}
+            Issue.record("expected cannotShowNow")
+        } catch VideoAdError.cannotShowNow {}
         #expect(ad.isReady && delegate.events.isEmpty, "nothing spent while nobody can see it")
         Environment.isApplicationActive = { true }
         try ad.show(in: harness.player.view)
@@ -706,7 +706,7 @@ struct VideoAdTests {
         #expect(await waitUntil { self.window.root.presentedViewController === modal })
         // The runner never finishes the dismissal, which is the moment at issue: the modal is going, the root still presents it.
         window.root.dismiss(animated: true)
-        do { try ad.show() } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable, got \(error)") }
+        do { try ad.show() } catch VideoAdError.cannotShowNow {} catch { Issue.record("expected cannotShowNow, got \(error)") }
         #expect(ad.isReady, "the ad waits for a presenter that can present")
     }
 
@@ -720,7 +720,7 @@ struct VideoAdTests {
         send(ad, "video.start", ["playhead": 0])   // a page that started anyway: dropped, it was never shown
         #expect(await waitUntil { delegate.endReasons == [.failed] })
         #expect(delegate.events == ["fail", "end:failed"], "no impression for an ad nobody saw")
-        guard case .presenterUnavailable? = delegate.failures.first else { Issue.record("expected presenterUnavailable, got \(delegate.failures)"); return }
+        guard case .cannotShowNow? = delegate.failures.first else { Issue.record("expected cannotShowNow, got \(delegate.failures)"); return }
         let fired = await beacons()
         #expect(!fired.contains("impression") && !fired.contains("creativeView") && !fired.contains("start"), "nothing billable: \(fired)")
         #expect(KontextVideo.shared.adOnScreen == nil, "the screen is free again")
@@ -834,7 +834,7 @@ struct VideoAdTests {
     @Test func showInAViewThatIsNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10b"))
         let detached = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 400))
-        do { try ad.show(in: detached) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable, got \(error)") }
+        do { try ad.show(in: detached) } catch VideoAdError.cannotShowNow {} catch { Issue.record("expected cannotShowNow, got \(error)") }
         #expect(ad.isReady, "retryable")
         #expect(await beacons() == ["loaded"], "nothing fired by the attempt")
     }
@@ -842,7 +842,7 @@ struct VideoAdTests {
     @Test func showFromWhenNotOnScreenThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i10"))
         let detached = UIViewController()
-        do { try ad.show(from: detached) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
+        do { try ad.show(from: detached) } catch VideoAdError.cannotShowNow {} catch { Issue.record("expected cannotShowNow") }
         #expect(ad.isReady, "retryable")
     }
 
@@ -850,7 +850,7 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i11"))
         let other = UIViewController()
         window.root.present(other, animated: false)
-        do { try ad.show(from: window.root) } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
+        do { try ad.show(from: window.root) } catch VideoAdError.cannotShowNow {} catch { Issue.record("expected cannotShowNow") }
         window.root.dismiss(animated: false)
         #expect(ad.isReady)
     }
@@ -868,7 +868,7 @@ struct VideoAdTests {
     @Test func showWithoutAPresenterAndNoKeyWindowThrowsPresenterUnavailableAndKeepsTheAd() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i14"))
         Environment.keyWindow = { nil }
-        do { try ad.show() } catch VideoAdError.presenterUnavailable {} catch { Issue.record("expected presenterUnavailable") }
+        do { try ad.show() } catch VideoAdError.cannotShowNow {} catch { Issue.record("expected cannotShowNow") }
         #expect(ad.isReady, "retryable, or pass the controller")
     }
 
@@ -886,7 +886,7 @@ struct VideoAdTests {
     @Test func showFromOnAPauseAdThrowsWrongPresentation() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p19"))
         let assertions = AssertionLog()
-        do { try ad.show(from: window.root) } catch VideoAdError.wrongPresentation {} catch { Issue.record("expected wrongPresentation, got \(error)") }
+        do { try ad.show(from: window.root) } catch VideoAdError.wrongShowMethod {} catch { Issue.record("expected wrongShowMethod, got \(error)") }
         #expect(assertions.all == ["VideoAd.show(from:) on a pause ad; use show(in:)"] && ad.isReady)
     }
 

@@ -109,7 +109,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   `State/SdkState` the same way, moved by `KontextVideo` under `State/SdkLifecycle`; the reporters ask it.
 - What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
   `Screen/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
-  checks, the public format guards (`wrongPresentation`, `dismiss()` on a linear ad) and the facts of the linear
+  checks, the public format guards (`wrongShowMethod`, `dismiss()` on a linear ad) and the facts of the linear
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
   goes into a rule or a screen, not into an `if format` in `VideoAd`.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
@@ -244,7 +244,7 @@ Where the two differ on purpose, each language's convention wins:
 - Initialisms: Swift cases them as Swift does (`variantID`, `lastRequestID`, `gppSID`), Kotlin keeps `Id`.
 - `dismiss()` does not throw (Kotlin drops its checked exception the same way); `reject(_:)` does not throw
   in Swift, where an ad already ended or shown makes it a no-op with a console line.
-- The custom player: Swift's `VideoAdsPlayer` reports through optional publishers (`isPlayingPublisher`,
+- The custom player: Swift's `ContentPlayer` reports through optional publishers (`isPlayingPublisher`,
   `seekPublisher`, `contentChangedPublisher`) and `playbackSpeed`; Kotlin's through a `Listener`
   (`onIsPlayingChanged`, `onSeek`, `onContentChanged`) and `playbackSpeed`. Same meaning, member for member.
 - The public value types are plain values in Swift, not `Codable`: the wire goes through `Payloads/AppInputs.swift`. The server both talk to is mocked by

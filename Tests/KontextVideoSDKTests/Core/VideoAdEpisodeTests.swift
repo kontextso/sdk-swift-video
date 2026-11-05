@@ -114,7 +114,7 @@ struct VideoAdEpisodeTests {
     }
 
     /// A custom player that reports the episode it plays.
-    final class EpisodePlayer: VideoAdsPlayer {
+    final class EpisodePlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
         var isPlaying = true
         var currentItem: AnyHashable?

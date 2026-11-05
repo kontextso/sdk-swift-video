@@ -124,9 +124,13 @@ final class OverlayRule: ContentRule {
 
     /// The overlay is on screen: its `duration`, if any, counts from the playhead now, and starts again from
     /// the playhead whenever its scene comes back: video played while it could not be seen counts nothing.
-    /// A pause while the scene was away is checked again once it is back.
+    /// A pause while the scene was away is checked again once it is back. Shown with no player tracked, it says
+    /// so: its duration then is time on screen, which an app that calls `track(_:)` after `show` may not expect.
     func started(clock: ActiveTimeClock) {
-        guard followsContent, let owner = ad.owner else { return }
+        guard followsContent, let owner = ad.owner else {
+            Logger.warning("overlay \(ad.id.prefix(8)) shown before track(): its duration counts on-screen time, not video time")
+            return
+        }
         if let duration = ad.duration { contentProgress = ContentProgress(duration: duration, at: owner.playback.playhead) }
         clock.onActivate = { [weak self] in
             guard let self, let playback = ad.owner?.playback else { return }

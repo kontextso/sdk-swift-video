@@ -24,7 +24,7 @@ struct VideoAdContentTests {
     }
 
     /// A custom player with a publisher, and a count of the subscriptions it still has.
-    final class PublishingPlayer: VideoAdsPlayer {
+    final class PublishingPlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
         var isPlaying = true { didSet { subject.send(isPlaying) } }
         let subject = PassthroughSubject<Bool, Never>()
@@ -36,7 +36,7 @@ struct VideoAdContentTests {
     }
 
     /// A custom player that reports what it does: its speed, its seeks and its item changes.
-    final class ReportingPlayer: VideoAdsPlayer {
+    final class ReportingPlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
         var isPlaying = true
         var playbackSpeed: Double? = 1
@@ -47,7 +47,7 @@ struct VideoAdContentTests {
     }
 
     /// A custom player that declares its publisher with the wrong type: not the protocol's requirement.
-    final class MistypedPlayer: VideoAdsPlayer {
+    final class MistypedPlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
         var isPlaying = true
         var isPlayingPublisher: AnyPublisher<Bool, Never> { Just(true).eraseToAnyPublisher() }
@@ -92,6 +92,31 @@ struct VideoAdContentTests {
         #expect(delegate.endReasons.isEmpty, "only a player replacing another hands the overlay over")
         ads.track(TestPlayer())
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "another player: the overlay ends")
+    }
+
+    @Test func anOverlayShownBeforeTrackSaysItsDurationCountsOnScreenTime() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-untracked", duration: 60_000)) { _ in }
+        var warnings: [String] = []
+        Logger.level = .warning
+        Logger.sink = { level, message in if level == .warning { warnings.append(message) } }
+        defer { Logger.sink = nil }
+        try ad.show(in: view)
+        let expected = "overlay \(ad.id.prefix(8)) shown before track(): its duration counts on-screen time, not video time"
+        #expect(warnings.filter { $0.contains("before track()") } == [expected], "once, at show")
+        #expect(ad.wasShown && !ad.hasEnded && delegate.endReasons.isEmpty && ad.clock != nil, "shown as before, on its clock")
+        ad.dismiss()
+    }
+
+    @Test func aTrackedOverlayDoesNotWarn() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-tracked", duration: 60_000))
+        var warnings: [String] = []
+        Logger.level = .warning
+        Logger.sink = { level, message in if level == .warning { warnings.append(message) } }
+        defer { Logger.sink = nil }
+        try ad.show(in: view)
+        #expect(ad.wasShown && !ad.hasEnded)
+        #expect(!warnings.contains { $0.contains("before track()") }, "tracked: no warning")
+        ad.dismiss()
     }
 
     @Test func anOverlayShownBeforeTheFirstTrackFollowsTheContentFromThenOnActiveTime() async throws {
@@ -431,7 +456,7 @@ struct VideoAdContentTests {
     }
 
     /// A player whose `isPlaying` getter runs app code.
-    final class HookPlayer: VideoAdsPlayer {
+    final class HookPlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
         var onRead: (() -> Void)?
         var isPlaying: Bool {
@@ -714,7 +739,7 @@ struct VideoAdContentTests {
     }
 
     /// A player whose publisher runs app code when it is read and when it is subscribed to.
-    final class SetupHookPlayer: VideoAdsPlayer {
+    final class SetupHookPlayer: ContentPlayer {
         var currentTime: TimeInterval = 1
         var isPlaying = true
         var onRead: (() -> Void)?
@@ -901,7 +926,7 @@ struct VideoAdContentTests {
     }
 
     /// A player model that owns its `VideoAds` and is its tracked player: the cycle the docs warn about.
-    final class OwningPlayer: VideoAdsPlayer {
+    final class OwningPlayer: ContentPlayer {
         var ads: VideoAds?
         var currentTime: TimeInterval { 0 }
         var isPlaying: Bool { true }

@@ -7,7 +7,7 @@ import Combine
 /// reference; it reads it on the main actor. A conforming type that references the `VideoAds`, or the object
 /// owning it, keeps both alive until `destroy()`: call `destroy()` then, or do not reference the ads from it.
 @MainActor
-public protocol VideoAdsPlayer: AnyObject {
+public protocol ContentPlayer: AnyObject {
     /// Where the content is, in seconds of the episode.
     var currentTime: TimeInterval { get }
     /// `false` when the viewer or your app paused the content, or it ended. Buffering and seeking count as
@@ -38,7 +38,7 @@ public protocol VideoAdsPlayer: AnyObject {
 
 /// The defaults of the optional members: the SDK does without, and says so once on the console, so a member
 /// declared with another type, which the compiler takes for a different property, does not go unnoticed.
-extension VideoAdsPlayer {
+extension ContentPlayer {
     /// No publisher: the SDK reads `isPlaying` when it needs it.
     public var isPlayingPublisher: AnyPublisher<Bool, Never>? {
         PlayerFallback.note("isPlayingPublisher", of: Self.self, level: .warning,
@@ -73,7 +73,7 @@ extension VideoAdsPlayer {
     }
 }
 
-/// Says once per process, per member, that a `VideoAdsPlayer` left an optional member to its default.
+/// Says once per process, per member, that a `ContentPlayer` left an optional member to its default.
 @MainActor
 enum PlayerFallback {
     /// The members already said. Tests empty it.
@@ -89,8 +89,8 @@ enum PlayerFallback {
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
 /// an overlay, which lives only while the content plays, and a pause ad, which lives only while it is paused. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
-/// `VideoAdsPlayer` (its publishers, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
-/// `AVPlayer` weakly (the app owns it) and a `VideoAdsPlayer` strongly (often a wrapper only the SDK holds);
+/// `ContentPlayer` (its publishers, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
+/// `AVPlayer` weakly (the app owns it) and a `ContentPlayer` strongly (often a wrapper only the SDK holds);
 /// `stop()` drops every observer, subscription and timer, and the player. Every callback carries the binding
 /// it came from: one queued from a player tracked before is dropped.
 @MainActor
@@ -133,7 +133,7 @@ final class ContentPlayback {
     private var readTime: (() -> TimeInterval?)?
     /// Whether the content plays, `nil` once the player is gone.
     private var readPlaying: (() -> Bool?)?
-    /// The playback speed when the player tells it (an `AVPlayer`'s `rate`, a `VideoAdsPlayer`'s `playbackSpeed`),
+    /// The playback speed when the player tells it (an `AVPlayer`'s `rate`, a `ContentPlayer`'s `playbackSpeed`),
     /// for telling fast playback from a seek.
     private var readRate: (() -> Double?)?
     private weak var avPlayer: AVPlayer?
@@ -161,8 +161,8 @@ final class ContentPlayback {
         guard hasEpisodeItem, let avPlayer else { return false }
         return episodeItem == nil || avPlayer.currentItem !== episodeItem
     }
-    /// The tracked `VideoAdsPlayer`, kept alive until `stop()`.
-    private var customPlayer: (any VideoAdsPlayer)?
+    /// The tracked `ContentPlayer`, kept alive until `stop()`.
+    private var customPlayer: (any ContentPlayer)?
     private var observations: [NSKeyValueObservation] = []
     private var itemObservers: [any NSObjectProtocol] = []
     private var subscriptions: [AnyCancellable] = []
@@ -268,7 +268,7 @@ final class ContentPlayback {
         claim(player)
     }
 
-    func track(_ player: some VideoAdsPlayer) {
+    func track(_ player: some ContentPlayer) {
         guard let wasOverlayShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
                                          rate: { [weak player] in player?.playbackSpeed }) else { return }
         customPlayer = player

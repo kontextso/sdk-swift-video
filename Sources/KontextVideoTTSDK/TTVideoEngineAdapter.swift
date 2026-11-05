@@ -25,7 +25,7 @@ extension VideoAds {
 
 /// A TTSDK engine as the SDK reads it, through key-value coding on the properties TTSDK declares.
 @MainActor
-final class TTVideoEngineAdapter: VideoAdsPlayer {
+final class TTVideoEngineAdapter: ContentPlayer {
     /// `TTVideoEnginePlaybackStatePlaying`.
     static let playbackStatePlaying = 1
 

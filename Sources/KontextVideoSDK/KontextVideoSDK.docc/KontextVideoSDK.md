@@ -32,7 +32,7 @@ Create a ``VideoAds`` for each episode and track the player it plays in:
 
 ```swift
 let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"))
-ads.track(player)   // an AVPlayer, or your own player conformed to VideoAdsPlayer
+ads.track(player)   // an AVPlayer, or your own player conformed to ContentPlayer
 ```
 
 Ask for an ad before its moment, so `show` is instant:
@@ -96,7 +96,7 @@ no user id or email. The package ships a privacy manifest.
 ### On screen
 
 - ``VideoAdDelegate``
-- ``VideoAdsPlayer``
+- ``ContentPlayer``
 
 ### Errors
 

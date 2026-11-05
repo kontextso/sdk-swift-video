@@ -19,7 +19,7 @@ import UIKit
 /// One type serves every format, so `format(_:)` and an auction read the same way for all three; the format
 /// decides how it is shown: `show(in:)` for an overlay or pause ad, `show(from:)` for a linear ad. The
 /// other call is a programmer error, caught at that call: it stops a debug build and throws
-/// `wrongPresentation` in a release build. Code that shows an ad of a format it does not fix switches on
+/// `wrongShowMethod` in a release build. Code that shows an ad of a format it does not fix switches on
 /// `format`.
 ///
 /// ## State
@@ -265,9 +265,9 @@ public final class VideoAd {
 
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
     /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
-    /// Throws when the show cannot begin, with nothing fired: `wrongPresentation` (a linear ad),
+    /// Throws when the show cannot begin, with nothing fired: `wrongShowMethod` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated` (`.contentChanged` too: show an episode's ads only in
-    /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `presenterUnavailable`
+    /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `cannotShowNow`
     /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent;
     /// or the app is not active or the view's window scene is not in the foreground and active: the content
     /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
@@ -291,15 +291,15 @@ public final class VideoAd {
 
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
         // The public call fits the format: a fact of the linear format, not of its screen.
-        guard format != .linear else { throw wrongPresentation("show(in:)", use: "show(from:)") }
+        guard format != .linear else { throw wrongShowMethod("show(in:)", use: "show(from:)") }
         try checkShowable()
         guard ViewabilityMeter.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
-            throw VideoAdError.presenterUnavailable
+            throw VideoAdError.cannotShowNow
         }
         guard ViewabilityMeter.isInFront(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
-            throw VideoAdError.presenterUnavailable
+            throw VideoAdError.cannotShowNow
         }
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
@@ -330,9 +330,9 @@ public final class VideoAd {
     /// and not already presenting; with `nil` (the default) from the key window's top view controller,
     /// the usual default for a full-screen ad. Pass the controller when the guess would
     /// be wrong: a player presented as a sheet, a second window, a hosting controller that is not yours.
-    /// Throws when the show cannot begin, with nothing fired: `wrongPresentation` (an overlay or pause
+    /// Throws when the show cannot begin, with nothing fired: `wrongShowMethod` (an overlay or pause
     /// ad), `alreadyShown`, `anotherAdShowing`, `invalidated`, `destroyed`, `disabled`,
-    /// `presenterUnavailable` (the controller cannot present, or the app or its window scene is not in the
+    /// `cannotShowNow` (the controller cannot present, or the app or its window scene is not in the
     /// foreground and active; the ad stays ready: try again once the app is back, or pass the right
     /// controller). Otherwise `show` was accepted: the ad is being presented, or, if code of yours that UIKit
     /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`). Only the SDK dismisses it:
@@ -344,26 +344,26 @@ public final class VideoAd {
 
     private func showLinear(from viewController: UIViewController?) throws {
         // The public call fits the format: a fact of the linear format, not of its screen.
-        guard format == .linear else { throw wrongPresentation("show(from:)", use: "show(in:)") }
+        guard format == .linear else { throw wrongShowMethod("show(from:)", use: "show(in:)") }
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
             guard ViewabilityMeter.canBeSeen(viewController.view), viewController.presentedViewController == nil,
                   !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
-                throw VideoAdError.presenterUnavailable
+                throw VideoAdError.cannotShowNow
             }
             presenter = viewController
         } else {
             guard let top = LinearAdViewController.topPresenter(), ViewabilityMeter.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
-                throw VideoAdError.presenterUnavailable
+                throw VideoAdError.cannotShowNow
             }
             presenter = top
         }
         guard ViewabilityMeter.isInFront(presenter.view) else {
             Logger.warning("ad \(id.prefix(8)): cannot present, the app or the presenter's scene is not in front; the ad stays ready")
-            throw VideoAdError.presenterUnavailable
+            throw VideoAdError.cannotShowNow
         }
         // Reserved first, so a completion that runs at once finds the ad shown and the slot taken, and before
         // the WebView leaves its parking window, whose overridable hooks are the app's code (a show from
@@ -387,7 +387,7 @@ public final class VideoAd {
             guard let self else { return }
             ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
                                         recovery: .adEndedFailed)
-            fail(.presenterUnavailable)
+            fail(.cannotShowNow)
         }
     }
 

@@ -114,11 +114,11 @@ struct VideoAdPlacementTests {
         let refused = { (ad: VideoAd, view: UIView, label: String) in
             do {
                 try ad.show(in: view)
-                Issue.record("\(label): expected presenterUnavailable")
-            } catch VideoAdError.presenterUnavailable {
+                Issue.record("\(label): expected cannotShowNow")
+            } catch VideoAdError.cannotShowNow {
                 #expect(ad.isReady && !ad.wasShown, "\(label): the ad stays ready")
             } catch {
-                Issue.record("\(label): expected presenterUnavailable, got \(error)")
+                Issue.record("\(label): expected cannotShowNow, got \(error)")
             }
         }
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p10h"))
@@ -149,8 +149,8 @@ struct VideoAdPlacementTests {
         let (linear, _, _) = try await makeAd(Fixtures.linearAd(id: "v10h"))
         do {
             try linear.show(from: hiddenWindow.root)
-            Issue.record("expected presenterUnavailable")
-        } catch VideoAdError.presenterUnavailable {
+            Issue.record("expected cannotShowNow")
+        } catch VideoAdError.cannotShowNow {
             #expect(linear.isReady, "a controller in a hidden window cannot present it")
         }
     }
@@ -171,10 +171,10 @@ struct VideoAdPlacementTests {
         let refused = { (container: UIWindow, label: String) in
             do {
                 try hidden.show(in: container)
-                Issue.record("\(label): expected presenterUnavailable")
-            } catch VideoAdError.presenterUnavailable {
+                Issue.record("\(label): expected cannotShowNow")
+            } catch VideoAdError.cannotShowNow {
             } catch {
-                Issue.record("\(label): expected presenterUnavailable, got \(error)")
+                Issue.record("\(label): expected cannotShowNow, got \(error)")
             }
         }
         refused(hiddenWindow.window, "a hidden window is not on screen")
@@ -211,10 +211,10 @@ struct VideoAdPlacementTests {
             for (call, show) in attempts {
                 do {
                     try show()
-                    Issue.record("\(state), \(call): expected presenterUnavailable")
-                } catch VideoAdError.presenterUnavailable {
+                    Issue.record("\(state), \(call): expected cannotShowNow")
+                } catch VideoAdError.cannotShowNow {
                 } catch {
-                    Issue.record("\(state), \(call): expected presenterUnavailable, got \(error)")
+                    Issue.record("\(state), \(call): expected cannotShowNow, got \(error)")
                 }
             }
         }
