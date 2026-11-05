@@ -7,9 +7,10 @@ import UIKit
 /// before its first frame, and an image ad ended while it was being presented, before its impression.
 ///
 /// ```
-///   end reason                       video ad, no impression   image ad, no impression
-///   every reason but failed          close                     close
-///   failed                           nothing (`error` fired)   nothing
+///   end reason                                    video ad, no impression      image ad, no impression
+///   dismissed, destroyed, interrupted, completed  close                        nothing
+///   skipped, closed, resumed                      nothing (their own beacon)   nothing
+///   failed                                        nothing (`error` fired)      nothing
 /// ```
 ///
 /// An inline ad also fires `overlayViewDuration` at every end.
@@ -66,7 +67,7 @@ struct VideoAdEndBeaconTests {
             ad.end(reason)
             #expect(delegate.endReasons == [reason])
             let fired = await events(id, after: "overlayViewDuration")
-            let closes = reason == .failed ? 0 : 1
+            let closes = [VideoAd.EndReason.dismissed, .destroyed, .interrupted, .completed].contains(reason) ? 1 : 0
             #expect(fired.filter { $0 == "close" }.count == closes, "\(reason): \(fired)")
             #expect(!fired.contains("impression"))
         }
@@ -81,7 +82,7 @@ struct VideoAdEndBeaconTests {
             try ad.show(in: harness.player.view)
             #expect(delegate.endReasons == [reason])
             let fired = await events(id, after: "overlayViewDuration")
-            #expect(fired.filter { $0 == "close" }.count == (reason == .failed ? 0 : 1), "\(reason): \(fired)")
+            #expect(!fired.contains("close"), "an image's impression fires at show; no close stands in for it: \(reason): \(fired)")
             #expect(!fired.contains("impression"))
         }
     }
@@ -94,22 +95,22 @@ struct VideoAdEndBeaconTests {
         ad.presented()
     }
 
-    @Test func aLinearAdSkippedBeforeItsFirstFrameFiresSkipThenClose() async throws {
+    @Test func aLinearAdSkippedBeforeItsFirstFrameFiresOnlySkip() async throws {
         let (ad, delegate) = try await makeAd(Fixtures.linearAd(id: "el-skip"))
         try presentLinear(ad)
         send(ad, "video.skip", ["playhead": 0])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
         let fired = await events("el-skip", after: "skip")
-        #expect(fired.filter { $0 == "close" }.count == 1, "the skip, then the end's close: \(fired)")
+        #expect(!fired.contains("close"), "the skip is the outcome: \(fired)")
     }
 
-    @Test func aLinearAdClosedBeforeItsFirstFrameFiresSkipThenClose() async throws {
+    @Test func aLinearAdClosedBeforeItsFirstFrameFiresOnlySkip() async throws {
         let (ad, delegate) = try await makeAd(Fixtures.linearAd(id: "el-close"))
         try presentLinear(ad)
         send(ad, "ad.close", ["reason": "close"])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
         let fired = await events("el-close", after: "skip")
-        #expect(fired.filter { $0 == "close" }.count == 1, "a close before the end is a skip, then the end's close: \(fired)")
+        #expect(!fired.contains("close"), "a close before the end is a skip, and the skip is the outcome: \(fired)")
     }
 }
 }

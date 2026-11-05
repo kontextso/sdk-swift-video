@@ -402,6 +402,9 @@ public final class VideoAd {
         }
     }
 
+    /// The ends a video before its first frame reports as `close`: none fired a beacon of its own.
+    private static let closedBeforeFirstFrame: [EndReason] = [.dismissed, .destroyed, .interrupted, .completed]
+
     /// How long a linear presentation may take to reach the screen before the ad gives up on it.
     static var presentationTimeout: TimeInterval = 2
     /// How long a linear dismissal may take before `didEnd` comes anyway, once the controller left the screen (five
@@ -578,10 +581,11 @@ public final class VideoAd {
             }
             finish(reason)
         } ?? false
-        // On screen but never an impression (a video that ended before its first frame, by the app, the viewer
-        // or an interruption): `close` is the outcome the server counts as shown, not billed. A failure already
-        // fired `error`, the other outcome; an ad that never reached the screen fired nothing to close.
-        if isPresented, !impressionRecorded, reason != .failed {
+        // A video on screen that never reached its first frame (`video.start`), ended by the app, an interruption,
+        // a destroy or its own time: `close` is the outcome the server counts as shown, not billed. A failure
+        // already fired `error`; the page's own close or skip fired its beacon; an image's impression fires at
+        // show; an ad that never reached the screen fired nothing to close. As the Kotlin SDK decides it.
+        if isPresented, descriptor.creative == .video, !impressionRecorded, Self.closedBeforeFirstFrame.contains(reason) {
             tracker.fire("close")
         }
         if presentation?.screen.isInline == true {

@@ -36,6 +36,8 @@ In progress.
 * A DocC catalog: the API reference builds with `xcodebuild docbuild`.
 
 ### Changed
+* A video ad on screen that ended before its first frame fires the `close` beacon only when the app, an interruption, a destroy or its own time ended it, as the Kotlin SDK does; a skip or the page's own close no longer adds a second `close` after its `skip` or `close`, and an image ad never fires one in its impression's place.
+* A page message may be up to 1 MB (was 64 KB).
 * `/config` is sent once, with no retry, like every other request; a retry policy comes later. After a failure the SDK is `.failed`, and the next `format()` tries `/config` again, as before.
 * KontextKit 0.4.0, now up to the next minor version, so its patches arrive without an SDK release. The volume in an ads request comes from KontextKit again, which since 0.4.0 reads it without touching the app's audio session.
 * An overlay's `duration` and its on-screen time count while its window's scene is active, not the app: on iPad, a second window of the app taking the screen freezes them too.

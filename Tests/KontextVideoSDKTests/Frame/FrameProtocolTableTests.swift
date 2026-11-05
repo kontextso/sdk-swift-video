@@ -133,14 +133,17 @@ struct FrameProtocolTableTests {
             let holds6 = kind(core.accept(message("ad.loaded"), from: sender, now: 0)) == (accepted ? "loaded" : "drop")
             #expect(holds6, "\(sender)")
         }
-        let padding = String(repeating: "x", count: FrameProtocol.maxMessageBytes)
+        // A message of exactly `maxMessageBytes` bytes parses; one byte more is dropped.
+        let head = "{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
+        let atLimit = head + String(repeating: "x", count: FrameProtocol.maxMessageBytes - head.utf8.count - tail.utf8.count) + tail
+        #expect(FrameProtocol.maxMessageBytes == 1024 * 1024 && atLimit.utf8.count == FrameProtocol.maxMessageBytes)
         let bodies: [(Any, String)] = [
             (message("ad.loaded", adId: "ad-2"), "drop"),
             (["adId": "ad-1"], "drop"),
             ("not json", "drop"),
             ("[1, 2]", "drop"),
-            ("{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"\(padding)\"}", "drop"),
-            ("{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"\(padding.prefix(1000))\"}", "loaded"),
+            (head + "x" + atLimit.dropFirst(head.utf8.count), "drop"),
+            (atLimit, "loaded"),
             ("{\"adId\":\"ad-1\",\"type\":\"ad.loaded\"}", "loaded"),
         ]
         for (body, expected) in bodies {

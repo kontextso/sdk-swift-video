@@ -75,8 +75,8 @@ struct FrameProtocol {
     static let touchWindow: TimeInterval = 1
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
-    /// The largest message string parsed, in UTF-8 bytes; every message of the protocol is far smaller.
-    static let maxMessageBytes = 64 * 1024
+    /// The largest message string parsed, in UTF-8 bytes (1 MB); every message of the protocol is far smaller.
+    static let maxMessageBytes = 1024 * 1024
     /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
     /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
     /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
