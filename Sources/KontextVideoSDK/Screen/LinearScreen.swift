@@ -1,4 +1,3 @@
-import UIKit
 import WebKit
 
 /// A linear ad full screen: the `LinearAdViewController` UIKit presents, and its dismissal at the end

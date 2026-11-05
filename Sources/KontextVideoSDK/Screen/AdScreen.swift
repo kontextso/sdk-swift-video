@@ -1,4 +1,4 @@
-import UIKit
+import Foundation
 
 /// Where an ad is on screen, by format: inside the app's player view (`InlineScreen`, an overlay or pause
 /// ad) or full screen over the app (`LinearScreen`, a linear ad).

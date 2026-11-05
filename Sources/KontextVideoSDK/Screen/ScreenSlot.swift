@@ -31,7 +31,7 @@ enum ScreenSlot {
     }
 
     /// The slot free, with nothing told. Tests only: the slot is process-wide.
-    static func resetForTesting() { // swiftlint:disable:this unused_declaration
+    static func resetForTesting() {
         current = nil
     }
 }
