@@ -189,12 +189,7 @@ struct TrackerTests {
     }
 
     @Test func aNonsensePlayheadIsClampedNotCrashed() async throws {
-        #expect(Tracker.playhead(seconds: .infinity) == "00:00:00.000")
-        #expect(Tracker.playhead(seconds: .nan) == "00:00:00.000")
-        #expect(Tracker.playhead(seconds: -5) == "00:00:00.000")
-        #expect(Tracker.playhead(seconds: TimeInterval(Int.max) / 1000) == "87600:00:00.000", "ten years, not a trap")
-        #expect(Tracker.playhead(seconds: 1e300) == "87600:00:00.000")
-        #expect(Tracker.playhead(seconds: 3661.25) == "01:01:01.250")
+        // The formatting itself: TrackingMacrosTests. Here, a beacon fired with both.
         let tracker = try makeTracker()
         tracker.adPlayhead = Int.max
         tracker.contentPlayhead = { .infinity }

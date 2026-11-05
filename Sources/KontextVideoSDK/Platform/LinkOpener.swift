@@ -34,7 +34,7 @@ enum LinkOpener {
     /// `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it (iOS 17); the tracker reads the
     /// encoded form.
     static func url(_ raw: String) -> URL? {
-        guard !raw.unicodeScalars.contains(where: unusableCharacters.contains), let url = URL(string: Tracker.encodingBrackets(raw)) else { return nil }
+        guard !raw.unicodeScalars.contains(where: unusableCharacters.contains), let url = URL(string: TrackingMacros.encodingBrackets(raw)) else { return nil }
         if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host?.isEmpty ?? true { return nil }
         return url
     }

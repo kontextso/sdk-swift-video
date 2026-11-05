@@ -1,11 +1,8 @@
 import Foundation
 
 /// Fires an ad's `tracking` entries when their moment happens, once each except the events that repeat
-/// (`repeatable`), with the macros substituted: the IAB's (`[CACHEBUSTING]`, `[TIMESTAMP]`, `[MEDIAPLAYHEAD]`
-/// and its deprecated twin `[CONTENTPLAYHEAD]`, `[ADPLAYHEAD]`, `[ERRORCODE]`) and our own, prefixed `KONTEXT_`
-/// so they never collide with the IAB registry (`[REASON]` there is an integer for verification pixels). A
-/// macro the SDK does not know stays in place. The page never fires a beacon; the SDK fires every one. No
-/// retries: a beacon that did not leave is lost.
+/// (`repeatable`), with the macros substituted (`TrackingMacros`). The page never fires a beacon; the SDK fires
+/// every one. No retries: a beacon that did not leave is lost.
 @MainActor
 final class Tracker {
     /// Milliseconds into the ad video, as the page last reported it; `[ADPLAYHEAD]`.
@@ -34,7 +31,7 @@ final class Tracker {
         self.adId = adId
         self.entries = entries
         session = Environment.session
-        readsContentPlayhead = entries.contains { Self.asksForContentPlayhead($0.url) }
+        readsContentPlayhead = entries.contains { TrackingMacros.asksForContentPlayhead($0.url) }
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
@@ -93,76 +90,8 @@ final class Tracker {
     }
 
     private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
-        // A macro may arrive with its brackets encoded, one or both (a click-through parsed into a `URL`):
-        // normalized first, so detection and substitution see the same string. The end re-encodes whatever
-        // is left, so a bracket that was never a macro comes out as it went in.
-        let normalized = Self.decodingBrackets(template)
-        // The content playhead read once, and only when a URL asks for it: its two names are one moment.
-        let content = Self.asksForContentPlayhead(normalized)
-            ? Self.encode(Self.playhead(seconds: frozenContentPlayhead ?? contentPlayhead())) : ""
-        let substituted = normalized
-            .replacingOccurrences(of: "[CACHEBUSTING]", with: String(format: "%08d", Int.random(in: 0..<100_000_000)))
-            .replacingOccurrences(of: "[TIMESTAMP]", with: Self.encode(Self.timestamp.string(from: Date())))
-            .replacingOccurrences(of: "[MEDIAPLAYHEAD]", with: content)
-            .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: content)
-            .replacingOccurrences(of: "[ADPLAYHEAD]", with: Self.encode(Self.playhead(seconds: TimeInterval(adPlayhead) / 1000)))
-            .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
-            .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
-            .replacingOccurrences(of: "[KONTEXT_VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
-            .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
-            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: Self.encode(notUsed?.winningPrice.map { String($0) } ?? ""))
-            .replacingOccurrences(of: "[KONTEXT_WINNER]", with: Self.encode(notUsed?.winner ?? ""))
-        // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
-        // URL, and every `%3A` above would become `%253A`.
-        return Self.encodingBrackets(substituted)
-    }
-
-    /// Either name of the content playhead, its brackets encoded or not.
-    static func asksForContentPlayhead(_ template: String) -> Bool {
-        let normalized = decodingBrackets(template)
-        return normalized.contains("[MEDIAPLAYHEAD]") || normalized.contains("[CONTENTPLAYHEAD]")
-    }
-
-    /// A macro's brackets as the tracker matches them: `%5B` and `%5D`, in either case, back to `[` and `]`.
-    static func decodingBrackets(_ text: String) -> String {
-        text.replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
-            .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
-    }
-
-    /// Brackets percent-encoded, as a URL carries them: `URL(string:)` refuses a bare one, or re-encodes the
-    /// whole string around it.
-    static func encodingBrackets(_ text: String) -> String {
-        text.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D")
-    }
-
-    /// `[TIMESTAMP]`: `YYYY-MM-DDTHH:MM:SS.mmm±HH:MM` in the device's zone.
-    private static let timestamp: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = .current
-        return formatter
-    }()
-
-    /// Playheads beyond this (ten years, the same cap as the content playhead) are nonsense and clamped:
-    /// a value near `Int.max` would trap the `Int` conversion below.
-    static let maxPlayhead: TimeInterval = 315_360_000
-
-    /// `[MEDIAPLAYHEAD]`, `[ADPLAYHEAD]`: `HH:MM:SS.mmm`.
-    static func playhead(seconds: TimeInterval) -> String {
-        let seconds = seconds.isFinite ? min(max(0, seconds), maxPlayhead) : 0
-        // Whole milliseconds first: splitting the Double would lose one (9.806 is 9.80599… in binary).
-        let totalMs = Int((seconds * 1000).rounded())
-        let hours = totalMs / 3_600_000
-        let minutes = totalMs / 60_000 % 60
-        let secs = totalMs / 1000 % 60
-        let millis = totalMs % 1000
-        return String(format: "%02d:%02d:%02d.%03d", hours, minutes, secs, millis)
-    }
-
-    /// A value inside one query parameter: only RFC 3986's unreserved characters stay, so `:` in a playhead,
-    /// `+` in a price and `;`, `/` or `?` in a winner's name are no parser's delimiter.
-    private static func encode(_ value: String) -> String {
-        value.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? value
+        TrackingMacros.substitute(template, contentPlayhead: { frozenContentPlayhead ?? contentPlayhead() }, adPlayheadMs: adPlayhead,
+                                  errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)
     }
 }
 
@@ -205,11 +134,6 @@ extension Tracker {
     }
 }
 
-private extension CharacterSet {
-    /// RFC 3986 unreserved: letters, digits, `-._~`.
-    static let urlQueryValueAllowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-}
-
 extension VideoAd {
     /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
     /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
@@ -218,7 +142,7 @@ extension VideoAd {
     /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
     @discardableResult
     func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
-        let asked = tracker.readsContentPlayhead || urls.contains { Tracker.asksForContentPlayhead($0.absoluteString) }
+        let asked = tracker.readsContentPlayhead || urls.contains { TrackingMacros.asksForContentPlayhead($0.absoluteString) }
         guard tracker.frozenContentPlayhead == nil, asked else { return try work() }
         tracker.frozenContentPlayhead = tracker.lastContentPlayhead
         defer { tracker.frozenContentPlayhead = nil }
