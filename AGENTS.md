@@ -70,14 +70,14 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   a violation once; `accept` returns a `Step`), `TouchGate` (one tap opens one URL), `FrameNavigation` (what a
   top-level navigation may do, a navigation out as a click), `FrameBridge` (its load and timeout, parking, the navigation
   delegate; it carries out each `Step`), `FrameWebView` (the WebView locked down for one ad: what the page may and may not do), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
-  message of its page; a click goes to `VideoAd.click`), `SKAdNetworkImpression`.
+  message of its page; a click goes to `VideoAd.click`).
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearAdViewController`, `LinearPresentation` (its present and dismiss,
   each with a watchdog), `ScreenSlot` (the app's one ad on screen: taken at `show`, freed at `didEnd`, here and nowhere
   else; the ad holds its screen, the screen its meter; the creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `InlineScreen+Placement` (where an inline ad goes, from `InlineScreen`'s
   insets and chosen size; the page gets the size at `FrameBridge.show(size:)`).
-- `Measurement/`, what the viewer saw (visibility, time on screen) and the beacons that report it: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter` (the 50 % rule's loop), `ViewExposure` (how much of a view is seen) and `Polygon` (its geometry), `OnScreenTimeClock`. `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
-  `ContentRule`. `Payloads/` is the
-  wire, `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
+- `Measurement/`, what the viewer saw (visibility, time on screen) and the beacons that report it: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter` (the 50 % rule's loop), `ViewExposure` (how much of a view is seen) and `Polygon` (its geometry), `OnScreenTimeClock`, `SKAdNetworkImpression` (Apple's install-attribution impression of an app-install ad). `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
+  `ContentRule`. `Payloads/` is the ad server's API: /config, /ads, its
+  error body, the app's inputs as sent, and Apple attribution; `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),
   `SdkState` the SDK's facts (its phase, the public `KontextVideo.State`; the configuration; what `/config` said of
   error and debug reports, which the reporters ask), `AdState` every fact of an ad's life: the phase and the milestones

@@ -55,7 +55,8 @@ final class Tracker {
     /// for an AdChoices open, a video moment, progress checkpoints the page passed without reporting them, `skip`,
     /// and at `complete` the end card's `creativeView`. What the ad does about the event (its state, the delegate,
     /// its end) is the ad's, around this call. Not here: a click's beacon, which shares its fire id with the
-    /// click-through (`VideoAd.click`), and a close's, which depends on how the close ends the ad.
+    /// click-through (`VideoAd.click`), and a close's, which depends on how the close ends the ad. It takes a
+    /// `FrameEvent` because the beacons are named after the page's events (the VAST names).
     func record(_ event: FrameEvent) {
         switch event {
         case .loaded:
