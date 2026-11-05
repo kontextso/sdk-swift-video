@@ -164,7 +164,8 @@ Layout, one suite per source file plus the whole flows:
 ```
 Tests/KontextVideoSDKTests/
 ├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (payloads),
-│                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
+│                 FramePageServer (real frame pages over the kontext-test scheme), FramePageDriver (the
+│                 bridge's calls on the protocol, without a WebView), TestSupport
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
 ├── Model/        encoding of what the app passes in
 ├── State/        the lifecycles' tables (SdkLifecycleTests, AdLifecycleTests), the SDK state's and the ad state's moves,
@@ -176,8 +177,9 @@ Tests/KontextVideoSDKTests/
 │                 CorpusTests runs the shared malformed-answer corpus
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
 │                 here; its README has the format and how to add a case
-├── Frame/        a page message read (FrameMessageTests), the protocol as tables (FrameProtocolTableTests, no WebView), every message in every bridge
-│                 state (FrameMessageTableTests), the bridge with its WebView (FrameBridgeTests)
+├── Frame/        a page message read (FrameMessageTests), the protocol as tables (FrameProtocolTableTests) and rule by
+│                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), all without a
+│                 WebView; the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, the meter, the active-time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
@@ -188,6 +190,10 @@ Tests/KontextVideoSDKTests/
 ```
 
 Rules the suites follow:
+
+- A test that checks the frame protocol's rules drives `FramePageDriver`, not a `FrameBridge`: every bridge owns
+  a WKWebView, and WebKit launches a web content process for each. A burst of them on a CI runner stalled the
+  suites after it that load real pages.
 
 - Anything that touches process-wide state (the shared instance, `Environment`, the stub server) nests under
   `SerialSuites`, which is `.serialized`; Swift Testing runs other suites in parallel.

@@ -2,9 +2,10 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// Every message type of the Kontext Frame Protocol in every state of the bridge, as one table: what reaches
-/// the ad. A characterization of the bridge as a whole (envelope, sender, state, order, touch), so a change
-/// to any of its rules shows up here as a changed cell.
+/// Every message type of the Kontext Frame Protocol in every state of the page, as one table: what reaches
+/// the ad. A characterization of the whole (envelope, sender, state, order, touch), so a change to any of its
+/// rules shows up here as a changed cell. The table runs on the protocol behind the bridge's calls
+/// (`FramePageDriver`); a few cells run through a real `FrameBridge` too.
 ///
 /// ```
 ///   outcome   what the ad gets
@@ -74,50 +75,63 @@ struct FrameMessageTableTests {
         "ad.whatever": [.drop, .drop, .drop, .drop],
     ]
 
-    private func bridge(in stage: Stage) -> (FrameBridge, () -> [FrameEvent]) {
-        let bridge = FrameBridge(adId: "ad-1", url: URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: true)
+    /// Puts `page` in `stage`; the events it delivers from then on.
+    private func setUp(_ page: any FramePage, in stage: Stage) -> () -> [FrameEvent] {
         var events: [FrameEvent] = []
-        bridge.onEvent = { events.append($0) }
+        page.onEvent = { events.append($0) }
         switch stage {
         case .loading:
             break
         case .loaded:
-            bridge.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
         case .shown:
-            bridge.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
-            bridge.show()
-            bridge.receive(["adId": "ad-1", "type": "video.start"], from: main)
+            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.show(size: nil)
+            page.receive(["adId": "ad-1", "type": "video.start"], from: main)
         case .ended:
-            bridge.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
-            bridge.show()
-            bridge.hide()
+            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.show(size: nil)
+            page.hide()
         }
         let setUp = events.count
-        return (bridge, { Array(events.dropFirst(setUp)) })
+        return { Array(events.dropFirst(setUp)) }
     }
 
-    private func outcome(of type: String, _ body: [String: Any], in stage: Stage) -> Outcome {
-        let (bridge, events) = bridge(in: stage)
-        let before = bridge.state
+    private func outcome(of type: String, _ body: [String: Any], in stage: Stage, on page: any FramePage) -> Outcome {
+        let events = setUp(page, in: stage)
+        let before = page.state
         var message: [String: Any] = ["adId": "ad-1", "type": type]
         body.forEach { message[$0.key] = $0.value }
-        bridge.noteTouch()
-        bridge.receive(message, from: main)
+        page.noteTouch()
+        page.receive(message, from: main)
         let delivered = events()
         if delivered.isEmpty {
-            #expect(bridge.state == before, "\(type) in \(stage): a dropped message leaves the state")
+            #expect(page.state == before, "\(type) in \(stage): a dropped message leaves the state")
             return .drop
         }
         #expect(delivered.count == 1, "\(type) in \(stage): one event")
-        if case .loaded = delivered[0] { return bridge.state == .loaded ? .loaded : .deliver }
-        if bridge.state == .ended, before != .ended { return .end }
+        if case .loaded = delivered[0] { return page.state == .loaded ? .loaded : .deliver }
+        if page.state == .ended, before != .ended { return .end }
         return .deliver
     }
 
+    /// The whole table on the protocol, with the bridge's calls (`FramePageDriver`): no WebView per cell.
     @Test func everyMessageInEveryState() {
         for (type, body) in Self.messages {
-            let row = Stage.allCases.map { outcome(of: type, body, in: $0) }
+            let row = Stage.allCases.map { outcome(of: type, body, in: $0, on: FramePageDriver(isVideo: true)) }
             #expect(row == Self.expected[type], "\(type): loading, loaded, shown, ended")
+        }
+    }
+
+    /// A few cells through a real `FrameBridge`, one of each outcome: the bridge carries out the same steps.
+    @Test func theBridgeGivesTheSameCells() {
+        let cells: [(type: String, stage: Stage)] = [("ad.loaded", .loading), ("ad.click", .loaded), ("ad.click", .shown),
+                                                     ("video.pause", .shown), ("ad.close", .shown), ("ad.error", .loading)]
+        for (type, stage) in cells {
+            let column = Stage.allCases.firstIndex(of: stage)!
+            let body = Self.messages.first { $0.type == type }!.body
+            let bridge = FrameBridge(adId: "ad-1", url: URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: true)
+            #expect(outcome(of: type, body, in: stage, on: bridge) == Self.expected[type]?[column], "\(type) in \(stage)")
         }
     }
 }
