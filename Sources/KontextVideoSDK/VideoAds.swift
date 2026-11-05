@@ -200,9 +200,9 @@ public final class VideoAds {
                 try owner().checkStillUsable()
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
                 // Once per request, here in the request every caller shares, not once per waiting caller.
-                let failure = ErrorReporter.RequestFailure(error)
+                let failure = ErrorReport.FailedRequest(error)
                 let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
-                let recovery: ErrorReporter.Recovery = try owner().holdsAds ? .heldAdsKept : .noAd
+                let recovery: ErrorReport.Recovery = try owner().holdsAds ? .heldAdsKept : .noAd
                 ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
                                             sessionId: sessionId, failure: failure, recovery: recovery)
                 throw VideoAdError.request(VideoAdError.RequestFailure(error))

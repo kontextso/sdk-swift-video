@@ -230,7 +230,7 @@ public final class KontextVideo {
             sdkState.moveTo(.failed)
             Logger.error("/config failed, no ads until it succeeds: \(error)")
             // Waits in memory: it leaves once a later `/config` turns the reports on.
-            let failure = ErrorReporter.RequestFailure(error)
+            let failure = ErrorReport.FailedRequest(error)
             ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: failure)
         }
     }

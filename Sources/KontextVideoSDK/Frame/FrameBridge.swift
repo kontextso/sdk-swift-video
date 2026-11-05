@@ -44,7 +44,7 @@ final class FrameBridge: NSObject {
     /// Set as the bridge fails, before the `.error` event goes out.
     private(set) var failureCause: FailureCause?
     /// The system error behind a page that could not load, as a domain and a code.
-    private(set) var failureUnderlying: ErrorReporter.Underlying?
+    private(set) var failureUnderlying: ErrorReport.Underlying?
     var onEvent: ((FrameEvent) -> Void)?
 
     private var loadTimeoutTask: Task<Void, Never>?
@@ -351,7 +351,7 @@ extension FrameBridge: WKNavigationDelegate {
     func responseDecision(_ response: URLResponse, isMainFrame: Bool, canShowMIMEType: Bool) -> WKNavigationResponsePolicy {
         if isMainFrame, state == .loading, let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
             Logger.warning("frame \(adId.prefix(8)): page answered \(status)")
-            failureUnderlying = ErrorReporter.Underlying(httpStatus: status)
+            failureUnderlying = ErrorReport.Underlying(httpStatus: status)
             fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
             return .cancel
         }
@@ -390,7 +390,7 @@ extension FrameBridge: WKNavigationDelegate {
     private func loadFailed(_ error: Error) {
         guard state == .loading, !Self.isInterruption(error) else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
-        failureUnderlying = ErrorReporter.Underlying(error)
+        failureUnderlying = ErrorReport.Underlying(error)
         fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
     }
 

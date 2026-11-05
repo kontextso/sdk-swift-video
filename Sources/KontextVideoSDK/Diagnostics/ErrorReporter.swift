@@ -7,89 +7,19 @@ import Foundation
 /// Off until `/config` says `reportErrors: true`; a missing field, `enabled: false` or a failed launch keep it
 /// off. Before `/config` answers, reports wait in memory and leave once it turns them on, or are dropped. Every
 /// fault is eligible; delivery is bounded and best effort:
-/// - at most `maxBuffered` reports wait; beyond that the oldest go, and the next batch says how many;
-/// - one batch at a time, at most `maxBatch` reports; a batch that fails is retried unchanged (same
+/// - at most `ReportQueue.maxBuffered` reports wait; beyond that the oldest go, and the next batch says how many;
+/// - one batch at a time, at most `ReportQueue.maxBatch` reports; a batch that fails is retried unchanged (same
 ///   `batchId`, same `dropped`), after a backoff from `retryDelay` doubling to `maxRetryDelay`, with jitter;
 /// - the server can stop a running client at once: `410` ends reporting for this launch, any other `4xx`
 ///   but `429` drops that batch without a retry;
 /// - nothing is stored on disk.
 /// Each report carries codes and ids, never free text from a system error, and never the IFA, the IDFV, the
 /// user id, the email, consent strings, request or response bodies, or URLs.
+///
+/// The shell only: the mode, the scheduling, the retry delay, sending and the server's answers. A report itself is
+/// `ErrorReport`, the waiting ones and their batches `ReportQueue`.
 @MainActor
 final class ErrorReporter {
-    /// What failed. Stable: the server groups by it.
-    enum Code: String, Sendable {
-        case configFailed = "config.failed"
-        case adsRequestFailed = "ads.request_failed"
-        case adsDecodeFailed = "ads.decode_failed"
-        case creativeFailed = "ad.creative_failed"
-        case loadTimeout = "ad.load_timeout"
-        case frameLoadFailed = "frame.load_failed"
-        case processTerminated = "frame.process_terminated"
-        case protocolViolation = "frame.protocol_violation"
-        case presentationFailed = "ad.presentation_failed"
-        case dismissalTimedOut = "ad.dismissal_timed_out"
-        case skanFailed = "skan.failed"
-        case emptyToken = "integration.empty_token"
-        case badServerURL = "integration.bad_server_url"
-        case notInitialized = "integration.not_initialized"
-        case badContent = "integration.bad_content"
-    }
-
-    /// Where in the SDK it failed.
-    enum Stage: String, Encodable, Sendable {
-        case config, request, load, presentation, playback, attribution, integration
-    }
-
-    /// What the SDK did about it. A closed list, so the server can count by it.
-    enum Recovery: String, Encodable, Sendable {
-        /// A failed request left the held, valid ads in place; `format()` returns them.
-        case heldAdsKept = "held_ads_kept"
-        /// Nothing to show.
-        case noAd = "no_ad"
-        /// The ad was on screen and ended with `didEnd(.failed)`.
-        case adEndedFailed = "ad_ended_failed"
-        /// The ad failed before `show`; `load()` or `show` throws.
-        case adDroppedBeforeShow = "ad_dropped_before_show"
-        /// UIKit never finished; `didEnd` was delivered anyway.
-        case didEndDelivered = "did_end_delivered"
-    }
-
-    /// A system error as a domain and a code only; its text can carry anything.
-    struct Underlying: Encodable, Equatable, Sendable {
-        let domain: String
-        let code: Int
-
-        init(_ error: Error) {
-            let error = error as NSError
-            domain = ErrorReporter.capped(error.domain)
-            code = error.code
-        }
-
-        /// A page answered with an error status: domain `http`, the status as the code, as the Kotlin SDK sends it.
-        init(httpStatus: Int) {
-            domain = "http"
-            code = httpStatus
-        }
-    }
-
-    struct Report: Encodable, Sendable {
-        let id: String
-        let createdAt: String
-        let code: String
-        let stage: Stage
-        let requestId: String?
-        let sessionId: String?
-        let adId: String?
-        let vastCode: Int?
-        let httpStatus: Int?
-        let underlying: Underlying?
-        /// A short machine word that narrows the code down: the SKAdNetwork step, `network`, the missing field.
-        let detail: String?
-        let recovery: Recovery?
-        let history: [DebugReporter.Moment]
-    }
-
     private struct Request: Encodable {
         struct OS: Encodable {
             let name: String
@@ -104,13 +34,7 @@ final class ErrorReporter {
         let app: AppInfo
         let os: OS
         let dropped: Int
-        let errors: [Report]
-    }
-
-    /// One batch, retried byte for byte until it leaves or the server refuses it: the server dedupes by `batchId`.
-    private struct Batch {
-        let count: Int
-        let body: Data
+        let errors: [ErrorReport]
     }
 
     /// Whether reports leave: unknown until `/config` answers, then what it said.
@@ -125,32 +49,6 @@ final class ErrorReporter {
     /// The first wait after a batch that did not leave; it doubles on every failure, up to `maxRetryDelay`.
     static var retryDelay: TimeInterval = 30
     static var maxRetryDelay: TimeInterval = 300
-    /// Reports kept while they cannot leave; beyond this the oldest go, counted in `dropped`.
-    static let maxBuffered = 200
-    /// Reports in one request.
-    static let maxBatch = 50
-    /// Encoded bytes of the reports waiting, and of one whole request body, envelope included: the counts alone
-    /// do not bound memory or upload size.
-    static let maxBufferedBytes = 256 * 1024
-    static let maxBatchBytes = 64 * 1024
-    /// UTF-8 bytes kept of every string field: ids, `detail`, the underlying error's domain, history names
-    /// and values. Bytes, not characters: one character can carry any number of combining marks.
-    nonisolated static let maxFieldLength = 64
-
-    /// `text` cut to `maxFieldLength` UTF-8 bytes, at a Unicode scalar boundary so it stays valid text.
-    nonisolated static func capped(_ text: String) -> String {
-        guard text.utf8.count > maxFieldLength else { return text }
-        var scalars = String.UnicodeScalarView()
-        var bytes = 0
-        for scalar in text.unicodeScalars {
-            let size = String(scalar).utf8.count
-            guard bytes + size <= maxFieldLength else { break }
-            scalars.append(scalar)
-            bytes += size
-        }
-        return String(scalars)
-    }
-
     /// The server answered a batch with `410`: reporting ends for this launch, whatever `/config` said. The
     /// reporter's own fact, from its own endpoint, not the SDK's state.
     private var wasStoppedByServer = false
@@ -165,23 +63,12 @@ final class ErrorReporter {
         case false?: return .off
         }
     }
-    private(set) var buffer: [Report] = []
-    /// The encoded size of each waiting report, in `buffer`'s order, and their sum.
-    private var sizes: [Int] = []
-    private var bufferedBytes = 0
-    /// Reports dropped for room and not yet sent in a batch.
-    private(set) var dropped = 0
+    /// The reports waiting, and the batches made from them.
+    private(set) var queue = ReportQueue()
     /// The batch that did not leave yet, retried as it is.
-    private var pendingBatch: Batch?
+    private var pendingBatch: ReportQueue.Batch?
     private var failures = 0
     private var flushTask: Task<Void, Never>?
-
-    /// `2026-10-21T18:00:00.482Z`. `ISO8601DateFormatter.string(from:)` is documented thread-safe.
-    nonisolated(unsafe) private static let timestamp: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 
     private init() {}
 
@@ -189,7 +76,7 @@ final class ErrorReporter {
     /// for this launch.
     func reportingChanged() {
         switch mode {
-        case .on: if !buffer.isEmpty { scheduleFlush(after: Self.interval) }
+        case .on: if !queue.isEmpty { scheduleFlush(after: Self.interval) }
         case .off: dropAll()
         case .pending: break
         }
@@ -198,84 +85,30 @@ final class ErrorReporter {
     /// Records a fault with the SDK's recent history; it leaves with the next batch, when reports are on. The
     /// report is complete here, before any delegate call can end or release the ad it is about.
     func report(
-        _ code: Code,
-        stage: Stage,
+        _ code: ErrorReport.Code,
+        stage: ErrorReport.Stage,
         requestId: String? = nil,
         sessionId: String? = nil,
         adId: String? = nil,
         vastCode: Int? = nil,
         httpStatus: Int? = nil,
-        underlying: Underlying? = nil,
+        underlying: ErrorReport.Underlying? = nil,
         detail: String? = nil,
-        recovery: Recovery? = nil
+        recovery: ErrorReport.Recovery? = nil
     ) {
         guard mode != .off else { return }
-        let cap = { (text: String?) in text.map(Self.capped) }
-        let report = Report(
-            id: UUID().uuidString.lowercased(),
-            createdAt: Self.timestamp.string(from: Date()),
-            code: code.rawValue,
-            stage: stage,
-            requestId: cap(requestId),
-            sessionId: cap(sessionId),
-            adId: cap(adId),
-            vastCode: vastCode,
-            httpStatus: httpStatus,
-            underlying: underlying,
-            detail: cap(detail),
-            recovery: recovery,
-            history: DebugReporter.shared.recentHistory()
-        )
+        let report = ErrorReport.make(code, stage: stage, requestId: requestId, sessionId: sessionId, adId: adId, vastCode: vastCode,
+                                      httpStatus: httpStatus, underlying: underlying, detail: detail, recovery: recovery)
         Logger.debug("error report \(code.rawValue)\(adId.map { " ad=\($0.prefix(8))" } ?? "")")
-        let size = (try? JSONEncoder().encode(report).count) ?? 0
-        // Every field is capped, so this cannot happen; if it ever does, the report goes rather than the budgets.
-        guard size <= Self.maxBatchBytes else {
-            Logger.debug("error report \(code.rawValue) of \(size) bytes dropped, over the batch budget")
-            dropped += 1
+        guard queue.add(report) else {
+            Logger.debug("error report \(code.rawValue) of \(ReportQueue.size(of: report)) bytes dropped, over the batch budget")
             return
-        }
-        buffer.append(report)
-        sizes.append(size)
-        bufferedBytes += size
-        while buffer.count > Self.maxBuffered || (bufferedBytes > Self.maxBufferedBytes && buffer.count > 1) {
-            buffer.removeFirst()
-            bufferedBytes -= sizes.removeFirst()
-            dropped += 1
         }
         if mode == .on { scheduleFlush(after: Self.interval) }
     }
 
-    /// An ads or `/config` request's failure as the report's fields: an HTTP status, or the transport
-    /// error's domain and code with `network`.
-    struct RequestFailure: Sendable {
-        let httpStatus: Int?
-        let underlying: Underlying?
-        let detail: String?
-
-        init(_ error: Error) {
-            switch error as? APIError {
-            case .http(let status, _)?:
-                httpStatus = status
-                underlying = nil
-                detail = nil
-            case .transport(let urlError)?:
-                httpStatus = nil
-                underlying = Underlying(urlError)
-                detail = "network"
-            case .decoding(let decoding)?:
-                httpStatus = nil
-                underlying = Underlying(decoding)
-                detail = nil
-            case nil:
-                httpStatus = nil
-                underlying = Underlying(error)
-                detail = nil
-            }
-        }
-    }
-
     /// A failed ads or `/config` request.
-    func report(_ code: Code, stage: Stage, requestId: String, sessionId: String? = nil, failure: RequestFailure, recovery: Recovery? = nil) {
+    func report(_ code: ErrorReport.Code, stage: ErrorReport.Stage, requestId: String, sessionId: String? = nil, failure: ErrorReport.FailedRequest, recovery: ErrorReport.Recovery? = nil) {
         report(code, stage: stage, requestId: requestId, sessionId: sessionId, httpStatus: failure.httpStatus,
                underlying: failure.underlying, detail: failure.detail, recovery: recovery)
     }
@@ -285,10 +118,7 @@ final class ErrorReporter {
         flushTask?.cancel()
         flushTask = nil
         wasStoppedByServer = false
-        buffer.removeAll()
-        sizes.removeAll()
-        bufferedBytes = 0
-        dropped = 0
+        queue.clear()
         pendingBatch = nil
         failures = 0
     }
@@ -297,10 +127,7 @@ final class ErrorReporter {
     private func dropAll() {
         flushTask?.cancel()
         flushTask = nil
-        buffer.removeAll()
-        sizes.removeAll()
-        bufferedBytes = 0
-        dropped = 0
+        queue.clear()
         pendingBatch = nil
     }
 
@@ -312,7 +139,7 @@ final class ErrorReporter {
             guard let self, !Task.isCancelled else { return }
             let delivered = await flush()
             flushTask = nil
-            guard mode == .on, pendingBatch != nil || !buffer.isEmpty else { return }
+            guard mode == .on, pendingBatch != nil || !queue.isEmpty else { return }
             scheduleFlush(after: delivered ? Self.interval : nextRetryDelay())
         }
     }
@@ -352,53 +179,15 @@ final class ErrorReporter {
             return false
         }
     }
-    /// The oldest waiting reports as one finished request body: up to `maxBatch` of them, and as many as fit in
-    /// `maxBatchBytes` with the envelope and the separators, the size of the whole body being what is limited.
-    /// The rest wait for the next batch. A report that cannot fit even alone is dropped and counted. `nil` when
-    /// nothing is left to send.
-    private func nextBatch(token: String) -> Batch? {
+
+    /// The next batch from the queue, its body this launch's request: a new `batchId`, the app, the OS, the
+    /// dropped count. `nil` when nothing is left to send.
+    private func nextBatch(token: String) -> ReportQueue.Batch? {
         let id = UUID().uuidString.lowercased()
         let os = OSInfo.current()
-        let request = { (reports: [Report]) in
-            Request(batchId: id, publisherToken: token, installId: KontextVideo.installId, app: .current(),
-                    os: Request.OS(name: os.name.rawValue, version: os.version), dropped: self.dropped, errors: reports)
+        return queue.makeBatch { reports, dropped in
+            try? APIClient.encode(Request(batchId: id, publisherToken: token, installId: KontextVideo.installId, app: .current(),
+                                          os: Request.OS(name: os.name.rawValue, version: os.version), dropped: dropped, errors: reports))
         }
-        while !buffer.isEmpty {
-            // `"errors":[]` holds the reports, one byte between each two: the size is known before encoding.
-            guard let envelope = try? APIClient.encode(request([])).count else { return nil }
-            var count = 0
-            var bytes = envelope
-            while count < min(buffer.count, Self.maxBatch), bytes + sizes[count] + (count > 0 ? 1 : 0) <= Self.maxBatchBytes {
-                bytes += sizes[count] + (count > 0 ? 1 : 0)
-                count += 1
-            }
-            if count == 0 {
-                Logger.debug("error report of \(sizes[0]) bytes dropped, it cannot fit a batch")
-                remove(1)
-                dropped += 1
-                continue
-            }
-            // Checked on the encoded body itself: the arithmetic above is the plan, the body is what leaves.
-            var body = try? APIClient.encode(request(Array(buffer.prefix(count))))
-            while count > 1, (body?.count ?? 0) > Self.maxBatchBytes {
-                count -= 1
-                body = try? APIClient.encode(request(Array(buffer.prefix(count))))
-            }
-            guard let body, body.count <= Self.maxBatchBytes else {
-                remove(1)
-                dropped += 1
-                continue
-            }
-            remove(count)
-            dropped = 0
-            return Batch(count: count, body: body)
-        }
-        return nil
-    }
-
-    private func remove(_ count: Int) {
-        buffer.removeFirst(count)
-        bufferedBytes -= sizes.prefix(count).reduce(0, +)
-        sizes.removeFirst(count)
     }
 }

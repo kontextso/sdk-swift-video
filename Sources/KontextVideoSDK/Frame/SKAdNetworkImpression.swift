@@ -102,7 +102,7 @@ final class SKAdNetworkImpression {
     /// only, since its text can carry anything.
     private func report(_ step: String, _ error: Error) {
         Logger.warning("ad \(adId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
-        let underlying = ErrorReporter.Underlying(error)
+        let underlying = ErrorReport.Underlying(error)
         DebugReporter.shared.event("ad.skanFailed", adId: adId, level: .warning,
                                    state: ["step": .string(step), "domain": .string(underlying.domain), "code": .number(Double(underlying.code))])
         ErrorReporter.shared.report(.skanFailed, stage: .attribution, adId: adId, underlying: underlying, detail: step)

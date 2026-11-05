@@ -19,14 +19,14 @@ extension VideoAd {
     /// The creative's error as a fault report. The bridge says why it failed: the page, a load timeout, a page
     /// that could not load, or a terminated web process all fire the same VAST codes.
     func reportCreativeError(vastCode: Int) {
-        let code: ErrorReporter.Code
+        let code: ErrorReport.Code
         switch loadedBridge?.failureCause ?? .page {
         case .page: code = .creativeFailed
         case .loadTimeout: code = .loadTimeout
         case .loadFailed: code = .frameLoadFailed
         case .processTerminated: code = .processTerminated
         }
-        let recovery: ErrorReporter.Recovery = wasShown ? .adEndedFailed : .adDroppedBeforeShow
+        let recovery: ErrorReport.Recovery = wasShown ? .adEndedFailed : .adDroppedBeforeShow
         ErrorReporter.shared.report(code, stage: wasShown ? .playback : .load, sessionId: owner?.sessionId, adId: id, vastCode: vastCode,
                                     underlying: loadedBridge?.failureUnderlying, recovery: recovery)
     }

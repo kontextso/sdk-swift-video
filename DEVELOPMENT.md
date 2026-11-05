@@ -32,7 +32,7 @@ sdk-swift-video/
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
-│   ├── Diagnostics/  what the SDK tells: Logger (the console), ErrorReporter (faults to /v2/error), DebugReporter (debug events to /v2/debug)
+│   ├── Diagnostics/  what the SDK tells: Logger (the console); ErrorReporter (faults to /v2/error: the mode, scheduling, retries, the server's answers), ErrorReport (one report: its vocabulary and fields), ReportQueue (the waiting reports and their batches, pure); DebugReporter (debug events to /v2/debug), EventHistory (the last events, an error report's history); ReportFormat (capping, the timestamp, a state value), shared so neither reporter reaches into the other
 │   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
 │   └── PrivacyInfo.xcprivacy
 ├── Sources/KontextVideoTTSDK/   the optional KontextVideoTTSDK product: ads.track(ttVideoEngine:), TTSDK read through Objective-C (see its README)
@@ -181,7 +181,8 @@ Tests/KontextVideoSDKTests/
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, the meter, the active-time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
-├── Diagnostics/  the logger, the error reporter, the debug reporter
+├── Diagnostics/  the logger, the error reporter, the report queue (ReportQueueTests), the event history
+│                 (EventHistoryTests), the debug reporter
 ├── Platform/     the environment's seams, awaitShared, the link opener
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```

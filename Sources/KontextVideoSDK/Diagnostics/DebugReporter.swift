@@ -12,7 +12,7 @@ final class DebugReporter {
         let name: String
         let adId: String?
         let level: Level?
-        let state: [String: Value]?
+        let state: [String: ReportFormat.Value]?
     }
 
     /// Absent means `info`.
@@ -21,41 +21,6 @@ final class DebugReporter {
         case warning
         case error
     }
-
-    /// A string, a number or a boolean.
-    enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
-        case string(String)
-        case number(Double)
-        case bool(Bool)
-
-        init(stringLiteral value: String) { self = .string(value) }
-        init(integerLiteral value: Int) { self = .number(Double(value)) }
-        init(booleanLiteral value: Bool) { self = .bool(value) }
-
-        func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-            switch self {
-            case .string(let value): try container.encode(value)
-            case .number(let value): try container.encode(value)
-            case .bool(let value): try container.encode(value)
-            }
-        }
-
-        var description: String {
-            switch self {
-            case .string(let value): return value
-            case .number(let value): return Int(exactly: value).map(String.init) ?? String(value)
-            case .bool(let value): return String(value)
-            }
-        }
-    }
-
-    /// `2026-10-21T18:00:00.482Z`. `ISO8601DateFormatter.string(from:)` is documented thread-safe.
-    nonisolated(unsafe) private static let timestamp: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 
     private struct Request: Encodable {
         let publisherToken: String
@@ -77,61 +42,26 @@ final class DebugReporter {
     private var buffer: [Event] = []
     private var flushTask: Task<Void, Never>?
 
-    /// One event in the short history every error report carries: what the SDK did just before.
-    struct Moment: Encodable, Sendable {
-        /// When it happened: device time, ISO 8601 with milliseconds in UTC, as the event and the report write it.
-        let createdAt: String
-        let name: String
-        let adId: String?
-        let state: [String: Value]?
-    }
-
-    /// The last events, kept whether or not the server asked for the debug log: the history of an error report.
-    static let historyLength = 30
-    private var history: [(createdAt: String, name: String, adId: String?, state: [String: Value]?)] = []
-
     /// `/config` answered (`KontextVideo.recordDebugReporting`): off drops what waits.
     func reportingChanged() {
         if !isEnabled { buffer.removeAll() }
     }
 
-    /// Tests only, with the shared instance reset.
-    func clearHistory() {
-        history.removeAll()
-    }
-
     /// Back to the state before any `/config`: nothing waiting, no history. Tests only.
     func resetForTesting() {
         buffer.removeAll()
-        clearHistory()
-    }
-
-    /// The state keys an error report's history may carry; anything else stays on the device.
-    static let historyKeys: Set<String> = ["held", "playhead", "format", "filled", "reason", "enabled", "code", "durationMs", "step", "domain"]
-
-    /// The recent events, reduced for an error report: listed state keys only, strings and ids capped at
-    /// `ErrorReporter.maxFieldLength` UTF-8 bytes.
-    func recentHistory() -> [Moment] {
-        return history.map { entry in
-            let state = entry.state?.filter { Self.historyKeys.contains($0.key) }.mapValues { value -> Value in
-                if case .string(let text) = value { return .string(ErrorReporter.capped(text)) }
-                return value
-            }
-            return Moment(createdAt: entry.createdAt, name: ErrorReporter.capped(entry.name),
-                          adId: entry.adId.map(ErrorReporter.capped), state: state?.isEmpty == true ? nil : state)
-        }
+        EventHistory.clear()
     }
 
     private init() {}
 
     /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
     /// device console, in the same shape, whether or not the server asked for it.
-    func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: Value]? = nil) {
+    func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: ReportFormat.Value]? = nil) {
         Logger.debug(Self.line(name, adId: adId, state: state))
         // One timestamp for both: the history entry and the debug event are the same moment.
-        let createdAt = Self.timestamp.string(from: Date())
-        history.append((createdAt, name, adId, state))
-        if history.count > Self.historyLength { history.removeFirst(history.count - Self.historyLength) }
+        let createdAt = ReportFormat.timestamp()
+        EventHistory.record(createdAt: createdAt, name: name, adId: adId, state: state)
         guard isEnabled else { return }
         buffer.append(Event(createdAt: createdAt, name: name, adId: adId, level: level, state: state))
         if buffer.count > Self.maxBuffered { buffer.removeFirst(buffer.count - Self.maxBuffered) }
@@ -139,7 +69,7 @@ final class DebugReporter {
     }
 
     /// `ad.loaded ad=f1a2b3c4 durationMs=842`, the event as the console shows it.
-    static func line(_ name: String, adId: String?, state: [String: Value]?) -> String {
+    static func line(_ name: String, adId: String?, state: [String: ReportFormat.Value]?) -> String {
         var parts = [name]
         if let adId { parts.append("ad=\(adId.prefix(8))") }
         for (key, value) in (state ?? [:]).sorted(by: { $0.key < $1.key }) {

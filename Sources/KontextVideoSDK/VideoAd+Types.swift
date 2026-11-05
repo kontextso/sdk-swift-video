@@ -73,7 +73,7 @@ extension VideoAd {
 
         /// The reason in an error report's history, as both SDKs write it: the case name, and `code` as a
         /// key of its own.
-        var reportState: [String: DebugReporter.Value] {
+        var reportState: [String: ReportFormat.Value] {
             switch self {
             case .expired: ["reason": .string("expired")]
             case .rejected: ["reason": .string("rejected")]
