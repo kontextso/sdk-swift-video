@@ -321,7 +321,6 @@ struct FrameBridgeTests {
     }
 
     @Test func theScriptTakesGetUserMediaOutOfAPage() async throws {
-        await WebKitWarmup.ensure()
         FramePageServer().install()
         // Loaded in a window, as the harness does: outside one, WebKit deprioritizes the page and a CI runner
         // without a key window never finishes loading it.

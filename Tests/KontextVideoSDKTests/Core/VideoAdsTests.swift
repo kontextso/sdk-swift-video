@@ -497,7 +497,6 @@ struct VideoAdsTests {
             while !gate.open { await sleepMs(5) }
             return .authorized
         }
-        await WebKitWarmup.ensure()
         _ = await KontextVideo.shared.initialize(with: KontextVideo.Configuration(
             publisherToken: "test-dev", requestTrackingAuthorization: true, logLevel: .none, adServerURL: harness.server.baseURL))
         let first = harness.player.ads(for: .init(id: "v1", language: "en"))
@@ -539,7 +538,6 @@ struct VideoAdsTests {
     }
 
     @Test func destroyWhileWaitingForInitThrowsDestroyedAtOnceAndTheOthersShareOneConfig() async throws {
-        await WebKitWarmup.ensure()
         let gate = StubServer.Gate()
         // A safety net: without the fix the destroyed call would hang until /config answers.
         Task { await sleepMs(3000); gate.open() }
@@ -564,7 +562,6 @@ struct VideoAdsTests {
     }
 
     @Test func formatWaitsForInitInFlight() async throws {
-        await WebKitWarmup.ensure()
         let gate = StubServer.Gate()
         defer { gate.open() }
         var config = StubServer.Response.json(Fixtures.initEnabled())
@@ -625,7 +622,6 @@ struct VideoAdsTests {
             while !gate.open { await sleepMs(5) }
             return .authorized
         }
-        await WebKitWarmup.ensure()
         _ = await KontextVideo.shared.initialize(with: KontextVideo.Configuration(
             publisherToken: "test-dev", requestTrackingAuthorization: true, logLevel: .none, adServerURL: harness.server.baseURL))
         let ads = harness.player.ads(for: .init(id: "v", language: "en"))

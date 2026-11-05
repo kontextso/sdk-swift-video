@@ -243,10 +243,8 @@ struct SDKHarness {
         Environment.userAgent = { "Mozilla/5.0 (iPhone; KontextVideoSDKTests)" }
     }
 
-    /// Initializes the SDK and waits until `/config` answered. Also the moment WebKit is warmed up, so the
-    /// first frame page of the process does not pay for spawning the web content process.
+    /// Initializes the SDK and waits until `/config` answered.
     func initialize() async -> KontextVideo.State {
-        await WebKitWarmup.ensure()
         return await KontextVideo.shared.initialize(with: configuration)
     }
 
@@ -294,8 +292,8 @@ struct SDKHarness {
 
 /// The first frame page of a process is slow: WebKit spawns a web content process for the bridge's
 /// non-persistent data store, and on a cold CI runner that took longer than the page-load timeout.
-/// Loading one real frame page once, through the real bridge, before the first test that needs a page,
-/// moves that cost out of every test.
+/// Loading one real frame page once, through the real bridge, before the serial suites run (`SerialSuites`'
+/// `.webKitWarmedUp`), moves that cost out of every test.
 @MainActor
 enum WebKitWarmup {
     private static var done = false
