@@ -172,7 +172,7 @@ final class OverlayRule: ContentRule {
         // Seconds of video while the overlay is seen: not while its scene is inactive or it is out of sight.
         if contentProgress.advance(to: playback.playhead, counting: ad.clock?.isCounting == true, rate: playback.rate) {
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(contentProgress.duration) s of video elapsed")
-            ad.isCompleted = true
+            ad.state.markCompleted()
             ad.end(.completed)
         }
     }

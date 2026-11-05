@@ -20,7 +20,7 @@ extension VideoAd {
         guard !hasEnded, invalidationReason == nil else { return }
         switch event {
         case .loaded:
-            isLoaded = true
+            state.markLoaded()
             tracker.fire("loaded")
             loadContinuation?.resume()
             loadContinuation = nil
@@ -63,7 +63,7 @@ extension VideoAd {
             // `isCompleted` is set only by the page's `complete` event, never by a close. Overlay and pause ads have no
             // "watch to the end": a close is .closed, or .resumed when it resumed the content.
             let outcome = reason.outcome(isLinear: format == .linear, isCompleted: isCompleted)
-            if outcome.endReason == .completed { isCompleted = true }
+            if outcome.endReason == .completed { state.markCompleted() }
             if let beacon = outcome.beacon { tracker.fire(beacon) }
             end(outcome.endReason)
         case .skip(let playhead):
@@ -92,7 +92,7 @@ extension VideoAd {
             tracker.fireProgress(upTo: max(offset, playhead))
         case .complete(let playhead):
             tracker.adPlayhead = playhead
-            isCompleted = true
+            state.markCompleted()
             videoPlaying = false
             meter?.countsTime = false   // the end card is not the video playing
             // Checkpoints before the end that the page never reported, then the end itself.

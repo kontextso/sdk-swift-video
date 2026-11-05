@@ -70,8 +70,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   each with a watchdog), `Presentation` (the slot, the screen, the meter), `AdHostView`, `AdGeometry`, `VideoAd+Placement`.
 - `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Playback/`: `ContentPlayback` and
   `ContentRule`. `Payloads/` is the
-  wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Model/AdLifecycle` its phases and their legal steps (every
-  public flag of `VideoAd` reads it), `Device/` what the SDK reads, `Support/Environment.swift` the
+  wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Model/AdState` every fact of its life: the phases, their legal
+  steps and the milestones (loaded, impression, completed, the failure); every public flag of `VideoAd` reads it, `Device/` what the SDK reads, `Support/Environment.swift` the
   seams the tests replace.
 
 ## Rules
@@ -79,6 +79,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 - Commit directly to `main`; no feature branches. Push and watch CI (it runs five jobs; see DEVELOPMENT.md).
 - The lifecycle guarantee is sacred: after a successful `show`, exactly one `didEnd`, whoever ended it; nothing is
   delivered through the delegate before `show`. `VideoAd.end(_:)` is the only terminal path.
+- One source of truth: every fact of an ad's life is in `AdState` (`Model/AdState.swift`); everything else asks it,
+  never keeps its own copy. Its phase moves only through `transition(to:)`, each milestone is marked once.
 - The page never fires a beacon; `Tracker` does, each entry once, except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence. The SDK never requests an ad by itself.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then the code, then `sdk-kotlin-video`.

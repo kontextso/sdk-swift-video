@@ -98,7 +98,7 @@ final class InlineScreen: AdScreen {
         let clock = ActiveTimeClock(duration: ad.contentRule.wallClockDuration, adId: ad.id) { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(ad.duration ?? 0) s on screen elapsed")
-            ad.isCompleted = true
+            ad.state.markCompleted()
             ad.end(.completed)
         }
         self.clock = clock
@@ -168,7 +168,7 @@ final class LinearScreen: AdScreen {
         self.controller = nil
         // Pending while the ad is ending: once `didEnd` was delivered, the watchdog has nothing left to do.
         let isPending: @MainActor () -> Bool = { [weak ad] in
-            if case .ending? = ad?.lifecycle.phase { return true }
+            if case .ending? = ad?.state.phase { return true }
             return false
         }
         return LinearPresentation.dismiss(controller, timeout: VideoAd.dismissalTimeout, isPending: isPending, completion: onGone)
