@@ -343,10 +343,10 @@ struct DecodingTests {
     @Test func aSizeSaysWhetherItMayShrink() throws {
         let fixed = try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250, "scalable": false]))
         guard case .pause(_, let sizes) = fixed.details else { Issue.record("expected pause"); return }
-        #expect(sizes == [AdPayload.Size(width: 300, height: 250, scalable: false)])
+        #expect(sizes == [AdPayload.Size(width: 300, height: 250, isScalable: false)])
         let unsaid = try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250]))
         guard case .pause(_, let defaulted) = unsaid.details else { Issue.record("expected pause"); return }
-        #expect(defaulted.first?.scalable == true, "absent is scalable")
+        #expect(defaulted.first?.isScalable == true, "absent is scalable")
     }
 
     @Test func theFrameURLMustBeAbsoluteWithAHost() throws {
@@ -531,7 +531,7 @@ struct DecodingTests {
         for bad in ["FILE://localhost/etc/passwd", "JavaScript://x/alert(1)", "Data://x/y"] {
             #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
         }
-        #expect(throws: DecodingError.self, "a scalable flag of the wrong type is a malformed size") {
+        #expect(throws: DecodingError.self, "a isScalable flag of the wrong type is a malformed size") {
             try Fixtures.payload(Fixtures.ad(size: ["width": 300, "height": 250, "scalable": "no"]))
         }
     }

@@ -35,9 +35,9 @@ final class ActiveTimeClock {
     private var since: TimeInterval?
     /// Active time before the current stretch, seconds.
     private var accumulated: TimeInterval = 0
-    private var stopped = false
+    private var isStopped = false
     /// The duration ran out and `onElapsed` was called: it never runs again, whatever the app's activity does.
-    private var expired = false
+    private var isExpired = false
     /// Waits out the rest of the duration during an active stretch.
     private(set) var timer: Task<Void, Never>?
     /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
@@ -57,8 +57,8 @@ final class ActiveTimeClock {
     private var isSeen = true
 
     /// The meter's answer changed: the clock counts only while the ad is seen.
-    func setSeen(_ seen: Bool) {
-        isSeen = seen
+    func setSeen(_ isSeen: Bool) {
+        self.isSeen = isSeen
         update()
     }
     /// Called when an active stretch begins after the clock started: the scene came back. An overlay that
@@ -73,7 +73,7 @@ final class ActiveTimeClock {
     /// The ad is on screen in `window`: counts from now if its scene is active, and follows that scene. The
     /// app's own activity is followed only without a scene: when the app resigns, its scenes deactivate too.
     func start(in window: UIWindow?) {
-        guard !stopped, observers.isEmpty else { return }
+        guard !isStopped, observers.isEmpty else { return }
         let scene = window?.windowScene
         let center = NotificationCenter.default
         let pauseName = scene == nil ? UIApplication.willResignActiveNotification : UIScene.willDeactivateNotification
@@ -89,8 +89,8 @@ final class ActiveTimeClock {
         setSceneActive(window.map(Environment.isWindowActive) ?? Environment.isApplicationActive())
     }
 
-    private func setSceneActive(_ active: Bool) {
-        isSceneActive = active
+    private func setSceneActive(_ isActive: Bool) {
+        isSceneActive = isActive
         update()
     }
 
@@ -101,8 +101,8 @@ final class ActiveTimeClock {
     /// The ad ended: the clock freezes for good and returns the active time it counted.
     @discardableResult
     func stop() -> TimeInterval {
-        if !stopped {
-            stopped = true
+        if !isStopped {
+            isStopped = true
             pause()
             observers.forEach(NotificationCenter.default.removeObserver)
             observers = []
@@ -117,24 +117,24 @@ final class ActiveTimeClock {
         }
         timer?.cancel()
         timer = nil
-        if !stopped { Logger.debug("ad \(adId.prefix(8)): clock frozen at \(accumulated) s on screen") }
+        if !isStopped { Logger.debug("ad \(adId.prefix(8)): clock frozen at \(accumulated) s on screen") }
     }
 
     private func resume() {
-        guard !stopped, since == nil else { return }
+        guard !isStopped, since == nil else { return }
         since = ProcessInfo.processInfo.systemUptime
         startTimer()
         onActivate?()
     }
 
     private func startTimer() {
-        guard timer == nil, !expired, let duration else { return }
+        guard timer == nil, !isExpired, let duration else { return }
         // Clamped to a day: a nonsense server value must not trap the `UInt64` conversion.
         let remaining = min(max(0, duration - elapsed), 86_400)
         timer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            guard let self, !Task.isCancelled, !stopped, !expired else { return }
-            expired = true
+            guard let self, !Task.isCancelled, !isStopped, !isExpired else { return }
+            isExpired = true
             onElapsed()
         }
     }

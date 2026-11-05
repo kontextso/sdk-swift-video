@@ -76,11 +76,11 @@ extension VideoAd {
             tracker.adPlayhead = playhead
             Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
             switch event {
-            case .start, .resume: videoPlaying = true
-            case .pause: videoPlaying = false
+            case .start, .resume: isVideoPlaying = true
+            case .pause: isVideoPlaying = false
             default: break
             }
-            meter?.countsTime = videoPlaying
+            meter?.countsTime = isVideoPlaying
             tracker.fire(event.rawValue)
             tracker.fireProgress(upTo: playhead)
             // The delegate last: it may end the ad on the spot, and everything above was the event's own.
@@ -93,7 +93,7 @@ extension VideoAd {
         case .complete(let playhead):
             tracker.adPlayhead = playhead
             state.markCompleted()
-            videoPlaying = false
+            isVideoPlaying = false
             meter?.countsTime = false   // the end card is not the video playing
             // Checkpoints before the end that the page never reported, then the end itself.
             tracker.fireProgress(upTo: playhead)

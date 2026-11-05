@@ -128,7 +128,7 @@ final class ContentPlayback {
     private var itemGeneration = 0
     /// The `AVPlayer`'s current item played to its end and has not restarted (a seek; a play alone is not one) or been
     /// replaced: it plays nothing, whatever its rate (`actionAtItemEnd` `.none` keeps the rate).
-    private var itemEnded = false
+    private var hasItemEnded = false
     /// Content time in seconds, `nil` once the player is gone.
     private var readTime: (() -> TimeInterval?)?
     /// Whether the content plays, `nil` once the player is gone.
@@ -144,14 +144,14 @@ final class ContentPlayback {
     /// A custom player's item at `track`, or the first it reported after: this episode.
     private var customEpisodeItem: AnyHashable?
     /// Another `VideoAds` tracks this one's player now: this episode no longer plays in it, until `track` again.
-    private(set) var lostPlayer = false
+    private(set) var hasLostPlayer = false
 
     /// Whether the tracked content is no longer this `VideoAds`'s episode: another `VideoAds` took its player,
     /// or the `AVPlayer` moved to another item than this episode's. An overlay or pause ad shown now would be
     /// counted for this episode over another one. Without a player, or for a custom player's item, nothing
     /// can tell: `false`.
     var playsAnotherEpisode: Bool {
-        if lostPlayer { return true }
+        if hasLostPlayer { return true }
         if let customPlayer {
             // App code: the item is read now, and the first one seen is this episode.
             guard let item = customPlayer.currentItem else { return false }
@@ -230,16 +230,16 @@ final class ContentPlayback {
 
     /// The binding is complete: an overlay that followed the old player ends. Last, because its `didEnd` is
     /// app code: a `destroy()` or another `track` there wins, and this binding does nothing more.
-    private func finishBinding(overlayWasShown: Bool) {
-        if overlayWasShown { deliver(.contentChanged, from: generation) }
+    private func finishBinding(wasOverlayShown: Bool) {
+        if wasOverlayShown { deliver(.contentChanged, from: generation) }
     }
 
     func track(_ player: AVPlayer) {
         // `seconds` is NaN for an invalid or indefinite time; `playhead` turns that into 0. `rate` is the rate
         // asked for: 0 after `pause()`, unchanged while buffering, and at the end only with `actionAtItemEnd`
         // `.pause`; the item's end is observed on its own and holds until the item restarts or is replaced.
-        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime().seconds },
-                                         playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.itemEnded != true } },
+        guard let wasOverlayShown = bind(time: { [weak player] in player?.currentTime().seconds },
+                                         playing: { [weak self, weak player] in player.map { $0.rate != 0 && self?.hasItemEnded != true } },
                                          rate: { [weak player] in player.map { Double($0.rate) } }) else { return }
         avPlayer = player
         adoptEpisodeItem(player.currentItem)
@@ -247,9 +247,9 @@ final class ContentPlayback {
         observations = [
             player.observe(\.rate, options: [.new]) { [weak self] _, change in
                 let playback = self
-                let playing = change.newValue.map { $0 != 0 }
+                let isPlaying = change.newValue.map { $0 != 0 }
                 // A rate alone never restarts an ended item: play() after the end plays nothing. A seek does (`jumped`).
-                Self.onMain { playback?.deliver(.playback(isPlaying: playing), from: generation) }
+                Self.onMain { playback?.deliver(.playback(isPlaying: isPlaying), from: generation) }
             },
             player.observe(\.currentItem) { [weak self] _, _ in
                 let playback = self
@@ -262,14 +262,14 @@ final class ContentPlayback {
             },
         ]
         observeItem(player.currentItem)
-        finishBinding(overlayWasShown: overlayWasShown)
+        finishBinding(wasOverlayShown: wasOverlayShown)
         // The overlay's `didEnd` there is app code: a `track` or `destroy()` in it won.
         guard generation == self.generation else { return }
         claim(player)
     }
 
     func track(_ player: some VideoAdsPlayer) {
-        guard let overlayWasShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
+        guard let wasOverlayShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
                                          rate: { [weak player] in player?.playbackSpeed }) else { return }
         customPlayer = player
         customEpisodeItem = player.currentItem
@@ -280,8 +280,8 @@ final class ContentPlayback {
         let playing = player.isPlayingPublisher?
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] playing in
-                MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: playing), from: generation) }
+            .sink { [weak self] isPlaying in
+                MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: isPlaying), from: generation) }
             }
         let seeks = player.seekPublisher?
             .receive(on: DispatchQueue.main)
@@ -295,7 +295,7 @@ final class ContentPlayback {
             return
         }
         self.subscriptions = subscriptions
-        finishBinding(overlayWasShown: overlayWasShown)
+        finishBinding(wasOverlayShown: wasOverlayShown)
         guard generation == self.generation else { return }
         claim(player)
     }
@@ -327,9 +327,9 @@ final class ContentPlayback {
         episodeItem = nil
         hasEpisodeItem = false
         customEpisodeItem = nil
-        lostPlayer = false
+        hasLostPlayer = false
         Self.owners.removeAll { $0.playback === self || $0.playback == nil }
-        itemEnded = false
+        hasItemEnded = false
         isTracking = false
         isTicking = false
         // Last, with every property settled: a `track` or `destroy()` in the cancellation finds a stopped playback.
@@ -362,7 +362,7 @@ final class ContentPlayback {
         guard generation == self.generation else { return }
         Logger.info("the player is tracked by another VideoAds now; this one no longer tracks it")
         stop()
-        lostPlayer = true
+        hasLostPlayer = true
     }
 
     /// The first item seen from `track` on is this episode's: one there at `track`, or the first the player got.
@@ -378,7 +378,7 @@ final class ContentPlayback {
         itemObservers.forEach(NotificationCenter.default.removeObserver)
         itemObservers = []
         itemGeneration += 1
-        itemEnded = false
+        hasItemEnded = false
         guard let item else { return }
         let generation = self.generation
         let itemGeneration = self.itemGeneration
@@ -404,8 +404,8 @@ final class ContentPlayback {
     /// restarts (a time jump, a seek back to play it again).
     private func deliverItem(_ change: Change, from generation: Int, item: Int) {
         guard generation == self.generation, item == itemGeneration else { return }
-        if change == .contentEnded { itemEnded = true }
-        if change == .jumped { itemEnded = false }
+        if change == .contentEnded { hasItemEnded = true }
+        if change == .jumped { hasItemEnded = false }
         onChange?(change)
     }
 
@@ -450,9 +450,9 @@ final class ContentProgress {
         lastMovedAt = Environment.now()
     }
 
-    /// Takes the playhead now; counts the step when `counting` and it looks like playback at `rate` (the
+    /// Takes the playhead now; counts the step when `isCounting` and it looks like playback at `rate` (the
     /// player's speed, `nil` when unknown). `true` once the duration is reached.
-    func advance(to playhead: TimeInterval, counting: Bool, rate: Double? = nil) -> Bool {
+    func advance(to playhead: TimeInterval, isCounting: Bool, rate: Double? = nil) -> Bool {
         let step = playhead - last
         if step != 0 {
             let now = Environment.now()
@@ -460,7 +460,7 @@ final class ContentProgress {
             last = playhead
             lastMovedAt = now
             let speed = rate.map { max(abs($0) * Self.rateMargin, 1) } ?? Self.maxRate
-            if counting, step > 0, step <= real * speed + Self.slack { elapsed += step }
+            if isCounting, step > 0, step <= real * speed + Self.slack { elapsed += step }
         }
         return elapsed >= duration
     }

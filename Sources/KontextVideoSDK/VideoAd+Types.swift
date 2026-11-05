@@ -34,7 +34,7 @@ extension VideoAd {
         let width: Int
         let height: Int
         /// `false`: built for exactly this size, never shown smaller.
-        var scalable = true
+        var isScalable = true
     }
 
     /// Where the server placed the ad.

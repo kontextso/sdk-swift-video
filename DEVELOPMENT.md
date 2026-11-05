@@ -133,6 +133,11 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   types are top level: nesting protects app code from collisions, and internal
   types cannot collide. `AdFormat` is the one public top-level type: it names the formats everywhere and
   cannot realistically collide.
+- Booleans, the same names as in `sdk-kotlin-video`: a state (an adjective or participle) takes `is`, `has` or
+  `was` (`isLoaded`, `isStopped`, `hasImpression`, `hasEnded`, `wasOnScreen`); a third-person verb stays as it is
+  (`countsTime`, `checksEpisode`, `refusesShow`, `coversWhole`). A wire field renamed in Swift keeps its JSON key
+  through `CodingKeys` (`isMuted` is sent as `muted`); wire and standard names (`gdpr`, `coppa`, `reportErrors`)
+  and UIKit's overrides stay.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then here, then to `sdk-kotlin-video`.
 - SwiftLint (`.swiftlint.yml`, stricter limits relaxed for `Tests/`) and `swiftlint analyze` run in CI, and CI fails
   on any compiler warning in `Sources/`; the commands are in AGENTS.md.

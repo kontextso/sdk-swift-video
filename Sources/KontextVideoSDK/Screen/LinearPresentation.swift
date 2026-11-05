@@ -40,9 +40,9 @@ enum LinearPresentation {
     /// store sheet). Returns `false`, with nothing dismissed, when UIKit no longer presents it. `completion`
     /// runs when the dismissal finished; if UIKit never says so, and `isPending` is still true, once the
     /// controller has left the screen after `timeout`, or after five times that while it still has not
-    /// (`timedOut`: reported over a controller UIKit did not take down).
+    /// (`hasTimedOut`: reported over a controller UIKit did not take down).
     static func dismiss(_ controller: LinearViewController, timeout: TimeInterval, isPending: @escaping @MainActor () -> Bool,
-                        completion: @escaping @MainActor (_ timedOut: Bool) -> Void) -> Bool {
+                        completion: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool {
         // The ad ends it: its disappearance is no interruption.
         controller.isEndingByAd = true
         guard controller.isPresentedLive, let presenter = controller.presentingViewController else { return false }

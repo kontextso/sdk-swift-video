@@ -53,7 +53,7 @@ struct RequestTests {
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
             labels: ["stage": "first_episode", "layout": "fullscreen"],
-            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: Int((playhead * 1000).rounded())),
+            player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: Int((playhead * 1000).rounded())),
             sessionId: "s-1",
             held: ["a-1", "a-2"]
         )
@@ -68,7 +68,7 @@ struct RequestTests {
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
             labels: [:],
-            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: 0),
+            player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: 0),
             sessionId: "s-1",
             held: []
         )
@@ -83,7 +83,7 @@ struct RequestTests {
         let withoutKeywords = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92), labels: [:],
-            player: PlayerSnapshot(width: 390, height: 844, fullscreen: true, playhead: 0), sessionId: "s-1", held: []
+            player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: 0), sessionId: "s-1", held: []
         ))
         #expect(withoutKeywords["user"] == nil, "nothing left of the user")
     }
@@ -166,11 +166,11 @@ struct RequestTests {
         Environment.keyWindow = { window.window }
         let snapshot = PlayerSnapshot.make(playhead: 47.0014)
         #expect(snapshot.width == 844 && snapshot.height == 390, "landscape: the key window's size in points")
-        #expect(snapshot.fullscreen)
+        #expect(snapshot.isFullscreen)
         #expect(snapshot.playhead == 47_001, "milliseconds on the wire, rounded")
         Environment.keyWindow = { nil }
         let bare = PlayerSnapshot.make(playhead: 0)
-        #expect(bare.fullscreen, "no window yet: the main screen")
+        #expect(bare.isFullscreen, "no window yet: the main screen")
         #expect(bare.width == Int(UIScreen.main.bounds.width.rounded()))
     }
 
@@ -286,7 +286,7 @@ struct RequestTests {
         #expect(session.category == set.0 && session.mode == set.1 && session.categoryOptions == set.2, "the app's audio session is the app's")
         #expect(set.0 == .ambient, "the app's own category was in place")
         #expect((0...100).contains(audio.volume))
-        #expect(audio.muted == (audio.volume == 0) || audio.volume <= 1, "muted below 1 %")
+        #expect(audio.isMuted == (audio.volume == 0) || audio.volume <= 1, "muted below 1 %")
     }
 
     @Test func consentStorageReadsTheIABKeys() {

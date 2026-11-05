@@ -99,9 +99,9 @@ struct FrameProtocol {
     let playheadLimitMs: Int
     private(set) var state: State = .loading
     /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
-    private var videoStarted = false
+    private var isVideoStarted = false
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
-    private var reportedViolation = false
+    private var hasReportedViolation = false
     private var lastTouchAt: TimeInterval = -.infinity
 
     /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
@@ -196,7 +196,7 @@ struct FrameProtocol {
             // `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads;
             // the rest need the start before them.
             switch event {
-            case .start: videoStarted = true
+            case .start: isVideoStarted = true
             case .mute, .unmute: break
             default: if let dropped = droppedBeforeStart(type) { return dropped }
             }
@@ -215,7 +215,7 @@ struct FrameProtocol {
     /// `nil` when `video.start` came before this video message; otherwise the drop: progress, quartiles or a
     /// complete for a video that never started would be billed with no impression.
     private mutating func droppedBeforeStart(_ type: String) -> Step? {
-        guard !videoStarted else { return nil }
+        guard !isVideoStarted else { return nil }
         return .drop(log: "\(type) before video.start dropped", violation: violation("video.beforeStart"))
     }
 
@@ -224,8 +224,8 @@ struct FrameProtocol {
     /// from another frame, one after the end, or one of an unknown type is not: creatives post messages of
     /// their own, late messages are expected, and a newer page may send types this SDK does not know yet.
     private mutating func violation(_ detail: String) -> String? {
-        guard !reportedViolation else { return nil }
-        reportedViolation = true
+        guard !hasReportedViolation else { return nil }
+        hasReportedViolation = true
         return detail
     }
 

@@ -80,21 +80,21 @@ struct AdStateTests {
 
     @Test func eachMilestoneIsSetOnceAndNeverUndone() {
         var state = AdState()
-        #expect(!state.loaded && !state.completed && !state.impressionRecorded && state.failure == nil)
+        #expect(!state.isLoaded && !state.isCompleted && !state.hasImpression && state.failure == nil)
         state.markLoaded()
         state.markLoaded()
-        #expect(state.loaded)
+        #expect(state.isLoaded)
         let first = state.markImpression()
         let second = state.markImpression()
         #expect(first && !second, "the impression fires the first time only")
-        #expect(state.impressionRecorded)
+        #expect(state.hasImpression)
         state.markCompleted()
         state.markCompleted()
-        #expect(state.completed)
+        #expect(state.isCompleted)
         // Every later step keeps them.
         for step: Phase in [.reserved, .onScreen, .ending(.completed), .ended(.completed)] {
             state.moveTo(step)
-            #expect(state.loaded && state.completed && state.impressionRecorded, "after \(step)")
+            #expect(state.isLoaded && state.isCompleted && state.hasImpression, "after \(step)")
         }
     }
 

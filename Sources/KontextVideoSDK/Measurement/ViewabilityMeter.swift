@@ -86,7 +86,7 @@ final class ViewabilityMeter {
     /// Ticks in a row that found no window; from the second one on, each reports the detachment.
     private var detachedTicks = 0
     /// `stop()` was called: measuring never resumes, whatever `start()` says afterwards.
-    private var stopped = false
+    private var isStopped = false
     /// The view has been seen laid out in a window, with a size: the first real measurement. Before it, a
     /// tick reads 0 only because the view is not placed yet (a linear ad's controller mid-layout, a container
     /// still at zero size), and a page pauses its video on 0: the page hears nothing until then, and every
@@ -106,7 +106,7 @@ final class ViewabilityMeter {
     }
 
     func start() {
-        guard timer == nil, !stopped else { return }
+        guard timer == nil, !isStopped else { return }
         // The timer first: a callback from the first tick that stops the meter must find it there. In the
         // common modes, so it keeps ticking while the viewer scrolls (the default mode pauses then).
         let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] timer in
@@ -121,7 +121,7 @@ final class ViewabilityMeter {
 
     /// The ad ended: a verdict is still owed when none was reached.
     func stop() {
-        stopped = true
+        isStopped = true
         timer?.invalidate()
         timer = nil
         if verdict == nil {
@@ -161,13 +161,13 @@ final class ViewabilityMeter {
         //    the clock are current before the rules below may end the ad.
         report(percentage, visible: visible.isNull ? .zero : visible)
         // The page's reaction to the exposure may have ended the ad.
-        guard !stopped else { return }
+        guard !isStopped else { return }
         // 5. Nothing seen for a second while its scene is active: onOffScreen, the ad ends.
         if active, percentage == 0 {
             if offScreenSince == nil || stalled { offScreenSince = now }
             if let since = offScreenSince, now - since >= Self.offScreenGrace {
                 onOffScreen?()
-                guard !stopped else { return }
+                guard !isStopped else { return }
             }
         } else {
             offScreenSince = nil

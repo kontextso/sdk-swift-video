@@ -101,7 +101,7 @@ final class OverlayRule: ContentRule {
     /// The overlay's `duration` in seconds of video, once on screen over a tracked player.
     private(set) var contentProgress: ContentProgress?
     /// A pause came while the scene was not active: the overlay is frozen, not ended.
-    private(set) var contentPausedWhileInactive = false
+    private(set) var wasContentPausedWhileInactive = false
     /// That overlay's check after its scene came back.
     private(set) var contentRecheck: Task<Void, Never>?
 
@@ -131,7 +131,7 @@ final class OverlayRule: ContentRule {
         clock.onActivate = { [weak self] in
             guard let self, let playback = ad.owner?.playback else { return }
             contentProgress?.resync(to: playback.playhead)
-            if contentPausedWhileInactive { recheckContentAfterGrace() }
+            if wasContentPausedWhileInactive { recheckContentAfterGrace() }
         }
     }
 
@@ -161,16 +161,16 @@ final class OverlayRule: ContentRule {
             ad.end(.interrupted)
             return
         }
-        if contentPausedWhileInactive {
+        if wasContentPausedWhileInactive {
             // The content plays again: the frozen overlay goes on where it stopped.
             Logger.info("ad \(ad.id.prefix(8)): the content plays again; the overlay goes on")
-            contentPausedWhileInactive = false
+            wasContentPausedWhileInactive = false
             contentRecheck?.cancel()
             contentRecheck = nil
         }
         guard change == .tick, let contentProgress, !ad.hasEnded else { return }
         // Seconds of video while the overlay is seen: not while its scene is inactive or it is out of sight.
-        if contentProgress.advance(to: playback.playhead, counting: ad.clock?.isCounting == true, rate: playback.rate) {
+        if contentProgress.advance(to: playback.playhead, isCounting: ad.clock?.isCounting == true, rate: playback.rate) {
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(contentProgress.duration) s of video elapsed")
             ad.state.markCompleted()
             ad.end(.completed)
@@ -196,11 +196,11 @@ final class OverlayRule: ContentRule {
     /// the check after the scene's return. Returns whether the overlay stays. Before its clock exists (the
     /// view still being attached) a pause ends it as always.
     private func freezesOnPause() -> Bool {
-        if ad.clock?.isSceneActive == false, !contentPausedWhileInactive {
+        if ad.clock?.isSceneActive == false, !wasContentPausedWhileInactive {
             Logger.info("ad \(ad.id.prefix(8)): the content paused while the scene is not active; the overlay freezes")
-            contentPausedWhileInactive = true
+            wasContentPausedWhileInactive = true
         }
-        return contentPausedWhileInactive
+        return wasContentPausedWhileInactive
     }
 
     /// The scene is back over an overlay frozen by a pause: the app may be about to play the content again,
@@ -212,9 +212,9 @@ final class OverlayRule: ContentRule {
             try? await Task.sleep(nanoseconds: UInt64(Self.contentResumeGrace * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
-            guard followsContent, !ad.hasEnded, contentPausedWhileInactive, ad.clock?.isSceneActive == true,
+            guard followsContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.clock?.isSceneActive == true,
                   let playback = ad.owner?.playback else { return }
-            contentPausedWhileInactive = false
+            wasContentPausedWhileInactive = false
             if playback.isPlaying {
                 Logger.info("ad \(ad.id.prefix(8)): the content plays again; the overlay goes on")
                 return
@@ -235,7 +235,7 @@ final class PauseRule: ContentRule {
     unowned let ad: VideoAd
 
     /// The content was seen paused since `show`: from then on, content seen playing ends the ad.
-    private(set) var contentPausedSinceShow = false
+    private(set) var hasContentPausedSinceShow = false
 
     init(ad: VideoAd) {
         self.ad = ad
@@ -255,37 +255,37 @@ final class PauseRule: ContentRule {
     /// that already played at `show` must pause first: a rate change of playing content is no resume.
     func started(clock: ActiveTimeClock) {
         guard followsContent, let playback = ad.owner?.playback else { return }
-        contentPausedSinceShow = !playback.isPlaying
+        hasContentPausedSinceShow = !playback.isPlaying
     }
 
     func contentDidChange(_ change: ContentPlayback.Change) {
         guard followsContent, ad.state.wasOnScreen, !ad.hasEnded, let playback = ad.owner?.playback else { return }
-        let playing: Bool
+        let isPlaying: Bool
         switch change {
         case .contentChanged:
             Logger.info("ad \(ad.id.prefix(8)): the content changed or another VideoAds took the player; the pause ad ends")
             return ad.end(.interrupted)
-        case .playback(isPlaying: let value?): playing = value
-        case .contentEnded: playing = false
-        case .playback(isPlaying: nil), .jumped, .tick: playing = playback.isPlaying
+        case .playback(isPlaying: let value?): isPlaying = value
+        case .contentEnded: isPlaying = false
+        case .playback(isPlaying: nil), .jumped, .tick: isPlaying = playback.isPlaying
         }
-        endIfContentResumed(playing: playing)
+        endIfContentResumed(isPlaying: isPlaying)
     }
 
     /// A pause ad shown right before `player.play()` ends at the next ad's `show`, which finds the screen free.
     func endIfContentStopped() {
         guard followsContent, ad.state.wasOnScreen, !ad.hasEnded, let playback = ad.owner?.playback else { return }
-        endIfContentResumed(playing: playback.isPlaying)
+        endIfContentResumed(isPlaying: playback.isPlaying)
     }
 
     func cancel() {}
 
-    private func endIfContentResumed(playing: Bool) {
-        guard playing else {
-            contentPausedSinceShow = true
+    private func endIfContentResumed(isPlaying: Bool) {
+        guard isPlaying else {
+            hasContentPausedSinceShow = true
             return
         }
-        guard contentPausedSinceShow else { return }
+        guard hasContentPausedSinceShow else { return }
         Logger.info("ad \(ad.id.prefix(8)): the content plays again; the pause ad ends")
         ad.end(.interrupted)
     }

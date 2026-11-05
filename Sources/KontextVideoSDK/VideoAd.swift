@@ -79,7 +79,7 @@ public final class VideoAd {
     var chosenSize: Size?
 
     /// The page reported the creative ready: `load()` finished.
-    public var isLoaded: Bool { state.loaded }
+    public var isLoaded: Bool { state.isLoaded }
 
     /// Whether `show` can be called: the creative is loaded, the ad was not shown yet and not invalidated, and
     /// the server has not switched the SDK off.
@@ -113,7 +113,7 @@ public final class VideoAd {
     /// Whether the creative ran to its end: a video reached `complete`, an
     /// overlay's `duration` elapsed. Separate from `didEnd`'s reason, which says how the ad left the
     /// screen: a linear ad whose end card the viewer closed ends `.closed` with this `true`.
-    public var isCompleted: Bool { state.completed }
+    public var isCompleted: Bool { state.isCompleted }
 
     /// Every fact of the ad's life, the one source of truth: every public flag above reads it live. The phase
     /// moves only forward, through `state.moveTo(_:)` under `AdLifecycle`'s rules; each milestone is marked once,
@@ -153,7 +153,7 @@ public final class VideoAd {
     /// The ad video is playing (from `video.start`, not while paused, over at `complete`): the only time a
     /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
     /// video starts: a linear ad's meter waits for the presentation to finish.
-    var videoPlaying = false
+    var isVideoPlaying = false
     var clock: ActiveTimeClock? { (presentation?.screen as? InlineScreen)?.clock }
     /// How the ad follows the tracked content player, by format (`Playback/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
@@ -501,13 +501,13 @@ public final class VideoAd {
         let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: descriptor.creative == .video ? 2 : 1)
         // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
         // viewability clock runs only while the video plays (from `video.start`, not while paused).
-        meter.countsTime = descriptor.creative != .video || videoPlaying
+        meter.countsTime = descriptor.creative != .video || isVideoPlaying
         meter.onExposure = { [weak self] percentage, visible in
             self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
         }
         // At most one verdict per ad, after its impression: an ad never counted has nothing to be viewable.
         meter.onVerdict = { [weak self] verdict in
-            guard self?.state.impressionRecorded == true else { return }
+            guard self?.state.hasImpression == true else { return }
             self?.withContentPlayhead { self?.tracker.fire(verdict.rawValue) }
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
@@ -565,9 +565,9 @@ public final class VideoAd {
         loadedBridge?.hide()
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
         // A linear ad's controller is dismissed, and `didEnd` waits for it; an inline ad is gone already.
-        let dismissing = presentation?.screen.close { [weak self] timedOut in
+        let dismissing = presentation?.screen.close { [weak self] hasTimedOut in
             guard let self else { return }
-            if timedOut {
+            if hasTimedOut {
                 // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
                 Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
                 DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
@@ -580,7 +580,7 @@ public final class VideoAd {
         // a destroy or its own time: `close` is the outcome the server counts as shown, not billed. A failure
         // already fired `error`; the page's own close or skip fired its beacon; an image's impression fires at
         // show; an ad that never reached the screen fired nothing to close. As the Kotlin SDK decides it.
-        if state.wasOnScreen, descriptor.creative == .video, !state.impressionRecorded, Self.closedBeforeFirstFrame.contains(reason) {
+        if state.wasOnScreen, descriptor.creative == .video, !state.hasImpression, Self.closedBeforeFirstFrame.contains(reason) {
             tracker.fire("close")
         }
         if presentation?.screen.isInline == true {

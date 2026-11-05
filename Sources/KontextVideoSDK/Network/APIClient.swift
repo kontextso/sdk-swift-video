@@ -88,22 +88,22 @@ struct APIClient: Sendable {
     /// structure is. A real answer nests about 6 deep.
     static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
         var depth = 0
-        var inString = false
-        var escaped = false
+        var isInString = false
+        var isEscaped = false
         for byte in data {
-            if inString {
-                if escaped {
-                    escaped = false
+            if isInString {
+                if isEscaped {
+                    isEscaped = false
                 } else if byte == UInt8(ascii: "\\") {
-                    escaped = true
+                    isEscaped = true
                 } else if byte == UInt8(ascii: "\"") {
-                    inString = false
+                    isInString = false
                 }
                 continue
             }
             switch byte {
             case UInt8(ascii: "\""):
-                inString = true
+                isInString = true
             case UInt8(ascii: "["), UInt8(ascii: "{"):
                 depth += 1
                 if depth > maxNestingDepth {

@@ -209,7 +209,7 @@ public final class KontextVideo {
             case .enabled(let reportDebug, let reportErrors):
                 self.reportDebug = reportDebug
                 DebugReporter.shared.isEnabled = reportDebug
-                ErrorReporter.shared.configure(enabled: reportErrors)
+                ErrorReporter.shared.configure(isEnabled: reportErrors)
                 DebugReporter.shared.event("config.response", state: ["enabled": true])
                 state = .enabled
                 Logger.info("Enabled")
@@ -219,7 +219,7 @@ public final class KontextVideo {
                 NetworkInfo.startLookup()
             case .disabled(let reason):
                 state = .disabled(reason: reason)
-                ErrorReporter.shared.configure(enabled: false)
+                ErrorReporter.shared.configure(isEnabled: false)
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {

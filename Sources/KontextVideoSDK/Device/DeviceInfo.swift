@@ -63,12 +63,17 @@ struct ScreenInfo: Encodable, Sendable {
     let width: Int
     let height: Int
     let dpr: Double
-    let darkMode: Bool
+    let isDarkMode: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case width, height, dpr
+        case isDarkMode = "darkMode"
+    }
 
     @MainActor
     static func current() -> ScreenInfo {
         let info = ScreenInfoProvider.collect()
-        return ScreenInfo(width: info.width, height: info.height, dpr: info.dpr, darkMode: info.darkMode)
+        return ScreenInfo(width: info.width, height: info.height, dpr: info.dpr, isDarkMode: info.darkMode)
     }
 }
 
@@ -77,12 +82,17 @@ struct PowerInfo: Encodable, Sendable {
     /// 0–100; `nil` when the device does not report it.
     let batteryLevel: Int?
     let batteryState: String
-    let lowPowerMode: Bool
+    let isLowPowerMode: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case batteryLevel, batteryState
+        case isLowPowerMode = "lowPowerMode"
+    }
 
     @MainActor
     static func current() -> PowerInfo {
         let info = BatteryInfoProvider.collect()
-        return PowerInfo(batteryLevel: info.batteryLevel.map { Int($0.rounded()) }, batteryState: info.batteryState, lowPowerMode: info.lowPowerMode)
+        return PowerInfo(batteryLevel: info.batteryLevel.map { Int($0.rounded()) }, batteryState: info.batteryState, isLowPowerMode: info.lowPowerMode)
     }
 }
 
@@ -90,14 +100,19 @@ struct PowerInfo: Encodable, Sendable {
 struct AudioInfo: Encodable, Sendable {
     /// 0–100.
     let volume: Int
-    let muted: Bool
+    let isMuted: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case volume
+        case isMuted = "muted"
+    }
 
     /// KontextKit's read of the system volume, below 1 % counted as muted. A read only since KontextKit
     /// 0.4.0: it leaves the shared audio session, which belongs to the app's player, as the app set it.
     @MainActor
     static func current() -> AudioInfo {
         let info = AudioInfoProvider.collect()
-        return AudioInfo(volume: info.volume, muted: info.muted)
+        return AudioInfo(volume: info.volume, isMuted: info.muted)
     }
 }
 

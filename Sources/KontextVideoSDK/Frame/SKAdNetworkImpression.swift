@@ -15,11 +15,11 @@ final class SKAdNetworkImpression {
     let skan: Skan
     private let adId: String
     /// `start()` ran; nothing is called twice.
-    private var started = false
-    private var ended = false
+    private var isStarted = false
+    private var hasEnded = false
     /// The manager built and stored the impression (`initImpression` succeeded); Apple checks it only at
     /// `startImpression`. From here there is something to end.
-    private var registered = false
+    private var isRegistered = false
     /// The last call queued, for the next one to wait on. Tests clear it.
     static var queue: Task<Void, Never>?
 
@@ -36,15 +36,15 @@ final class SKAdNetworkImpression {
     /// The creative is on screen: the `SKAdImpression` is registered and started. Once. A payload signed for
     /// the click only (no fidelity-0 entry) registers nothing; its sheet still carries the attribution.
     func start() {
-        guard !started, skan.hasFidelity0 else { return }
-        started = true
+        guard !isStarted, skan.hasFidelity0 else { return }
+        isStarted = true
         enqueue { [self] in
             do {
                 try await manager.initImpression(skan)
-                registered = true
+                isRegistered = true
                 // The ad left the screen while the impression was being built: no start for an ad nobody
                 // sees; the end already queued behind this releases it.
-                guard !ended else { return }
+                guard !hasEnded else { return }
                 try await manager.startImpression()
                 Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression started")
             } catch {
@@ -55,11 +55,11 @@ final class SKAdNetworkImpression {
 
     /// The creative left the screen: the impression is ended and released. Once; after `start()`'s calls.
     func end() {
-        guard started, !ended else { return }
-        ended = true
+        guard isStarted, !hasEnded else { return }
+        hasEnded = true
         enqueue { [self] in
-            guard registered else { return }
-            registered = false
+            guard isRegistered else { return }
+            isRegistered = false
             do {
                 try await manager.endImpression()
                 Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression ended")

@@ -24,24 +24,24 @@ struct AdState: Equatable {
     private(set) var wasOnScreen = false
 
     /// The page reported the creative ready (`isLoaded`).
-    private(set) var loaded = false
+    private(set) var isLoaded = false
     /// The impression fired: at `show` for an image, at the first frame for a video.
-    private(set) var impressionRecorded = false
+    private(set) var hasImpression = false
     /// The creative ran to its end (`isCompleted`).
-    private(set) var completed = false
+    private(set) var isCompleted = false
     /// What broke, for the `didFail` that `end(.failed)` delivers first.
     private(set) var failure: VideoAdError?
 
     /// Records that the creative is ready. Once; never undone.
-    mutating func markLoaded() { loaded = true }
+    mutating func markLoaded() { isLoaded = true }
 
     /// Records that the creative ran to its end. Once; never undone.
-    mutating func markCompleted() { completed = true }
+    mutating func markCompleted() { isCompleted = true }
 
     /// Records the impression, and says whether this was the first time: only then does it fire.
     mutating func markImpression() -> Bool {
-        guard !impressionRecorded else { return false }
-        impressionRecorded = true
+        guard !hasImpression else { return false }
+        hasImpression = true
         return true
     }
 

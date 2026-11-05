@@ -88,16 +88,21 @@ struct AdsDevice: Encodable, Sendable {
 struct PlayerSnapshot: Encodable, Sendable, Equatable {
     let width: Int
     let height: Int
-    let fullscreen: Bool
+    let isFullscreen: Bool
     /// Milliseconds in content time; 0 before the episode plays.
     let playhead: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case width, height, playhead
+        case isFullscreen = "fullscreen"
+    }
 
     /// The key window's size, or the screen's, in points: width < height is portrait. `playhead` in
     /// seconds, as the SDK keeps it; the wire takes milliseconds.
     @MainActor
     static func make(playhead: TimeInterval) -> PlayerSnapshot {
         let screen = (Environment.keyWindow()?.bounds ?? UIScreen.main.bounds).size
-        return PlayerSnapshot(width: Int(screen.width.rounded()), height: Int(screen.height.rounded()), fullscreen: true,
+        return PlayerSnapshot(width: Int(screen.width.rounded()), height: Int(screen.height.rounded()), isFullscreen: true,
                               playhead: Int((playhead * 1000).rounded()))
     }
 }

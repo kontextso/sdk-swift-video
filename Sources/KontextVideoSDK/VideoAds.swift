@@ -156,16 +156,16 @@ public final class VideoAds {
                 guard let self, !self.isDestroyed else { throw VideoAdError.destroyed }
                 return self
             }
-            let enabled: Bool
+            let isEnabled: Bool
             do {
-                enabled = try await KontextVideo.shared.waitUntilEnabled()
+                isEnabled = try await KontextVideo.shared.waitUntilEnabled()
             } catch {
                 // Only `destroy()` or the release cancels the request: it stops waiting for `/config`, which goes on.
                 throw VideoAdError.destroyed
             }
             // Destroyed while waiting: `destroyed`, whatever `/config` said meanwhile.
             _ = try owner()
-            guard enabled else {
+            guard isEnabled else {
                 Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
                 if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
                 throw VideoAdError.initializationFailed
@@ -201,9 +201,9 @@ public final class VideoAds {
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
                 // Once per request, here in the request every caller shares, not once per waiting caller.
                 let failure = ErrorReporter.RequestFailure(error)
-                let decoding: Bool = (error as? APIError)?.isDecoding ?? false
+                let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
                 let recovery: ErrorReporter.Recovery = try owner().holdsAds ? .heldAdsKept : .noAd
-                ErrorReporter.shared.report(decoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
+                ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
                                             sessionId: sessionId, failure: failure, recovery: recovery)
                 throw VideoAdError.request(VideoAdError.RequestFailure(error))
             }

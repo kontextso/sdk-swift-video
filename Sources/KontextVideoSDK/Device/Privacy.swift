@@ -14,7 +14,12 @@ struct IFA: Encodable, Sendable {
     /// Never `true` on iOS: since iOS 10 an opted-out device returns no id at all, so an id is always one
     /// that may be used. Sent because the API's `ifa` object has the field: other platforms' SDKs hand out
     /// an id together with a limit flag (Android before 12, Roku, Fire TV, Samsung and LG TVs).
-    let limitAdTracking = false // swiftlint:disable:this unused_declaration
+    let isAdTrackingLimited = false // swiftlint:disable:this unused_declaration
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type
+        case isAdTrackingLimited = "limitAdTracking"
+    }
 }
 
 /// What the request says about tracking: the ATT status and, when authorized, the IDFA.
@@ -34,7 +39,7 @@ struct TrackingInfo: Sendable {
     @MainActor
     private static var authorization: Task<ATTrackingManager.AuthorizationStatus, Error>?
     /// The app was told once that it never asked for tracking authorization; once per launch is enough.
-    @MainActor static var warnedAboutUnaskedTracking = false
+    @MainActor static var hasWarnedAboutUnaskedTracking = false
 
     /// Reads the current state. With `requestAuthorization`, first requests App Tracking Transparency
     /// authorization when the viewer has not answered yet (the app's Info.plist needs
@@ -64,10 +69,10 @@ struct TrackingInfo: Sendable {
             let answer = try await awaitShared(task)
             Logger.info("ATT: \(name(of: answer))")
             return answer
-        } else if status == .notDetermined, !warnedAboutUnaskedTracking {
+        } else if status == .notDetermined, !hasWarnedAboutUnaskedTracking {
             // A publisher who forgot both their own dialog and the SDK's option sends every request without
             // the IDFA; said once, at the first request, where a developer looks.
-            warnedAboutUnaskedTracking = true
+            hasWarnedAboutUnaskedTracking = true
             Logger.warning("App Tracking Transparency not answered yet: the IDFA is not sent until the app asks, or set requestTrackingAuthorization: true.")
         }
         return nil

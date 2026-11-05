@@ -39,14 +39,14 @@ final class TTVideoEngineAdapter: VideoAdsPlayer {
     }
 
     private weak var engine: NSObject?
-    private let readable: Bool
+    private let isReadable: Bool
     var item: (@MainActor () -> AnyHashable?)?
 
     init(engine: NSObject) {
         self.engine = engine
         // A key the object does not have would raise an Objective-C exception, which Swift cannot catch.
-        readable = ["currentPlaybackTime", "playbackState"].allSatisfy { engine.responds(to: NSSelectorFromString($0)) }
-        if !readable {
+        isReadable = ["currentPlaybackTime", "playbackState"].allSatisfy { engine.responds(to: NSSelectorFromString($0)) }
+        if !isReadable {
             let name = String(describing: type(of: engine))
             os.Logger(subsystem: "so.kontext.video", category: "KontextVideoTTSDK")
                 .error("track(ttVideoEngine:): \(name, privacy: .public) has no currentPlaybackTime or playbackState; the content counts as not playing")
@@ -54,7 +54,7 @@ final class TTVideoEngineAdapter: VideoAdsPlayer {
     }
 
     private func number(_ key: String) -> NSNumber? {
-        guard readable, let engine, engine.responds(to: NSSelectorFromString(key)) else { return nil }
+        guard isReadable, let engine, engine.responds(to: NSSelectorFromString(key)) else { return nil }
         return engine.value(forKey: key) as? NSNumber
     }
 

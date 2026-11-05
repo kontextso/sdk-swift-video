@@ -94,6 +94,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   page may send its own label.
 - `StrictConcurrency` is on and CI fails on any compiler warning in `Sources/`: a concurrency warning is a bug.
   Every type touching UIKit, WebKit or ATT is `@MainActor`.
+- Booleans: one that names a state (an adjective or participle) takes `is`/`has`/`was` (`isLoaded`, `hasImpression`,
+  `wasOnScreen`); a third-person verb stays (`countsTime`, `refusesShow`); wire keys keep their JSON name (`CodingKeys`).
 - Comments say *why*, in prose; a doc comment on every public declaration. No ticket or PR references.
 - Facts about the device, consent and attribution come from KontextKit; what the SDK needs and KontextKit lacks
   goes into KontextKit, not into a workaround here.

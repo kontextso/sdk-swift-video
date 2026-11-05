@@ -77,7 +77,7 @@ extension VideoAd {
         let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
                              height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
         let view = room.map { "view \(Int($0.width))×\(Int($0.height)) is too small for" } ?? "the safe area and insets leave no room for"
-        Logger.warning("ad \(id.prefix(8)): \(view) the ad's \(size.width)×\(size.height)\(size.scalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
+        Logger.warning("ad \(id.prefix(8)): \(view) the ad's \(size.width)×\(size.height)\(size.isScalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
         return VideoAdError.containerTooSmall(minimum: minimum)
     }
 

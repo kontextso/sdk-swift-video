@@ -173,9 +173,9 @@ final class ErrorReporter {
     private init() {}
 
     /// `/config` answered: `reportErrors` turns the reports on, anything else drops them for this launch.
-    func configure(enabled: Bool) {
+    func configure(isEnabled: Bool) {
         guard mode != .off else { return }   // a `410` from the error endpoint is final for the launch
-        if enabled {
+        if isEnabled {
             mode = .on
             if !buffer.isEmpty { scheduleFlush(after: Self.interval) }
         } else {

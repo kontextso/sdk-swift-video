@@ -36,9 +36,9 @@ protocol AdScreen: AnyObject {
     /// seen, seconds.
     func tearDown(meter: ViewabilityMeter?) -> TimeInterval
     /// Takes the screen away after `tearDown`. Returns `true` when that takes time: `onGone` runs once it
-    /// finished (`timedOut`: reported over a screen UIKit did not take down), and `didEnd` waits for it.
+    /// finished (`hasTimedOut`: reported over a screen UIKit did not take down), and `didEnd` waits for it.
     /// `false`: nothing to wait for, `onGone` never runs.
-    func close(onGone: @escaping @MainActor (_ timedOut: Bool) -> Void) -> Bool
+    func close(onGone: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool
 }
 
 /// An overlay or pause ad inside the app's player view: the `AdHostView` that holds the page, and the
@@ -116,7 +116,7 @@ final class InlineScreen: AdScreen {
     }
 
     /// Gone already: `tearDown` removed the host.
-    func close(onGone: @escaping @MainActor (_ timedOut: Bool) -> Void) -> Bool { false }
+    func close(onGone: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool { false }
 }
 
 /// A linear ad full screen: the `LinearViewController` UIKit presents, and its dismissal at the end
@@ -163,7 +163,7 @@ final class LinearScreen: AdScreen {
 
     /// Whatever the reason, while UIKit still presents it; `didEnd` waits, so a screen presented there misses
     /// the animation.
-    func close(onGone: @escaping @MainActor (_ timedOut: Bool) -> Void) -> Bool {
+    func close(onGone: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool {
         guard let controller else { return false }
         self.controller = nil
         // Pending while the ad is ending: once `didEnd` was delivered, the watchdog has nothing left to do.

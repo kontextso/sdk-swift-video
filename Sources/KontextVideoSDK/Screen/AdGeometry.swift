@@ -43,7 +43,7 @@ enum AdGeometry {
 
     /// How far a variant may shrink: to `minimumScale`, or not at all when the creative is not scalable.
     static func smallestScale(of size: VideoAd.Size) -> CGFloat {
-        size.scalable ? minimumScale : 1
+        size.isScalable ? minimumScale : 1
     }
 
     /// The app's insets with a negative or non-finite side counted as zero.

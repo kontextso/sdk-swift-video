@@ -404,14 +404,14 @@ struct VideoAdContentTests {
 
     @Test func aShortSeekCountsNothingAndALateSampleOfRealPlaybackCounts() {
         let seek = ContentProgress(duration: 1, at: 10)
-        #expect(!seek.advance(to: 11.5, counting: true) && seek.elapsed == 0, "1.5 s at once, before any time passed: a seek")
+        #expect(!seek.advance(to: 11.5, isCounting: true) && seek.elapsed == 0, "1.5 s at once, before any time passed: a seek")
         let late = ContentProgress(duration: 10, at: 0)
         advanceClock(by: 3)
-        #expect(!late.advance(to: 3, counting: true) && late.elapsed == 3, "3 s of video after 3 s: playback, sampled late")
+        #expect(!late.advance(to: 3, isCounting: true) && late.elapsed == 3, "3 s of video after 3 s: playback, sampled late")
         let jumped = ContentProgress(duration: 10, at: 0)
         advanceClock(by: 1)
         jumped.resync(to: 0.8)   // an AVPlayer time jump
-        #expect(!jumped.advance(to: 0.8, counting: true) && jumped.elapsed == 0)
+        #expect(!jumped.advance(to: 0.8, isCounting: true) && jumped.elapsed == 0)
     }
 
     @Test func aPublishedPauseEndsTheOverlayEvenIfPlaybackResumesBeforeDelivery() async throws {
@@ -611,7 +611,7 @@ struct VideoAdContentTests {
         try setSceneActive(true)
         harness.player.isPlaying = true   // the app plays the content again on return
         ad.contentDidChange(.tick)
-        #expect(!ad.contentPausedWhileInactive)
+        #expect(!ad.wasContentPausedWhileInactive)
         await sleepMs(250)   // past the grace
         #expect(delegate.endReasons.isEmpty)
         harness.player.playhead = 0.5
@@ -632,7 +632,7 @@ struct VideoAdContentTests {
         ad.contentDidChange(.playback(isPlaying: false))
         try setSceneActive(true)
         harness.player.isPlaying = true
-        #expect(await waitUntil { !ad.contentPausedWhileInactive && ad.contentRecheck == nil })
+        #expect(await waitUntil { !ad.wasContentPausedWhileInactive && ad.contentRecheck == nil })
         #expect(delegate.endReasons.isEmpty)
         ad.contentDidChange(.playback(isPlaying: false))
         #expect(delegate.endReasons == [.interrupted])
@@ -666,7 +666,7 @@ struct VideoAdContentTests {
         try setSceneActive(true)
         try setSceneActive(false)
         await sleepMs(200)
-        #expect(delegate.endReasons.isEmpty && ad.contentPausedWhileInactive)
+        #expect(delegate.endReasons.isEmpty && ad.wasContentPausedWhileInactive)
         try setSceneActive(true)
         #expect(await waitUntil { delegate.endReasons == [.interrupted] })
     }
@@ -704,13 +704,13 @@ struct VideoAdContentTests {
         let known = ContentProgress(duration: 100, at: 0)
         for second in 1...4 {
             advanceClock(by: 0.25)
-            _ = unknown.advance(to: Double(second), counting: true)              // 4×, speed not told
-            _ = known.advance(to: Double(second) * 2, counting: true, rate: 8)   // 8×, an AVPlayer's rate
+            _ = unknown.advance(to: Double(second), isCounting: true)              // 4×, speed not told
+            _ = known.advance(to: Double(second) * 2, isCounting: true, rate: 8)   // 8×, an AVPlayer's rate
         }
         #expect(abs(unknown.elapsed - 4) < 0.001 && abs(known.elapsed - 8) < 0.001)
         let seek = ContentProgress(duration: 10, at: 0)
         advanceClock(by: 0.25)
-        #expect(!seek.advance(to: 2, counting: true, rate: 1) && seek.elapsed == 0, "2 s in a quarter second at 1×: a seek")
+        #expect(!seek.advance(to: 2, isCounting: true, rate: 1) && seek.elapsed == 0, "2 s in a quarter second at 1×: a seek")
     }
 
     /// A player whose publisher runs app code when it is read and when it is subscribed to.
