@@ -30,13 +30,17 @@ public final class KontextVideo {
         InstallIdProvider.getOrCreate()
     }
 
+    /// The SDK's own facts, the one source of truth: its phase, the configuration, what `/config` said of the
+    /// reports. `KontextVideo` is the shell that moves it.
+    private(set) var sdkState = SdkState()
+
     /// The configuration the SDK was initialised with, or `nil` before `initialize(with:)`.
-    private(set) var configuration: Configuration?
+    var configuration: Configuration? { sdkState.configuration }
     /// Where the SDK is, readable at any time. `initialize(with:)` reports it once `/config` answered; it can
     /// change later: an ads response may switch the SDK off (`.disabled`), and the next `format(_:)` after a
     /// failed `/config` tries again (`.failed`, then `.initializing`). Read it, for example, to hide your ad UI
     /// once the SDK is disabled. Nothing notifies a change: read it when you decide.
-    public private(set) var state: State = .notInitialized
+    public var state: State { sdkState.phase }
 
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
@@ -55,9 +59,7 @@ public final class KontextVideo {
     public var variantID: String?
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
-    var isInitialized: Bool {
-        configuration != nil
-    }
+    var isInitialized: Bool { sdkState.isInitialized }
 
     /// The one ad on screen in the whole app, from any `VideoAds`: taken at `show`, released at `didEnd`; it
     /// retains the ad until then, whatever the app does with its reference.
@@ -65,13 +67,8 @@ public final class KontextVideo {
     var adOnScreen: VideoAd? { shownAd?.ad }
 
     /// The server's reason while the SDK is switched off, else `nil`.
-    var disabledReason: String? {
-        if case .disabled(let reason) = state { return reason }
-        return nil
-    }
+    var disabledReason: String? { sdkState.disabledReason }
 
-    /// When the server asked for the debug log (`reportDebug` in the `/config` response).
-    private(set) var reportDebug = false
     private var initTask: Task<Void, Never>?
 
     private init() {}
@@ -95,7 +92,7 @@ public final class KontextVideo {
             }
             return
         }
-        self.configuration = configuration
+        sdkState.recordConfiguration(configuration)
         Logger.level = configuration.logLevel
         if !configuration.problems.isEmpty {
             // A configuration mistake: every request would fail. Stops a debug build here, not at a 400 later.
@@ -108,7 +105,7 @@ public final class KontextVideo {
             }
         }
         Logger.debug("Initialising, SDK version \(Self.version)")
-        state = .initializing
+        sdkState.moveTo(.initializing)
         initTask = Task {
             await fetchConfig(configuration: configuration)
             // Cancelled by `resetForTesting()`: the state is no longer this call's to report.
@@ -142,8 +139,7 @@ public final class KontextVideo {
 
     /// An ads response said `enabled: false`: the same kill switch as `/config`.
     func disable(reason: String) {
-        guard state != .disabled(reason: reason) else { return }
-        state = .disabled(reason: reason)
+        guard sdkState.moveTo(.disabled(reason: reason)) else { return }
         Logger.warning("Disabled by the server: \(reason)")
     }
 
@@ -169,25 +165,33 @@ public final class KontextVideo {
     /// After a failed `/config`, every ads request tries it again first; a load is already an explicit
     /// request for an ad, and one `/config` per load is cheap.
     private func retryConfig() {
-        guard state == .failed, let configuration else { return }
+        guard let configuration, sdkState.moveTo(.initializing) else { return }
         Logger.info("Retrying /config")
-        state = .initializing
         initTask = Task { await fetchConfig(configuration: configuration) }
+    }
+
+    /// `/config`'s `reportErrors`, recorded in `sdkState`; `ErrorReporter` sends, keeps or drops its reports by it.
+    func recordErrorReporting(_ isOn: Bool) {
+        sdkState.recordErrorReporting(isOn)
+        ErrorReporter.shared.reportingChanged()
+    }
+
+    /// `/config`'s `reportDebug`, recorded in `sdkState`; `DebugReporter` sends its events or drops them by it.
+    func recordDebugReporting(_ isOn: Bool) {
+        sdkState.recordDebugReporting(isOn)
+        DebugReporter.shared.reportingChanged()
     }
 
     /// Back to the state before `initialize(with:)`. Tests only: the shared instance is process-wide.
     func resetForTesting() { // swiftlint:disable:this unused_declaration
         initTask?.cancel()
         initTask = nil
-        configuration = nil
-        state = .notInitialized
+        sdkState = SdkState()
         user = nil
         regulatory = nil
         variantID = nil
         shownAd = nil
-        reportDebug = false
-        DebugReporter.shared.isEnabled = false
-        DebugReporter.shared.clearHistory()
+        DebugReporter.shared.resetForTesting()
         ErrorReporter.shared.resetForTesting()
         Logger.level = .warning
     }
@@ -207,24 +211,23 @@ public final class KontextVideo {
             guard !Task.isCancelled else { return }
             switch response {
             case .enabled(let reportDebug, let reportErrors):
-                self.reportDebug = reportDebug
-                DebugReporter.shared.isEnabled = reportDebug
-                ErrorReporter.shared.configure(isEnabled: reportErrors)
+                recordDebugReporting(reportDebug)
+                recordErrorReporting(reportErrors)
                 DebugReporter.shared.event("config.response", state: ["enabled": true])
-                state = .enabled
+                sdkState.moveTo(.enabled)
                 Logger.info("Enabled")
                 // The browser user agent every ads request carries, evaluated in a WebView once per process.
                 // Started now, so the first request rarely waits for it; not at `initialize`, so an app whose
                 // SDK the server switches off never makes that WebView.
                 NetworkInfo.startLookup()
             case .disabled(let reason):
-                state = .disabled(reason: reason)
-                ErrorReporter.shared.configure(isEnabled: false)
+                sdkState.moveTo(.disabled(reason: reason))
+                recordErrorReporting(false)
                 Logger.warning("Disabled by the server: \(reason)")
             }
         } catch {
             guard !Task.isCancelled else { return }
-            state = .failed
+            sdkState.moveTo(.failed)
             Logger.error("/config failed, no ads until it succeeds: \(error)")
             // Waits in memory: it leaves once a later `/config` turns the reports on.
             let failure = ErrorReporter.RequestFailure(error)

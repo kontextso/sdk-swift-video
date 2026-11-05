@@ -70,10 +70,9 @@ final class DebugReporter {
     /// Events kept while a batch cannot leave (a slow or failing server); beyond this the oldest go.
     static let maxBuffered = 500
 
-    /// Set from the `/config` response; nothing is sent while `false`.
-    var isEnabled = false {
-        didSet { if !isEnabled { buffer.removeAll() } }
-    }
+    /// What `/config` said (`reportDebug`), read from the SDK's state: off until it answers; nothing is sent while
+    /// `false`.
+    var isEnabled: Bool { KontextVideo.shared.sdkState.isDebugReportingOn }
 
     private var buffer: [Event] = []
     private var flushTask: Task<Void, Never>?
@@ -91,9 +90,20 @@ final class DebugReporter {
     static let historyLength = 30
     private var history: [(createdAt: String, name: String, adId: String?, state: [String: Value]?)] = []
 
+    /// `/config` answered (`KontextVideo.recordDebugReporting`): off drops what waits.
+    func reportingChanged() {
+        if !isEnabled { buffer.removeAll() }
+    }
+
     /// Tests only, with the shared instance reset.
     func clearHistory() {
         history.removeAll()
+    }
+
+    /// Back to the state before any `/config`: nothing waiting, no history. Tests only.
+    func resetForTesting() {
+        buffer.removeAll()
+        clearHistory()
     }
 
     /// The state keys an error report's history may carry; anything else stays on the device.

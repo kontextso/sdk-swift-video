@@ -67,7 +67,7 @@ struct DebugReporterTests {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         DebugReporter.shared.event("tick")
-        DebugReporter.shared.isEnabled = false
+        KontextVideo.shared.recordDebugReporting(false)
         await sleepMs(300)
         #expect(batchesWithTicks().isEmpty, "the tick was buffered, then dropped")
     }

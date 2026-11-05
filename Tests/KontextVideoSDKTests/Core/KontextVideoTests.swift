@@ -220,7 +220,7 @@ struct KontextVideoTests {
     @Test func reportDebugEnablesTheReporter() async {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        #expect(sdk.reportDebug)
+        #expect(sdk.sdkState.isDebugReportingOn)
         #expect(DebugReporter.shared.isEnabled)
     }
 

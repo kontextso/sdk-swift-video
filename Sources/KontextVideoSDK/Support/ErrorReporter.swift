@@ -151,7 +151,20 @@ final class ErrorReporter {
         return String(scalars)
     }
 
-    private(set) var mode = Mode.pending
+    /// The server answered a batch with `410`: reporting ends for this launch, whatever `/config` said. The
+    /// reporter's own fact, from its own endpoint, not the SDK's state.
+    private var wasStoppedByServer = false
+
+    /// Pending until `/config` answers, then what it said (`SdkState.isErrorReportingOn`), unless the server
+    /// stopped it.
+    var mode: Mode {
+        if wasStoppedByServer { return .off }
+        switch KontextVideo.shared.sdkState.isErrorReportingOn {
+        case nil: return .pending
+        case true?: return .on
+        case false?: return .off
+        }
+    }
     private(set) var buffer: [Report] = []
     /// The encoded size of each waiting report, in `buffer`'s order, and their sum.
     private var sizes: [Int] = []
@@ -172,14 +185,13 @@ final class ErrorReporter {
 
     private init() {}
 
-    /// `/config` answered: `reportErrors` turns the reports on, anything else drops them for this launch.
-    func configure(isEnabled: Bool) {
-        guard mode != .off else { return }   // a `410` from the error endpoint is final for the launch
-        if isEnabled {
-            mode = .on
-            if !buffer.isEmpty { scheduleFlush(after: Self.interval) }
-        } else {
-            turnOff()
+    /// `/config` answered (`KontextVideo.recordErrorReporting`): reports on send what waited, reports off drop it
+    /// for this launch.
+    func reportingChanged() {
+        switch mode {
+        case .on: if !buffer.isEmpty { scheduleFlush(after: Self.interval) }
+        case .off: dropAll()
+        case .pending: break
         }
     }
 
@@ -272,7 +284,7 @@ final class ErrorReporter {
     func resetForTesting() {
         flushTask?.cancel()
         flushTask = nil
-        mode = .pending
+        wasStoppedByServer = false
         buffer.removeAll()
         sizes.removeAll()
         bufferedBytes = 0
@@ -281,8 +293,8 @@ final class ErrorReporter {
         failures = 0
     }
 
-    private func turnOff() {
-        mode = .off
+    /// Drops everything waiting: reports are off for this launch.
+    private func dropAll() {
         flushTask?.cancel()
         flushTask = nil
         buffer.removeAll()
@@ -325,7 +337,8 @@ final class ErrorReporter {
         } catch APIError.http(let status, _) where status == 410 {
             // The server's off switch for running clients: no more reports this launch.
             Logger.debug("error reports turned off by the server")
-            turnOff()
+            wasStoppedByServer = true
+            dropAll()
             return true
         } catch APIError.http(let status, _) where (400..<500).contains(status) && status != 429 {
             // Refused for good (a malformed body, a refused token): a retry would be refused the same way.

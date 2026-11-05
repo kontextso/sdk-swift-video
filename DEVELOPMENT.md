@@ -22,7 +22,8 @@ sdk-swift-video/
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
-│   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor; AdLifecycle: its phases and their legal moves, stateless; AdState: every fact of its life, its phase, its milestones and the flags they give)
+│   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor)
+│   ├── State/        the state of the SDK and of each ad, and their legal moves: SdkLifecycle and AdLifecycle (the phases and the moves between them, stateless), SdkState (the SDK's phase, its configuration, what /config said of the reports) and AdState (every fact of an ad's life, its phase, its milestones and the flags they give)
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
@@ -47,7 +48,7 @@ The lifecycle these files implement is the Notion page *SDK Lifecycle*: every `f
 with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns the bid state and re-serves held bids
 until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
-The rule for the tree: the root is what the app calls, `Model/` is the model, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
+The rule for the tree: the root is what the app calls, `Model/` is the model, `State/` is the state of the SDK and of each ad and their legal moves, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
 web page and its messages, `Screen/` puts the ad on screen, `Measurement/` measures and reports (together the Notion hub's "Rendering" section), `Support/` is plumbing.
 
 ## Building
@@ -102,15 +103,17 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
 - One source of truth: every fact of an ad's life (phase, loaded, impression, completed, on screen, the failure) is
-  in `Model/AdState`; everything else asks it. `VideoAd`'s public flags are getters over it. Its phase moves only
-  through `moveTo(_:)`, under the stateless rules of `Model/AdLifecycle`.
+  in `State/AdState`; everything else asks it. `VideoAd`'s public flags are getters over it. Its phase moves only
+  through `moveTo(_:)`, under the stateless rules of `State/AdLifecycle`. The SDK's own facts (its phase, the
+  public `KontextVideo.State`; the configuration; what `/config` said of error and debug reports) are in
+  `State/SdkState` the same way, moved by `KontextVideo` under `State/SdkLifecycle`; the reporters ask it.
 - What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
   `Screen/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
   checks, the public format guards (`wrongPresentation`, `dismiss()` on a linear ad) and the facts of the linear
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
   goes into a rule or a screen, not into an `if format` in `VideoAd`.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
-  test: `Model/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameProtocol`
+  test: `State/SdkLifecycle` (which SDK phase may follow which), `State/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameProtocol`
   (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
   (the beacon and end reason of a page's close), and the decision table in `Playback/ContentRule.swift`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
@@ -162,7 +165,10 @@ Tests/KontextVideoSDKTests/
 ├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (payloads),
 │                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
-├── Model/        encoding of what the app passes in; the lifecycle's table (AdLifecycleTests), the ad state's moves, milestones and flags (AdStateTests)
+├── Model/        encoding of what the app passes in
+├── State/        the lifecycles' tables (SdkLifecycleTests, AdLifecycleTests), the SDK state's and the ad state's moves,
+│                 milestones and flags (SdkStateTests, AdStateTests), every SDK move and the reporters across them
+│                 end to end (SdkStatesTests)
 ├── Network/      the client: transport, status codes, the error body
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);
 │                 CorpusTests runs the shared malformed-answer corpus

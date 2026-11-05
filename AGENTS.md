@@ -50,7 +50,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 
 ## Architecture
 
-- `KontextVideo.shared`: initialize (`/config`), `user`, `regulatory`, `variantID`, the one ad on screen.
+- `KontextVideo.shared`: initialize (`/config`), `user`, `regulatory`, `variantID`, the one ad on screen; the shell
+  that moves `SdkState`.
 - `VideoAds`: one per video. `format(_:)` asks the server for all formats with the `VideoAds`'s `sessionId` and the
   ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Support/AwaitShared.swift`).
@@ -71,9 +72,11 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   creative's arrival is `VideoAd.reachedScreen()`), `AdHostView`, `AdGeometry`, `VideoAd+Placement`.
 - `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Playback/`: `ContentPlayback` and
   `ContentRule`. `Payloads/` is the
-  wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Model/AdLifecycle` the rules of its life (the phases and
-  the legal moves between them, stateless), `Model/AdState` the data, every fact of that life: the phase and the milestones
-  (loaded, impression, completed, on screen, the failure); every public flag of `VideoAd` reads it, `Device/` what the SDK reads, `Support/Environment.swift` the
+  wire, `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
+  legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),
+  `SdkState` the SDK's facts (its phase, the public `KontextVideo.State`; the configuration; what `/config` said of
+  error and debug reports, which the reporters ask), `AdState` every fact of an ad's life: the phase and the milestones
+  (loaded, impression, completed, on screen, the failure); every public flag of `VideoAd` reads it. `Device/` what the SDK reads, `Support/Environment.swift` the
   seams the tests replace.
 
 ## Rules
@@ -81,9 +84,10 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 - Commit directly to `main`; no feature branches. Push and watch CI (it runs five jobs; see DEVELOPMENT.md).
 - The lifecycle guarantee is sacred: after a successful `show`, exactly one `didEnd`, whoever ended it; nothing is
   delivered through the delegate before `show`. `VideoAd.end(_:)` is the only terminal path.
-- One source of truth: every fact of an ad's life is in `AdState` (`Model/AdState.swift`); everything else asks it,
-  never keeps its own copy. Its phase moves only through `moveTo(_:)`, which asks `AdLifecycle.canMove(from:to:)`;
-  each milestone is marked once.
+- One source of truth: every fact of an ad's life is in `AdState` (`State/AdState.swift`), every fact of the SDK's
+  in `SdkState` (`State/SdkState.swift`); everything else asks them, never keeps its own copy. A phase moves only
+  through `moveTo(_:)`, which asks `AdLifecycle.canMove(from:to:)` or `SdkLifecycle.canMove(from:to:)`; each
+  milestone is marked once.
 - The page never fires a beacon; `Tracker` does, each entry once, except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence. The SDK never requests an ad by itself.
 - Public API changes go to the Notion page *SDK Lifecycle* first, then the code, then `sdk-kotlin-video`.
