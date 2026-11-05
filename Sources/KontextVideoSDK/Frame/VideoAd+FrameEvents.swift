@@ -70,11 +70,11 @@ extension VideoAd {
         case .video(let moment, _):
             Logger.debug("ad \(id.prefix(8)): video.\(moment.rawValue)")
             switch moment {
-            case .start, .resume: isVideoPlaying = true
-            case .pause: isVideoPlaying = false
+            case .start, .resume: state.markVideoPlaying(true)
+            case .pause: state.markVideoPlaying(false)
             default: break
             }
-            meter?.countsTime = isVideoPlaying
+            meter?.countsTime = state.isVideoPlaying
             tracker.record(event)
             // The delegate last: it may end the ad on the spot, and everything above was the event's own.
             if moment == .start {
@@ -84,7 +84,7 @@ extension VideoAd {
             tracker.record(event)
         case .complete:
             state.markCompleted()
-            isVideoPlaying = false
+            state.markVideoPlaying(false)
             meter?.countsTime = false   // the end card is not the video playing
             tracker.record(event)
             Logger.info("ad \(id.prefix(8)): complete")

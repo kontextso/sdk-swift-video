@@ -144,10 +144,6 @@ public final class VideoAd {
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     var meter: ViewabilityMeter? { shownAd?.meter }
-    /// The ad video is playing (from `video.start`, not while paused, over at `complete`): the only time a
-    /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
-    /// video starts: a linear ad's meter waits for the presentation to finish.
-    var isVideoPlaying = false
     var onScreenClock: OnScreenTimeClock? { (shownAd?.screen as? InlineScreen)?.onScreenClock }
     /// How the ad follows the tracked content player, by format (`Content/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
@@ -491,7 +487,7 @@ public final class VideoAd {
         let meter = ViewabilityMeter(view: bridge.webView, requiredSeconds: descriptor.creative == .video ? 2 : 1)
         // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
         // viewability clock runs only while the video plays (from `video.start`, not while paused).
-        meter.countsTime = descriptor.creative != .video || isVideoPlaying
+        meter.countsTime = descriptor.creative != .video || state.isVideoPlaying
         meter.onExposure = { [weak self] exposure in
             self?.bridge.exposure(percentage: exposure.share, visibleRectangle: exposure.visibleBox)
         }

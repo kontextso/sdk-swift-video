@@ -40,6 +40,10 @@ struct AdState: Equatable {
     private(set) var isCompleted = false
     /// What broke, for the `didFail` that `end(.failed)` delivers first.
     private(set) var failure: VideoAdError?
+    /// The ad video is playing (from `video.start`, not while paused, over at `complete`): the only time a video
+    /// creative's viewability clock runs. Kept here, not in the meter, because the meter may not exist yet when the
+    /// video starts: a linear ad's meter waits for the presentation to finish. Not a milestone: it goes both ways.
+    private(set) var isVideoPlaying = false
 
     /// Records that the creative is ready. Once; never undone.
     mutating func markLoaded() { isLoaded = true }
@@ -53,6 +57,9 @@ struct AdState: Equatable {
         hasImpression = true
         return true
     }
+
+    /// Records whether the ad video plays now (`video.start` and `resume` on, `pause` and `complete` off).
+    mutating func markVideoPlaying(_ isPlaying: Bool) { isVideoPlaying = isPlaying }
 
     /// Records what broke, for the `didFail` before `didEnd(.failed)`. The first failure stays.
     mutating func markFailed(_ error: VideoAdError) {
