@@ -51,6 +51,43 @@ final class Tracker {
         return try work()
     }
 
+    /// The beacons of one page event, and the ad playhead it carries: `loaded`, `error` with its code, `iconClick`
+    /// for an AdChoices open, a video moment, progress checkpoints the page passed without reporting them, `skip`,
+    /// and at `complete` the end card's `creativeView`. What the ad does about the event (its state, the delegate,
+    /// its end) is the ad's, around this call. Not here: a click's beacon, which shares its fire id with the
+    /// click-through (`VideoAd.click`), and a close's, which depends on how the close ends the ad.
+    func record(_ event: FrameEvent) {
+        switch event {
+        case .loaded:
+            fire("loaded")
+        case .error(let code):
+            fire("error", errorCode: code)
+        case .open(_, let purpose):
+            if purpose == "adChoices" { fire("iconClick") }
+        case .skip(let playhead):
+            adPlayhead = playhead
+            // Checkpoints the video passed before the skip that the page never reported, then the skip.
+            fireProgress(upTo: playhead)
+            fire("skip")
+        case .video(let moment, let playhead):
+            adPlayhead = playhead
+            fire(moment.rawValue)
+            fireProgress(upTo: playhead)
+        case .progress(let offset, let playhead):
+            adPlayhead = playhead
+            fireProgress(upTo: max(offset, playhead))
+        case .complete(let playhead):
+            adPlayhead = playhead
+            // Checkpoints before the end that the page never reported, then the end itself.
+            fireProgress(upTo: playhead)
+            fire("complete")
+            // The end card, when there is one, becomes visible now.
+            fire("creativeView", part: "endCard")
+        case .click, .close:
+            break
+        }
+    }
+
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
     /// `offset` selects a `progress` entry; `errorCode` fills `[ERRORCODE]`, `notUsed` fills `[KONTEXT_REASON]`,
     /// `[KONTEXT_WINNINGPRICE]` and `[KONTEXT_WINNER]`. Returns the occurrence's fire id, for a click-through

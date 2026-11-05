@@ -21,11 +21,11 @@ extension VideoAd {
         switch event {
         case .loaded:
             state.markLoaded()
-            tracker.fire("loaded")
+            tracker.record(event)
             loadContinuation?.resume()
             loadContinuation = nil
         case .error(let code):
-            tracker.fire("error", errorCode: code)
+            tracker.record(event)
             reportCreativeError(vastCode: code)
             if let continuation = loadContinuation {
                 loadContinuation = nil
@@ -42,9 +42,7 @@ extension VideoAd {
             click(url, fallback: fallbackUrl, area: area)
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.absoluteString)")
-            if purpose == "adChoices" {
-                tracker.fire("iconClick")
-            }
+            tracker.record(event)
             LinkOpener.open(url, fallback: nil)
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
@@ -66,40 +64,29 @@ extension VideoAd {
             if outcome.endReason == .completed { state.markCompleted() }
             if let beacon = outcome.beacon { tracker.fire(beacon) }
             end(outcome.endReason)
-        case .skip(let playhead):
-            tracker.adPlayhead = playhead
-            // Checkpoints the video passed before the skip that the page never reported, then the skip.
-            tracker.fireProgress(upTo: playhead)
-            tracker.fire("skip")
+        case .skip:
+            tracker.record(event)
             end(.skipped)
-        case .video(let event, let playhead):
-            tracker.adPlayhead = playhead
-            Logger.debug("ad \(id.prefix(8)): video.\(event.rawValue)")
-            switch event {
+        case .video(let moment, _):
+            Logger.debug("ad \(id.prefix(8)): video.\(moment.rawValue)")
+            switch moment {
             case .start, .resume: isVideoPlaying = true
             case .pause: isVideoPlaying = false
             default: break
             }
             meter?.countsTime = isVideoPlaying
-            tracker.fire(event.rawValue)
-            tracker.fireProgress(upTo: playhead)
+            tracker.record(event)
             // The delegate last: it may end the ad on the spot, and everything above was the event's own.
-            if event == .start {
+            if moment == .start {
                 recordImpression()
             }
-        case .progress(let offset, let playhead):
-            tracker.adPlayhead = playhead
-            tracker.fireProgress(upTo: max(offset, playhead))
-        case .complete(let playhead):
-            tracker.adPlayhead = playhead
+        case .progress:
+            tracker.record(event)
+        case .complete:
             state.markCompleted()
             isVideoPlaying = false
             meter?.countsTime = false   // the end card is not the video playing
-            // Checkpoints before the end that the page never reported, then the end itself.
-            tracker.fireProgress(upTo: playhead)
-            tracker.fire("complete")
-            // The end card, when there is one, becomes visible now.
-            tracker.fire("creativeView", part: "endCard")
+            tracker.record(event)
             Logger.info("ad \(id.prefix(8)): complete")
         }
     }
