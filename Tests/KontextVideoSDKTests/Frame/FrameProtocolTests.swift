@@ -431,14 +431,14 @@ struct FrameProtocolTests {
 
     @Test func aRedirectWithTheExplicitDefaultPortIsTheSameOrigin() {
         let (https, _) = makePage(url: URL(string: "https://server.kontext.so/frame/ad-1")!)
-        #expect(https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:443/frame/ad-1/next")!))
-        #expect(https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so/other")!))
-        #expect(!https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:8443/frame/ad-1")!))
-        #expect(!https.frameProtocol.isSameOrigin(URL(string: "http://server.kontext.so/frame/ad-1")!))
-        #expect(!https.frameProtocol.isSameOrigin(URL(string: "https://evil.test/frame/ad-1")!))
+        #expect(https.frameProtocol.navigation.isSameOrigin(URL(string: "https://server.kontext.so:443/frame/ad-1/next")!))
+        #expect(https.frameProtocol.navigation.isSameOrigin(URL(string: "https://server.kontext.so/other")!))
+        #expect(!https.frameProtocol.navigation.isSameOrigin(URL(string: "https://server.kontext.so:8443/frame/ad-1")!))
+        #expect(!https.frameProtocol.navigation.isSameOrigin(URL(string: "http://server.kontext.so/frame/ad-1")!))
+        #expect(!https.frameProtocol.navigation.isSameOrigin(URL(string: "https://evil.test/frame/ad-1")!))
         let (local, _) = makePage(url: URL(string: "http://localhost:5175/frame/ad-1")!)
-        #expect(local.frameProtocol.isSameOrigin(URL(string: "http://localhost:5175/x")!))
-        #expect(!local.frameProtocol.isSameOrigin(URL(string: "http://localhost/x")!))
+        #expect(local.frameProtocol.navigation.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        #expect(!local.frameProtocol.navigation.isSameOrigin(URL(string: "http://localhost/x")!))
     }
 
     @Test func aTouchTooLongAgoAuthorizesNothing() {
@@ -484,14 +484,14 @@ struct FrameProtocolTests {
     @Test func originsCompareWithoutCase() {
         let (page, _) = makePage(url: URL(string: "HTTPS://Server.Kontext.SO/frame/ad-1")!)
         #expect(page.frameProtocol.isFrameOrigin(main), "WebKit reports the canonical lowercase origin")
-        #expect(page.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:443/next")!))
+        #expect(page.frameProtocol.navigation.isSameOrigin(URL(string: "https://server.kontext.so:443/next")!))
         let (local, _) = makePage(url: URL(string: "HTTP://LOCALHOST:5175/frame/ad-1")!)
         #expect(local.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
-        #expect(local.frameProtocol.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        #expect(local.frameProtocol.navigation.isSameOrigin(URL(string: "http://localhost:5175/x")!))
         let (plain, _) = makePage(url: URL(string: "HTTP://LOCALHOST/frame/ad-1")!)
-        #expect(plain.frameProtocol.isSameOrigin(URL(string: "http://localhost:80/x")!), "the default port, whatever the scheme's case")
-        #expect(!page.frameProtocol.isSameOrigin(URL(string: "https://other.kontext.so/x")!) && !page.frameProtocol.isSameOrigin(URL(string: "http://server.kontext.so/x")!), "a different host or scheme is still another origin")
-        #expect(!page.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:8443/x")!), "and a different port")
+        #expect(plain.frameProtocol.navigation.isSameOrigin(URL(string: "http://localhost:80/x")!), "the default port, whatever the scheme's case")
+        #expect(!page.frameProtocol.navigation.isSameOrigin(URL(string: "https://other.kontext.so/x")!) && !page.frameProtocol.navigation.isSameOrigin(URL(string: "http://server.kontext.so/x")!), "a different host or scheme is still another origin")
+        #expect(!page.frameProtocol.navigation.isSameOrigin(URL(string: "https://server.kontext.so:8443/x")!), "and a different port")
     }
 
     @Test func navigationsBeforeAndAfterThePageIsReady() {

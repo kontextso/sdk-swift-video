@@ -27,7 +27,7 @@ sdk-swift-video/
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire, and the request's rules for them: what is left out, a COPPA user; the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
-│   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the frame's phase, FramePhase: where the ad's frame, its web page, is), FrameBridge (carries out each Step), FrameWebView (the WebView locked down for one ad) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
+│   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the frame's phase, FramePhase: where the ad's frame, its web page, is), TouchGate (one tap, one URL), FrameNavigation (the page's navigations), FrameBridge (carries out each Step), FrameWebView (the WebView locked down for one ad) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
 │   ├── Measurement/  what the viewer saw (visibility, time on screen) and the beacons that report it: the tracker (beacons) and its macros, the viewability meter, what a view exposes and its geometry, the on-screen time clock
 │   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of OnScreenTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
@@ -178,7 +178,8 @@ Tests/KontextVideoSDKTests/
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
 │                 here; its README has the format and how to add a case
 ├── Frame/        a page message read (FrameMessageTests), the protocol as tables (FrameProtocolTableTests) and rule by
-│                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), all without a
+│                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), the navigations (FrameNavigationTests), one tap
+│                 one URL (TouchGateTests), all without a
 │                 WebView; the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the on-screen time clock

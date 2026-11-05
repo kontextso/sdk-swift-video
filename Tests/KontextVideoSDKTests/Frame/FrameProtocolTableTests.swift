@@ -4,7 +4,7 @@ import Testing
 
 /// `FrameProtocol` as tables over plain values, no WebView: every message in every state, the envelope and the
 /// sender, the playhead's bounds, the order of the video's events, the violation reported once, the touch
-/// window and the navigation decisions.
+/// window; the navigation decisions are FrameNavigationTests'.
 @Suite
 @MainActor
 struct FrameProtocolTableTests {
@@ -237,28 +237,5 @@ struct FrameProtocolTableTests {
             Issue.record("expected the fallback"); return
         }
         #expect(url.absoluteString == "https://brand.test/offer" && fallback == nil)
-    }
-
-    @Test func navigationsBeforeAndAfterThePageIsReady() {
-        let anchored = URL(string: "https://server.kontext.so/frame/ad-1#endcard")!
-        // target, main frame, reload, submission, loading, shown
-        let rows: [(String, Bool, Bool, Bool, FrameProtocol.NavigationDecision, FrameProtocol.NavigationDecision)] = [
-            ("https://server.kontext.so/frame/ad-1/v2", true, false, false, .allow, .cancel),
-            ("https://server.kontext.so:443/next", true, false, false, .allow, .cancel),
-            ("about:blank", true, false, false, .allow, .cancel),
-            ("https://brand.test/", true, false, false, .external, .external),
-            ("https://server.kontext.so/frame/ad-1#endcard", true, false, false, .allow, .allow),
-            ("https://server.kontext.so/frame/ad-1", true, true, false, .allow, .cancel),
-            ("https://server.kontext.so/frame/ad-1#submitted", true, false, true, .allow, .cancel),
-            ("https://anything.test/creative", false, false, false, .allow, .allow),
-        ]
-        for (target, isMainFrame, isReload, isSubmission, loading, shown) in rows {
-            for (core, expected) in [(core(), loading), (core(.shown), shown)] {
-                let decision = core.navigationDecision(to: URL(string: target)!, isMainFrame: isMainFrame, isReload: isReload,
-                                                       isSubmission: isSubmission, current: Self.page)
-                #expect(decision == expected, "\(target) in \(core.state)")
-            }
-        }
-        #expect(core(.shown).navigationDecision(to: anchored, isMainFrame: true, current: anchored) == .allow, "the same fragment again")
     }
 }

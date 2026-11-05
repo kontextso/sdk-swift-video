@@ -12,7 +12,8 @@ import Foundation
 /// How: `FrameBridge` (the imperative shell) owns one `FrameProtocol`. For each message the page posts, it calls
 /// `accept(_:from:now:)`, which checks the sender, reads the message (`FrameMessage.parse`) and applies the rules
 /// (`accept(_:now:)`); the bridge carries out the `Step` it returns. For the SDK's own moments it asks `show()`,
-/// `end()`, `noteTouch(now:)`, `externalNavigation(to:now:)` and `navigationDecision(...)`.
+/// `end()`, `noteTouch(now:)`, `externalNavigation(to:now:)` and `navigationDecision(...)`, the last two
+/// `FrameNavigation`'s rules read in the frame's phase.
 ///
 /// The frame's phase (`FramePhase`) is not the ad's state; `AdState` says why there are two and how they move together.
 ///
@@ -58,24 +59,14 @@ struct FrameProtocol {
         let port: Int
     }
 
-    /// What a top-level navigation may do. While the page loads: its own origin (redirects included) and
-    /// `about:blank`; anything else is a click the page could not report. Once it is ready the document
-    /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
-    /// the same origin or a reload of itself, is refused, or the creative and its close control would vanish
-    /// under an ad still shown. A navigation stays within the document, as browsers decide it, when the
-    /// target carries a fragment and differs from the current URL in nothing else; a reload, a form submission
-    /// or any request that is not a GET (`isSubmission`, whatever its fragment), or the current URL without a
-    /// fragment, loads a new document. A subframe (the creative's own iframe) navigates freely.
-    enum NavigationDecision: Equatable {
-        case allow, cancel, external
-    }
-
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
 
     let adId: String
     /// The page the bridge loaded: its origin is the only one whose messages count.
     let pageURL: URL
+    /// The page's navigations, held to its origin.
+    let navigation: FrameNavigation
     /// The VAST error code when the page itself does not answer: 400 for a video, 500 otherwise.
     let loadErrorCode: Int
     /// The highest playhead a page may report, in milliseconds: the video's duration and the grace, or a day.
@@ -93,6 +84,7 @@ struct FrameProtocol {
     init(adId: String, pageURL: URL, isVideo: Bool, videoDuration: TimeInterval?) {
         self.adId = adId
         self.pageURL = pageURL
+        navigation = FrameNavigation(pageURL: pageURL)
         loadErrorCode = isVideo ? 400 : 500
         playheadLimitMs = videoDuration.map { min(Int(($0 * 1000).rounded()) + Self.playheadGraceMs, 86_400_000) } ?? 86_400_000
     }
@@ -234,8 +226,7 @@ struct FrameProtocol {
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
     /// without one it is a forced redirect and goes nowhere (`nil`).
     mutating func externalNavigation(to target: URL, now: TimeInterval) -> FrameEvent? {
-        guard state == .shown, LinkOpener.isAllowed(target), touch.consume(now: now) else { return nil }
-        return .click(url: target, fallbackUrl: nil, area: .creative)
+        FrameNavigation.click(to: target, phase: state, touch: &touch, now: now)
     }
 
     /// What a click or open goes to under `LinkOpener.isAllowed`, `nil` when nothing may open. The fallback is held
@@ -252,46 +243,13 @@ struct FrameProtocol {
     /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
     /// explicit 443 in the URL and the origin's 0 are the same origin.
     func isFrameOrigin(_ sender: Sender) -> Bool {
-        isPageOrigin(scheme: sender.scheme, host: sender.host, port: sender.port == 0 ? Self.defaultPort(for: sender.scheme) : sender.port)
+        navigation.isPageOrigin(scheme: sender.scheme, host: sender.host,
+                                port: sender.port == 0 ? FrameNavigation.defaultPort(for: sender.scheme) : sender.port)
     }
 
-    /// Whether `target` is in the page's origin, with the default port and an explicit one the same.
-    func isSameOrigin(_ target: URL) -> Bool {
-        isPageOrigin(scheme: target.scheme, host: target.host, port: Self.effectivePort(of: target))
-    }
-
-    /// Scheme and host compare without case, as browsers canonicalize them; Foundation keeps the case as
-    /// written. `port` is the effective one, the scheme's default when none was given.
-    private func isPageOrigin(scheme: String?, host: String?, port: Int) -> Bool {
-        scheme?.lowercased() == pageURL.scheme?.lowercased() && host?.lowercased() == pageURL.host?.lowercased()
-            && port == Self.effectivePort(of: pageURL)
-    }
-
-    private static func effectivePort(of url: URL) -> Int {
-        url.port ?? defaultPort(for: url.scheme)
-    }
-
-    private static func defaultPort(for scheme: String?) -> Int {
-        switch scheme?.lowercased() {
-        case "https": return 443
-        case "http": return 80
-        default: return 0
-        }
-    }
-
-    /// See `NavigationDecision`.
+    /// What a top-level navigation may do now: `FrameNavigation`'s rules, in the frame's current phase.
     func navigationDecision(to target: URL, isMainFrame: Bool, isReload: Bool = false, isSubmission: Bool = false,
-                            current: URL?) -> NavigationDecision {
-        guard isMainFrame else { return .allow }
-        let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
-        if state == .loading { return ours ? .allow : .external }
-        if let current, !isReload, !isSubmission, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
-        return ours ? .cancel : .external
-    }
-
-    private static func withoutFragment(_ url: URL) -> String {
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.fragment = nil
-        return components?.string ?? url.absoluteString
+                            current: URL?) -> FrameNavigation.Decision {
+        navigation.decision(to: target, isMainFrame: isMainFrame, isReload: isReload, isSubmission: isSubmission, current: current, phase: state)
     }
 }
