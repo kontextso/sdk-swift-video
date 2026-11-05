@@ -9,7 +9,8 @@ Kontext Swift Video SDK: overlay, pause and linear ads in short-drama and other 
 iOS 14+, Swift Package Manager only (CocoaPods trunk is read-only from December 2026). The contract is the Notion
 document *Video Ads API & SDK v2*; the behavior is the Notion page *SDK Lifecycle*, and the code implements it
 line by line. Timed mode (windows, `nextRequestAt`) is specified on the Notion pages but deliberately not in the
-SDK; the wire's timed-mode fields decode and are ignored. Integration guide for publishers:
+SDK: an ad with a `window` trigger is dropped and reported (only `manual` is taken), and `nextRequestAt` is not
+read. Integration guide for publishers:
 https://docs.kontext.so/video/sdk/swift. Kotlin twin: [sdk-kotlin-video](https://github.com/kontextso/sdk-kotlin-video).
 
 ## Contract, and which source wins

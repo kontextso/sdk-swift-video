@@ -280,7 +280,6 @@ struct DecodingTests {
         linear["expires"] = 30_000.4
         linear["duration"] = 15_023.5
         linear["skipOffset"] = 5000.2
-        linear["trigger"] = ["kind": "window", "from": 1000.5, "to": 2000.4]
         linear["tracking"] = [
             ["event": "progress", "url": "https://ads.test/p33", "offset": 4957.59],   // 33 % of 15 023 ms
             ["event": "progress", "url": "https://ads.test/p-neg", "offset": -1],
@@ -293,7 +292,6 @@ struct DecodingTests {
         ]
         let payload = try Fixtures.payload(linear)
         #expect(payload.expires == 30_000 && payload.details == .linear(duration: 15_024, skipOffset: 5000))
-        #expect(payload.trigger == .window(from: 1001, to: 2000))
         #expect(payload.tracking.map(\.url) == ["https://ads.test/p33", "https://ads.test/p5", "https://ads.test/start"],
                 "a negative, huge or non-numeric offset drops its entry, not the ad")
         #expect(payload.tracking.map(\.offset) == [4958, 5000, nil])
@@ -385,7 +383,6 @@ struct DecodingTests {
         #expect(ad.creative == .image)
         #expect(ad.expires == 3_600_000)
         #expect(ad.price == AdPayload.Price(value: 7.5, currency: "USD", precision: .exact))
-        #expect(ad.trigger == .manual)
         #expect(ad.rendering == .frame(URL(string: "kontext-test://frames/frame/ad-1")!))
         guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .top)
@@ -404,10 +401,9 @@ struct DecodingTests {
         #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(size: nil)) }
     }
 
-    @Test func overlayAdWithWindowTrigger() throws {
-        let ad = try Fixtures.payload(Fixtures.ad(format: "overlay", trigger: ["kind": "window", "from": 4000, "to": 10_000], position: "bottom", duration: 6000))
+    @Test func overlayAd() throws {
+        let ad = try Fixtures.payload(Fixtures.ad(format: "overlay", position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
-        #expect(ad.trigger == .window(from: 4000, to: 10_000))
         guard case .overlay(let position, let sizes, let duration) = ad.details else { Issue.record("expected overlay"); return }
         #expect(position == .bottom)
         #expect(sizes.map(\.width) == [300])
@@ -462,8 +458,17 @@ struct DecodingTests {
         #expect(try Fixtures.payload(ad).id == "ad-1", "the SDK never reads it; it is for players that render VAST")
     }
 
-    @Test func unknownTriggerKindIsRejected() {
-        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(trigger: ["kind": "timer"])) }
+    @Test func onlyAManualTriggerIsTaken() throws {
+        // The SDK does not act on a trigger yet: a window, even a valid one, is refused rather than shown at any time.
+        for trigger: [String: Any] in [["kind": "window", "from": 4000, "to": 10_000], ["kind": "window", "from": 4000], ["kind": "timer"]] {
+            do {
+                _ = try Fixtures.payload(Fixtures.ad(format: "overlay", trigger: trigger, position: "bottom", duration: 6000))
+                Issue.record("expected \(trigger) to fail the ad")
+            } catch DecodingError.dataCorrupted(let context) {
+                #expect(context.codingPath.map(\.stringValue) == ["trigger", "kind"], "\(trigger)")
+            }
+        }
+        #expect(try Fixtures.payload(Fixtures.ad(trigger: ["kind": "manual"])).id == "ad-1")
     }
 
     @Test func unknownRenderingKindIsRejected() {

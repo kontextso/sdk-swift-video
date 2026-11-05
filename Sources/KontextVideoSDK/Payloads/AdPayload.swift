@@ -3,15 +3,6 @@ import Foundation
 /// One served ad as the wire sends it: everything the SDK needs to place, show, time and track it.
 /// `VideoAd` is the public object built from it.
 struct AdPayload: Decodable, Sendable {
-    /// When the server meant the ad to be shown. Decoded so a timed-mode answer is still a valid ad; not
-    /// acted on: the SDK has no timed mode yet, and the app picks every moment.
-    enum Trigger: Sendable, Equatable {
-        /// The app decides the moment.
-        case manual
-        /// Timed mode: meant for `from`…`to`, milliseconds in content time.
-        case window(from: Int, to: Int)
-    }
-
     /// What the page renders. The viewability clock (1 s for an image or HTML, 2 s for a video), when the
     /// impression counts (at `show`, or at a video's first frame), the video events and the `complete`
     /// beacon depend on it.
@@ -258,7 +249,6 @@ struct AdPayload: Decodable, Sendable {
     let id: String
     let format: AdFormat
     let creative: Creative
-    let trigger: Trigger
     let price: Price
     /// Milliseconds from receipt.
     let expires: Int
@@ -275,7 +265,7 @@ struct AdPayload: Decodable, Sendable {
     }
 
     private enum TriggerKeys: String, CodingKey {
-        case kind, from, to
+        case kind
     }
 
     private enum RenderingKeys: String, CodingKey {
@@ -292,7 +282,7 @@ struct AdPayload: Decodable, Sendable {
         expires = try Self.expires(from: container)
         tracking = try container.decode([TrackingEntry].self, forKey: .tracking).compactMap(\.event)
         attribution = try? container.decodeIfPresent(Attribution.self, forKey: .attribution)   // best effort: never fails the ad
-        trigger = try Self.trigger(from: container)
+        try Self.checkTrigger(in: container)
         rendering = try Self.rendering(from: container)
         details = try Self.details(of: format, from: container)
     }
@@ -312,13 +302,16 @@ struct AdPayload: Decodable, Sendable {
         return expires
     }
 
-    private static func trigger(from container: KeyedDecodingContainer<CodingKeys>) throws -> Trigger {
+    /// The SDK does not act on a trigger yet: the app picks every moment. Only `manual` says that; a `window`
+    /// (timed mode, `from`…`to` in content time) is refused rather than shown at any time, and the ad is dropped
+    /// and reported at `trigger.kind`, as an unknown kind is.
+    private static func checkTrigger(in container: KeyedDecodingContainer<CodingKeys>) throws {
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
         switch try trigger.decode(String.self, forKey: .kind) {
         case "manual":
-            return .manual
+            return
         case "window":
-            return .window(from: try milliseconds(.from, in: trigger), to: try milliseconds(.to, in: trigger))
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: trigger, debugDescription: "trigger kind window is not supported yet")
         case let kind:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: trigger, debugDescription: "unknown trigger kind \(kind)")
         }

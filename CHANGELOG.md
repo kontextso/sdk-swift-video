@@ -38,6 +38,7 @@ In progress.
 * A DocC catalog: the API reference builds with `xcodebuild docbuild`.
 
 ### Changed
+* An ad whose `trigger` is a `window` (timed mode) is dropped and reported as malformed, as an unknown trigger kind is; its format answers as a no-fill unless another ad fills it. The SDK has no timed mode, and such an ad was shown at whatever moment the app chose.
 * A video ad on screen that ended before its first frame fires the `close` beacon only when the app, an interruption, a destroy or its own time ended it, as the Kotlin SDK does; a skip or the page's own close no longer adds a second `close` after its `skip` or `close`, and an image ad never fires one in its impression's place.
 * A page message may be up to 1 MB (was 64 KB).
 * `/config` is sent once, with no retry, like every other request; a retry policy comes later. After a failure the SDK is `.failed`, and the next `format()` tries `/config` again, as before.

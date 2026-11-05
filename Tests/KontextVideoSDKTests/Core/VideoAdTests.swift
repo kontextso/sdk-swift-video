@@ -90,12 +90,12 @@ struct VideoAdTests {
         #expect(ad.wasShown == false)
     }
 
-    @Test func overlayAdExposesSecondsAndATimedAnswerIsAnOrdinaryAd() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o1", format: "overlay", trigger: ["kind": "window", "from": 4000, "to": 10_000], position: "bottom", duration: 6000))
+    @Test func overlayAdExposesSeconds() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o1", format: "overlay", position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
         #expect(ad.descriptor.position == .bottom)
         #expect(ad.duration == 6)
-        #expect(ad.isReady, "no timed mode yet: the window on the wire changes nothing for the app")
+        #expect(ad.isReady)
     }
 
     @Test func linearAdExposesVideoFacts() async throws {
