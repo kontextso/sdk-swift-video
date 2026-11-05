@@ -66,7 +66,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 - `Frame/`, the ad's web page and its messages: `FrameMessage` (one page message read: the JSON, the envelope, the
   1 MB limit, the fields, the playhead's bounds; `parse` gives `nil` for a broken envelope), `FrameProtocol` (the
   Kontext Frame Protocol's rules as plain values: the sender, the frame's phase (`FramePhase`, where the ad's frame, its web page, is; not the ad's
-  `AdState`: the two move together at fixed points, see `FrameProtocol`), the order of the video's events, one URL
+  `AdState`: the two move together at fixed points, see `AdState`), the order of the video's events, one URL
   per touch, the navigation decision; `accept` returns a `Step`), `FrameBridge` (its load and timeout, parking, the navigation
   delegate; it carries out each `Step`), `FrameWebView` (the WebView locked down for one ad: what the page may and may not do), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
   message of its page; a click goes to `VideoAd.click`), `SKAdNetworkImpression`.

@@ -14,13 +14,7 @@ import Foundation
 /// (`accept(_:now:)`); the bridge carries out the `Step` it returns. For the SDK's own moments it asks `show()`,
 /// `end()`, `noteTouch(now:)`, `externalNavigation(to:now:)` and `navigationDecision(...)`.
 ///
-/// The frame's phase (`FramePhase`, where the ad's frame, its web page, is) is not the ad's state (`AdState`), and both are needed: the page's rules are checked
-/// before the ad hears a message at all; the page can end itself (close, skip, error) before the ad knows; a page
-/// can be loaded for an ad only offered, never shown; and an ad can be reserved (`show` accepted) while its page
-/// is not shown yet (a linear ad UIKit is still presenting). They move together at fixed points: the page's
-/// `ad.loaded` marks the ad loaded; the ad reaching the screen (`onScreen`) shows the page (loaded → shown); a
-/// page that ends itself hands the ad its event, and the ad ends; the ad's end, or its invalidation, hides the
-/// page (→ ended).
+/// The frame's phase (`FramePhase`) is not the ad's state; `AdState` says why there are two and how they move together.
 ///
 /// ```
 ///   message           loading     loaded      shown                    ended
