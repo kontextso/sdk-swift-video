@@ -46,7 +46,7 @@ final class PauseRule: ContentRule {
         endIfContentResumed(isPlaying: isPlaying)
     }
 
-    /// A pause ad shown right before `player.play()` ends at the next ad's `show`, which finds the screen free.
+    /// A pause ad shown right before `player.play()` ends at the next ad's `show`, which finds the slot free.
     func endIfContentStopped() {
         guard ad.isTrackingContent, ad.state.wasOnScreen, !ad.hasEnded, let playback = ad.contentPlayback else { return }
         endIfContentResumed(isPlaying: playback.isPlaying)

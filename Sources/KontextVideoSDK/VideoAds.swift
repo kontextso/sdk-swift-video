@@ -39,7 +39,7 @@ public final class VideoAds {
     /// of this object carries them, and the server's configuration decides what they change, such as which
     /// formats it offers; they are fixed for the object's life. They are sent as given: use the names and values
     /// Kontext gives you.
-    /// They describe the screen, never the viewer: no personal data.
+    /// They describe where the ads play, never the viewer: no personal data.
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
         self.labels = labels

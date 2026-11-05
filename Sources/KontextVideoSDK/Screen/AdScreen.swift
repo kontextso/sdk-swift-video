@@ -3,6 +3,10 @@ import Foundation
 /// Where an ad is on screen, by format: inside the app's player view (`InlineScreen`, an overlay or pause
 /// ad) or full screen over the app (`LinearScreen`, a linear ad).
 ///
+/// Words: a **view** is a UIKit view (`InlineAdView`, the app's container); a **view controller** is a UIKit
+/// screen; a **screen** (this protocol) is where an ad is shown, inline in the player or full screen; **on screen**
+/// means visible to the viewer.
+///
 /// Why: the two differ in everything about the screen: what holds the page, how the ad leaves, what the
 /// viewability meter must know, whether active time is counted. Each lives in its own type, so `VideoAd`
 /// never asks "which format am I?" about the screen.
@@ -21,12 +25,10 @@ import Foundation
 /// 2. once the creative is on screen, it takes the viewability meter (`meter`), sets it up (`configure()`) and
 ///    starts what it counts (`reachedScreen()`);
 /// 3. at the end, `VideoAd.end(_:)` tears it down (`tearDown()`: the meter stops, the active time seen) and closes it
-///    (`close(onGone:)`: `true` when `didEnd` must wait for the screen to be gone).
+///    (`close(onGone:)`: `true` when `didEnd` must wait for the view controller to be gone).
 /// A screen ends its ad only through `VideoAd.end(_:)`, never by finishing it itself.
 @MainActor
 protocol AdScreen: AnyObject {
-    /// The ad sits in the app's player view: its active time is counted and reported (`overlayViewDuration`).
-    var isInline: Bool { get }
     /// The viewability meter of the ad on this screen, from the creative's arrival to `tearDown()`.
     var meter: ViewabilityMeter? { get set }
     /// Sets `meter` up for this screen, before it starts.

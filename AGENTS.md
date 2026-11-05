@@ -90,8 +90,21 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   the content, the user): each stops a debug build, logs and reports. `Device/` what the SDK reads, `Platform/Environment.swift` the
   seams the tests replace.
 
+## Glossary
+
+- **view**: a UIKit view (`InlineAdView`, the app's container). **view controller**: a UIKit screen (call UIKit's
+  screen this, or "presenter" where that is its role, never "screen"). **screen** (`AdScreen`): where an ad is
+  shown, inline in the player (`InlineScreen`) or full screen (`LinearScreen`). **on screen**: visible to the viewer.
+- **client**: a transport to one kind of host (`APIClient`, `BeaconClient`). **fetcher**: one server request with a
+  purpose, built on a client (`AdsFetcher`, `ConfigFetcher`).
+
 ## Rules
 
+- Every file starts with a comment that says, in this order: what it is, in one plain sentence; why it exists or is
+  shaped this way, when that is not obvious; a picture or example (an ASCII diagram, a table, real numbers) when the
+  idea is spatial, a flow or a decision; where it fits: who uses it and what it hands off to. The main function of a
+  file with a multi-step flow gets numbered step comments (`// 1. …`, `// 2. …`). Small, obvious files get only the
+  first line. Never repeat what the code says; explain what it cannot. The reference is `Screen/InlineAdView.swift`.
 - Commit directly to `main`; no feature branches. Push and watch CI (it runs five jobs; see DEVELOPMENT.md).
 - The lifecycle guarantee is sacred: after a successful `show`, exactly one `didEnd`, whoever ended it; nothing is
   delivered through the delegate before `show`. `VideoAd.end(_:)` is the only terminal path.

@@ -13,8 +13,6 @@ final class LinearScreen: AdScreen {
         self.ad = ad
     }
 
-    var isInline: Bool { false }
-
     /// How long a linear ad may take to reach the screen before the ad gives up on it.
     static var showTimeout: TimeInterval = 2
     /// How long a dismissal may take before `didEnd` comes anyway, once the controller left the screen (five

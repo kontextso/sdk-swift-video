@@ -29,8 +29,6 @@ final class InlineScreen: AdScreen {
         self.extraInsets = extraInsets
     }
 
-    var isInline: Bool { true }
-
     /// The checks and the placement of an overlay or pause ad in `view`, before anything is reserved: the view must
     /// be on screen and in front of the viewer, and the ad must fit it (`frame(in:safeArea:)`). Throws
     /// `cannotShowNow` or `containerTooSmall`, with nothing fired; the ad stays ready.

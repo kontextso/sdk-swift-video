@@ -1,6 +1,18 @@
 import KontextKit
 
-/// Entry point of the Kontext Video SDK.
+/// The Kontext Video SDK's entry point, the one shared instance an app talks to: `initialize(with:)` once at launch,
+/// then the viewer's facts (`user`, `regulatory`, `variantID`) whenever they change, and `state` to read.
+///
+/// Why one shared instance: the SDK has one configuration, one `/config` and one ad on screen per app, as
+/// established ad SDKs do. It is the shell around `SdkState`: it starts `/config` (`ConfigFetcher`), retries it
+/// before an ads request after a failure (`waitUntilEnabled`), and applies the kill switch. Ads come from a
+/// `VideoAds` per video, which asks it whether ads may be requested.
+///
+/// ```
+/// initialize ──► .initializing ──/config──► .enabled ──(an ads answer's kill switch)──► .disabled
+///                                     ├────► .disabled (the server said so)
+///                                     └────► .failed ──(the next format())──► .initializing
+/// ```
 @MainActor
 public final class KontextVideo {
     /// Whether the SDK may request ads.

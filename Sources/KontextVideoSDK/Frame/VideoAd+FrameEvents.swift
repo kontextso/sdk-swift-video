@@ -1,7 +1,8 @@
 import Foundation
 
-/// What the frame page reports, as beacons, the ad's state and the delegate: `VideoAd`'s half of the frame
-/// protocol, the bridge (`FrameBridge`) being the other.
+/// What the ad does with each event its page reports: its state, its beacons (`Tracker.record`), the delegate and
+/// its end. `VideoAd`'s half of the frame protocol: `FrameBridge` accepts a message under `FrameProtocol`'s rules
+/// and hands the event here (`handle`); a click goes on to `VideoAd.click`, a close through `CloseOutcome`.
 extension VideoAd {
     /// What the page reports, mapped to the beacons and the delegate: `handleNow` with the content playhead
     /// read once first, when any URL of the moment asks for it (`[CONTENTPLAYHEAD]`), so every beacon of one
