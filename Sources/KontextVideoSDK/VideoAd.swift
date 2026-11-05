@@ -301,12 +301,12 @@ public final class VideoAd {
         guard format != .linear else { throw wrongShowMethod("show(in:)", use: "show(from:)") }
         try checkShowable()
         let screen = try InlineScreen.prepare(for: self, in: view, insets: insets)
-        // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
+        // Nothing throws after `reserve`. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
         // step below checks for that. One bridge throughout: after an end, `bridge` would make a new one.
         let bridge = self.bridge
-        reserve(on: screen)
+        try reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
         let isSeen = screen.attach(webView)
@@ -347,7 +347,7 @@ public final class VideoAd {
         // beacons of that moment fire, once UIKit confirms the presentation: an ad UIKit refused must never
         // record an impression.
         let screen = LinearScreen(ad: self)
-        reserve(on: screen)
+        try reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
         screen.attach(webView)
@@ -395,19 +395,31 @@ public final class VideoAd {
     /// where the check says so, then throws.
     private func checkShowable() throws {
         let contentPaused = runAppCodeBeforeShow()
-        let facts = ShowCheck.Facts(
+        try refuse(ShowCheck.refusal(showFacts(
+            // An episode's ads only in that episode: one requested for it is counted for it.
+            playsAnotherEpisode: { [contentRule, owner] in contentRule.checksEpisode && owner?.playback.playsAnotherEpisode == true },
+            isContentPaused: contentPaused
+        )))
+    }
+
+    /// The facts `ShowCheck` reads, now; what only the app's code can tell is passed in.
+    private func showFacts(playsAnotherEpisode: @escaping () -> Bool = { false }, isContentPaused: Bool = false) -> ShowCheck.Facts {
+        ShowCheck.Facts(
             wasShown: wasShown,
             isOwnerGone: owner.map { $0.isDestroyed } ?? true,
             disabledReason: KontextVideo.shared.disabledReason,
             invalidationReason: invalidationReason,
             isExpired: descriptor.isExpired,
-            // An episode's ads only in that episode: one requested for it is counted for it.
-            playsAnotherEpisode: { [contentRule, owner] in contentRule.checksEpisode && owner?.playback.playsAnotherEpisode == true },
+            playsAnotherEpisode: playsAnotherEpisode,
             isSlotTaken: KontextVideo.shared.adOnScreen != nil,
             isLoaded: isLoaded,
-            isContentPaused: contentPaused
+            isContentPaused: isContentPaused
         )
-        guard let refusal = ShowCheck.refusal(facts) else { return }
+    }
+
+    /// Carries out a refusal: ends the ad where the check says so, then throws. Nothing for `nil`.
+    private func refuse(_ refusal: ShowCheck.Refusal?) throws {
+        guard let refusal else { return }
         switch refusal {
         case .alreadyShown: throw VideoAdError.alreadyShown
         case .destroyed: throw VideoAdError.destroyed
@@ -430,8 +442,13 @@ public final class VideoAd {
     /// unshown ones; `show` returning is the app's signal. Before any of the app's code can run, so a show
     /// from inside it finds the slot taken. The creative itself goes on screen in `reachedScreen()`: at once for
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
-    private func reserve(on screen: any AdScreen) {
-        state.moveTo(.reserved)
+    ///
+    /// The episode check read the app's player (a custom player's `currentItem`) and preparing the screen read
+    /// UIKit's getters, all of which can be the app's code: it may have rejected, destroyed or shown an ad. So the
+    /// plain checks run once more over what it left, and the phase must move, or `show` throws with nothing changed.
+    private func reserve(on screen: any AdScreen) throws {
+        try refuse(ShowCheck.refusal(showFacts()))
+        guard state.moveTo(.reserved) else { throw VideoAdError.alreadyShown }
         self.screen = screen
         ScreenSlot.take(self, owner: owner)
     }

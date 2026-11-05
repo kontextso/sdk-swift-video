@@ -148,6 +148,57 @@ struct VideoAdEpisodeTests {
         expectContentChanged(loop, "a new value for the next loop is another item")
     }
 
+    /// A custom player whose `currentItem` runs the app's code once, on the next read.
+    final class HookPlayer: ContentPlayer {
+        var currentTime: TimeInterval = 0
+        var isPlaying = true
+        var onRead: (() -> Void)?
+        var currentItem: AnyHashable? {
+            let hook = onRead
+            onRead = nil
+            hook?()
+            return "episode-1"
+        }
+    }
+
+    /// `show` reads the custom player's `currentItem` (the episode check), which runs `hook`; the show must
+    /// throw `expected` with nothing reserved, and a later ad must still show.
+    private func expectRefusedAfterItsItemRead(_ id: String, expected: VideoAdError, hook: @escaping (VideoAd, VideoAds) -> Void) async throws {
+        let player = HookPlayer()
+        let ads = await makeAds(id)
+        ads.track(player)
+        let ad = try loadedAd(Fixtures.overlayAd(id: "o-\(id)"), of: ads)
+        player.onRead = { [weak ad, weak ads] in if let ad, let ads { hook(ad, ads) } }
+        do {
+            try ad.show(in: view)
+            Issue.record("expected \(expected)")
+        } catch let error as VideoAdError {
+            #expect(error == expected)
+        }
+        #expect(!ad.wasShown && KontextVideo.shared.adOnScreen !== ad, "the refused ad holds no slot")
+        KontextVideo.shared.adOnScreen?.dismiss()
+        let later = try loadedAd(Fixtures.overlayAd(id: "o-\(id)-later"), of: await makeAds("\(id)-later"))
+        try later.show(in: view)
+        #expect(later.wasShown && KontextVideo.shared.adOnScreen === later, "the slot is free for the next ad")
+        later.dismiss()
+    }
+
+    @Test func aRejectFromTheItemReadRefusesTheShow() async throws {
+        try await expectRefusedAfterItsItemRead("ep-hook-reject", expected: .invalidated(.rejected)) { ad, _ in ad.reject() }
+    }
+
+    @Test func aDestroyFromTheItemReadRefusesTheShow() async throws {
+        try await expectRefusedAfterItsItemRead("ep-hook-destroy", expected: .destroyed) { _, ads in ads.destroy() }
+    }
+
+    @Test func anotherAdShownFromTheItemReadRefusesTheShow() async throws {
+        let other = try loadedAd(Fixtures.overlayAd(id: "o-ep-hook-other"), of: await makeAds("ep-hook-other-owner"))
+        try await expectRefusedAfterItsItemRead("ep-hook-show", expected: .anotherAdShowing) { [view] _, _ in
+            try? other.show(in: view)
+        }
+        #expect(other.wasShown)
+    }
+
     @Test func aLinearAdIsNotChecked() async throws {
         let player = TestPlayer()
         let episodeA = await makeAds("ep-linear")
