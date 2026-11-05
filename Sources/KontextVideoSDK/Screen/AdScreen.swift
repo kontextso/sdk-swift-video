@@ -168,7 +168,7 @@ final class LinearScreen: AdScreen {
         self.controller = nil
         // Pending while the ad is ending: once `didEnd` was delivered, the watchdog has nothing left to do.
         let isPending: @MainActor () -> Bool = { [weak ad] in
-            if case .ending? = ad?.phase { return true }
+            if case .ending? = ad?.lifecycle.phase { return true }
             return false
         }
         return LinearPresentation.dismiss(controller, timeout: VideoAd.dismissalTimeout, isPending: isPending, completion: onGone)
