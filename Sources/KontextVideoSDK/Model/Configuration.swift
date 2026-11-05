@@ -54,13 +54,5 @@ extension KontextVideo {
             self.logLevel = logLevel
             self.adServerURL = adServerURL ?? Self.defaultAdServerURL
         }
-
-        /// What is wrong with the options, one phrase each; empty when they are usable.
-        var problems: [String] {
-            var problems: [String] = []
-            if publisherToken.isEmpty { problems.append("publisherToken is empty") }
-            if adServerURL.scheme == nil || (adServerURL.host ?? "").isEmpty { problems.append("adServerURL \(adServerURL) is not absolute") }
-            return problems
-        }
     }
 }

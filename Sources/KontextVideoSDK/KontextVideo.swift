@@ -235,3 +235,14 @@ public final class KontextVideo {
         }
     }
 }
+
+/// The configuration's check, next to `initialize(with:)`, which makes it.
+extension KontextVideo.Configuration {
+    /// What is wrong with the options, one phrase each; empty when they are usable.
+    var problems: [String] {
+        var problems: [String] = []
+        if publisherToken.isEmpty { problems.append("publisherToken is empty") }
+        if adServerURL.scheme == nil || (adServerURL.host ?? "").isEmpty { problems.append("adServerURL \(adServerURL) is not absolute") }
+        return problems
+    }
+}

@@ -111,3 +111,44 @@ extension KeyedDecodingContainer {
         return format
     }
 }
+
+/// The request's rules for the app's content: what it sends, what the server would refuse.
+extension KontextVideo.Content {
+    /// The duration as the request sends it: positive whole milliseconds, else nothing.
+    var durationMs: Int? {
+        duration.flatMap { seconds -> Int? in
+            guard seconds.isFinite, seconds >= 0, let ms = Int(exactly: (seconds * 1000).rounded()), ms >= 1 else { return nil }
+            return ms
+        }
+    }
+
+    /// Required fields the publisher left empty: every request fails at the server. The rule is the
+    /// schema's, a non-empty string; `" "` passes, as it does there.
+    var missingRequired: [String] {
+        [id.isEmpty ? "id is empty" : nil, language.isEmpty ? "language is empty" : nil].compactMap { $0 }
+    }
+
+    /// Optional metadata the request leaves out because the server would refuse it, one phrase each.
+    var leftOut: [String] {
+        var problems: [String] = []
+        if let duration, durationMs == nil { problems.append("duration \(duration) s left out") }
+        if let episodeNumber, episodeNumber < 1 { problems.append("episodeNumber \(episodeNumber) left out") }
+        if let series, series.id.isEmpty { problems.append("series left out, its id is empty") }
+        if let count = series?.episodeCount, count < 1 { problems.append("series.episodeCount \(count) left out") }
+        return problems
+    }
+}
+
+/// The request's rules for the app's user: a COPPA request's user, the fields left out.
+extension KontextVideo.User {
+    /// The user without what identifies the viewer (id, email, email hash), for a COPPA request; `nil`
+    /// when nothing else is left.
+    var withoutIdentity: KontextVideo.User? {
+        keywords == nil ? nil : KontextVideo.User(keywords: keywords)
+    }
+
+    /// Fields set to an empty string, which the request leaves out; an empty `id` is also an assertion.
+    var emptyFields: [String] {
+        [("id", id), ("email", email), ("emailHash", emailHash)].compactMap { $0.1?.isEmpty == true ? $0.0 : nil }
+    }
+}

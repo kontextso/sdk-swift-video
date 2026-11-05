@@ -90,29 +90,5 @@ extension KontextVideo {
             self.genre = genre
             self.series = series
         }
-
-        /// The duration as the request sends it: positive whole milliseconds, else nothing.
-        var durationMs: Int? {
-            duration.flatMap { seconds -> Int? in
-                guard seconds.isFinite, seconds >= 0, let ms = Int(exactly: (seconds * 1000).rounded()), ms >= 1 else { return nil }
-                return ms
-            }
-        }
-
-        /// Required fields the publisher left empty: every request fails at the server. The rule is the
-        /// schema's, a non-empty string; `" "` passes, as it does there.
-        var missingRequired: [String] {
-            [id.isEmpty ? "id is empty" : nil, language.isEmpty ? "language is empty" : nil].compactMap { $0 }
-        }
-
-        /// Optional metadata the request leaves out because the server would refuse it, one phrase each.
-        var leftOut: [String] {
-            var problems: [String] = []
-            if let duration, durationMs == nil { problems.append("duration \(duration) s left out") }
-            if let episodeNumber, episodeNumber < 1 { problems.append("episodeNumber \(episodeNumber) left out") }
-            if let series, series.id.isEmpty { problems.append("series left out, its id is empty") }
-            if let count = series?.episodeCount, count < 1 { problems.append("series.episodeCount \(count) left out") }
-            return problems
-        }
     }
 }
