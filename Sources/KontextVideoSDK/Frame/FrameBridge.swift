@@ -196,11 +196,14 @@ final class FrameBridge: NSObject {
     /// Every message sent to the page, for tests.
     var onSend: ((String, [String: Any]) -> Void)?
 
-    /// The envelope as the page receives it: `{ adId, type, ...payload }`.
+    /// The envelope as the page receives it: `{ adId, type, ...payload }`; `nil` when it is not valid JSON.
+    /// Checked first: `JSONSerialization` raises an Objective-C exception, which no `try` catches, for a NaN or
+    /// infinite number (an exposure measured on a view with a degenerate transform), and the app would crash.
     static func envelope(adId: String, type: String, payload: [String: Any]) -> String? {
         var message: [String: Any] = ["adId": adId, "type": type]
         payload.forEach { message[$0.key] = $0.value }
-        guard let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys]) else { return nil }
+        guard JSONSerialization.isValidJSONObject(message),
+              let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys]) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 

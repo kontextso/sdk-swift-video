@@ -241,6 +241,12 @@ struct FrameBridgeTests {
         #expect(object?["exposedPercentage"] as? Double == 0.75)
     }
 
+    @Test func anEnvelopeWithANonFiniteNumberIsDroppedNotACrash() {
+        // JSONSerialization raises an Objective-C exception for these, which would take the app down.
+        #expect(FrameBridge.envelope(adId: "ad-1", type: "ad.exposure", payload: ["exposedPercentage": Double.nan]) == nil)
+        #expect(FrameBridge.envelope(adId: "ad-1", type: "ad.exposure", payload: ["visibleRectangle": ["x": CGFloat.infinity]]) == nil)
+    }
+
     // MARK: Parking
 
     @Test func loadParksTheWebViewInTheKeyWindowAndTakeWebViewUnparksIt() {
