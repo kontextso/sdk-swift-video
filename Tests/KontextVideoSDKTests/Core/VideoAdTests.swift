@@ -754,7 +754,7 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
         window.add(controller.view)   // UIKit attached it, but the completion never runs
-        #expect(await waitUntil(5) { ad.isPresented })
+        #expect(await waitUntil(5) { ad.state.wasOnScreen })
         let fired = await beacons()
         #expect(delegate.endReasons.isEmpty && fired.contains("creativeView"), "presented, not failed: \(fired)")
     }
@@ -790,7 +790,7 @@ struct VideoAdTests {
     @Test func aVideoThatStartedBeforeTheLinearMeterExistsStillCountsAsPlaying() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10d"))
         try ad.show(from: window.root)
-        #expect(ad.meter == nil && !ad.isPresented, "a linear ad's page and meter wait for the presentation")
+        #expect(ad.meter == nil && !ad.state.wasOnScreen, "a linear ad's page and meter wait for the presentation")
         send(ad, "video.start", ["playhead": 0])
         #expect(!delegate.events.contains("impression"), "nothing from the page before UIKit confirmed")
         ad.presented()   // what the presentation completion does

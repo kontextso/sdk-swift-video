@@ -259,7 +259,7 @@ final class PauseRule: ContentRule {
     }
 
     func contentDidChange(_ change: ContentPlayback.Change) {
-        guard followsContent, ad.isPresented, !ad.hasEnded, let playback = ad.owner?.playback else { return }
+        guard followsContent, ad.state.wasOnScreen, !ad.hasEnded, let playback = ad.owner?.playback else { return }
         let playing: Bool
         switch change {
         case .contentChanged:
@@ -274,7 +274,7 @@ final class PauseRule: ContentRule {
 
     /// A pause ad shown right before `player.play()` ends at the next ad's `show`, which finds the screen free.
     func endIfContentStopped() {
-        guard followsContent, ad.isPresented, !ad.hasEnded, let playback = ad.owner?.playback else { return }
+        guard followsContent, ad.state.wasOnScreen, !ad.hasEnded, let playback = ad.owner?.playback else { return }
         endIfContentResumed(playing: playback.isPlaying)
     }
 

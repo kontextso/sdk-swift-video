@@ -1,26 +1,16 @@
-/// Everything about where an ad is in its life, as one plain value: the phases, the one table of legal steps
-/// between them, the milestones it passed (loaded, impression, completed, the failure behind its end) and the
-/// flags the public API reads off them. One source of truth: every fact of an ad's life lives here, and
-/// everyone else (`VideoAd`'s public flags, the screens, the content rules, the page's handlers) asks it.
+/// Everything about where an ad is in its life, as one plain value: its phase, the milestones it passed
+/// (loaded, impression, completed, on screen, the failure behind its end) and the flags the public API reads
+/// off them. One source of truth: every fact of an ad's life lives here, and everyone else (`VideoAd`'s public
+/// flags, the screens, the content rules, the page's handlers) asks it. The rules it follows are
+/// `AdLifecycle`'s.
 ///
-/// Why: the lifecycle guarantee (nothing to the delegate before `show`; after a successful `show` exactly one
-/// `didEnd`) rests on these steps moving one way only, and on each milestone being recorded once. Kept apart
-/// from `VideoAd`, with no UIKit and no effects, the table can be read in one place and tested cell by cell.
-///
-/// How: `VideoAd` holds one `AdState` and moves it only through `transition(to:)`, which says whether the
-/// step was legal; an illegal one (a late event, a second end) changes nothing, and the caller stops there.
-/// A milestone is set through its `mark` method, once, and never undone; it does not move the phase.
+/// How: `VideoAd` holds one `AdState` and moves it only through `moveTo(_:)`, which asks
+/// `AdLifecycle.canMove(from:to:)` and says whether it moved; an illegal move (a late event, a second end)
+/// changes nothing, and the caller stops there. A milestone is set through its `mark` method (or, for
+/// `wasOnScreen`, by the first move to `onScreen`), once, and never undone; a `mark` does not move the phase.
 /// Every public flag of the ad reads the state live, never a copy.
 ///
-/// ```
-///   offered ──► invalidated(reason)                 ended before show: nothing delivered
-///      │
-///      └──► reserved ──► onScreen ──► ending(reason) ──► ended(reason)
-///               │                         ▲
-///               └─────────────────────────┘           show accepted, never presented (a linear ad UIKit refused)
-/// ```
-///
-/// | Phase | `wasShown` | `hasEnded` | `invalidationReason` | `isPresented` |
+/// | Phase | `wasShown` | `hasEnded` | `invalidationReason` | `wasOnScreen` |
 /// |---|---|---|---|---|
 /// | offered | `false` | `false` | `nil` | `false` |
 /// | invalidated | `false` | `false` | set | `false` |
@@ -28,26 +18,10 @@
 /// | onScreen | `true` | `false` | `nil` | `true` |
 /// | ending, ended | `true` | `true` | `nil` | as it was |
 struct AdState: Equatable {
-    /// The phases, each reached only through `transition(to:)`.
-    enum Phase: Equatable {
-        /// Returned by `format(_:)`; `isLoaded` says whether the creative is ready.
-        case offered
-        /// Ended before `show`: nothing was delivered.
-        case invalidated(VideoAd.InvalidationReason)
-        /// `show` committed and took the app's one slot; a linear ad waits for UIKit to present it.
-        case reserved
-        /// The creative is presented: the page was told to show, the meter and the clock run.
-        case onScreen
-        /// The ad is ending; a linear ad is being dismissed, and `didEnd` follows once that finished.
-        case ending(VideoAd.EndReason)
-        /// `didEnd` was delivered.
-        case ended(VideoAd.EndReason)
-    }
-
-    private(set) var phase = Phase.offered
-    /// The creative reached the screen (the phase was `onScreen`). Stays `true` after the end: an ad that was on
-    /// screen without an impression closes.
-    private(set) var isPresented = false
+    private(set) var phase = AdLifecycle.Phase.offered
+    /// The creative reached the screen (the phase became `onScreen`). Stays `true` after the end: an ad that was
+    /// on screen without an impression closes.
+    private(set) var wasOnScreen = false
 
     /// The page reported the creative ready (`isLoaded`).
     private(set) var loaded = false
@@ -76,20 +50,14 @@ struct AdState: Equatable {
         if failure == nil { failure = error }
     }
 
-    /// Moves to `next` when that is a legal step, and says whether it did: offered → invalidated or reserved,
-    /// reserved → on screen or ending, on screen → ending, ending → ended. Anything else (a late event, a
-    /// second end) changes nothing.
+    /// Moves to `next` when `AdLifecycle` allows it, and says whether it did; the first move to `onScreen`
+    /// records `wasOnScreen`. A refused move changes nothing.
     @discardableResult
-    mutating func transition(to next: Phase) -> Bool {
-        switch (phase, next) {
-        case (.offered, .invalidated), (.offered, .reserved), (.reserved, .onScreen), (.reserved, .ending),
-             (.onScreen, .ending), (.ending, .ended):
-            phase = next
-            if next == .onScreen { isPresented = true }
-            return true
-        default:
-            return false
-        }
+    mutating func moveTo(_ next: AdLifecycle.Phase) -> Bool {
+        guard AdLifecycle.canMove(from: phase, to: next) else { return false }
+        phase = next
+        if next == .onScreen { wasOnScreen = true }
+        return true
     }
 
     /// `true` from a successful `show` on.

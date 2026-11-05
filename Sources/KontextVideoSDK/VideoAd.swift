@@ -59,7 +59,8 @@ public final class VideoAd {
     //   Screen/VideoAd+Placement.swift     frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
     //   VideoAd+Types.swift                its value types: Price, RejectReason, InvalidationReason, Size, Position
     //   VideoAd+Errors.swift               the errors show and load throw, and the creative's error report
-    //   Model/AdState.swift                every fact of its life: phases, legal steps, milestones
+    //   Model/AdState.swift                every fact of its life: its phase, milestones and flags
+    //   Model/AdLifecycle.swift            the phases and the legal moves between them
 
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     // business at `show`; nothing of that is exposed.
@@ -115,11 +116,10 @@ public final class VideoAd {
     public var isCompleted: Bool { state.completed }
 
     /// Every fact of the ad's life, the one source of truth: every public flag above reads it live. The phase
-    /// moves only forward, through `state.transition(to:)`; each milestone is marked once (`Model/AdState.swift`).
+    /// moves only forward, through `state.moveTo(_:)` under `AdLifecycle`'s rules; each milestone is marked once,
+    /// `wasOnScreen` too: at `show` for an overlay or pause ad, once UIKit presented the controller for a linear ad
+    /// (`Model/AdState.swift`).
     var state = AdState()
-    /// The creative reached the screen: at `show` for an overlay or pause ad, once UIKit presented the controller
-    /// for a linear ad. Stays `true` after the end.
-    var isPresented: Bool { state.isPresented }
 
     /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
     /// move it.
@@ -448,7 +448,7 @@ public final class VideoAd {
     /// from inside it finds the slot taken. The creative itself goes on screen in `presented()`: at once for
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
     private func reserve(on screen: any AdScreen) {
-        state.transition(to: .reserved)
+        state.moveTo(.reserved)
         presentation = Presentation.begin(self, owner: owner, screen: screen)
     }
 
@@ -460,7 +460,7 @@ public final class VideoAd {
     }
 
     private func presentNow() {
-        guard state.transition(to: .onScreen) else { return }
+        guard state.moveTo(.onScreen) else { return }
         bridge.show()
         Logger.info("ad \(id.prefix(8)): shown")
         DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
@@ -554,7 +554,7 @@ public final class VideoAd {
     //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (`Presentation.release`);
     //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
-        guard state.transition(to: .ending(reason)) else { return }
+        guard state.moveTo(.ending(reason)) else { return }
         if reason == .failed, let failure = state.failure {
             delegate?.videoAd(self, didFail: failure)
         }
@@ -580,7 +580,7 @@ public final class VideoAd {
         // a destroy or its own time: `close` is the outcome the server counts as shown, not billed. A failure
         // already fired `error`; the page's own close or skip fired its beacon; an image's impression fires at
         // show; an ad that never reached the screen fired nothing to close. As the Kotlin SDK decides it.
-        if isPresented, descriptor.creative == .video, !state.impressionRecorded, Self.closedBeforeFirstFrame.contains(reason) {
+        if state.wasOnScreen, descriptor.creative == .video, !state.impressionRecorded, Self.closedBeforeFirstFrame.contains(reason) {
             tracker.fire("close")
         }
         if presentation?.screen.isInline == true {
@@ -594,7 +594,7 @@ public final class VideoAd {
     /// The screen is free and the app hears `didEnd`: at once for an overlay or pause ad, once the
     /// dismissal finished for a linear ad. Once.
     private func finish(_ reason: EndReason) {
-        guard state.transition(to: .ended(reason)) else { return }
+        guard state.moveTo(.ended(reason)) else { return }
         presentation?.release()
         presentation = nil
         delegate?.videoAd(self, didEnd: reason)
@@ -621,7 +621,7 @@ public final class VideoAd {
     /// `didEnd(.destroyed)`. No beacon here: `reject` and `destroy` fire `notUsed` themselves, an expired
     /// ad is the server's to close (it knows `expires`), a failed creative already fired `error`.
     func invalidate(_ reason: InvalidationReason) {
-        guard state.transition(to: .invalidated(reason)) else { return }
+        guard state.moveTo(.invalidated(reason)) else { return }
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
         DebugReporter.shared.event("ad.invalidated", adId: id, state: reason.reportState)
         loadedBridge?.hide()

@@ -22,7 +22,7 @@ sdk-swift-video/
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
-│   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor, and AdState: every fact of its life, its phases, their legal steps, its milestones and the flags they give)
+│   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat) and the ad as the SDK keeps it (AdDescriptor; AdLifecycle: its phases and their legal moves, stateless; AdState: every fact of its life, its phase, its milestones and the flags they give)
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
@@ -101,15 +101,16 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - The lifecycle, in one line: `load` returns a ready ad; `show` either throws or presentation begins; then zero or
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
-- One source of truth: every fact of an ad's life (phase, loaded, impression, completed, the failure) is in
-  `Model/AdState`; everything else asks it. `VideoAd`'s public flags are getters over it.
+- One source of truth: every fact of an ad's life (phase, loaded, impression, completed, on screen, the failure) is
+  in `Model/AdState`; everything else asks it. `VideoAd`'s public flags are getters over it. Its phase moves only
+  through `moveTo(_:)`, under the stateless rules of `Model/AdLifecycle`.
 - What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
   `Screen/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
   checks, the public format guards (`wrongPresentation`, `dismiss()` on a linear ad) and the facts of the linear
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
   goes into a rule or a screen, not into an `if format` in `VideoAd`.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
-  test: `Model/AdState` (which phase may follow which, each milestone once; `VideoAd` acts on each step), `Frame/FrameProtocol`
+  test: `Model/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameProtocol`
   (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
   (the beacon and end reason of a page's close), and the decision table in `Playback/ContentRule.swift`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
@@ -156,7 +157,7 @@ Tests/KontextVideoSDKTests/
 ├── Helpers/      StubServer (a scripted ad server behind URLProtocol), Fixtures (payloads),
 │                 FramePageServer (real frame pages over the kontext-test scheme), TestSupport
 │                 (TestPlayer, RecordingDelegate, TestWindow, SDKHarness, waitUntil), SerialSuites
-├── Model/        encoding of what the app passes in; the ad state's tables (AdStateTests)
+├── Model/        encoding of what the app passes in; the lifecycle's table (AdLifecycleTests), the ad state's moves, milestones and flags (AdStateTests)
 ├── Network/      the client: transport, status codes, the error body
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);
 │                 CorpusTests runs the shared malformed-answer corpus
