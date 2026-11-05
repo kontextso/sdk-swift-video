@@ -28,7 +28,7 @@ sdk-swift-video/
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameProtocol (the protocol's rules: accept(message) → Step), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), VideoAd+Click, the SKAdNetwork impression
-│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), the host view, VideoAd+Placement (where an overlay or pause ad goes)
+│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
@@ -176,7 +176,7 @@ Tests/KontextVideoSDKTests/
 │                 here; its README has the format and how to add a case
 ├── Frame/        the protocol as tables (FrameProtocolTableTests, no WebView), every message in every bridge
 │                 state (FrameMessageTableTests), the bridge with its WebView (FrameBridgeTests)
-├── Screen/       the linear-ad controller
+├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, the meter, the active-time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen), support, the debug reporter
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end

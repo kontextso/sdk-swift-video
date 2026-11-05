@@ -161,7 +161,7 @@ struct VideoAdPlacementTests {
         ad.delegate = delegate
         // A window has no `window` of its own: it is its own, on screen while visible and its scene in front.
         try ad.show(in: window.window)
-        #expect(ad.wasShown && window.window.subviews.contains { $0 is AdHostView })
+        #expect(ad.wasShown && window.window.subviews.contains { $0 is InlineAdView })
         ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         let hiddenWindow = TestWindow()
@@ -392,7 +392,7 @@ struct VideoAdPlacementTests {
         window.add(player)
         try ad.show(in: player)
         #expect(try #require(adFrame(in: player)) == CGRect(x: 59, y: 0, width: 726, height: 369), "the page stays clear of the cutout")
-        let host = try #require(player.subviews.compactMap { $0 as? AdHostView }.first)
+        let host = try #require(player.subviews.compactMap { $0 as? InlineAdView }.first)
         #expect(host.frame == player.bounds && host.backgroundColor == .black, "the host fills the player in black")
         #expect(host.hitTest(CGPoint(x: 20, y: 200), with: nil) === host, "a touch by the cutout stays with the ad, not the player")
         ad.dismiss()

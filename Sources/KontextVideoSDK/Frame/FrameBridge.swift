@@ -190,17 +190,16 @@ final class FrameBridge: NSObject {
 
     // MARK: SDK → page
 
-    /// The variant the SDK chose from the ad's `sizes` for the real box; the page lays it out.
-    var chosenSize: (width: Int, height: Int)?
-
-    /// The page is on screen: it starts whatever the creative does when visible, in the chosen size.
-    func show() {
+    /// The page is on screen: it starts whatever the creative does when visible, in `size`, the variant the
+    /// SDK chose from the ad's `sizes` for the real box (`nil`: the page fills its view). Given here, not kept:
+    /// the choice is the screen's (`InlineScreen.chosenSize`).
+    func show(size: VideoAd.Size? = nil) {
         guard frameProtocol.show() else {
             Logger.warning("frame \(adId.prefix(8)): show() in state \(state), ignored")
             return
         }
-        if let chosenSize {
-            send("ad.show", ["size": ["width": chosenSize.width, "height": chosenSize.height]])
+        if let size {
+            send("ad.show", ["size": ["width": size.width, "height": size.height]])
         } else {
             send("ad.show")
         }

@@ -52,7 +52,7 @@ struct VideoAdLinearTests {
 
     /// A linear ad presented from `presenter` in a window of its own; the controller's view is put in the
     /// window directly, as the runner never completes the transition, so the meter sees the ad.
-    private func presentLinear(_ ad: VideoAd, from presenter: Presenter) async throws -> (LinearViewController, UIWindow) {
+    private func presentLinear(_ ad: VideoAd, from presenter: Presenter) async throws -> (LinearAdViewController, UIWindow) {
         let window = UIWindow(windowScene: try #require(self.window.window.windowScene))
         window.frame = self.window.window.frame
         window.rootViewController = presenter

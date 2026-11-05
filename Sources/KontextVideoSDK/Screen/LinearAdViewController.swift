@@ -5,7 +5,7 @@ import WebKit
 /// ad owns the page and decides when it ends; the controller tells the ad when the system took the
 /// presentation away (`.interrupted`).
 @MainActor
-final class LinearViewController: UIViewController {
+final class LinearAdViewController: UIViewController {
     /// Set by the ad while it dismisses the controller itself, so `viewDidDisappear` is not an interruption.
     var isEndingByAd = false
     /// Called when the view left the screen and the ad did not ask for it.
@@ -58,7 +58,7 @@ final class LinearViewController: UIViewController {
     }
 }
 
-extension LinearViewController {
+extension LinearAdViewController {
     /// The key window's root controller, followed through what it presents to the top.
     /// `nil` when there is no key window or the top controller cannot present: it is
     /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that

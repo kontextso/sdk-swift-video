@@ -129,7 +129,7 @@ struct TestFailure: Error {}
 /// whole player and holds the creative at its place.
 @MainActor
 func adFrame(in player: UIView) -> CGRect? {
-    guard let host = player.subviews.last as? AdHostView else { return nil }
+    guard let host = player.subviews.last as? InlineAdView else { return nil }
     return host.convert(host.content.frame, to: player)
 }
 

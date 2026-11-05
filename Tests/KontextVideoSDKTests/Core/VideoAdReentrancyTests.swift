@@ -249,7 +249,7 @@ struct VideoAdReentrancyTests {
             if let last = delegate.events.last, !ends.isEmpty { #expect(last.hasPrefix("end:"), "\(label): didEnd is last: \(delegate.events)") }
             if delegate.events.contains("impression") { #expect(ad.wasShown, "\(label): an impression only for a shown ad") }
             if ad.invalidationReason != nil { #expect(!ad.wasShown, "\(label): an invalidated ad is never shown") }
-            let hosts = view.subviews.filter { $0 is AdHostView }.count   // each view holds only its own ad
+            let hosts = view.subviews.filter { $0 is InlineAdView }.count   // each view holds only its own ad
             #expect(hosts == (ad.wasShown && !ad.hasEnded ? 1 : 0), "\(label): \(ad.id) leaves no host behind")
         }
     }

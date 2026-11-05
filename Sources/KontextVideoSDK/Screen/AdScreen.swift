@@ -9,11 +9,11 @@ import WebKit
 /// never asks "which format am I?" about the screen.
 ///
 /// ```
-///                 holds the page            measures                       leaves the screen
-/// InlineScreen    AdHostView in the player  meter + ActiveTimeClock;       removed at once: didEnd now
-///                                           out of sight 1 s ends it
-/// LinearScreen    LinearViewController      meter; a sheet over it         dismissed through UIKit:
-///                 presented full screen     counts as covered              didEnd once it is gone
+///                 holds the page              measures                       leaves the screen
+/// InlineScreen    InlineAdView in the player  meter + ActiveTimeClock;       removed at once: didEnd now
+///                                             out of sight 1 s ends it
+/// LinearScreen    LinearAdViewController      meter; a sheet over it         dismissed through UIKit:
+///                 presented full screen       counts as covered              didEnd once it is gone
 /// ```
 ///
 /// How: `show(in:)` makes an `InlineScreen` and `show(from:)` a `LinearScreen` when the ad takes the app's
@@ -41,18 +41,28 @@ protocol AdScreen: AnyObject {
     func close(onGone: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool
 }
 
-/// An overlay or pause ad inside the app's player view: the `AdHostView` that holds the page, and the
+/// An overlay or pause ad inside the app's player view: the `InlineAdView` that holds the page, and the
 /// `ActiveTimeClock` that counts the time it is seen (and ends an overlay whose `duration` ran out on it).
+/// Its placement (the app's insets, the size variant chosen at `show`) lives here too, read by
+/// `VideoAd+Placement` at `show` and at every layout pass.
 @MainActor
 final class InlineScreen: AdScreen {
     unowned let ad: VideoAd
+    /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too; never
+    /// negative or non-finite.
+    let extraInsets: UIEdgeInsets
+    /// The size variant `frame(in:safeArea:)` chose for the view at `show`: the largest that fits without
+    /// scaling, else the one with the best scale still at or above 50 %. `nil` for a full-screen pause ad, or
+    /// when none fitted.
+    var chosenSize: VideoAd.Size?
     /// The view the SDK put into the player's view; `nil` before `attach` and after the end.
-    private(set) var hostView: AdHostView?
+    private(set) var hostView: InlineAdView?
     /// Time seen on screen; made once the creative is on screen.
     private(set) var clock: ActiveTimeClock?
 
-    init(ad: VideoAd) {
+    init(ad: VideoAd, extraInsets: UIEdgeInsets) {
         self.ad = ad
+        self.extraInsets = extraInsets
     }
 
     var isInline: Bool { true }
@@ -60,12 +70,12 @@ final class InlineScreen: AdScreen {
     /// Puts `webView` into `container` at `adFrame`, inside a host over the whole container that follows its
     /// resizes. Adding the host runs the container's overridable hooks, the app's code: the host is known
     /// first, so an end from there finds and removes it.
-    func attach(_ webView: UIView, to container: UIView, adFrame: CGRect, coversWhole: Bool) -> AdHostView {
+    func attach(_ webView: UIView, to container: UIView, adFrame: CGRect, coversWhole: Bool) -> InlineAdView {
         let ad = self.ad
-        let host = AdHostView(frame: container.bounds, content: webView)
+        let host = InlineAdView(frame: container.bounds, content: webView)
         host.coversWhole = coversWhole
         host.content.frame = adFrame
-        host.place = { [weak ad] bounds, safeArea in ad?.refit(in: bounds, safeArea: safeArea) }
+        host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
         host.onUnfit = { [weak ad] in
             // Not inside UIKit's layout pass: ending removes the view being laid out.
             Task { @MainActor [weak ad] in
@@ -119,13 +129,13 @@ final class InlineScreen: AdScreen {
     func close(onGone: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool { false }
 }
 
-/// A linear ad full screen: the `LinearViewController` UIKit presents, and its dismissal at the end
+/// A linear ad full screen: the `LinearAdViewController` UIKit presents, and its dismissal at the end
 /// (`LinearPresentation`). No active time is counted: a linear ad has no `overlayViewDuration`.
 @MainActor
 final class LinearScreen: AdScreen {
     unowned let ad: VideoAd
     /// The controller presented for the ad; `nil` before `attach` and once its dismissal began.
-    private(set) var controller: LinearViewController?
+    private(set) var controller: LinearAdViewController?
 
     init(ad: VideoAd) {
         self.ad = ad
@@ -134,9 +144,9 @@ final class LinearScreen: AdScreen {
     var isInline: Bool { false }
 
     /// The controller that shows `webView` full screen. UIKit taking it away (not the SDK) ends the ad.
-    func attach(_ webView: WKWebView) -> LinearViewController {
+    func attach(_ webView: WKWebView) -> LinearAdViewController {
         let ad = self.ad
-        let controller = LinearViewController(webView: webView)
+        let controller = LinearAdViewController(webView: webView)
         controller.onInterrupted = { [weak ad] in
             guard let ad else { return }
             Logger.warning("ad \(ad.id.prefix(8)): presentation interrupted")

@@ -6,7 +6,7 @@ import UIKit
 /// player.
 ///
 /// ```
-/// ┌────────── AdHostView = the whole player, e.g. 800×400 ──────────┐
+/// ┌────────── InlineAdView = the whole player, e.g. 800×400 ──────────┐
 /// │                                                                 │
 /// │                (transparent, taps pass through)                 │
 /// │                                                                 │
@@ -19,7 +19,7 @@ import UIKit
 /// The web view is only as big as the ad (its size from the server, shrunk at most to half when it does not
 /// fit), placed by `place` at every layout pass, so it follows a resize or a rotation.
 @MainActor
-final class AdHostView: UIView {
+final class InlineAdView: UIView {
     /// The creative's frame for the player's bounds and safe area, in this view's coordinates; `nil` when
     /// it no longer fits.
     var place: ((CGRect, UIEdgeInsets) -> CGRect?)?

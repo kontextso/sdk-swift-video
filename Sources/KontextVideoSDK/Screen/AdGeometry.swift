@@ -3,7 +3,7 @@ import UIKit
 /// The geometry of an overlay or pause ad in the player's view, as pure arithmetic: no views and no ad, only
 /// rectangles and scales. Where the ad goes: a variant scaled down to fit the view's safe area, never enlarged
 /// and never below its smallest scale, centred, at the top or the bottom. `VideoAd` picks the variant at
-/// `show`; `AdHostView` asks again when the view resizes. Whether the viewer could see a view is in
+/// `show`; `InlineAdView` asks again when the view resizes. Whether the viewer could see a view is in
 /// `ViewabilityMeter`.
 @MainActor
 enum AdGeometry {

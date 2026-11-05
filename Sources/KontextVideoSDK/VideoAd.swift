@@ -56,11 +56,11 @@ public final class VideoAd {
     //
     //   Frame/VideoAd+FrameEvents.swift    handle, handleNow: what the ad does with each message of its page
     //   Frame/VideoAd+Click.swift          click, openClick, open: a click's beacon, delegate and URL
-    //   Screen/VideoAd+Placement.swift     frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
+    //   Screen/VideoAd+Placement.swift     InlineScreen's frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
     //   VideoAd+Types.swift                its value types: Price, RejectReason, InvalidationReason, Size, Position
     //   VideoAd+Errors.swift               the errors show and load throw, and the creative's error report
-    //   Model/AdState.swift                every fact of its life: its phase, milestones and flags
-    //   Model/AdLifecycle.swift            the phases and the legal moves between them
+    //   State/AdState.swift                every fact of its life: its phase, milestones and flags
+    //   State/AdLifecycle.swift            the phases and the legal moves between them
 
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     // business at `show`; nothing of that is exposed.
@@ -74,9 +74,6 @@ public final class VideoAd {
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
     /// the video's length. Seconds; always `nil` for a pause ad.
     public var duration: TimeInterval? { descriptor.duration }
-    /// The size variant `show` chose for the view: the largest that fits without scaling, else the one
-    /// with the best scale still at or above 50 %.
-    var chosenSize: Size?
 
     /// The page reported the creative ready: `load()` finished.
     public var isLoaded: Bool { state.isLoaded }
@@ -118,7 +115,7 @@ public final class VideoAd {
     /// Every fact of the ad's life, the one source of truth: every public flag above reads it live. The phase
     /// moves only forward, through `state.moveTo(_:)` under `AdLifecycle`'s rules; each milestone is marked once,
     /// `wasOnScreen` too: at `show` for an overlay or pause ad, once UIKit presented the controller for a linear ad
-    /// (`Model/AdState.swift`).
+    /// (`State/AdState.swift`).
     var state = AdState()
 
     /// The server's answer this ad renders; the expiry counts from the first receipt, a re-serve does not
@@ -145,8 +142,6 @@ public final class VideoAd {
     private(set) weak var owner: VideoAds?
     /// The ad on screen, from `show` to `didEnd`: the slot, the host view or controller, the meter, the clock.
     private(set) var shownAd: ShownAd?
-    /// The app's insets from `show(in:insets:)`, on top of the view's safe area, for every refit too.
-    var extraInsets = UIEdgeInsets.zero
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
     var meter: ViewabilityMeter? { shownAd?.meter }
@@ -308,20 +303,18 @@ public final class VideoAd {
         }
         let container = view
         let area = CGRect(origin: .zero, size: container.bounds.size)
-        extraInsets = AdGeometry.cleaned(insets)
+        let screen = InlineScreen(ad: self, extraInsets: AdGeometry.cleaned(insets))
         let adFrame = descriptor.position == .fullscreen
-            ? fullscreenFrame(in: area, safeArea: container.safeAreaInsets)
-            : try frame(in: area, safeArea: AdGeometry.adding(extraInsets, to: container.safeAreaInsets))
+            ? screen.fullscreenFrame(in: area, safeArea: container.safeAreaInsets)
+            : try screen.frame(in: area, safeArea: AdGeometry.adding(screen.extraInsets, to: container.safeAreaInsets))
         // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
         // step below checks for that. One bridge throughout: after an end, `bridge` would make a new one.
         let bridge = self.bridge
-        let screen = InlineScreen(ad: self)
         reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
-        bridge.chosenSize = chosenSize.map { ($0.width, $0.height) }
         let host = screen.attach(webView, to: container, adFrame: adFrame, coversWhole: descriptor.position == .fullscreen)
         // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
         if !hasEnded, !ViewabilityMeter.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
@@ -362,7 +355,7 @@ public final class VideoAd {
             }
             presenter = viewController
         } else {
-            guard let top = LinearViewController.topPresenter(), ViewabilityMeter.canBeSeen(top.view) else {
+            guard let top = LinearAdViewController.topPresenter(), ViewabilityMeter.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
                 throw VideoAdError.presenterUnavailable
             }
@@ -458,7 +451,7 @@ public final class VideoAd {
     func reachedScreen() {
         withContentPlayhead {
             guard state.moveTo(.onScreen) else { return }
-            bridge.show()
+            bridge.show(size: (shownAd?.screen as? InlineScreen)?.chosenSize)
             Logger.info("ad \(id.prefix(8)): shown")
             DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
             startMeter()

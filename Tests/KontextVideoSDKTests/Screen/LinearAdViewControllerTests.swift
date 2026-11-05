@@ -6,8 +6,8 @@ import WebKit
 /// The full-screen container: its one decision (interruption or the ad's own ending) and its setup.
 @MainActor
 struct LinearViewControllerTests {
-    private func makeController() -> (LinearViewController, () -> Int) {
-        let controller = LinearViewController(webView: WKWebView(frame: .zero))
+    private func makeController() -> (LinearAdViewController, () -> Int) {
+        let controller = LinearAdViewController(webView: WKWebView(frame: .zero))
         var interruptions = 0
         controller.onInterrupted = { interruptions += 1 }
         return (controller, { interruptions })
@@ -52,7 +52,7 @@ struct LinearViewControllerTests {
 
     @Test func presentsFullScreenWithTheWebViewFillingIt() {
         let webView = WKWebView(frame: .zero)
-        let controller = LinearViewController(webView: webView)
+        let controller = LinearAdViewController(webView: webView)
         #expect(controller.modalPresentationStyle == .fullScreen)
         #expect(controller.modalTransitionStyle == .crossDissolve)
         controller.view.frame = CGRect(x: 0, y: 0, width: 300, height: 600)

@@ -144,7 +144,7 @@ struct VideoAdTests {
         #expect(ad.isReady == false, "shown at most once")
         #expect(delegate.events == ["impression"], "an image counts at show")
         #expect(sent.first == "ad.show")
-        let host = try #require(harness.player.view.subviews.last as? AdHostView)
+        let host = try #require(harness.player.view.subviews.last as? InlineAdView)
         #expect(host.content === ad.bridge.webView && host.frame == harness.player.view.bounds, "a transparent host over the player holds the creative")
         #expect(adFrame(in: harness.player.view) == CGRect(x: 85, y: 0, width: 220, height: 220), "300×300 scaled to the 220 pt height, centred")
         let fired = await beacons()
@@ -654,7 +654,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i9"))
         try ad.show(from: window.root)   // the real wiring: the controller holds the WebView
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? LinearViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearAdViewController)
         #expect(presented.modalPresentationStyle == .fullScreen)
         #expect(presented.view.subviews.first === ad.bridge.webView)
         #expect(presented.prefersStatusBarHidden)
@@ -861,7 +861,7 @@ struct VideoAdTests {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i13"))
         Environment.keyWindow = { [window] in window.window }
         try ad.show()
-        #expect(await waitUntil { self.window.root.presentedViewController is LinearViewController })
+        #expect(await waitUntil { self.window.root.presentedViewController is LinearAdViewController })
         #expect(ad.wasShown)
     }
 
@@ -905,7 +905,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i12"))
         try presentLinear(ad)
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? LinearViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearAdViewController)
         // What viewDidDisappear sees when the presenter is dismissed underneath the ad.
         presented.viewDisappeared(isBeingDismissed: true, isMovingFromParent: false, hasPresenter: true)
         #expect(delegate.endReasons == [.interrupted])
@@ -921,7 +921,7 @@ struct VideoAdTests {
         try presentLinear(ad)
         send(ad, "video.start", ["playhead": 0])
         #expect(await waitUntil { self.window.root.presentedViewController != nil })
-        let presented = try #require(window.root.presentedViewController as? LinearViewController)
+        let presented = try #require(window.root.presentedViewController as? LinearAdViewController)
         ads.destroy()
         #expect(await waitUntil { delegate.endReasons == [.destroyed] })
         #expect(presented.isEndingByAd, "the SDK asked UIKit to dismiss")
@@ -943,7 +943,7 @@ struct VideoAdTests {
 
     /// A linear ad presented from a `DismissSpy` in a window of its own; the controller's view is put in the
     /// window directly, as the runner never completes the transition, so the meter sees the ad.
-    private func presentLinear(_ ad: VideoAd, from spy: DismissSpy) async throws -> (LinearViewController, UIWindow) {
+    private func presentLinear(_ ad: VideoAd, from spy: DismissSpy) async throws -> (LinearAdViewController, UIWindow) {
         let window = UIWindow(windowScene: try #require(self.window.window.windowScene))
         window.frame = self.window.window.frame
         window.rootViewController = spy

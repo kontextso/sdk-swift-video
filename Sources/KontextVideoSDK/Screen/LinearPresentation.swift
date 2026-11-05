@@ -10,7 +10,7 @@ enum LinearPresentation {
     /// watchdog stops once `isPending` turns false (the ad ended, or was presented). After `timeout`, a
     /// controller that never reached a window failed; one that did, without the completion, is taken as
     /// presented after five times that.
-    static func present(_ controller: LinearViewController, from presenter: UIViewController, adId: String, timeout: TimeInterval,
+    static func present(_ controller: LinearAdViewController, from presenter: UIViewController, adId: String, timeout: TimeInterval,
                         isPending: @escaping @MainActor () -> Bool, onPresented: @escaping @MainActor () -> Void,
                         onFailed: @escaping @MainActor () -> Void) {
         presenter.present(controller, animated: true) {
@@ -41,7 +41,7 @@ enum LinearPresentation {
     /// runs when the dismissal finished; if UIKit never says so, and `isPending` is still true, once the
     /// controller has left the screen after `timeout`, or after five times that while it still has not
     /// (`hasTimedOut`: reported over a controller UIKit did not take down).
-    static func dismiss(_ controller: LinearViewController, timeout: TimeInterval, isPending: @escaping @MainActor () -> Bool,
+    static func dismiss(_ controller: LinearAdViewController, timeout: TimeInterval, isPending: @escaping @MainActor () -> Bool,
                         completion: @escaping @MainActor (_ hasTimedOut: Bool) -> Void) -> Bool {
         // The ad ends it: its disappearance is no interruption.
         controller.isEndingByAd = true
