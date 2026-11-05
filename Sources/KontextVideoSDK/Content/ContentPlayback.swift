@@ -97,7 +97,7 @@ final class ContentPlayback {
     /// number) must not crash the app when a request converts it to `Int`.
     var playhead: TimeInterval {
         guard let value = readTime?(), value.isFinite else { return 0 }
-        return min(max(0, value), 315_360_000)
+        return min(max(0, value), TenYears.seconds)
     }
 
     /// Ticks run while a player is tracked and an overlay or pause ad of this `VideoAds` is on screen, and only then.

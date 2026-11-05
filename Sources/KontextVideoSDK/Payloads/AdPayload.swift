@@ -116,9 +116,9 @@ struct AdPayload: Decodable, Sendable {
         }
     }
 
-    /// The largest count of milliseconds taken: ten years, the content playhead's cap. Beyond it a value is
-    /// nonsense, and near `Int.max` it would trap the conversion.
-    static let maxMilliseconds: Double = 315_360_000_000
+    /// The largest count of milliseconds taken (`TenYears`): beyond it a value is nonsense, and near `Int.max` it
+    /// would trap the conversion.
+    static let maxMilliseconds = TenYears.milliseconds
 
     /// A wire `number` of milliseconds as whole ones, rounded to the nearest: the contract types durations
     /// and offsets as numbers, and a server converting from VAST or percent sends fractions. `nil` when not

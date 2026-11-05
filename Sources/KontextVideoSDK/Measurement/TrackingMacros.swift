@@ -51,9 +51,9 @@ enum TrackingMacros {
         text.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D")
     }
 
-    /// Playheads beyond this (ten years, the same cap as the content playhead) are nonsense and clamped:
-    /// a value near `Int.max` would trap the `Int` conversion below.
-    static let maxPlayhead: TimeInterval = 315_360_000
+    /// Playheads beyond this (`TenYears`, the content playhead's cap too) are nonsense and clamped: a value near
+    /// `Int.max` would trap the `Int` conversion below.
+    static let maxPlayhead = TenYears.seconds
 
     /// `[MEDIAPLAYHEAD]`, `[ADPLAYHEAD]`: `HH:MM:SS.mmm`.
     static func playhead(seconds: TimeInterval) -> String {
