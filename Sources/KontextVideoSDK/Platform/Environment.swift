@@ -5,8 +5,9 @@ import KontextKit
 import UIKit
 import WebKit
 
-/// The SDK's seams: what tests replace and production never touches. Every value has its production
-/// default; `reset()` restores them all.
+/// The SDK's seams. Production sets none of them (`initialize(with:)` included): every value is a production
+/// default that only tests replace, and `reset()` restores them all from the same defaults, each written once
+/// below.
 @MainActor
 enum Environment {
     /// The session every request and beacon goes through: the SDK's own, never the app's shared one.
@@ -35,18 +36,19 @@ enum Environment {
     /// Where a loading WebView is parked so WebKit runs its page and buffers its video: the key window.
     /// Separate from `keyWindow` only so the tests can give pages a window without changing what the
     /// requests report or where a linear ad is presented.
-    static var parkingWindow: @MainActor () -> UIWindow? = { keyWindow() }
-    /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process.
-    static var schemeHandlers: [String: WKURLSchemeHandler] = [:]
+    static var parkingWindow: @MainActor () -> UIWindow? = defaultParkingWindow
+    /// Custom URL schemes the frame WebView can load, so a test serves a page from inside the process. Tests
+    /// only: empty in an app.
+    static var schemeHandlers: [String: WKURLSchemeHandler] = defaultSchemeHandlers
     /// Whether WebKit asks `WKUIDelegate` before a page captures the camera or microphone (iOS 15 on). Below
     /// that the frame removes the capture API from its pages instead; tests answer either way.
     static var asksBeforeMediaCapture: @MainActor () -> Bool = defaultAsksBeforeMediaCapture
     /// Opens a URL the page asked for; the completion says whether it could.
     static var openURL: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenURL
     /// A programmer error: stops a debug build. Tests record it instead.
-    static var assertionFailure: (String) -> Void = { Swift.assertionFailure($0) }
+    static var assertionFailure: (String) -> Void = defaultAssertionFailure
     /// Where the IAB consent keys are read from.
-    static var consentDefaults: UserDefaults = .standard
+    static var consentDefaults: UserDefaults = defaultConsentDefaults
     /// Whether a controller has another presented over it: a full-screen cover takes its view out of the
     /// window, which is not the ad's end; a sheet hides it from the viewer. An alert does not count: the ad
     /// stays in view around it.
@@ -56,50 +58,76 @@ enum Environment {
     /// Whether the scene of a given window is active, for the viewability of an ad in it.
     static var isWindowActive: @MainActor (UIWindow) -> Bool = defaultIsWindowActive
     /// App Tracking Transparency: the status now, and the dialog. Tests answer without the OS.
-    static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
-    static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = { await ATTrackingManager.requestTrackingAuthorization() }
+    static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = defaultTrackingAuthorizationStatus
+    static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = defaultRequestTrackingAuthorization
     /// The device's advertising identifier, all zeros unless ATT is authorized. Tests set a real one.
-    static var advertisingIdentifier: @MainActor () -> UUID = { ASIdentifierManager.shared().advertisingIdentifier }
+    static var advertisingIdentifier: @MainActor () -> UUID = defaultAdvertisingIdentifier
     /// The browser's user agent, `navigator.userAgent` of a WebView; KontextKit evaluates it in WebKit and
     /// caches it once it has one.
-    static var userAgent: @MainActor () async -> String? = { await NetworkInfoProvider.collect().userAgent }
+    static var userAgent: @MainActor () async -> String? = defaultUserAgent
     /// Registers and ends the SKAdNetwork impression of an app-install ad on screen.
-    static var skAdNetwork: any SKAdNetworkManaging = KontextKitSKAdNetwork()
+    static var skAdNetwork: any SKAdNetworkManaging = defaultSKAdNetwork()
     /// Presents the App Store product sheet an app-install ad's click opens.
-    static var storeProduct: any StoreProductManaging = KontextKitStoreProduct()
+    static var storeProduct: any StoreProductManaging = defaultStoreProduct()
     /// The clock an ad's lifetime is measured on: seconds since an arbitrary point, monotonic, and still
     /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and an ad must
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
     nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
     /// Custom schemes a frame page may come from besides http and https: the one the tests serve their pages
-    /// over (`schemeHandlers`). Empty in an app; not cleared by `reset`, as decoding runs before any harness.
+    /// over (`schemeHandlers`). Tests only: empty in an app; not cleared by `reset`, as decoding runs before any
+    /// harness.
     nonisolated(unsafe) static var testFrameSchemes: Set<String> = []
 
-    // Called by the tests, which the analyzer does not see.
-    // swiftlint:disable:next unused_declaration
-    static func reset() {
+    /// Every seam back to its production default, and the SDK's other test state with it. Tests only, which
+    /// the analyzer does not see.
+    static func reset() { // swiftlint:disable:this unused_declaration
         session = defaultSession
         keyWindow = defaultKeyWindow
-        parkingWindow = { keyWindow() }
-        schemeHandlers = [:]
+        parkingWindow = defaultParkingWindow
+        schemeHandlers = defaultSchemeHandlers
         openURL = defaultOpenURL
         asksBeforeMediaCapture = defaultAsksBeforeMediaCapture
-        assertionFailure = { Swift.assertionFailure($0) }
-        consentDefaults = .standard
+        assertionFailure = defaultAssertionFailure
+        consentDefaults = defaultConsentDefaults
         isApplicationActive = defaultIsApplicationActive
         isWindowActive = defaultIsWindowActive
         isCovered = defaultIsCovered
-        trackingAuthorizationStatus = { ATTrackingManager.trackingAuthorizationStatus }
-        advertisingIdentifier = { ASIdentifierManager.shared().advertisingIdentifier }
-        requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
-        userAgent = { await NetworkInfoProvider.collect().userAgent }
+        trackingAuthorizationStatus = defaultTrackingAuthorizationStatus
+        advertisingIdentifier = defaultAdvertisingIdentifier
+        requestTrackingAuthorization = defaultRequestTrackingAuthorization
+        userAgent = defaultUserAgent
         UserAgent.resetForTesting()
         TrackingInfo.hasWarnedAboutUnaskedTracking = false
         Logger.sink = nil
-        skAdNetwork = KontextKitSKAdNetwork()
-        storeProduct = KontextKitStoreProduct()
+        skAdNetwork = defaultSKAdNetwork()
+        storeProduct = defaultStoreProduct()
         now = defaultNow
     }
+
+    // The production defaults, each written once: the initializers above and `reset()` use them.
+
+    private static let defaultSchemeHandlers: [String: WKURLSchemeHandler] = [:]
+    private static let defaultConsentDefaults: UserDefaults = .standard
+
+    private static func defaultParkingWindow() -> UIWindow? { keyWindow() }
+
+    private nonisolated static func defaultAssertionFailure(_ message: String) { Swift.assertionFailure(message) }
+
+    private static func defaultTrackingAuthorizationStatus() -> ATTrackingManager.AuthorizationStatus {
+        ATTrackingManager.trackingAuthorizationStatus
+    }
+
+    private static func defaultRequestTrackingAuthorization() async -> ATTrackingManager.AuthorizationStatus {
+        await ATTrackingManager.requestTrackingAuthorization()
+    }
+
+    private static func defaultAdvertisingIdentifier() -> UUID { ASIdentifierManager.shared().advertisingIdentifier }
+
+    private static func defaultUserAgent() async -> String? { await NetworkInfoProvider.collect().userAgent }
+
+    private static func defaultSKAdNetwork() -> any SKAdNetworkManaging { KontextKitSKAdNetwork() }
+
+    private static func defaultStoreProduct() -> any StoreProductManaging { KontextKitStoreProduct() }
 
     private nonisolated static func defaultNow() -> TimeInterval {
         TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000

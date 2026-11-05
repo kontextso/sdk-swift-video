@@ -32,7 +32,8 @@ sdk-swift-video/
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
-│   ├── Support/      plumbing: Logger, Environment (the test seams), the debug reporter, awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
+│   ├── Diagnostics/  what the SDK tells: Logger (the console), ErrorReporter (faults to /v2/error), DebugReporter (debug events to /v2/debug)
+│   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
 │   └── PrivacyInfo.xcprivacy
 ├── Sources/KontextVideoTTSDK/   the optional KontextVideoTTSDK product: ads.track(ttVideoEngine:), TTSDK read through Objective-C (see its README)
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
@@ -49,7 +50,7 @@ with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns
 until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
 The rule for the tree: the root is what the app calls, `Model/` is the model, `State/` is the state of the SDK and of each ad and their legal moves, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
-web page and its messages, `Screen/` puts the ad on screen, `Measurement/` measures and reports (together the Notion hub's "Rendering" section), `Support/` is plumbing.
+web page and its messages, `Screen/` puts the ad on screen, `Measurement/` measures and reports (together the Notion hub's "Rendering" section), `Diagnostics/` is what the SDK tells (logs, error and debug reports), `Platform/` the system calls and seams under the rest.
 
 ## Building
 
@@ -179,7 +180,9 @@ Tests/KontextVideoSDKTests/
 │                 state (FrameMessageTableTests), the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, the meter, the active-time clock
-├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen), support, the debug reporter
+├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
+├── Diagnostics/  the logger, the error reporter, the debug reporter
+├── Platform/     the environment's seams, awaitShared, the link opener
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
 
@@ -188,7 +191,7 @@ Rules the suites follow:
 - Anything that touches process-wide state (the shared instance, `Environment`, the stub server) nests under
   `SerialSuites`, which is `.serialized`; Swift Testing runs other suites in parallel.
 - `SDKHarness` resets everything before a test and installs the stub server; the seams it uses are in
-  `Support/Environment.swift`, and production never sets them.
+  `Platform/Environment.swift`, and production never sets them.
 - Expectations on beacons use `waitUntil`: beacons are fire-and-forget and arrive a moment after the call.
 - Expiry is never waited for: `advanceClock(by:)` moves `Environment.now`, the ad clock. A test that sleeps to
   let something expire is flaky on a slow runner and goes against the suite's budget, about 2 minutes in all.

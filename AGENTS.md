@@ -54,7 +54,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   that moves `SdkState`.
 - `VideoAds`: one per video. `format(_:)` asks the server for all formats with the `VideoAds`'s `sessionId` and the
   ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
-  expire; the SDK follows the response. One request at a time, shared by every caller (`Support/AwaitShared.swift`).
+  expire; the SDK follows the response. One request at a time, shared by every caller (`Platform/AwaitShared.swift`).
 - `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
   renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show()` for
   linear; `dismiss()`; the page's events mapped to beacons and the delegate; `end(_:)` is the only terminal path.
@@ -79,7 +79,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),
   `SdkState` the SDK's facts (its phase, the public `KontextVideo.State`; the configuration; what `/config` said of
   error and debug reports, which the reporters ask), `AdState` every fact of an ad's life: the phase and the milestones
-  (loaded, impression, completed, on screen, the failure); every public flag of `VideoAd` reads it. `Device/` what the SDK reads, `Support/Environment.swift` the
+  (loaded, impression, completed, on screen, the failure); every public flag of `VideoAd` reads it. `Device/` what the SDK reads, `Platform/Environment.swift` the
   seams the tests replace.
 
 ## Rules
