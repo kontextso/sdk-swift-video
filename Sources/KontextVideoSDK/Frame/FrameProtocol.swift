@@ -3,13 +3,24 @@ import Foundation
 /// The Kontext Frame Protocol v2 as rules over plain values: which message the page may send in which state,
 /// what it means, and what is dropped. No WebView, no timers, no clock of its own.
 ///
-/// Why: the protocol's rules (the envelope, the sender, the order, the playhead's bounds, one URL per touch)
-/// decide what an ad bills and opens. Kept apart from the WebView that carries them, each rule is a cell of a
-/// table a test can read, and the Kotlin twin keeps the same names (`FrameProtocol`, `accept`, `Step`).
+/// Why: the protocol's rules (the sender, the page's state, the order of the video's events, one URL per touch,
+/// the navigation, a violation reported once) decide what an ad bills and opens. Kept apart from the WebView that
+/// carries them, each rule is a cell of a table a test can read, and the Kotlin twin keeps the same names
+/// (`FrameProtocol`, `accept`, `Step`). Reading the message itself (the JSON, the envelope, the 1 MB limit, the
+/// fields, the playhead's bounds) is `FrameMessage`'s.
 ///
 /// How: `FrameBridge` (the imperative shell) owns one `FrameProtocol`. For each message the page posts, it calls
-/// `accept(_:from:now:)` and carries out the `Step` it returns; for the SDK's own moments it asks `show()`,
+/// `accept(_:from:now:)`, which checks the sender, reads the message (`FrameMessage.parse`) and applies the rules
+/// (`accept(_:now:)`); the bridge carries out the `Step` it returns. For the SDK's own moments it asks `show()`,
 /// `end()`, `noteTouch(now:)`, `externalNavigation(to:now:)` and `navigationDecision(...)`.
+///
+/// The page's state (`PageState`) is not the ad's (`AdState`), and both are needed: the page's rules are checked
+/// before the ad hears a message at all; the page can end itself (close, skip, error) before the ad knows; a page
+/// can be loaded for an ad only offered, never shown; and an ad can be reserved (`show` accepted) while its page
+/// is not shown yet (a linear ad UIKit is still presenting). They move together at fixed points: the page's
+/// `ad.loaded` marks the ad loaded; the ad reaching the screen (`onScreen`) shows the page (loaded → shown); a
+/// page that ends itself hands the ad its event, and the ad ends; the ad's end, or its invalidation, hides the
+/// page (→ ended).
 ///
 /// ```
 ///   message           loading     loaded      shown                    ended
@@ -24,17 +35,11 @@ import Foundation
 ///   unknown type      drop        drop        drop                     ignore
 /// ```
 ///
-/// A message from another frame or origin is dropped; a malformed envelope, a video message before
-/// `video.start` and a malformed progress offset are dropped as a protocol violation, reported once per ad.
+/// A message from another frame or origin is dropped; a malformed envelope (`FrameMessage.parse` gives `nil`), a
+/// video message before `video.start` and a malformed progress offset are dropped as a protocol violation,
+/// reported once per ad.
 @MainActor
 struct FrameProtocol {
-    enum State: Sendable {
-        case loading
-        case loaded
-        case shown
-        case ended
-    }
-
     /// What the shell does with one message from the page.
     enum Step {
         /// Nothing: a message the state does not take, or one after the end.
@@ -75,8 +80,6 @@ struct FrameProtocol {
     static let touchWindow: TimeInterval = 1
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
-    /// The largest message string parsed, in UTF-8 bytes (1 MB); every message of the protocol is far smaller.
-    static let maxMessageBytes = 1024 * 1024
     /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
     /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
     /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
@@ -97,7 +100,7 @@ struct FrameProtocol {
     let loadErrorCode: Int
     /// The highest playhead a page may report, in milliseconds: the video's duration and the grace, or a day.
     let playheadLimitMs: Int
-    private(set) var state: State = .loading
+    private(set) var state: PageState = .loading
     /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
     private var isVideoStarted = false
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
@@ -119,50 +122,53 @@ struct FrameProtocol {
 
     // MARK: Page → SDK
 
-    /// Checks the sender, the envelope and the order of one message; `now` is the clock a click's touch is
-    /// measured on.
+    /// Checks the sender of one message, reads it (`FrameMessage.parse`: a broken envelope is a violation), and
+    /// says what to do with it; `now` is the clock a click's touch is measured on.
     mutating func accept(_ rawBody: Any, from sender: Sender, now: TimeInterval) -> Step {
         guard state != .ended else { return .ignore }
         guard sender.isMainFrame, isFrameOrigin(sender) else { return .drop(log: "message from another frame dropped") }
-        guard let body = Self.messageObject(rawBody), body["adId"] as? String == adId, let type = body["type"] as? String else {
+        guard let message = FrameMessage.parse(rawBody, adId: adId, playheadLimitMs: playheadLimitMs) else {
             return .drop(log: "malformed message dropped", violation: violation("envelope"))
         }
-        // Milliseconds into the ad video, a fraction rounded (a page reads `currentTime * 1000`), clamped to the
-        // video's duration (a day without one): a playhead past the end would fire every checkpoint at once.
-        let rawPlayhead = (body["playhead"] as? NSNumber)?.doubleValue ?? 0
-        let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), Double(playheadLimitMs)).rounded()) : 0
+        return accept(message, now: now)
+    }
 
-        switch type {
+    /// The rules for one message of this page, read: its order in the page's state and the video's. It changes
+    /// the state for `ad.loaded` and for the messages that end the page.
+    mutating func accept(_ message: FrameMessage, now: TimeInterval) -> Step {
+        guard state != .ended else { return .ignore }
+        let playhead = message.playheadMs
+        switch message.type {
         case "ad.loaded":
             guard state == .loading else { return .ignore }
             state = .loaded
             return .loaded
         case "ad.click", "ad.open":
-            return acceptOpening(type, body, now: now)
+            return acceptOpening(message, now: now)
         case "ad.close":
             guard state == .shown else { return .ignore }
-            return .endThenDeliver(.close(reason: (body["reason"] as? String).flatMap(FrameEvent.CloseReason.init(rawValue:)) ?? .close))
+            return .endThenDeliver(.close(reason: message.reason.flatMap(FrameEvent.CloseReason.init(rawValue:)) ?? .close))
         case "video.skip":
             guard state == .shown else { return .ignore }
             return .endThenDeliver(.skip(playhead: playhead))
         case let type where type.hasPrefix("video."):
-            return acceptVideo(type, body, playhead: playhead)
+            return acceptVideo(type, message, playhead: playhead)
         case "ad.error":
             // A VAST error code has three digits; any other code from the page goes as 900, undefined error.
-            let given = (body["code"] as? NSNumber)?.doubleValue
-            let code = given.map { (100...999).contains($0) ? Int($0) : 900 } ?? (state == .shown ? 405 : loadErrorCode)
+            let code = message.code.map { (100...999).contains($0) ? Int($0) : 900 } ?? (state == .shown ? 405 : loadErrorCode)
             return .endThenDeliver(.error(code: code))
-        default:
+        case let type:
             return .drop(log: "unknown message \(type) dropped")
         }
     }
 
     /// `ad.click` or `ad.open`: on screen only, to a usable URL of an allowed scheme, after a touch.
-    private mutating func acceptOpening(_ type: String, _ body: [String: Any], now: TimeInterval) -> Step {
+    private mutating func acceptOpening(_ message: FrameMessage, now: TimeInterval) -> Step {
         guard state == .shown else { return .ignore }
+        let type = message.type
         // A click whose `url` is missing or unusable but whose `fallbackUrl` is good opens the fallback.
-        let given = (body["url"] as? String).flatMap(Self.url)
-        let fallback = type == "ad.click" ? (body["fallbackUrl"] as? String).flatMap(Self.url) : nil
+        let given = message.url.flatMap(Self.url)
+        let fallback = type == "ad.click" ? message.fallbackUrl.flatMap(Self.url) : nil
         guard let url = given ?? fallback else { return .ignore }
         guard let target = Self.target(url, fallback: given == nil ? nil : fallback) else {
             return .drop(log: "\(type) to \(url.absoluteString) dropped, scheme refused", warning: true)
@@ -171,13 +177,13 @@ struct FrameProtocol {
             return .drop(log: "\(type) to \(url.absoluteString) dropped, no touch before it", warning: true)
         }
         if type == "ad.click" {
-            return .deliver(.click(url: target.url, fallbackUrl: target.fallback, area: VideoAd.Click.Area(body["area"] as? String)))
+            return .deliver(.click(url: target.url, fallbackUrl: target.fallback, area: VideoAd.Click.Area(message.area)))
         }
-        return .deliver(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
+        return .deliver(.open(url: url, purpose: message.purpose ?? "unknown"))
     }
 
     /// A `video.*` message: on screen only; everything but the start, mute and unmute after `video.start`.
-    private mutating func acceptVideo(_ type: String, _ body: [String: Any], playhead: Int) -> Step {
+    private mutating func acceptVideo(_ type: String, _ message: FrameMessage, playhead: Int) -> Step {
         guard state == .shown else { return .ignore }
         switch type {
         case "video.complete":
@@ -187,7 +193,7 @@ struct FrameProtocol {
             if let dropped = droppedBeforeStart(type) { return dropped }
             // A checkpoint in milliseconds within a day, a fraction rounded to the nearest; anything else would
             // fire every checkpoint early.
-            guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, (0...86_400_000).contains(raw) else {
+            guard let raw = message.offset, raw.isFinite, (0...86_400_000).contains(raw) else {
                 return .drop(log: "video.progress with a malformed offset dropped", violation: violation("progress.offset"))
             }
             return .deliver(.progress(offset: min(Int(raw.rounded()), playheadLimitMs), playhead: playhead))
@@ -202,14 +208,6 @@ struct FrameProtocol {
             }
             return .deliver(.video(event, playhead: playhead))
         }
-    }
-
-    /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
-    /// as WebKit converted it. `nil` for anything else.
-    static func messageObject(_ rawBody: Any) -> [String: Any]? {
-        if let object = rawBody as? [String: Any] { return object }
-        guard let text = rawBody as? String, text.utf8.count <= maxMessageBytes else { return nil }
-        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
     }
 
     /// `nil` when `video.start` came before this video message; otherwise the drop: progress, quartiles or a

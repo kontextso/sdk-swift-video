@@ -84,7 +84,7 @@ struct FrameBridgeTests {
         for body in ["[1, 2]", "\"ad.loaded\"", "42", "not json", "", "{\"adId\": \"ad-1\", \"type\": "] {
             bridge.receive(body, from: main)
         }
-        let padding = String(repeating: "x", count: FrameProtocol.maxMessageBytes)
+        let padding = String(repeating: "x", count: FrameMessage.maxMessageBytes)
         bridge.receive(json("ad.loaded", ["padding": padding]), from: main)
         #expect(bridge.state == .loading && recorder.events.isEmpty)
         bridge.receive(json("ad.loaded", ["padding": String(padding.prefix(1000))]), from: main)

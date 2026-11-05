@@ -135,8 +135,8 @@ struct FrameProtocolTableTests {
         }
         // A message of exactly `maxMessageBytes` bytes parses; one byte more is dropped.
         let head = "{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
-        let atLimit = head + String(repeating: "x", count: FrameProtocol.maxMessageBytes - head.utf8.count - tail.utf8.count) + tail
-        #expect(FrameProtocol.maxMessageBytes == 1024 * 1024 && atLimit.utf8.count == FrameProtocol.maxMessageBytes)
+        let atLimit = head + String(repeating: "x", count: FrameMessage.maxMessageBytes - head.utf8.count - tail.utf8.count) + tail
+        #expect(FrameMessage.maxMessageBytes == 1024 * 1024 && atLimit.utf8.count == FrameMessage.maxMessageBytes)
         let bodies: [(Any, String)] = [
             (message("ad.loaded", adId: "ad-2"), "drop"),
             (["adId": "ad-1"], "drop"),

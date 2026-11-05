@@ -4,6 +4,13 @@
 /// flags, the screens, the content rules, the page's handlers) asks it. The rules it follows are
 /// `AdLifecycle`'s.
 ///
+/// The ad's state is not its page's (`PageState`, moved by `FrameProtocol`), and both are needed: the page's
+/// rules are checked before the ad hears a message; the page can end itself before the ad knows; a page can be
+/// loaded for an ad only offered; an ad can be reserved while its page is not shown yet. They move together at
+/// fixed points: the page's `ad.loaded` marks the ad loaded; the ad reaching the screen (`onScreen`) shows the
+/// page; a page that ends itself hands the ad its event and the ad ends; the ad's end or invalidation hides the
+/// page.
+///
 /// How: `VideoAd` holds one `AdState` and moves it only through `moveTo(_:)`, which asks
 /// `AdLifecycle.canMove(from:to:)` and says whether it moved; an illegal move (a late event, a second end)
 /// changes nothing, and the caller stops there. A milestone is set through its `mark` method (or, for

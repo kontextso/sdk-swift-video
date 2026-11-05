@@ -40,7 +40,7 @@ final class FrameBridge: NSObject {
     let webView: WKWebView
     /// The protocol's rules and state: what each message means, and whether it counts now.
     private(set) var frameProtocol: FrameProtocol
-    var state: FrameProtocol.State { frameProtocol.state }
+    var state: PageState { frameProtocol.state }
     /// Set as the bridge fails, before the `.error` event goes out.
     private(set) var failureCause: FailureCause?
     /// The system error behind a page that could not load, as a domain and a code.

@@ -62,9 +62,11 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   follows the content: `OverlayRule`, `PauseRule`, `NoContentRule`) and `Screen/AdScreen.swift` (where it is
   on screen: `InlineScreen` for overlay and pause, `LinearScreen` for linear). `VideoAd` keeps `show`'s checks,
   the public format guards and `end(_:)`; rules and screens end an ad only through `end(_:)`.
-- `Frame/`, the ad's web page and its messages: `FrameProtocol` (the Kontext Frame Protocol's rules as plain values:
-  the envelope, the sender, the state, the order of the video's events, the playhead's bounds, one URL per touch, the
-  navigation decision; `accept` returns a `Step`), `FrameBridge` (the WebView, its load and timeout, parking, the
+- `Frame/`, the ad's web page and its messages: `FrameMessage` (one page message read: the JSON, the envelope, the
+  1 MB limit, the fields, the playhead's bounds; `parse` gives `nil` for a broken envelope), `FrameProtocol` (the
+  Kontext Frame Protocol's rules as plain values: the sender, the page's state (`PageState`, not the ad's
+  `AdState`: the two move together at fixed points, see `FrameProtocol`), the order of the video's events, one URL
+  per touch, the navigation decision; `accept` returns a `Step`), `FrameBridge` (the WebView, its load and timeout, parking, the
   WebKit delegates; it carries out each `Step`), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
   message of its page), `VideoAd+Click`, `SKAdNetworkImpression`.
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearAdViewController`, `LinearPresentation` (its present and dismiss,

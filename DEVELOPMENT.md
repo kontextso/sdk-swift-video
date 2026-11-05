@@ -27,7 +27,7 @@ sdk-swift-video/
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
-│   ├── Frame/        the ad's web page and its messages: FrameProtocol (the protocol's rules: accept(message) → Step), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), VideoAd+Click, the SKAdNetwork impression
+│   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the page's state, PageState), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), VideoAd+Click, the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
@@ -113,8 +113,8 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
   goes into a rule or a screen, not into an `if format` in `VideoAd`.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
-  test: `State/SdkLifecycle` (which SDK phase may follow which), `State/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameProtocol`
-  (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
+  test: `State/SdkLifecycle` (which SDK phase may follow which), `State/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameMessage` (how a
+  page message is read), `Frame/FrameProtocol` (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
   (the beacon and end reason of a page's close), and the decision table in `Playback/ContentRule.swift`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
@@ -174,7 +174,7 @@ Tests/KontextVideoSDKTests/
 │                 CorpusTests runs the shared malformed-answer corpus
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
 │                 here; its README has the format and how to add a case
-├── Frame/        the protocol as tables (FrameProtocolTableTests, no WebView), every message in every bridge
+├── Frame/        a page message read (FrameMessageTests), the protocol as tables (FrameProtocolTableTests, no WebView), every message in every bridge
 │                 state (FrameMessageTableTests), the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, the meter, the active-time clock
