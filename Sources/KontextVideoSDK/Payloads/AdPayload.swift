@@ -363,7 +363,18 @@ struct AdPayload: Decodable, Sendable {
     }
 }
 
+/// Reading the answers' values: a format by its wire name, and numbers reported at their own field.
 extension KeyedDecodingContainer {
+    /// A format from its wire name, for an ad and for an entry of the answer. `AdFormat` is not `Decodable`: this
+    /// keeps the call sites' spelling, and an unknown name fails as the raw-value decoding did.
+    func decode(_ type: AdFormat.Type, forKey key: Key) throws -> AdFormat {
+        let name = try decode(String.self, forKey: key)
+        guard let format = AdFormat(rawValue: name) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "unknown format \(name)")
+        }
+        return format
+    }
+
     /// `decode(_:forKey:)` for a number, a number the type cannot hold (`1e400`, or `320.5` read as an `Int`)
     /// reported at `key`: the iOS decoder throws its own error for it, not a `DecodingError`, and it reaches the
     /// caller as corrupted data with no coding path, while the error report must name the field (`price.value`),

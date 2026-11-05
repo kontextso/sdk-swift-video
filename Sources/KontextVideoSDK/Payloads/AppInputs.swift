@@ -100,18 +100,6 @@ struct RegulatoryPayload: Encodable, Sendable {
     }
 }
 
-extension KeyedDecodingContainer {
-    /// A format from its wire name. `AdFormat` is not `Decodable`: this keeps the call sites' spelling, and
-    /// an unknown name fails as the raw-value decoding did.
-    func decode(_ type: AdFormat.Type, forKey key: Key) throws -> AdFormat {
-        let name = try decode(String.self, forKey: key)
-        guard let format = AdFormat(rawValue: name) else {
-            throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "unknown format \(name)")
-        }
-        return format
-    }
-}
-
 /// The request's rules for the app's content: what it sends, what the server would refuse.
 extension KontextVideo.Content {
     /// The duration as the request sends it: positive whole milliseconds, else nothing.
