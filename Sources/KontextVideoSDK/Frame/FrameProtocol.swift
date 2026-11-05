@@ -14,7 +14,7 @@ import Foundation
 /// (`accept(_:now:)`); the bridge carries out the `Step` it returns. For the SDK's own moments it asks `show()`,
 /// `end()`, `noteTouch(now:)`, `externalNavigation(to:now:)` and `navigationDecision(...)`.
 ///
-/// The page's state (`PageState`) is not the ad's (`AdState`), and both are needed: the page's rules are checked
+/// The frame's phase (`FramePhase`, where the ad's frame, its web page, is) is not the ad's state (`AdState`), and both are needed: the page's rules are checked
 /// before the ad hears a message at all; the page can end itself (close, skip, error) before the ad knows; a page
 /// can be loaded for an ad only offered, never shown; and an ad can be reserved (`show` accepted) while its page
 /// is not shown yet (a linear ad UIKit is still presenting). They move together at fixed points: the page's
@@ -88,7 +88,7 @@ struct FrameProtocol {
     let loadErrorCode: Int
     /// The highest playhead a page may report, in milliseconds: the video's duration and the grace, or a day.
     let playheadLimitMs: Int
-    private(set) var state: PageState = .loading
+    private(set) var state: FramePhase = .loading
     /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
     private var isVideoStarted = false
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.

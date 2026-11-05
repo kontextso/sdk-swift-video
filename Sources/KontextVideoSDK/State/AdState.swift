@@ -4,7 +4,7 @@
 /// flags, the screens, the content rules, the page's handlers) asks it. The rules it follows are
 /// `AdLifecycle`'s.
 ///
-/// The ad's state is not its page's (`PageState`, moved by `FrameProtocol`), and both are needed: the page's
+/// The ad's state is not its frame's phase (`FramePhase`, where the ad's web page is, moved by `FrameProtocol`), and both are needed: the page's
 /// rules are checked before the ad hears a message; the page can end itself before the ad knows; a page can be
 /// loaded for an ad only offered; an ad can be reserved while its page is not shown yet. They move together at
 /// fixed points: the page's `ad.loaded` marks the ad loaded; the ad reaching the screen (`onScreen`) shows the

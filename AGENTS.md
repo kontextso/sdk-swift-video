@@ -65,7 +65,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   the public format guards and `end(_:)`; rules and screens end an ad only through `end(_:)`.
 - `Frame/`, the ad's web page and its messages: `FrameMessage` (one page message read: the JSON, the envelope, the
   1 MB limit, the fields, the playhead's bounds; `parse` gives `nil` for a broken envelope), `FrameProtocol` (the
-  Kontext Frame Protocol's rules as plain values: the sender, the page's state (`PageState`, not the ad's
+  Kontext Frame Protocol's rules as plain values: the sender, the frame's phase (`FramePhase`, where the ad's frame, its web page, is; not the ad's
   `AdState`: the two move together at fixed points, see `FrameProtocol`), the order of the video's events, one URL
   per touch, the navigation decision; `accept` returns a `Step`), `FrameBridge` (the WebView, its load and timeout, parking, the
   WebKit delegates; it carries out each `Step`), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each

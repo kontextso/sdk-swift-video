@@ -12,7 +12,7 @@ import Foundation
 @MainActor
 final class FramePageDriver {
     private(set) var frameProtocol: FrameProtocol
-    var state: PageState { frameProtocol.state }
+    var state: FramePhase { frameProtocol.state }
     var onEvent: ((FrameEvent) -> Void)?
     /// The clock a touch is measured on, as `Environment.now` is the bridge's; a test moves it.
     var now: TimeInterval = 1000
@@ -57,7 +57,7 @@ final class FramePageDriver {
 /// The calls a page's messages go through, the bridge's and the driver's alike, so one test can run on either.
 @MainActor
 protocol FramePage: AnyObject {
-    var state: PageState { get }
+    var state: FramePhase { get }
     var onEvent: ((FrameEvent) -> Void)? { get set }
     func receive(_ rawBody: Any, from sender: FrameProtocol.Sender)
     func show(size: VideoAd.Size?)
