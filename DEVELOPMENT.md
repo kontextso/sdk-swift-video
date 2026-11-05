@@ -23,8 +23,8 @@ sdk-swift-video/
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat), the public types alone (their rules live in Payloads/AppInputs, the configuration check next to initialize) and the ad as the SDK keeps it (AdDescriptor)
-│   ├── State/        the state of the SDK and of each ad, and their legal moves: SdkLifecycle and AdLifecycle (the phases and the moves between them, stateless), SdkState (the SDK's phase, its configuration, what /config said of the reports) and AdState (every fact of an ad's life, its phase, its milestones and the flags they give)
-│   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
+│   ├── State/        the state of the SDK and of each ad, and their legal moves: SdkLifecycle and AdLifecycle (the phases and the moves between them, stateless), SdkState (the SDK's phase, its configuration, what /config said of the reports) and AdState (every fact of an ad's life, its phase, its milestones and the flags they give), AdStore (what one VideoAds holds, and the plan an answer makes of it)
+│   ├── Network/      HTTP: APIClient (our server, any route), AdsFetcher (one ads request at a time per VideoAds), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire, and the request's rules for them: what is left out, a COPPA user; the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the frame's phase, FramePhase: where the ad's frame, its web page, is), TouchGate (one tap, one URL), FrameNavigation (the page's navigations), FrameBridge (carries out each Step), FrameWebView (the WebView locked down for one ad) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
@@ -170,7 +170,7 @@ Tests/KontextVideoSDKTests/
 ├── Model/        encoding of what the app passes in
 ├── State/        the lifecycles' tables (SdkLifecycleTests, AdLifecycleTests), the SDK state's and the ad state's moves,
 │                 milestones and flags (SdkStateTests, AdStateTests), every SDK move and the reporters across them
-│                 end to end (SdkStatesTests)
+│                 end to end (SdkStatesTests), what an ads answer does to the held ads (AdStoreTests)
 ├── Network/      the client: transport, status codes, the error body
 ├── Device/       the user agent's fallback (UserAgentTests)
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);

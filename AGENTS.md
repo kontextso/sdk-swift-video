@@ -81,7 +81,11 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),
   `SdkState` the SDK's facts (its phase, the public `KontextVideo.State`; the configuration; what `/config` said of
   error and debug reports, which the reporters ask), `AdState` every fact of an ad's life: the phase and the milestones
-  (loaded, impression, completed, on screen, the failure); every public flag of `VideoAd` reads it. `Device/` what the SDK reads, `Platform/Environment.swift` the
+  (loaded, impression, completed, on screen, the failure, whether the video plays); every public flag of `VideoAd` reads it;
+  `AdStore` what one `VideoAds` holds (an ad per format, the spent ids, the ad on screen) and the plan an answer makes of
+  it (`plan(_:)`, steps over plain ids that `VideoAds` carries out). `Network/` talks to the server: `APIClient`,
+  `BeaconClient`, `AdsFetcher` (one ads request at a time per `VideoAds`: the waits, the body, the POST, the failure
+  and dropped-ad reports, the kill switch). `Device/` what the SDK reads, `Platform/Environment.swift` the
   seams the tests replace.
 
 ## Rules

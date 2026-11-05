@@ -1,4 +1,3 @@
-import AppTrackingTransparency
 import AVFoundation
 import Foundation
 import UIKit
@@ -26,10 +25,10 @@ public final class VideoAds {
     /// The id of the latest ads request this object sent, `nil` before the first. Quote it to Kontext when an
     /// ad or a no-fill looks wrong: the server finds the request by it.
     public private(set) var lastRequestID: String?
-    /// The unshown ads, the spent ids and the ad on screen; a reference so `deinit` can reach it.
-    private let state = State()
-    /// The request in flight: every `format(_:)` meanwhile waits for it instead of sending another.
-    private var request: Task<[AdFormat: VideoAdError.NoFillReason], Error>?
+    /// The unshown ads, the spent ids and the ad on screen.
+    private(set) var store = AdStore()
+    /// One ads request at a time, shared by every `format(_:)` meanwhile. Set once, at the end of `init`.
+    private var fetcher: AdsFetcher?
     /// The system's memory warning. `nonisolated(unsafe)` only so `deinit`, which is not on the main actor,
     /// may read it for the teardown.
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
@@ -67,17 +66,18 @@ public final class VideoAds {
         }
         // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds;
         // a pause ad ends when the content plays again.
-        playback.onChange = { [weak self] change in self?.state.showing?.contentRule.contentDidChange(change) }
+        playback.onChange = { [weak self] change in self?.store.showing?.contentRule.contentDidChange(change) }
         playback.isFollowerShown = { [weak self] in
-            guard let ad = self?.state.showing else { return false }
+            guard let ad = self?.store.showing else { return false }
             return ad.format != .linear && !ad.hasEnded
         }
+        fetcher = AdsFetcher(owner: self)
         Logger.debug("VideoAds created for video \(content.id)")
     }
 
     /// Expired ads leave silently, as before a request (see `VideoAd.invalidate`).
     private func dropExpiredAds() {
-        let expired = state.ads.values.filter { $0.descriptor.isExpired }
+        let expired = store.ads.values.filter { $0.descriptor.isExpired }
         guard !expired.isEmpty else { return }
         Logger.info("\(content.id): memory warning, \(expired.count) expired ad(s) released")
         for ad in expired { ad.invalidate(.expired) }
@@ -97,8 +97,8 @@ public final class VideoAds {
     public func format(_ format: AdFormat) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         guard KontextVideo.shared.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
-        let task = request ?? startRequest()
-        let noFill: [AdFormat: VideoAdError.NoFillReason]
+        guard let task = fetcher?.fetch() else { throw VideoAdError.destroyed }
+        let noFill: AdsFetcher.NoFills
         do {
             noFill = try await awaitShared(task)
         } catch VideoAdError.request(let failure) {
@@ -118,141 +118,32 @@ public final class VideoAds {
     /// The held ad of `format` while it is valid. One that expired since the answer (app code ran before
     /// this caller resumed) leaves silently, as before a request.
     private func validHeld(_ format: AdFormat) -> VideoAd? {
-        guard let held = state.ads[format] else { return nil }
+        guard let held = store.ads[format] else { return nil }
         guard held.descriptor.isExpired else { return held }
         held.invalidate(.expired)
         return nil
     }
 
-    /// The ids of the valid unshown ads, by format; expired ones leave silently first.
-    private func validHeldIds() -> [String] {
-        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
-        return AdFormat.allCases.compactMap { state.ads[$0]?.id }
+    /// The ids of the valid unshown ads, by format, for the request; expired ones leave silently first.
+    func validHeldIds() -> [String] {
+        for ad in Array(store.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
+        return AdFormat.allCases.compactMap { store.ads[$0]?.id }
     }
 
     /// Whether a valid unshown ad is held: what a failed request leaves the app with (an expired one is not).
-    private var holdsAds: Bool {
-        state.ads.values.contains { !$0.descriptor.isExpired }
+    var holdsAds: Bool {
+        store.ads.values.contains { !$0.descriptor.isExpired }
+    }
+
+    /// The request left with this id: the one `lastRequestID` names.
+    func requestWasSent(_ requestId: String) {
+        lastRequestID = requestId
     }
 
     /// `destroyed` after `destroy()`; `disabled` once any video's response switched the SDK off meanwhile.
-    private func checkStillUsable() throws {
+    func checkStillUsable() throws {
         guard !isDestroyed else { throw VideoAdError.destroyed }
         if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
-    }
-
-    /// The request belongs to the `VideoAds`, not to the caller: nobody cancels it but `destroy()` or the
-    /// `VideoAds`' release. It holds its owner weakly and only between its waits, so releasing the object
-    /// mid-request reaches `deinit`, which cancels it. `held` is read after the waits, just before the body is
-    /// built, with expired ads dropped silently, so it lists the valid ones of that moment.
-    private func startRequest() -> Task<[AdFormat: VideoAdError.NoFillReason], Error> {
-        let content = content
-        let labels = labels
-        let sessionId = sessionId
-        let task = Task { [weak self] () throws -> [AdFormat: VideoAdError.NoFillReason] in
-            defer { self?.request = nil }
-            /// The owner, for one synchronous step; `destroyed` once it was destroyed or released.
-            @MainActor func owner() throws -> VideoAds {
-                guard let self, !self.isDestroyed else { throw VideoAdError.destroyed }
-                return self
-            }
-            let isEnabled: Bool
-            do {
-                isEnabled = try await KontextVideo.shared.waitUntilEnabled()
-            } catch {
-                // Only `destroy()` or the release cancels the request: it stops waiting for `/config`, which goes on.
-                throw VideoAdError.destroyed
-            }
-            // Destroyed while waiting: `destroyed`, whatever `/config` said meanwhile.
-            _ = try owner()
-            guard isEnabled else {
-                Logger.warning("\(content.id): not requested, the SDK is \(KontextVideo.shared.state)")
-                if let reason = KontextVideo.shared.disabledReason { throw VideoAdError.disabled(reason: reason) }
-                throw VideoAdError.initializationFailed
-            }
-            guard let configuration = KontextVideo.shared.configuration else { throw VideoAdError.notInitialized }
-            // The ATT dialog, when the publisher left it to the SDK, comes before the first ads request. Its
-            // answer is read with the rest of the privacy fields, after the last wait.
-            let answered: ATTrackingManager.AuthorizationStatus?
-            do {
-                answered = try await TrackingInfo.authorizeIfNeeded(requestAuthorization: configuration.requestTrackingAuthorization)
-            } catch {
-                // Its callers stop waiting for the dialog, which goes on.
-                throw VideoAdError.destroyed
-            }
-            // What is held is read after the waits (`/config`, the ATT dialog): an ad shown, rejected or expired
-            // during them is not sent as held, or the server would re-serve it and the format answer no-fill.
-            let held = try owner().validHeldIds()
-            let playhead = try owner().playhead
-            let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered), content: content,
-                                             labels: labels, player: .make(playhead: playhead), sessionId: sessionId, held: held)
-            // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
-            try owner().checkStillUsable()
-            try owner().lastRequestID = body.requestId
-            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
-            DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
-
-            let response: AdsResponse
-            do {
-                response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
-                try owner().checkIdsAgainstHeld(response)
-            } catch {
-                try owner().checkStillUsable()
-                Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
-                // Once per request, here in the request every caller shares, not once per waiting caller.
-                let failure = ErrorReport.FailedRequest(error)
-                let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
-                let recovery: ErrorReport.Recovery = try owner().holdsAds ? .heldAdsKept : .noAd
-                ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
-                                            sessionId: sessionId, failure: failure, recovery: recovery)
-                throw VideoAdError.request(VideoAdError.RequestFailure(error))
-            }
-            return try owner().receive(response, requestId: body.requestId)
-        }
-        request = task
-        return task
-    }
-
-    /// The answer, for a `VideoAds` still in use. The kill switch in it switches the whole SDK off and
-    /// drops every ad, with no notices: the server knows. Switched off meanwhile by another video's
-    /// response: the answer is dropped, the ads it carries are never held.
-    private func receive(_ response: AdsResponse, requestId: String) throws -> [AdFormat: VideoAdError.NoFillReason] {
-        if case .disabled(let reason) = response {
-            KontextVideo.shared.disable(reason: reason)
-            // The reason is never seen: load() and show throw `.disabled` first.
-            for ad in Array(state.ads.values) { ad.invalidate(.destroyed) }
-            throw VideoAdError.disabled(reason: reason)
-        }
-        try checkStillUsable()
-        reportDroppedAds(response, requestId: requestId)
-        return apply(response)
-    }
-
-    /// One id is one bid, across answers as within one: an answer that brings, under one format, the id of
-    /// an ad held under another (whose format the answer may leave out, so it stays) is malformed as a whole,
-    /// before anything held or spent changes, as an id listed twice in one answer is. Otherwise rejecting one
-    /// copy would leave the other valid, to be shown after its `notUsed`.
-    private func checkIdsAgainstHeld(_ response: AdsResponse) throws {
-        guard case .formats(let results) = response else { return }
-        for result in results {
-            for payload in result.ads {
-                guard let other = state.ads.first(where: { $0.key != result.format && $0.value.id == payload.id }) else { continue }
-                throw APIError.decoding(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "ad \(payload.id) is \(result.format), and held as \(other.key)")))
-            }
-        }
-    }
-
-    /// An ad that did not decode was dropped from its format, the rest of the answer stands: each is
-    /// reported once here, in the request every caller shares, with its format and the field that failed.
-    private func reportDroppedAds(_ response: AdsResponse, requestId: String) {
-        guard case .formats(let results) = response else { return }
-        for result in results {
-            for path in result.dropped {
-                Logger.error("\(result.format) for \(content.id): an ad of request \(requestId) is malformed at \(path); dropped")
-                ErrorReporter.shared.report(.adsDecodeFailed, stage: .request, requestId: requestId, sessionId: sessionId,
-                                            detail: "\(result.format.rawValue):\(path)", recovery: result.ads.isEmpty ? .noAd : nil)
-            }
-        }
     }
 
     /// Follows the server for every format it answered, whatever the SDK's own clock says: the same id
@@ -261,35 +152,32 @@ public final class VideoAds {
     /// nothing: its held ad stays as it is, loaded or not, until its own expiry (no held ad: a no-fill,
     /// reason unknown). An id the SDK already spent (shown or rejected while the request ran) is ignored
     /// for its format. A held ad that expired while the request ran leaves first, silently, whether the
-    /// answer names its format or not. Returns the no-fill reasons by format.
-    private func apply(_ response: AdsResponse) -> [AdFormat: VideoAdError.NoFillReason] {
-        for ad in Array(state.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
-        var noFill: [AdFormat: VideoAdError.NoFillReason] = [:]
-        for format in AdFormat.allCases {
-            let current = state.ads[format]
-            guard let result = response.result(for: format) else {
-                if current == nil { noFill[format] = .unknown }
+    /// answer names its format or not. `AdStore.plan` decides each format; this carries the steps out.
+    /// Returns the no-fill reasons by format.
+    func follow(_ response: AdsResponse) -> AdsFetcher.NoFills {
+        for ad in Array(store.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
+        var noFill: AdsFetcher.NoFills = [:]
+        for step in store.plan(response) {
+            switch step {
+            case .keep:
                 continue
-            }
-            guard let ad = result.ads.first else {
-                current?.invalidate(.expired)
-                let reason = result.noFillReason ?? .unknown
+            case .drop(let format):
+                // Ending it takes it out of the store (`adDidLeave`).
+                let held = store.ads[format]
+                held?.invalidate(.expired)
+            case .noFill(let format, let reason):
                 noFill[format] = reason
                 logNoFill(format, reason: reason)
-                continue
-            }
-            // Re-served (and valid: the expired left above): kept unchanged, the payload is ignored.
-            if let current, current.id == ad.id { continue }
-            // Replaced, no longer served, or re-served after it expired: it never comes back.
-            current?.invalidate(.expired)
-            if state.spentIds.contains(ad.id) {
-                Logger.debug("\(format) for \(content.id): ad \(ad.id.prefix(8)) was already used, ignored")
+            case .leftOut(let format):
+                noFill[format] = .unknown
+            case .ignoreUsed(let format, let id):
+                Logger.debug("\(format) for \(content.id): ad \(id.prefix(8)) was already used, ignored")
                 noFill[format] = .alreadyUsed
-                continue
+            case .replace(let format, let ad):
+                Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
+                DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
+                store.ads[format] = VideoAd(descriptor: AdDescriptor(payload: ad, receivedAt: Environment.now()), owner: self)
             }
-            Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
-            DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
-            state.ads[format] = VideoAd(descriptor: AdDescriptor(payload: ad, receivedAt: Environment.now()), owner: self)
         }
         return noFill
     }
@@ -356,13 +244,13 @@ public final class VideoAds {
 
     /// An ad ended before `show`, or was shown: it leaves its format, and its id is never accepted again.
     func adDidLeave(_ ad: VideoAd) {
-        if state.ads[ad.format] === ad { state.ads[ad.format] = nil }
-        state.spentIds.insert(ad.id)
+        if store.ads[ad.format] === ad { store.ads[ad.format] = nil }
+        store.spentIds.insert(ad.id)
     }
 
     /// Shown: the ad leaves its format, so the next request does not list it.
     func adDidBeginShowing(_ ad: VideoAd) {
-        state.showing = ad
+        store.showing = ad
         // An overlay counts its seconds of video, and both it and a pause ad watch a player without a
         // publisher, on ticks. With no player tracked there is nothing to watch; a later `track` starts them.
         playback.isTicking = ad.format != .linear && playback.isTracking
@@ -370,8 +258,8 @@ public final class VideoAds {
     }
 
     func adDidEnd(_ ad: VideoAd) {
-        guard state.showing === ad else { return }
-        state.showing = nil
+        guard store.showing === ad else { return }
+        store.showing = nil
         playback.isTicking = false
     }
 
@@ -385,8 +273,10 @@ public final class VideoAds {
     public func destroy() {
         guard !isDestroyed else { return }
         isDestroyed = true
-        request?.cancel()
-        state.endAll()
+        fetcher?.cancel()
+        Self.endAll(Array(store.ads.values), showing: store.showing)
+        store.ads = [:]
+        store.showing = nil
         memoryWarningObserver.map(NotificationCenter.default.removeObserver)
         memoryWarningObserver = nil
         // After the last beacons read it: the player, its observers and the ticks go.
@@ -399,17 +289,17 @@ public final class VideoAds {
     /// Released while it still holds ads, it says so on the console: the usual cause is a `VideoAds` the app
     /// did not keep (a local variable, a SwiftUI view struct) while it kept the ads.
     deinit {
-        let request = self.request
-        let state = self.state
+        let fetcher = self.fetcher
+        let store = self.store
         let observer = memoryWarningObserver
         let playback = self.playback
         let contentId = content.id
         let teardown: @MainActor () -> Void = {
-            request?.cancel()
-            if !state.ads.isEmpty {
-                Logger.warning("VideoAds for video \(contentId) was released while holding \(state.ads.count) ad(s); they were ended as destroyed. Keep the VideoAds alive while you use its ads.")
+            fetcher?.cancel()
+            if !store.ads.isEmpty {
+                Logger.warning("VideoAds for video \(contentId) was released while holding \(store.ads.count) ad(s); they were ended as destroyed. Keep the VideoAds alive while you use its ads.")
             }
-            state.endAll()
+            VideoAds.endAll(Array(store.ads.values), showing: store.showing)
             observer.map(NotificationCenter.default.removeObserver)
             playback.stop()
         }
@@ -422,33 +312,20 @@ public final class VideoAds {
 }
 
 extension VideoAds {
-    /// What a `VideoAds` holds, in a class of its own so `deinit` can end it all.
-    @MainActor
-    final class State {
-        /// The unshown ad of each format, at most one.
-        var ads: [AdFormat: VideoAd] = [:]
-        /// Ids that left: shown, rejected, expired, failed, destroyed. A response that brings one back is
-        /// ignored for its format: the request listed the ad before the app used it.
-        var spentIds: Set<String> = []
-        /// The ad of this `VideoAds` on screen. `KontextVideo.adOnScreen` retains it too.
-        var showing: VideoAd?
-
-        /// `destroy()`: every valid held ad gets its `notUsed` beacon and ends; the ad on screen ends. A held ad
-        /// that expired meanwhile leaves silently, as everywhere else.
-        func endAll() {
-            for ad in Array(ads.values) {
-                if ad.descriptor.isExpired {
-                    ad.invalidate(.expired)
-                    continue
-                }
-                ad.tracker.withContentPlayhead {
-                    ad.invalidate(.destroyed)
-                    ad.tracker.fire("notUsed", notUsed: .destroyed)
-                }
+    /// `destroy()` and the release: every valid held ad gets its `notUsed` beacon and ends; the ad on screen ends.
+    /// A held ad that expired meanwhile leaves silently, as everywhere else. Static, over copies: ending an ad
+    /// calls back into its owner's store.
+    static func endAll(_ ads: [VideoAd], showing: VideoAd?) {
+        for ad in ads {
+            if ad.descriptor.isExpired {
+                ad.invalidate(.expired)
+                continue
             }
-            ads = [:]
-            showing?.end(.destroyed)
-            showing = nil
+            ad.tracker.withContentPlayhead {
+                ad.invalidate(.destroyed)
+                ad.tracker.fire("notUsed", notUsed: .destroyed)
+            }
         }
+        showing?.end(.destroyed)
     }
 }
