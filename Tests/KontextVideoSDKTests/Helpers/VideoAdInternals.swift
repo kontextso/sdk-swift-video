@@ -14,7 +14,7 @@ extension VideoAd {
     /// The tracked player changed or a tick came; the rule decides.
     func contentDidChange(_ change: ContentPlayback.Change) { contentRule.contentDidChange(change) }
 
-    var contentProgress: ContentProgress? { (contentRule as? OverlayRule)?.contentProgress }
+    var contentClock: ContentTimeClock? { (contentRule as? OverlayRule)?.contentClock }
     var wasContentPausedWhileInactive: Bool { (contentRule as? OverlayRule)?.wasContentPausedWhileInactive ?? false }
     var contentRecheck: Task<Void, Never>? { (contentRule as? OverlayRule)?.contentRecheck }
     static var contentResumeGrace: TimeInterval {

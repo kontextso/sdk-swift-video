@@ -18,7 +18,7 @@ import UIKit
 ///
 /// Used for: an overlay's duration (a timer waits out only the time still missing, then calls `onElapsed`
 /// once), and the active time `stop()` returns at the end, reported as `overlayViewDuration`. An overlay that
-/// follows a tracked player counts its duration in video time instead (`ContentProgress`): its clock gets no
+/// follows a tracked player counts its duration in video time instead (`ContentTimeClock`): its clock gets no
 /// duration.
 ///
 /// Not the 50 %-for-1-second viewability rule: that is `ViewabilityMeter`'s (at least half on screen, without

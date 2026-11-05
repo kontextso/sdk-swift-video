@@ -149,7 +149,7 @@ public final class VideoAd {
     /// video starts: a linear ad's meter waits for the presentation to finish.
     var isVideoPlaying = false
     var clock: ActiveTimeClock? { (shownAd?.screen as? InlineScreen)?.clock }
-    /// How the ad follows the tracked content player, by format (`Playback/ContentRule.swift`). Made on first
+    /// How the ad follows the tracked content player, by format (`Content/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
     private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.

@@ -58,7 +58,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 - `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
   renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show()` for
   linear; `dismiss()`; the page's events mapped to beacons and the delegate; `end(_:)` is the only terminal path.
-- Format differences live in two places, not in `if format` branches: `Playback/ContentRule.swift` (how an ad
+- Format differences live in two places, not in `if format` branches: `Content/ContentRule.swift` (how an ad
   follows the content: `OverlayRule`, `PauseRule`, `NoContentRule`) and `Screen/AdScreen.swift` (where it is
   on screen: `InlineScreen` for overlay and pause, `LinearScreen` for linear). `VideoAd` keeps `show`'s checks,
   the public format guards and `end(_:)`; rules and screens end an ad only through `end(_:)`.
@@ -73,7 +73,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   each with a watchdog), `ShownAd` (the ad on screen: the slot, the screen, the meter; `begin` takes the slot, the
   creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `VideoAd+Placement` (where an inline ad goes, from `InlineScreen`'s
   insets and chosen size; the page gets the size at `FrameBridge.show(size:)`).
-- `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Playback/`: `ContentPlayback` and
+- `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
   `ContentRule`. `Payloads/` is the
   wire, `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),

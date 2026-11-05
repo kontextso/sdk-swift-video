@@ -30,7 +30,7 @@ sdk-swift-video/
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the page's state, PageState), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
-│   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
+│   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of ActiveTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Diagnostics/  what the SDK tells: Logger (the console); ErrorReporter (faults to /v2/error: the mode, scheduling, retries, the server's answers), ErrorReport (one report: its vocabulary and fields), ReportQueue (the waiting reports and their batches, pure); DebugReporter (debug events to /v2/debug), EventHistory (the last events, an error report's history); ReportFormat (capping, the timestamp, a state value), shared so neither reporter reaches into the other
 │   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
@@ -108,7 +108,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
   through `moveTo(_:)`, under the stateless rules of `State/AdLifecycle`. The SDK's own facts (its phase, the
   public `KontextVideo.State`; the configuration; what `/config` said of error and debug reports) are in
   `State/SdkState` the same way, moved by `KontextVideo` under `State/SdkLifecycle`; the reporters ask it.
-- What differs by format lives in two places: `Playback/ContentRule.swift` (how the ad follows the content) and
+- What differs by format lives in two places: `Content/ContentRule.swift` (how the ad follows the content) and
   `Screen/AdScreen.swift` (where it is on screen and how it leaves). `VideoAd` keeps the rest: `show`'s
   checks, the public format guards (`wrongShowMethod`, `dismiss()` on a linear ad) and the facts of the linear
   format (its video's duration for the page, a close before `complete` is a skip). A new format difference
@@ -116,7 +116,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
   test: `State/SdkLifecycle` (which SDK phase may follow which), `State/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameMessage` (how a
   page message is read), `Frame/FrameProtocol` (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
-  (the beacon and end reason of a page's close), and the decision table in `Playback/ContentRule.swift`.
+  (the beacon and end reason of a page's close), and the decision table in `Content/ContentRule.swift`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView

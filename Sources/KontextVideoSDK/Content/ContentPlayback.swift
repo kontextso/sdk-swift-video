@@ -1,91 +1,6 @@
 import AVFoundation
 import Combine
 
-/// Your player, as the SDK reads it: where the content is, and whether it plays. Pass it to
-/// `VideoAds.track(_:)`; an `AVPlayer` needs no conformance, `track` takes it directly. The SDK holds it
-/// strongly until `destroy()` or the next `track`, so a small wrapper around your player needs no other
-/// reference; it reads it on the main actor. A conforming type that references the `VideoAds`, or the object
-/// owning it, keeps both alive until `destroy()`: call `destroy()` then, or do not reference the ads from it.
-@MainActor
-public protocol ContentPlayer: AnyObject {
-    /// Where the content is, in seconds of the episode.
-    var currentTime: TimeInterval { get }
-    /// `false` when the viewer or your app paused the content, or it ended. Buffering and seeking count as
-    /// playing: the content is about to move on.
-    var isPlaying: Bool { get }
-    /// Optional: emits whenever `isPlaying` changes, for an immediate reaction. Without it the SDK reads
-    /// `isPlaying` four times a second while an overlay or pause ad is on screen, and at every `show`.
-    /// Declare it with exactly this type, `AnyPublisher<Bool, Never>?`: a property of another type (not
-    /// optional, an `@Published` projection) is not this requirement, and the SDK falls back to reading
-    /// `isPlaying`, saying so once on the console.
-    var isPlayingPublisher: AnyPublisher<Bool, Never>? { get }
-    /// Optional: the playback speed (1 is normal), when the player knows it. An overlay's `duration` counts
-    /// seconds of video, and the speed tells fast playback from a seek. `nil` (the default) allows up to
-    /// about 4×.
-    var playbackSpeed: Double? { get }
-    /// Optional: emits at each seek (the position jumped): an overlay's count of seconds of video goes on
-    /// from the new position. Without it a seek is told from the position alone, so a small one can count.
-    var seekPublisher: AnyPublisher<Void, Never>? { get }
-    /// Optional: emits when the player moves to another item, or plays this one to its end: an overlay over
-    /// it ends as `.interrupted`. Without it the SDK learns only from `isPlaying`.
-    var contentChangedPublisher: AnyPublisher<Void, Never>? { get }
-    /// Optional: a value that stands for the episode playing (an id, a URL), compared with `==`; give a new one
-    /// for each loop of a looped episode. An overlay or pause ad of a `VideoAds` throws
-    /// `invalidated(.contentChanged)` at `show` once it differs from the item at `track`. Without it only the
-    /// player moving to another `VideoAds` is seen.
-    var currentItem: AnyHashable? { get }
-}
-
-/// The defaults of the optional members: the SDK does without, and says so once on the console, so a member
-/// declared with another type, which the compiler takes for a different property, does not go unnoticed.
-extension ContentPlayer {
-    /// No publisher: the SDK reads `isPlaying` when it needs it.
-    public var isPlayingPublisher: AnyPublisher<Bool, Never>? {
-        PlayerFallback.note("isPlayingPublisher", of: Self.self, level: .warning,
-                            "the SDK reads isPlaying four times a second while an ad is on screen; declare it as AnyPublisher<Bool, Never>? to be heard at once")
-        return nil
-    }
-
-    /// No speed: up to about 4× counts as playback.
-    public var playbackSpeed: Double? {
-        PlayerFallback.note("playbackSpeed", of: Self.self, level: .info, "a step up to about 4× counts as playback; declare it as Double? to give the speed")
-        return nil
-    }
-
-    /// No seeks reported: they are told from the position.
-    public var seekPublisher: AnyPublisher<Void, Never>? {
-        PlayerFallback.note("seekPublisher", of: Self.self, level: .info, "seeks are told from the position; declare it as AnyPublisher<Void, Never>? to report them")
-        return nil
-    }
-
-    /// No item reported: only the player moving to another `VideoAds` tells another episode.
-    public var currentItem: AnyHashable? {
-        PlayerFallback.note("currentItem", of: Self.self, level: .info,
-                            "another episode is told only by the player moving to another VideoAds; declare it as AnyHashable? to report it")
-        return nil
-    }
-
-    /// No item changes reported: `isPlaying` tells the end.
-    public var contentChangedPublisher: AnyPublisher<Void, Never>? {
-        PlayerFallback.note("contentChangedPublisher", of: Self.self, level: .info,
-                            "another item or the end is told from isPlaying only; declare it as AnyPublisher<Void, Never>? to report them")
-        return nil
-    }
-}
-
-/// Says once per process, per member, that a `ContentPlayer` left an optional member to its default.
-@MainActor
-enum PlayerFallback {
-    /// The members already said. Tests empty it.
-    static var noted: Set<String> = []
-
-    static func note(_ member: String, of type: Any.Type, level: KontextVideo.Configuration.LogLevel, _ consequence: String) {
-        guard noted.insert(member).inserted else { return }
-        let message = "\(type) has no \(member) of the protocol's type, so the default is used: \(consequence)"
-        if level == .warning { Logger.warning(message) } else { Logger.info(message) }
-    }
-}
-
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
 /// an overlay, which lives only while the content plays, and a pause ad, which lives only while it is paused. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
@@ -98,14 +13,14 @@ final class ContentPlayback {
     enum Change: Equatable {
         /// The playing state changed: the value the player gave with the change, when it gave one. A pause
         /// stays a pause even if the player plays again before the change is delivered.
-        case playback(isPlaying: Bool?)
+        case playingChanged(isPlaying: Bool?)
         /// The player moved to another item (another episode, the next loop of a looper), or `track` was
         /// called again while an overlay was on screen.
         case contentChanged
         /// The item played to its end, whatever the player does next.
         case contentEnded
         /// The time jumped (a seek): an overlay's count of seconds of video starts again from here.
-        case jumped
+        case seeked
         /// `tickInterval` passed while ticking: an overlay counts its seconds of video.
         case tick
     }
@@ -249,7 +164,7 @@ final class ContentPlayback {
                 let playback = self
                 let isPlaying = change.newValue.map { $0 != 0 }
                 // A rate alone never restarts an ended item: play() after the end plays nothing. A seek does (`jumped`).
-                Self.onMain { playback?.deliver(.playback(isPlaying: isPlaying), from: generation) }
+                Self.onMain { playback?.deliver(.playingChanged(isPlaying: isPlaying), from: generation) }
             },
             player.observe(\.currentItem) { [weak self] _, _ in
                 let playback = self
@@ -265,7 +180,7 @@ final class ContentPlayback {
         finishBinding(wasOverlayShown: wasOverlayShown)
         // The overlay's `didEnd` there is app code: a `track` or `destroy()` in it won.
         guard generation == self.generation else { return }
-        claim(player)
+        PlayerOwnership.claim(self, player: player)
     }
 
     func track(_ player: some ContentPlayer) {
@@ -281,11 +196,11 @@ final class ContentPlayback {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isPlaying in
-                MainActor.assumeIsolated { self?.deliver(.playback(isPlaying: isPlaying), from: generation) }
+                MainActor.assumeIsolated { self?.deliver(.playingChanged(isPlaying: isPlaying), from: generation) }
             }
         let seeks = player.seekPublisher?
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in MainActor.assumeIsolated { self?.deliver(.jumped, from: generation) } }
+            .sink { [weak self] in MainActor.assumeIsolated { self?.deliver(.seeked, from: generation) } }
         let changes = player.contentChangedPublisher?
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in MainActor.assumeIsolated { self?.deliver(.contentChanged, from: generation) } }
@@ -297,7 +212,7 @@ final class ContentPlayback {
         self.subscriptions = subscriptions
         finishBinding(wasOverlayShown: wasOverlayShown)
         guard generation == self.generation else { return }
-        claim(player)
+        PlayerOwnership.claim(self, player: player)
     }
 
     /// A playhead and no playing state: an overlay runs on its own time. For the tests, which read the
@@ -328,7 +243,7 @@ final class ContentPlayback {
         hasEpisodeItem = false
         customEpisodeItem = nil
         hasLostPlayer = false
-        Self.owners.removeAll { $0.playback === self || $0.playback == nil }
+        PlayerOwnership.release(self)
         hasItemEnded = false
         isTracking = false
         isTicking = false
@@ -336,27 +251,9 @@ final class ContentPlayback {
         withExtendedLifetime(customPlayer) { subscriptions.forEach { $0.cancel() } }
     }
 
-    /// Which playback tracks which player: a player belongs to one `VideoAds` at a time.
-    private struct Owner {
-        weak var playback: ContentPlayback?
-        weak var player: AnyObject?
-    }
-
-    private static var owners: [Owner] = []
-
-    /// The player is this playback's now: another one that tracks it lets go, as if it had never tracked one,
-    /// except that its overlay and pause ads can no longer be shown (`playsAnotherEpisode`).
-    private func claim(_ player: AnyObject) {
-        Self.owners.removeAll { $0.playback == nil || $0.player == nil || $0.playback === self }
-        let others = Self.owners.filter { $0.player === player }.compactMap(\.playback)
-        Self.owners.removeAll { $0.player === player }
-        Self.owners.append(Owner(playback: self, player: player))
-        for other in others { other.losePlayer() }
-    }
-
     /// Another `VideoAds` took the player. An overlay or pause ad on screen hears `contentChanged` first, as
     /// for another item: an overlay ends. Its `didEnd` is app code: a `track` there wins.
-    private func losePlayer() {
+    func losePlayer() {
         let generation = self.generation
         if isFollowerShown() { deliver(.contentChanged, from: generation) }
         guard generation == self.generation else { return }
@@ -390,7 +287,7 @@ final class ContentPlayback {
             },
             center.addObserver(forName: AVPlayerItem.timeJumpedNotification, object: item, queue: nil) { [weak self] _ in
                 let playback = self
-                Self.onMain { playback?.deliverItem(.jumped, from: generation, item: itemGeneration) }
+                Self.onMain { playback?.deliverItem(.seeked, from: generation, item: itemGeneration) }
             },
         ]
     }
@@ -405,7 +302,7 @@ final class ContentPlayback {
     private func deliverItem(_ change: Change, from generation: Int, item: Int) {
         guard generation == self.generation, item == itemGeneration else { return }
         if change == .contentEnded { hasItemEnded = true }
-        if change == .jumped { hasItemEnded = false }
+        if change == .seeked { hasItemEnded = false }
         onChange?(change)
     }
 
@@ -416,52 +313,5 @@ final class ContentPlayback {
         } else {
             Task { @MainActor in work() }
         }
-    }
-}
-
-/// An overlay's `duration` in seconds of video: the playhead's progress while the overlay is on screen and
-/// its scene active (`resync` when the scene comes back, so time hidden counts nothing). A step backwards,
-/// or one faster than the playback speed allows for the real time since the playhead last moved, is a seek
-/// or a loop: it counts nothing, and counting goes on from the new position. An `AVPlayer` gives its speed,
-/// and its time jumps start the count again; for a custom player the limit is `maxRate`, so a seek that
-/// looks like playback (small, or after a long stall) can count.
-@MainActor
-final class ContentProgress {
-    /// The speed allowed when the player does not tell its own: 4× playback and a late sample still count.
-    static let maxRate: Double = 4.25
-    /// Room above a known speed for a late sample.
-    static let rateMargin: Double = 1.25
-    /// What a step may exceed `maxRate` by: the sampling's own jitter.
-    static let slack: TimeInterval = 0.25
-    let duration: TimeInterval
-    private(set) var elapsed: TimeInterval = 0
-    private var last: TimeInterval
-    private var lastMovedAt: TimeInterval
-
-    init(duration: TimeInterval, at playhead: TimeInterval) {
-        self.duration = duration
-        last = playhead
-        lastMovedAt = Environment.now()
-    }
-
-    /// The count goes on from `playhead`, nothing counted for the way there.
-    func resync(to playhead: TimeInterval) {
-        last = playhead
-        lastMovedAt = Environment.now()
-    }
-
-    /// Takes the playhead now; counts the step when `isCounting` and it looks like playback at `rate` (the
-    /// player's speed, `nil` when unknown). `true` once the duration is reached.
-    func advance(to playhead: TimeInterval, isCounting: Bool, rate: Double? = nil) -> Bool {
-        let step = playhead - last
-        if step != 0 {
-            let now = Environment.now()
-            let real = now - lastMovedAt
-            last = playhead
-            lastMovedAt = now
-            let speed = rate.map { max(abs($0) * Self.rateMargin, 1) } ?? Self.maxRate
-            if isCounting, step > 0, step <= real * speed + Self.slack { elapsed += step }
-        }
-        return elapsed >= duration
     }
 }
