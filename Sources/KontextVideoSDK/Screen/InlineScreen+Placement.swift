@@ -1,13 +1,13 @@
 import UIKit
 
-/// Where an overlay or pause ad goes in the player's view. Two layers: this file decides, `AdGeometry`
-/// calculates.
+/// Where an overlay or pause ad goes in the player's view: `InlineScreen`'s placement. Two layers: this file
+/// decides, `AdGeometry` calculates.
 ///
 /// ```
 /// VideoAd.show(in: view, insets:)   ─┐
 /// InlineAdView.layoutSubviews (each)  ─┤
 ///                                    ▼
-/// ┌─ VideoAd+Placement (InlineScreen) ─────────────────────────────┐
+/// ┌─ InlineScreen+Placement ───────────────────────────────────────┐
 /// │  frame(in:safeArea:)   which variant, and where   (at show)    │
 /// │  refit(in:safeArea:)   where it goes now          (each pass)  │
 /// │  tooSmall              the containerTooSmall error             │

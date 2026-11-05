@@ -55,7 +55,6 @@ public final class VideoAd {
     // The rest of VideoAd lives in:
     //
     //   Frame/VideoAd+FrameEvents.swift    handle, handleNow: what the ad does with each message of its page
-    //   Screen/VideoAd+Placement.swift     InlineScreen's frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
     //   VideoAd+Types.swift                its value types: Price, RejectReason, InvalidationReason, Size, Position
     //   VideoAd+Errors.swift               the errors show and load throw, and the creative's error report
     //   State/AdState.swift                every fact of its life: its phase, milestones and flags
