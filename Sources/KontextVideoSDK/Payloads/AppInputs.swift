@@ -139,6 +139,24 @@ extension KontextVideo.Content {
     }
 }
 
+// COPPA: a child's request carries no identifier for advertising: no advertising id, no IDFV (Apple's Kids rules
+// name device identifiers), no user id or email. The install id stays: the server needs it. The rule is here, in
+// one place; the request sends what these return.
+extension Optional where Wrapped == KontextVideo.Regulatory {
+    /// Whether the request is for a child: the publisher said COPPA applies (`coppa`).
+    var isChild: Bool { self?.coppa == true }
+
+    /// The user the request sends: for a child only what does not identify them (`withoutIdentity`).
+    func userToSend(_ user: KontextVideo.User?) -> KontextVideo.User? {
+        isChild ? user?.withoutIdentity : user
+    }
+
+    /// A device identifier the request sends (the advertising id, the IDFV): none for a child.
+    func deviceIdentifierToSend<Identifier>(_ identifier: Identifier?) -> Identifier? {
+        isChild ? nil : identifier
+    }
+}
+
 /// The request's rules for the app's user: a COPPA request's user, the fields left out.
 extension KontextVideo.User {
     /// The user without what identifies the viewer (id, email, email hash), for a COPPA request; `nil`

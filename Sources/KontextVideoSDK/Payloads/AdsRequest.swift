@@ -42,18 +42,15 @@ struct AdsRequest: Encodable, Sendable {
         let tracking = tracking()
         // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
         let regulatory = ConsentStorage.read(merging: sdk.regulatory)
-        // A child's request carries no identifier for advertising: no advertising id, no IDFV (Apple's Kids rules name
-        // device identifiers), no user id or email. The install id stays: the server needs it.
-        let isChild = regulatory?.coppa == true
         return AdsRequest(
             adServerURL: configuration.adServerURL,
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
-            user: (isChild ? sdk.user?.withoutIdentity : sdk.user).map(UserPayload.init),
+            user: regulatory.userToSend(sdk.user).map(UserPayload.init),
             variantId: sdk.variantID,
-            ifa: isChild ? nil : tracking.ifa,
-            idfv: isChild ? nil : UIDevice.current.identifierForVendor?.uuidString,
+            ifa: regulatory.deviceIdentifierToSend(tracking.ifa),
+            idfv: regulatory.deviceIdentifierToSend(UIDevice.current.identifierForVendor?.uuidString),
             attStatus: tracking.attStatus,
             regulatory: regulatory.map(RegulatoryPayload.init),
             sdk: SDKInfo(),
