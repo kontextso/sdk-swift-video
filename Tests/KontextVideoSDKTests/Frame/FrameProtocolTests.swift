@@ -446,12 +446,12 @@ struct FrameProtocolTests {
         shown(page)
         let before = recorder.events.count
         page.noteTouch()
-        page.now += FrameProtocol.touchWindow + 0.5
+        page.now += TouchGate.window + 0.5
         page.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
         page.externalNavigation(to: URL(string: "https://brand.test")!)
         #expect(recorder.events.count == before, "an expired touch opens nothing")
         page.noteTouch()
-        page.now += FrameProtocol.touchWindow - 0.1
+        page.now += TouchGate.window - 0.1
         page.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
         #expect(recorder.events.count == before + 1, "a touch within the window still does")
     }

@@ -218,7 +218,7 @@ struct FrameProtocolTableTests {
         let holds19 = kind(core.accept(click, from: main, now: 100)) == "drop"
         #expect(holds19, "no touch")
         core.noteTouch(now: 100)
-        let holds20 = kind(core.accept(click, from: main, now: 100 + FrameProtocol.touchWindow)) == "deliver"
+        let holds20 = kind(core.accept(click, from: main, now: 100 + TouchGate.window)) == "deliver"
         #expect(holds20, "at the window's edge")
         let holds21 = kind(core.accept(click, from: main, now: 101)) == "drop"
         #expect(holds21, "the touch was spent")

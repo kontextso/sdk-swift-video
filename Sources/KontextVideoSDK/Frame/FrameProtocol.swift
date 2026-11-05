@@ -70,8 +70,6 @@ struct FrameProtocol {
         case allow, cancel, external
     }
 
-    /// A URL is opened only if the viewer touched the WebView this recently.
-    static let touchWindow: TimeInterval = 1
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
 
@@ -87,7 +85,8 @@ struct FrameProtocol {
     private var isVideoStarted = false
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
     private var hasReportedViolation = false
-    private var lastTouchAt: TimeInterval = -.infinity
+    /// One tap opens one URL: clicks, opens and navigations out share it.
+    private var touch = TouchGate()
 
     /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
     /// capped at a day.
@@ -155,7 +154,7 @@ struct FrameProtocol {
         guard let target = Self.target(url, fallback: given == nil ? nil : fallback) else {
             return .drop(log: "\(type) to \(url.absoluteString) dropped, scheme refused", warning: true)
         }
-        guard consumeTouch(now: now) else {
+        guard touch.consume(now: now) else {
             return .drop(log: "\(type) to \(url.absoluteString) dropped, no touch before it", warning: true)
         }
         if type == "ad.click" {
@@ -227,23 +226,15 @@ struct FrameProtocol {
 
     // MARK: Touches and URLs
 
-    /// The viewer touched the WebView; a URL may be opened for `touchWindow` seconds.
+    /// The viewer touched the WebView; a URL may be opened for `TouchGate.window` seconds.
     mutating func noteTouch(now: TimeInterval) {
-        lastTouchAt = now
-    }
-
-    /// One tap opens one URL: the touch is spent by the first click, open or navigation it authorized, so a
-    /// page that reports a tap and also navigates on it does not open twice.
-    private mutating func consumeTouch(now: TimeInterval) -> Bool {
-        guard now - lastTouchAt <= Self.touchWindow else { return false }
-        lastTouchAt = -.infinity
-        return true
+        touch.note(now: now)
     }
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
     /// without one it is a forced redirect and goes nowhere (`nil`).
     mutating func externalNavigation(to target: URL, now: TimeInterval) -> FrameEvent? {
-        guard state == .shown, LinkOpener.isAllowed(target), consumeTouch(now: now) else { return nil }
+        guard state == .shown, LinkOpener.isAllowed(target), touch.consume(now: now) else { return nil }
         return .click(url: target, fallbackUrl: nil, area: .creative)
     }
 

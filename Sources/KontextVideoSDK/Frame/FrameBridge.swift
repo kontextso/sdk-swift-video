@@ -238,7 +238,7 @@ final class FrameBridge: NSObject {
         }
     }
 
-    /// The viewer touched the WebView; a URL may be opened for `FrameProtocol.touchWindow` seconds.
+    /// The viewer touched the WebView; a URL may be opened for `TouchGate.window` seconds.
     func noteTouch() {
         frameProtocol.noteTouch(now: Environment.now())
     }
