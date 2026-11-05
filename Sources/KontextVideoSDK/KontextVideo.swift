@@ -219,7 +219,7 @@ public final class KontextVideo {
                 // The browser user agent every ads request carries, evaluated in a WebView once per process.
                 // Started now, so the first request rarely waits for it; not at `initialize`, so an app whose
                 // SDK the server switches off never makes that WebView.
-                NetworkInfo.startLookup()
+                UserAgent.startLookup()
             case .disabled(let reason):
                 sdkState.moveTo(.disabled(reason: reason))
                 recordErrorReporting(false)

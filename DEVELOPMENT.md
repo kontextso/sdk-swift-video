@@ -26,7 +26,7 @@ sdk-swift-video/
 │   ├── State/        the state of the SDK and of each ad, and their legal moves: SdkLifecycle and AdLifecycle (the phases and the moves between them, stateless), SdkState (the SDK's phase, its configuration, what /config said of the reports) and AdState (every fact of an ad's life, its phase, its milestones and the flags they give)
 │   ├── Network/      HTTP: APIClient (our server, any route), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire, and the request's rules for them: what is left out, a COPPA user; the public types are not Codable), ErrorResponse, SDKInfo
-│   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
+│   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the page's state, PageState), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
@@ -170,6 +170,7 @@ Tests/KontextVideoSDKTests/
 │                 milestones and flags (SdkStateTests, AdStateTests), every SDK move and the reporters across them
 │                 end to end (SdkStatesTests)
 ├── Network/      the client: transport, status codes, the error body
+├── Device/       the user agent's fallback (UserAgentTests)
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);
 │                 CorpusTests runs the shared malformed-answer corpus
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it

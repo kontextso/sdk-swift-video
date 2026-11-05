@@ -135,7 +135,7 @@ struct VideoAdsTests {
         // The user agent lookup, one of the request's waits, held until the test lets it go.
         var asked = false
         var released = false
-        NetworkInfo.lookup = nil
+        UserAgent.lookup = nil
         Environment.userAgent = {
             asked = true
             while !released { await sleepMs(5) }
@@ -165,7 +165,7 @@ struct VideoAdsTests {
 
     @Test func aSlowUserAgentLookupSendsTheRequestWithTheFallbackAndTheNextOneWithTheRealOne() async throws {
         // A cold device: the WebView's user agent takes far longer than the request may wait.
-        NetworkInfo.userAgentWait = 0.05
+        UserAgent.userAgentWait = 0.05
         var lookups = 0
         var release: CheckedContinuation<Void, Never>?
         Environment.userAgent = {
@@ -180,10 +180,10 @@ struct VideoAdsTests {
         harness.serve(Fixtures.ad(id: "img-ua-1"))
         _ = try await ads.format(.pause)
         #expect(release != nil, "the lookup is still out")
-        #expect(userAgent(0) == NetworkInfo.fallbackUserAgent, "sent without waiting for it: \(userAgent(0) ?? "nil")")
+        #expect(userAgent(0) == UserAgent.fallbackUserAgent, "sent without waiting for it: \(userAgent(0) ?? "nil")")
         #expect(userAgent(0)?.hasPrefix("Mozilla/5.0 (") == true && userAgent(0)?.contains(UIDevice.current.systemVersion.replacingOccurrences(of: ".", with: "_")) == true)
         // The lookup goes on; the next request carries its answer (waiting as long as it takes, here).
-        NetworkInfo.userAgentWait = 60
+        UserAgent.userAgentWait = 60
         harness.serve(Fixtures.ad(id: "img-ua-2"))
         let second = Task { try await ads.format(.pause) }
         release?.resume()

@@ -93,8 +93,7 @@ enum Environment {
         advertisingIdentifier = { ASIdentifierManager.shared().advertisingIdentifier }
         requestTrackingAuthorization = { await ATTrackingManager.requestTrackingAuthorization() }
         userAgent = { await NetworkInfoProvider.collect().userAgent }
-        NetworkInfo.lookup = nil
-        NetworkInfo.userAgentWait = NetworkInfo.defaultUserAgentWait
+        UserAgent.resetForTesting()
         TrackingInfo.hasWarnedAboutUnaskedTracking = false
         Logger.sink = nil
         skAdNetwork = KontextKitSKAdNetwork()
