@@ -92,15 +92,6 @@ final class OnScreenTimeClock {
         setSceneActive(window.map(Environment.isWindowActive) ?? Environment.isApplicationActive())
     }
 
-    private func setSceneActive(_ isActive: Bool) {
-        isSceneActive = isActive
-        update()
-    }
-
-    private func update() {
-        if isSceneActive, isSeen { resume() } else { pause() }
-    }
-
     /// The ad ended: the clock freezes for good and returns the active time it counted.
     @discardableResult
     func stop() -> TimeInterval {
@@ -111,6 +102,17 @@ final class OnScreenTimeClock {
             observers = []
         }
         return accumulated
+    }
+
+    // MARK: Private
+
+    private func setSceneActive(_ isActive: Bool) {
+        isSceneActive = isActive
+        update()
+    }
+
+    private func update() {
+        if isSceneActive, isSeen { resume() } else { pause() }
     }
 
     private func pause() {
