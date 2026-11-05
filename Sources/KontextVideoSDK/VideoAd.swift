@@ -428,19 +428,39 @@ public final class VideoAd {
         end(.dismissed)
     }
 
+    /// The show checks (`ShowCheck`, in their order), after the app code a show runs first; a refusal ends the ad
+    /// where the check says so, then throws.
     private func checkShowable() throws {
         let contentPaused = runAppCodeBeforeShow()
-        if wasShown { throw VideoAdError.alreadyShown }
-        try checkUsable()
-        // An episode's ads only in that episode: one requested for it is counted for it.
-        if contentRule.checksEpisode, owner?.playback.playsAnotherEpisode == true {
+        let facts = ShowCheck.Facts(
+            wasShown: wasShown,
+            isOwnerGone: owner.map { $0.isDestroyed } ?? true,
+            disabledReason: KontextVideo.shared.disabledReason,
+            invalidationReason: invalidationReason,
+            isExpired: descriptor.isExpired,
+            // An episode's ads only in that episode: one requested for it is counted for it.
+            playsAnotherEpisode: { [contentRule, owner] in contentRule.checksEpisode && owner?.playback.playsAnotherEpisode == true },
+            isSlotTaken: KontextVideo.shared.adOnScreen != nil,
+            isLoaded: isLoaded,
+            isContentPaused: contentPaused
+        )
+        guard let refusal = ShowCheck.refusal(facts) else { return }
+        switch refusal {
+        case .alreadyShown: throw VideoAdError.alreadyShown
+        case .destroyed: throw VideoAdError.destroyed
+        case .disabled(let reason): throw VideoAdError.disabled(reason: reason)
+        case .invalidated(let reason): throw Self.error(for: reason)
+        case .expired:
+            invalidate(.expired)
+            throw VideoAdError.invalidated(.expired)
+        case .contentChanged:
             Logger.warning("ad \(id.prefix(8)): cannot show, its episode no longer plays in the tracked player; ended as contentChanged")
             invalidate(.contentChanged)
             throw VideoAdError.invalidated(.contentChanged)
+        case .anotherAdShowing: throw VideoAdError.anotherAdShowing
+        case .notLoaded: throw VideoAdError.notLoaded
+        case .contentPaused: throw VideoAdError.contentPaused
         }
-        if KontextVideo.shared.adOnScreen != nil { throw VideoAdError.anotherAdShowing }
-        guard isLoaded else { throw VideoAdError.notLoaded }
-        if contentPaused { throw VideoAdError.contentPaused }
     }
 
     /// `show` committed: the ad takes the app's one slot, the SDK retains it, it leaves its `VideoAds`'s
