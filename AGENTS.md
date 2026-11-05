@@ -61,13 +61,17 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   follows the content: `OverlayRule`, `PauseRule`, `NoContentRule`) and `Screen/AdScreen.swift` (where it is
   on screen: `InlineScreen` for overlay and pause, `LinearScreen` for linear). `VideoAd` keeps `show`'s checks,
   the public format guards and `end(_:)`; rules and screens end an ad only through `end(_:)`.
-- `Frame/`, the ad's web page and its messages: `FrameBridge` (the WebView and the Kontext Frame Protocol), `FrameEvent`,
-  `VideoAd+FrameEvents` (what the ad does with each message of its page), `VideoAd+Click`, `SKAdNetworkImpression`.
+- `Frame/`, the ad's web page and its messages: `FrameProtocol` (the Kontext Frame Protocol's rules as plain values:
+  the envelope, the sender, the state, the order of the video's events, the playhead's bounds, one URL per touch, the
+  navigation decision; `accept` returns a `Step`), `FrameBridge` (the WebView, its load and timeout, parking, the
+  WebKit delegates; it carries out each `Step`), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
+  message of its page), `VideoAd+Click`, `SKAdNetworkImpression`.
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearViewController`, `LinearPresentation` (its present and dismiss,
   each with a watchdog), `Presentation` (the slot, the screen, the meter), `AdHostView`, `AdGeometry`, `VideoAd+Placement`.
 - `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Playback/`: `ContentPlayback` and
   `ContentRule`. `Payloads/` is the
-  wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Device/` what the SDK reads, `Support/Environment.swift` the
+  wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Model/AdLifecycle` its phases and their legal steps (every
+  public flag of `VideoAd` reads it), `Device/` what the SDK reads, `Support/Environment.swift` the
   seams the tests replace.
 
 ## Rules
