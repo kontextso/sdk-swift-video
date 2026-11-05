@@ -5,6 +5,10 @@ import UIKit
 /// decides what each outcome means; this only says which one came.
 @MainActor
 enum LinearPresentation {
+    /// How many times its `timeout` a watchdog waits at most for a controller that UIKit left in a window with
+    /// no word: the cap after which a presentation is taken as done, or a dismissal as stuck.
+    static let capFactor: Double = 5
+
     /// Presents `controller` from `presenter`. `onPresented` runs when UIKit confirms it, or when the watchdog
     /// finds the controller on screen without that confirmation; `onFailed` when it never got there. The
     /// watchdog stops once `isPending` turns false (the ad ended, or was presented). After `timeout`, a
@@ -16,17 +20,19 @@ enum LinearPresentation {
         presenter.present(controller, animated: true) {
             onPresented()
         }
+        // `viewIfLoaded`: a presentation UIKit refused at once never loaded the view, and asking for `view` would
+        // load it (and move the page into it) only to look.
         Task {
             let step = min(timeout, 0.25)
             let deadline = Environment.now() + timeout
-            let cap = Environment.now() + timeout * 5
+            let cap = Environment.now() + timeout * capFactor
             while isPending(), Environment.now() < cap {
-                if Environment.now() >= deadline, controller.view.window == nil { break }
+                if Environment.now() >= deadline, controller.viewIfLoaded?.window == nil { break }
                 try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
             }
             guard isPending() else { return }
             // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
-            if let window = controller.view.window, !window.isHidden, window.alpha > ViewExposure.transparent, Environment.isWindowActive(window) {
+            if let window = controller.viewIfLoaded?.window, !window.isHidden, window.alpha > ViewExposure.transparent, Environment.isWindowActive(window) {
                 Logger.warning("ad \(adId.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
                 onPresented()
             } else {
@@ -49,12 +55,12 @@ enum LinearPresentation {
         presenter.dismiss(animated: true) { completion(false) }
         Task {
             let deadline = Environment.now() + timeout
-            let cap = Environment.now() + timeout * 5
+            let cap = Environment.now() + timeout * capFactor
             repeat {
                 try? await Task.sleep(nanoseconds: UInt64(min(timeout, 0.25) * 1_000_000_000))
-            } while Environment.now() < deadline || (controller.view.window != nil && Environment.now() < cap)
+            } while Environment.now() < deadline || (controller.viewIfLoaded?.window != nil && Environment.now() < cap)
             guard isPending() else { return }
-            completion(controller.view.window != nil)
+            completion(controller.viewIfLoaded?.window != nil)
         }
         return true
     }

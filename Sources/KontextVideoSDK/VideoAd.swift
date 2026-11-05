@@ -607,7 +607,7 @@ public final class VideoAd {
     /// Reported over a linear ad's controller UIKit did not take down: the app is not kept waiting for `didEnd`,
     /// and the log says so.
     private func reportDismissalTimedOut() {
-        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(LinearScreen.dismissalTimeout * 5)) s; didEnd delivered anyway")
+        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(LinearScreen.dismissalTimeout * LinearPresentation.capFactor)) s; didEnd delivered anyway")
         DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
         ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
                                     recovery: .didEndDelivered)
