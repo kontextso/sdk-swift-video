@@ -29,7 +29,7 @@ sdk-swift-video/
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the page's state, PageState), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
-│   ├── Measurement/  measuring and reporting: the tracker (beacons) and its macros, the viewability meter, the active-time clock
+│   ├── Measurement/  measuring and reporting: the tracker (beacons) and its macros, the viewability meter, what a view exposes and its geometry, the active-time clock
 │   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of ActiveTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Diagnostics/  what the SDK tells: Logger (the console); ErrorReporter (faults to /v2/error: the mode, scheduling, retries, the server's answers), ErrorReport (one report: its vocabulary and fields), ReportQueue (the waiting reports and their batches, pure); DebugReporter (debug events to /v2/debug), EventHistory (the last events, an error report's history); ReportFormat (capping, the timestamp, a state value), shared so neither reporter reaches into the other
@@ -181,7 +181,7 @@ Tests/KontextVideoSDKTests/
 │                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), all without a
 │                 WebView; the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
-├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, the active-time clock
+├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the active-time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
 ├── Diagnostics/  the logger, the error reporter, the report queue (ReportQueueTests), the event history
 │                 (EventHistoryTests), the debug reporter

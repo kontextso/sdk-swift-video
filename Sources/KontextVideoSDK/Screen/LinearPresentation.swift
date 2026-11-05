@@ -26,7 +26,7 @@ enum LinearPresentation {
             }
             guard isPending() else { return }
             // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
-            if let window = controller.view.window, !window.isHidden, window.alpha > ViewabilityMeter.transparent, Environment.isWindowActive(window) {
+            if let window = controller.view.window, !window.isHidden, window.alpha > ViewExposure.transparent, Environment.isWindowActive(window) {
                 Logger.warning("ad \(adId.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
                 onPresented()
             } else {

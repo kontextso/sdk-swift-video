@@ -74,7 +74,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   each with a watchdog), `ShownAd` (the ad on screen: the slot, the screen, the meter; `begin` takes the slot, the
   creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `VideoAd+Placement` (where an inline ad goes, from `InlineScreen`'s
   insets and chosen size; the page gets the size at `FrameBridge.show(size:)`).
-- `Measurement/`, measuring and reporting: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter`, `ActiveTimeClock`. `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
+- `Measurement/`, measuring and reporting: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter` (the 50 % rule's loop), `ViewExposure` (how much of a view is seen) and `Polygon` (its geometry), `ActiveTimeClock`. `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
   `ContentRule`. `Payloads/` is the
   wire, `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),

@@ -135,10 +135,10 @@ struct ViewabilityMeterTests {
         // Scrolled down by 200: the ad sits at y 100–180 in the scroll view, whole in height; the scroll view
         // cuts the 40 pt it sticks out on the right.
         scroll.contentOffset = CGPoint(x: 0, y: 200)
-        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.875) < 0.001, "280×80 of 320×80")
+        #expect(abs(ViewExposure.visibleShare(of: view) - 0.875) < 0.001, "280×80 of 320×80")
         // Scrolled by 350: the ad sits at y −50 to 30, only its bottom 30 rows show.
         scroll.contentOffset = CGPoint(x: 0, y: 350)
-        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.328) < 0.001, "280×30 of 320×80")
+        #expect(abs(ViewExposure.visibleShare(of: view) - 0.328) < 0.001, "280×30 of 320×80")
     }
 
     @Test func aParentThatDoesNotClipLetsTheAdShowBeyondIt() {
@@ -148,9 +148,9 @@ struct ViewabilityMeterTests {
         window.add(parent)
         let view = UIView(frame: CGRect(x: 100, y: 0, width: 120, height: 80))
         parent.addSubview(view)
-        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 1) < 0.001, "all of it inside the window")
+        #expect(abs(ViewExposure.visibleShare(of: view) - 1) < 0.001, "all of it inside the window")
         parent.clipsToBounds = true
-        #expect(abs(ViewabilityMeter.visibleShare(of: view) - 0.5) < 0.001, "cut at the parent's edge: 60 of 120")
+        #expect(abs(ViewExposure.visibleShare(of: view) - 0.5) < 0.001, "cut at the parent's edge: 60 of 120")
     }
 
     @Test func aScaledAncestorDoesNotShrinkTheShare() async {
@@ -451,12 +451,12 @@ struct ViewabilityMeterTests {
         let sink = attach(meter)
         meter.start()
         #expect(sink.exposures.last == 0, "\(sink.exposures)")
-        #expect(!ViewabilityMeter.canBeSeen(view), "show refuses it by the same rule")
+        #expect(!ViewExposure.canBeSeen(view), "show refuses it by the same rule")
         outer.alpha = 1
         middle.alpha = 1
         meter.tick()
         #expect(sink.exposures.last == 1, "one ancestor at 0.1 is still seen: \(sink.exposures)")
-        #expect(ViewabilityMeter.canBeSeen(view))
+        #expect(ViewExposure.canBeSeen(view))
     }
 
     @Test func nothingIsReportedBeforeTheViewIsLaidOutInAWindowThenARealZeroIs() async {

@@ -7,7 +7,7 @@ import UIKit
 ///
 /// ```
 /// every 250 ms: tick()
-///   ├─ measure:   exposure(of:in:): share on screen (0–1) and the visible rectangle   (static: geometry)
+///   ├─ measure:   ViewExposure.exposure(of:in:): share on screen (0–1) and the visible rectangle
 ///   ├─ report:    changed? onExposure(share, rect)       → the page, which tells the creative
 ///   │             any of it seen? changed: onSeen(bool)  → ActiveTimeClock
 ///   ├─ off-screen: nothing seen for 1 s while its scene is active: onOffScreen  → the ad ends
@@ -20,14 +20,9 @@ import UIKit
 /// ad, such as a sheet over a linear ad) and `countsTime` (off while a video creative is not playing: a paused
 /// video does not count towards its 2 s).
 ///
-/// The two hard parts. The geometry, `exposure(of:in:)`: the view's corners are carried through every
-/// ancestor's transform (rotation, scale), and the shape is cut by every ancestor that clips its subviews and
-/// by the window; visible area over full area is the share. Real shapes, not rectangles, so a rotated view is
-/// not over-counted. The timing: the 50 % stretch starts again when the share drops, the video pauses, or the
-/// loop stalled (a frozen app cannot prove the time was continuous).
-///
-/// Also here: `canBeSeen` (could the viewer see a view at all, before showing an ad in it), `isInFront`
-/// and the 1 % `transparent` threshold.
+/// The two hard parts. The geometry is `ViewExposure`'s (and `Polygon`'s): how much of the view is on screen.
+/// The timing is here: the 50 % stretch starts again when the share drops, the video pauses, or the loop stalled
+/// (a frozen app cannot prove the time was continuous).
 ///
 /// Not `ActiveTimeClock`: that one adds up any time seen, with breaks; this one judges the 50 % rule.
 @MainActor
@@ -156,7 +151,7 @@ final class ViewabilityMeter {
         //    app: an iPad window in the background shows nothing) or something covers it.
         let active = Environment.isWindowActive(window)
         let seen = active && isCovered?() != true
-        let (percentage, visible) = seen ? Self.exposure(of: view, in: window) : (0, .null)
+        let (percentage, visible) = seen ? ViewExposure.exposure(of: view, in: window) : (0, .null)
         // 4. Tell: onExposure when it changed, onSeen when "any of it visible" flipped. First, so the page and
         //    the clock are current before the rules below may end the ad.
         report(percentage, visible: visible.isNull ? .zero : visible)
@@ -183,81 +178,6 @@ final class ViewabilityMeter {
         } else {
             exposedSince = nil
         }
-    }
-
-    /// At most this opacity (1 %) a view counts as invisible, though it is shown: its alpha times every
-    /// ancestor's, as UIKit draws it. Not 0: three ancestors at 0.1 make 0.001, which nobody can see, yet no
-    /// single view is transparent; an ad drawn like that (by accident, or to fake views) must not be shown, get
-    /// an impression or count as seen. 1 % is invisible to the eye, and far below any fade a real UI rests at.
-    nonisolated static let transparent: CGFloat = 0.01
-
-    /// The window `view` is in. A window passed as the container is its own: UIKit gives a window no
-    /// `window` of its own.
-    static func window(of view: UIView) -> UIWindow? {
-        view as? UIWindow ?? view.window
-    }
-
-    /// Whether the viewer could see `view`: in a window (or a window itself), with an area, and neither it,
-    /// an ancestor nor the window hidden or transparent; transparency multiplies along the chain, as in the
-    /// meter. What covers it is not known here; the meter measures that once the ad is shown.
-    static func canBeSeen(_ view: UIView) -> Bool {
-        guard window(of: view) != nil, view.bounds.width > 0, view.bounds.height > 0 else { return false }
-        var opacity: CGFloat = 1
-        var node: UIView? = view
-        while let current = node {
-            opacity *= current.alpha
-            if current.isHidden || opacity <= transparent { return false }
-            node = current.superview
-        }
-        return true
-    }
-
-    /// Whether `view`'s window is in front of the viewer: the app is active and so is the window's scene
-    /// (`foregroundActive`; a window without a scene follows the app). Not with the content in Picture in
-    /// Picture only, on the lock screen, with background audio or under Control Center: an impression there
-    /// would count an ad nobody sees, and a linear ad would be presented into the background.
-    static func isInFront(_ view: UIView) -> Bool {
-        guard let window = window(of: view) else { return false }
-        return Environment.isWindowActive(window)
-    }
-
-    /// The share of `view` that can be seen, and that part's bounding rectangle in the view's coordinates:
-    /// its outline cut by the window and by every ancestor that clips (a scroll view, a container with
-    /// `clipsToBounds`); nothing when it or an ancestor is hidden or transparent. Measured on the actual
-    /// shapes in window coordinates, not on rectangles: a rotated view or ancestor turns a rectangle into a
-    /// rotated one, whose bounding box would overstate what is seen. Transparency multiplies along the chain,
-    /// as it does on screen: three ancestors at 0.1 leave the ad at 0.001, unseen. Areas compare in window coordinates,
-    /// where a scaled ancestor shrinks the whole and the visible part alike. Overlap by sibling views is not
-    /// measured: only the view's own outline, its ancestors' clipping and the window count.
-    /// The share of `view` on screen now, as the meter measures it: 0 when nothing of it can be seen (outside
-    /// the window, clipped away by an ancestor, hidden or transparent).
-    static func visibleShare(of view: UIView) -> Double {
-        guard let window = view.window else { return 0 }
-        return exposure(of: view, in: window).0
-    }
-
-    private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
-        guard !window.isHidden, window.alpha > Self.transparent else { return (0, .null) }
-        let outline = Polygon.corners(of: view.bounds).map { view.convert($0, to: window) }
-        let whole = Polygon.area(outline)
-        guard whole > 0 else { return (0, .null) }
-        var visible = Polygon.clip(outline, to: Polygon.corners(of: window.bounds))
-        var opacity = window.alpha
-        var current: UIView? = view
-        while let node = current, node !== window, !visible.isEmpty {
-            opacity *= node.alpha
-            if node.isHidden || opacity <= Self.transparent { return (0, .null) }
-            if node !== view, node.clipsToBounds {
-                visible = Polygon.clip(visible, to: Polygon.corners(of: node.bounds).map { node.convert($0, to: window) })
-            }
-            current = node.superview
-        }
-        let seen = Polygon.area(visible)
-        guard seen > 0 else { return (0, .null) }
-        let inView = visible.map { view.convert($0, from: window) }
-        let xs = inView.map(\.x), ys = inView.map(\.y)
-        let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!).intersection(view.bounds)
-        return (min(1, Double(seen / whole)), box)
     }
 
     /// The page hears about a change of share or of place: half the ad at the top and half at the bottom

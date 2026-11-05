@@ -292,11 +292,11 @@ public final class VideoAd {
         // The public call fits the format: a fact of the linear format, not of its screen.
         guard format != .linear else { throw wrongShowMethod("show(in:)", use: "show(from:)") }
         try checkShowable()
-        guard ViewabilityMeter.canBeSeen(view) else {
+        guard ViewExposure.canBeSeen(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
             throw VideoAdError.cannotShowNow
         }
-        guard ViewabilityMeter.isInFront(view) else {
+        guard ViewExposure.isInFront(view) else {
             Logger.warning("ad \(id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
             throw VideoAdError.cannotShowNow
         }
@@ -316,7 +316,7 @@ public final class VideoAd {
         guard !hasEnded else { return }
         let host = screen.attach(webView, to: container, adFrame: adFrame, coversWhole: descriptor.position == .fullscreen)
         // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
-        if !hasEnded, !ViewabilityMeter.canBeSeen(host) || ViewabilityMeter.visibleShare(of: webView) == 0 {
+        if !hasEnded, !ViewExposure.canBeSeen(host) || ViewExposure.visibleShare(of: webView) == 0 {
             Logger.warning("ad \(id.prefix(8)): nothing of the ad is on screen where it was placed; ended as interrupted")
             end(.interrupted)
             return
@@ -347,20 +347,20 @@ public final class VideoAd {
         try checkShowable()
         let presenter: UIViewController
         if let viewController {
-            guard ViewabilityMeter.canBeSeen(viewController.view), viewController.presentedViewController == nil,
+            guard ViewExposure.canBeSeen(viewController.view), viewController.presentedViewController == nil,
                   !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
                 throw VideoAdError.cannotShowNow
             }
             presenter = viewController
         } else {
-            guard let top = LinearAdViewController.topPresenter(), ViewabilityMeter.canBeSeen(top.view) else {
+            guard let top = LinearAdViewController.topPresenter(), ViewExposure.canBeSeen(top.view) else {
                 Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
                 throw VideoAdError.cannotShowNow
             }
             presenter = top
         }
-        guard ViewabilityMeter.isInFront(presenter.view) else {
+        guard ViewExposure.isInFront(presenter.view) else {
             Logger.warning("ad \(id.prefix(8)): cannot present, the app or the presenter's scene is not in front; the ad stays ready")
             throw VideoAdError.cannotShowNow
         }
