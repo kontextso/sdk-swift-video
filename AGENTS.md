@@ -67,8 +67,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   1 MB limit, the fields, the playhead's bounds; `parse` gives `nil` for a broken envelope), `FrameProtocol` (the
   Kontext Frame Protocol's rules as plain values: the sender, the frame's phase (`FramePhase`, where the ad's frame, its web page, is; not the ad's
   `AdState`: the two move together at fixed points, see `FrameProtocol`), the order of the video's events, one URL
-  per touch, the navigation decision; `accept` returns a `Step`), `FrameBridge` (the WebView, its load and timeout, parking, the
-  WebKit delegates; it carries out each `Step`), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
+  per touch, the navigation decision; `accept` returns a `Step`), `FrameBridge` (its load and timeout, parking, the navigation
+  delegate; it carries out each `Step`), `FrameWebView` (the WebView locked down for one ad: what the page may and may not do), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
   message of its page; a click goes to `VideoAd.click`), `SKAdNetworkImpression`.
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearAdViewController`, `LinearPresentation` (its present and dismiss,
   each with a watchdog), `ShownAd` (the ad on screen: the slot, the screen, the meter; `begin` takes the slot, the

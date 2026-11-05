@@ -18,8 +18,9 @@ import WebKit
 ///                         └─ end: stop the page, unpark, release WebKit's hooks
 /// ```
 ///
-/// What stays here is what needs WebKit or a timer: the WebView's setup, the message handler, the load and its
-/// timeout, parking, `evaluateJavaScript`, the navigation and UI delegates, and the teardown.
+/// What stays here is what needs WebKit or a timer: the messages both ways (`evaluateJavaScript` to the page), the
+/// load and its timeout, parking, the navigation delegate, the failures and the teardown. What the page may and may
+/// not do (the configuration, the refusals, the touch) is `FrameWebView`'s.
 @MainActor
 final class FrameBridge: NSObject {
     /// `ad.loaded` must arrive within this. A constant in spirit; a variable so the tests can set it.
@@ -37,7 +38,7 @@ final class FrameBridge: NSObject {
     }
 
     let adId: String
-    let webView: WKWebView
+    let webView: FrameWebView
     /// The protocol's rules and state: what each message means, and whether it counts now.
     private(set) var frameProtocol: FrameProtocol
     var state: FramePhase { frameProtocol.state }
@@ -48,8 +49,6 @@ final class FrameBridge: NSObject {
     var onEvent: ((FrameEvent) -> Void)?
 
     private var loadTimeoutTask: Task<Void, Never>?
-    private let messageHandler = MessageHandler()
-    private let touchRecognizer = TouchRecognizer()
 
     /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
     /// capped at a day.
@@ -57,54 +56,14 @@ final class FrameBridge: NSObject {
         self.adId = adId
         frameProtocol = FrameProtocol(adId: adId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
 
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.allowsInlineMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = []
-        // The ad plays where the SDK put it: never in a PiP window or on an AirPlay screen out of our measurement.
-        configuration.allowsPictureInPictureMediaPlayback = false
-        configuration.allowsAirPlayForMediaPlayback = false
-        configuration.dataDetectorTypes = []
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.userContentController.add(messageHandler, name: "kontext")
-        if !Environment.asksBeforeMediaCapture() {
-            configuration.userContentController.addUserScript(Self.noMediaCapture)
-        }
-        for (scheme, handler) in Environment.schemeHandlers {
-            configuration.setURLSchemeHandler(handler, forURLScheme: scheme)
-        }
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = FrameWebView(asksBeforeMediaCapture: Environment.asksBeforeMediaCapture(), schemeHandlers: Environment.schemeHandlers)
         super.init()
 
-        messageHandler.bridge = self
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.allowsLinkPreview = false
-        webView.allowsBackForwardNavigationGestures = false
+        webView.onMessage = { [weak self] in self?.receive($0) }
+        webView.onTouch = { [weak self] in self?.noteTouch() }
+        webView.onNewWindow = { [weak self] in self?.externalNavigation(to: $0) }
         webView.navigationDelegate = self
-        webView.uiDelegate = self
-        touchRecognizer.onTouch = { [weak self] in self?.noteTouch() }
-        webView.addGestureRecognizer(touchRecognizer)
-        #if DEBUG
-        if #available(iOS 16.4, *) {
-            webView.isInspectable = true
-        }
-        #endif
     }
-
-    /// A creative never reaches the camera or microphone. From iOS 15 WebKit asks the UI delegate, which
-    /// denies; on iOS 14 it would ask the viewer directly, so the capture API is taken out of every frame
-    /// before the page's own scripts run: the standard one and the legacy prefixed ones.
-    static let noMediaCapture = WKUserScript(source: """
-        (function () {
-          try { delete MediaDevices.prototype.getUserMedia; } catch (e) {}
-          try { delete Navigator.prototype.getUserMedia; delete Navigator.prototype.webkitGetUserMedia; } catch (e) {}
-        })();
-        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
 
     /// The owner dropped the bridge: the page is stopped and the WebView leaves the window it was parked
     /// in, or the window would keep it alive, invisible. The handler registered with WebKit is a weak
@@ -119,7 +78,7 @@ final class FrameBridge: NSObject {
         let teardown: @MainActor () -> Void = {
             timeout?.cancel()
             webView.stopLoading()
-            webView.configuration.userContentController.removeScriptMessageHandler(forName: "kontext")
+            webView.configuration.userContentController.removeScriptMessageHandler(forName: FrameWebView.messageHandlerName)
             webView.navigationDelegate = nil
             webView.uiDelegate = nil
             webView.removeFromSuperview()
@@ -245,7 +204,7 @@ final class FrameBridge: NSObject {
 
     // MARK: Page → SDK
 
-    fileprivate func receive(_ message: WKScriptMessage) {
+    private func receive(_ message: WKScriptMessage) {
         receive(message.body, from: FrameProtocol.Sender(message.frameInfo))
     }
 
@@ -298,7 +257,7 @@ final class FrameBridge: NSObject {
         loadTimeoutTask?.cancel()
         unpark()
         webView.stopLoading()
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "kontext")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: FrameWebView.messageHandlerName)
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.loadHTMLString("", baseURL: nil)
@@ -405,71 +364,6 @@ extension FrameBridge: WKNavigationDelegate {
         Logger.warning("frame \(adId.prefix(8)): web content process terminated")
         // 405 is a failure while playing; an ad loaded but never shown gets the load error, like any other.
         fail(.error(code: frameProtocol.failureCode), cause: .processTerminated)
-    }
-}
-
-// MARK: - WKUIDelegate
-
-extension FrameBridge: WKUIDelegate {
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // A `target="_blank"` link: no new window, treated like any other navigation out.
-        if let target = navigationAction.request.url {
-            externalNavigation(to: target)
-        }
-        return nil
-    }
-
-    @available(iOS 15.0, *)
-    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping @MainActor @Sendable (WKPermissionDecision) -> Void) {
-        decisionHandler(.deny)
-    }
-
-    // The page's dialogs are answered at once, as dismissed. All three in their `async` form: the
-    // completion-handler forms' closure types differ between the iOS 18 and iOS 26 SDKs, and a signature
-    // that misses is never called (the CI warnings gate catches it on Xcode 16.4).
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async {}
-
-    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo) async -> Bool {
-        false
-    }
-
-    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo) async -> String? {
-        nil
-    }
-}
-
-// MARK: - Helpers
-
-/// Receives the page's messages without the retain cycle `WKUserContentController` creates with its handlers.
-private final class MessageHandler: NSObject, WKScriptMessageHandler {
-    weak var bridge: FrameBridge?
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated {
-            bridge?.receive(message)
-        }
-    }
-}
-
-/// Notes when the viewer touches the WebView, without taking the touch away from the page.
-private final class TouchRecognizer: UIGestureRecognizer, UIGestureRecognizerDelegate {
-    var onTouch: (() -> Void)?
-
-    init() {
-        super.init(target: nil, action: nil)
-        cancelsTouchesInView = false
-        delaysTouchesBegan = false
-        delaysTouchesEnded = false
-        delegate = self
-    }
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        onTouch?()
-        state = .failed
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        true
     }
 }
 
