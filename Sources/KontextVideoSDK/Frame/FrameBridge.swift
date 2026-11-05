@@ -35,6 +35,16 @@ final class FrameBridge: NSObject {
         case loadFailed
         /// WebKit's content process for the page ended; the callback does not say why.
         case processTerminated
+
+        /// The fault report's code for a creative that failed this way.
+        var reportCode: ErrorReport.Code {
+            switch self {
+            case .page: .creativeFailed
+            case .loadTimeout: .loadTimeout
+            case .loadFailed: .frameLoadFailed
+            case .processTerminated: .processTerminated
+            }
+        }
     }
 
     let adId: String
