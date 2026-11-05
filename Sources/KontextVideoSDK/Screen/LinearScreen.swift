@@ -8,6 +8,7 @@ final class LinearScreen: AdScreen {
     unowned let ad: VideoAd
     /// The controller presented for the ad; `nil` before `attach` and once its dismissal began.
     private(set) var controller: LinearAdViewController?
+    var meter: ViewabilityMeter?
 
     init(ad: VideoAd) {
         self.ad = ad
@@ -31,15 +32,16 @@ final class LinearScreen: AdScreen {
     /// A sheet over the ad (a click's store page) leaves its view in the window, where the meter would still
     /// see it whole, and makes UIKit remove the view until the sheet goes: neither is the ad leaving. Out of
     /// sight is no end either: the viewer's own doing, and it comes back.
-    func configure(meter: ViewabilityMeter) {
-        meter.isCovered = { [weak self] in self?.controller.map(Environment.isCovered) ?? false }
+    func configure() {
+        meter?.isCovered = { [weak self] in self?.controller.map(Environment.isCovered) ?? false }
     }
 
     func reachedScreen() {}
 
     /// The controller stays, for `close`.
-    func tearDown(meter: ViewabilityMeter?) -> TimeInterval {
+    func tearDown() -> TimeInterval {
         meter?.stop()
+        meter = nil
         return 0
     }
 

@@ -16,24 +16,26 @@ import UIKit
 /// ```
 ///
 /// How: `show(in:)` makes an `InlineScreen` and `show(from:)` a `LinearScreen` when the ad takes the app's
-/// slot (`ShownAd`); then:
+/// slot (`ScreenSlot`), and the ad holds it until `didEnd`; then:
 /// 1. `show` attaches the page to it (`attach`);
-/// 2. once the creative is on screen, the meter is set up for it (`configure(meter:)`) and it starts what it
-///    counts (`reachedScreen()`);
-/// 3. at the end, `VideoAd.end(_:)` tears it down (`tearDown(meter:)`: the active time seen) and closes it
+/// 2. once the creative is on screen, it takes the viewability meter (`meter`), sets it up (`configure()`) and
+///    starts what it counts (`reachedScreen()`);
+/// 3. at the end, `VideoAd.end(_:)` tears it down (`tearDown()`: the meter stops, the active time seen) and closes it
 ///    (`close(onGone:)`: `true` when `didEnd` must wait for the screen to be gone).
 /// A screen ends its ad only through `VideoAd.end(_:)`, never by finishing it itself.
 @MainActor
 protocol AdScreen: AnyObject {
     /// The ad sits in the app's player view: its active time is counted and reported (`overlayViewDuration`).
     var isInline: Bool { get }
-    /// Sets the meter up for this screen, before it starts.
-    func configure(meter: ViewabilityMeter)
+    /// The viewability meter of the ad on this screen, from the creative's arrival to `tearDown()`.
+    var meter: ViewabilityMeter? { get set }
+    /// Sets `meter` up for this screen, before it starts.
+    func configure()
     /// The creative is on screen, the meter running: the screen starts what it counts.
     func reachedScreen()
     /// The ad is ending: the clock, then `meter`, then the page leave the screen. Returns the active time
     /// seen, seconds.
-    func tearDown(meter: ViewabilityMeter?) -> TimeInterval
+    func tearDown() -> TimeInterval
     /// Takes the screen away after `tearDown`. Returns `true` when that takes time: `onGone` runs once it
     /// finished (`hasTimedOut`: reported over a screen UIKit did not take down), and `didEnd` waits for it.
     /// `false`: nothing to wait for, `onGone` never runs.

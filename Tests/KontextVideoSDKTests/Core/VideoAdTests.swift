@@ -679,7 +679,7 @@ struct VideoAdTests {
         #expect(delegate.events == ["impression", "end:dismissed"], "ended from inside the impression callback")
         #expect(clock?.observers.isEmpty == true, "the observers set up at show were removed by the end that followed")
         #expect(clock?.timer == nil && ad.loadedBridge == nil, "no clock running, no WebView")
-        #expect(ad.shownAd == nil && KontextVideo.shared.adOnScreen == nil, "the slot is free")
+        #expect(ad.screen == nil && KontextVideo.shared.adOnScreen == nil, "the slot is free")
     }
 
     @Test func aMessageAfterTheEndChangesNothing() async throws {

@@ -61,10 +61,8 @@ public final class KontextVideo {
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
     var isInitialized: Bool { sdkState.isInitialized }
 
-    /// The one ad on screen in the whole app, from any `VideoAds`: taken at `show`, released at `didEnd`; it
-    /// retains the ad until then, whatever the app does with its reference.
-    var shownAd: ShownAd?
-    var adOnScreen: VideoAd? { shownAd?.ad }
+    /// The one ad on screen in the whole app, from any `VideoAds` (`ScreenSlot`).
+    var adOnScreen: VideoAd? { ScreenSlot.current }
 
     /// The server's reason while the SDK is switched off, else `nil`.
     var disabledReason: String? { sdkState.disabledReason }
@@ -190,7 +188,7 @@ public final class KontextVideo {
         user = nil
         regulatory = nil
         variantID = nil
-        shownAd = nil
+        ScreenSlot.resetForTesting()
         DebugReporter.shared.resetForTesting()
         ErrorReporter.shared.resetForTesting()
         Logger.level = .warning

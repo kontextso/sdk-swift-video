@@ -72,8 +72,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   delegate; it carries out each `Step`), `FrameWebView` (the WebView locked down for one ad: what the page may and may not do), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
   message of its page; a click goes to `VideoAd.click`), `SKAdNetworkImpression`.
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearAdViewController`, `LinearPresentation` (its present and dismiss,
-  each with a watchdog), `ShownAd` (the ad on screen: the slot, the screen, the meter; `begin` takes the slot, the
-  creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `InlineScreen+Placement` (where an inline ad goes, from `InlineScreen`'s
+  each with a watchdog), `ScreenSlot` (the app's one ad on screen: taken at `show`, freed at `didEnd`, here and nowhere
+  else; the ad holds its screen, the screen its meter; the creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `InlineScreen+Placement` (where an inline ad goes, from `InlineScreen`'s
   insets and chosen size; the page gets the size at `FrameBridge.show(size:)`).
 - `Measurement/`, what the viewer saw (visibility, time on screen) and the beacons that report it: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter` (the 50 % rule's loop), `ViewExposure` (how much of a view is seen) and `Polygon` (its geometry), `OnScreenTimeClock`. `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
   `ContentRule`. `Payloads/` is the

@@ -138,12 +138,12 @@ public final class VideoAd {
     var loadContinuation: CheckedContinuation<Void, Error>?
     /// The `VideoAds` it belongs to; told when the ad leaves it, is shown, and ends.
     private(set) weak var owner: VideoAds?
-    /// The ad on screen, from `show` to `didEnd`: the slot, the host view or controller, the meter, the clock.
-    private(set) var shownAd: ShownAd?
+    /// Where the ad is on screen, from `show` to `didEnd`: the host view or controller, the meter, the clock.
+    private(set) var screen: (any AdScreen)?
     /// Fires the `tracking` entries, each once: `notUsed` before anything is rendered, the rest on screen.
     let tracker: Tracker
-    var meter: ViewabilityMeter? { shownAd?.meter }
-    var onScreenClock: OnScreenTimeClock? { (shownAd?.screen as? InlineScreen)?.onScreenClock }
+    var meter: ViewabilityMeter? { screen?.meter }
+    var onScreenClock: OnScreenTimeClock? { (screen as? InlineScreen)?.onScreenClock }
     /// How the ad follows the tracked content player, by format (`Content/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
     private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)
@@ -449,7 +449,8 @@ public final class VideoAd {
     /// an overlay or pause ad, once UIKit confirmed it for a linear ad.
     private func reserve(on screen: any AdScreen) {
         state.moveTo(.reserved)
-        shownAd = ShownAd.begin(self, owner: owner, screen: screen)
+        self.screen = screen
+        ScreenSlot.take(self, owner: owner)
     }
 
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
@@ -458,14 +459,14 @@ public final class VideoAd {
     func reachedScreen() {
         tracker.withContentPlayhead {
             guard state.moveTo(.onScreen) else { return }
-            bridge.show(size: (shownAd?.screen as? InlineScreen)?.chosenSize)
+            bridge.show(size: (screen as? InlineScreen)?.chosenSize)
             Logger.info("ad \(id.prefix(8)): shown")
             DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
             startMeter()
             // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
             skAdNetwork?.start()
             // An inline ad's clock starts, and its content rule with it.
-            shownAd?.screen.reachedScreen()
+            screen?.reachedScreen()
             // At `ad.show`: creativeView and the AdChoices icon's view; the impression too for an image or
             // HTML creative, while a video's waits for its first frame. A video's impression waits for
             // `video.start`. The page owns the start timeout (3 s, then `ad.error` 405) and, when autoplay
@@ -519,8 +520,8 @@ public final class VideoAd {
             end(.interrupted)
         }
         // What the screen adds: the clock and the off-screen rule inline, the covered check full screen.
-        shownAd?.screen.configure(meter: meter)
-        shownAd?.meter = meter
+        screen?.meter = meter
+        screen?.configure()
         meter.start()
     }
 
@@ -575,8 +576,8 @@ public final class VideoAd {
     //  4. renderer: the page (hidden, released; endNow) and the host view (`InlineScreen.tearDown`);
     //  5. presentation: the linear controller dismissed (`LinearScreen.close`); there is no registration to undo on iOS;
     //  6. context: none on iOS;
-    //  7. the app-wide on-screen slot, `KontextVideo.shownAd` (`ShownAd.release`, from finish);
-    //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (`ShownAd.release`);
+    //  7. the app-wide on-screen slot (`ScreenSlot.release`, from finish);
+    //  8. player binding: the owner's showing ad and its ticks, `VideoAds.adDidEnd` (`ScreenSlot.release`);
     //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
         guard state.moveTo(.ending(reason)) else { return }
@@ -585,20 +586,14 @@ public final class VideoAd {
         }
         contentRule.cancel()
         // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
-        let activeTime = shownAd?.tearDown() ?? 0
+        let activeTime = screen?.tearDown() ?? 0
         skAdNetwork?.end()
         loadedBridge?.hide()
         loadedBridge = nil   // an ended ad keeps its facts, not a WebView
         // A linear ad's controller is dismissed, and `didEnd` waits for it; an inline ad is gone already.
-        let dismissing = shownAd?.screen.close { [weak self] hasTimedOut in
+        let dismissing = screen?.close { [weak self] hasTimedOut in
             guard let self else { return }
-            if hasTimedOut {
-                // Reported over a controller UIKit did not take down: the app is not kept waiting, and the log says so.
-                Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
-                DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
-                ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                            recovery: .didEndDelivered)
-            }
+            if hasTimedOut { reportDismissalTimedOut() }
             finish(reason)
         } ?? false
         // A video on screen that never reached its first frame (`video.start`), ended by the app, an interruption,
@@ -608,7 +603,7 @@ public final class VideoAd {
         if state.wasOnScreen, descriptor.creative == .video, !state.hasImpression, Self.closedBeforeFirstFrame.contains(reason) {
             tracker.fire("close")
         }
-        if shownAd?.screen.isInline == true {
+        if screen?.isInline == true {
             tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
@@ -620,9 +615,18 @@ public final class VideoAd {
     /// dismissal finished for a linear ad. Once.
     private func finish(_ reason: EndReason) {
         guard state.moveTo(.ended(reason)) else { return }
-        shownAd?.release()
-        shownAd = nil
+        ScreenSlot.release(self, owner: owner)
+        screen = nil
         delegate?.videoAd(self, didEnd: reason)
+    }
+
+    /// Reported over a linear ad's controller UIKit did not take down: the app is not kept waiting for `didEnd`,
+    /// and the log says so.
+    private func reportDismissalTimedOut() {
+        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
+        DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
+        ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
+                                    recovery: .didEndDelivered)
     }
 
     // MARK: The page's events

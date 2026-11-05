@@ -18,6 +18,7 @@ final class InlineScreen: AdScreen {
     private(set) var hostView: InlineAdView?
     /// Time seen on screen; made once the creative is on screen.
     private(set) var onScreenClock: OnScreenTimeClock?
+    var meter: ViewabilityMeter?
 
     init(ad: VideoAd, extraInsets: UIEdgeInsets) {
         self.ad = ad
@@ -50,7 +51,8 @@ final class InlineScreen: AdScreen {
 
     /// The meter is the one answer to "is it seen": the clock counts only then, and an ad out of sight in an
     /// active scene (a feed cell swiped away) ends, freeing the app's slot.
-    func configure(meter: ViewabilityMeter) {
+    func configure() {
+        guard let meter else { return }
         meter.onSeen = { [weak self] seen in self?.onScreenClock?.setSeen(seen) }
         let ad = self.ad
         meter.onOffScreen = { [weak ad] in
@@ -76,9 +78,10 @@ final class InlineScreen: AdScreen {
         ad.contentRule.started(onScreenClock: clock)
     }
 
-    func tearDown(meter: ViewabilityMeter?) -> TimeInterval {
+    func tearDown() -> TimeInterval {
         let activeTime = onScreenClock?.stop() ?? 0
         meter?.stop()
+        meter = nil
         hostView?.removeFromSuperview()
         hostView = nil
         return activeTime
