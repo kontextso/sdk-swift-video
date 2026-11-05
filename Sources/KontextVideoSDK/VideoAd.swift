@@ -603,8 +603,9 @@ public final class VideoAd {
         if state.wasOnScreen, descriptor.creative == .video, !state.hasImpression, Self.closedBeforeFirstFrame.contains(reason) {
             tracker.fire("close")
         }
-        // Only an inline ad's time on screen is counted and reported.
-        if screen is InlineScreen {
+        // Only an inline ad's time on screen is counted and reported, and only for an ad that reached the screen:
+        // one ended inside `show` (a hook, nothing of it on screen, its content stopped) was never seen.
+        if state.wasOnScreen, screen is InlineScreen {
             tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")

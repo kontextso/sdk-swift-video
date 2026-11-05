@@ -146,6 +146,7 @@ struct VideoAdReentrancyTests {
         #expect(ad.wasShown && ad.hasEnded)
         #expect(delegate.events == ["end:destroyed"], "no impression for an ad that ended before it was on screen")
         #expect(harness.player.view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
+        #expect(!(await beacons()).contains("overlayViewDuration"), "never on screen: no view duration")
     }
 
     @Test func aShowFromTheParkingWindowsHookFindsTheSlotTaken() async throws {
@@ -281,7 +282,28 @@ struct VideoAdReentrancyTests {
         #expect(ad.wasShown && ad.hasEnded)
         #expect(delegate.events == ["end:destroyed"], "no impression for an ad that ended before it was on screen")
         #expect(reentrant.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
-        #expect(!(await beacons()).contains("impression"))
+        let fired = await beacons()
+        #expect(!fired.contains("impression") && !fired.contains("overlayViewDuration"), "never on screen: no view duration: \(fired)")
+    }
+
+    /// A custom player that plays at the first read of `isPlaying` and is paused from the second on.
+    final class StopsAfterFirstRead: ContentPlayer {
+        var currentTime: TimeInterval = 0
+        private var reads = 0
+        var isPlaying: Bool {
+            reads += 1
+            return reads == 1
+        }
+    }
+
+    @Test func anOverlayWhoseContentStoppedDuringShowFiresNoViewDuration() async throws {
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o11s"))
+        ads.track(StopsAfterFirstRead())
+        try ad.show(in: harness.player.view)
+        #expect(ad.wasShown && ad.hasEnded)
+        #expect(delegate.events == ["end:interrupted"], "the content stopped before the ad reached the screen: \(delegate.events)")
+        let fired = await beacons()
+        #expect(!fired.contains { ["impression", "creativeView", "overlayViewDuration"].contains($0) }, "never on screen: \(fired)")
     }
 
     @Test func aHookThatTakesThePlayerOffScreenEndsTheAdWithoutAnImpression() async throws {
@@ -293,7 +315,8 @@ struct VideoAdReentrancyTests {
         #expect(ad.wasShown && ad.hasEnded)
         #expect(delegate.events == ["end:interrupted"], "committed, then ended at once, never seen")
         #expect(reentrant.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
-        #expect(!(await beacons()).contains("impression"))
+        let fired = await beacons()
+        #expect(!fired.contains("impression") && !fired.contains("overlayViewDuration"), "never on screen: no view duration: \(fired)")
     }
 
 }

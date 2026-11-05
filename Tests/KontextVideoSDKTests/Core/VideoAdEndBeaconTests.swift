@@ -13,7 +13,7 @@ import UIKit
 ///   failed                                        nothing (`error` fired)      nothing
 /// ```
 ///
-/// An inline ad also fires `overlayViewDuration` at every end.
+/// An inline ad that reached the screen also fires `overlayViewDuration` at every end.
 extension SerialSuites {
 @Suite
 @MainActor
