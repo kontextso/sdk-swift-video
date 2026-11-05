@@ -3,7 +3,11 @@ import Testing
 import UIKit
 import WebKit
 
-/// The full-screen container: its one decision (interruption or the ad's own ending) and its setup.
+/// The full-screen container: its one decision (interruption or the ad's own ending) and its setup. Serial
+/// although it touches no shared state: it creates WebViews, and each launches a web content process, which in
+/// parallel with the serial suites competed with their real page loads.
+extension SerialSuites {
+@Suite
 @MainActor
 struct LinearViewControllerTests {
     private func makeController() -> (LinearAdViewController, () -> Int) {
@@ -64,4 +68,5 @@ struct LinearViewControllerTests {
         #expect(controller.prefersHomeIndicatorAutoHidden)
         #expect(controller.view.accessibilityViewIsModal, "VoiceOver reads the ad alone")
     }
+}
 }
