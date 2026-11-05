@@ -48,7 +48,7 @@ struct VideoAdEpisodeTests {
     private func playingPlayer() async throws -> AVPlayer {
         let player = AVPlayer(url: Self.movie)
         player.actionAtItemEnd = .none
-        try #require(await waitUntil(5) { player.currentItem?.status == .readyToPlay }, "the movie loads")
+        try #require(await waitUntil { player.currentItem?.status == .readyToPlay }, "the movie loads")
         player.play()
         return player
     }

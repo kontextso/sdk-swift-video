@@ -68,7 +68,7 @@ struct VideoAdPlacementTests {
         window.add(player)
         try ad.show(in: player)
         player.frame.origin.x = 10_000   // the feed moved on; the cell stays in the window
-        #expect(await waitUntil(3) { delegate.endReasons == [.interrupted] }, "\(delegate.events)")
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "\(delegate.events)")
         #expect(KontextVideo.shared.adOnScreen == nil, "the next episode's ad can show")
     }
 
@@ -104,9 +104,9 @@ struct VideoAdPlacementTests {
         ad.bridge.receive(["adId": ad.id, "type": "video.start", "playhead": 0], from: sender)
         #expect(exposures.isEmpty, "no exposure 0 before the first layout: \(exposures)")
         window.add(ad.bridge.webView)
-        #expect(await waitUntil(5) { exposures.first.map { $0 > 0 } == true }, "the first real measurement: \(exposures)")
+        #expect(await waitUntil { exposures.first.map { $0 > 0 } == true }, "the first real measurement: \(exposures)")
         ad.bridge.webView.removeFromSuperview()
-        #expect(await waitUntil(5) { exposures.count >= 2 && exposures.last == 0 }, "a real 0 later still goes out: \(exposures)")
+        #expect(await waitUntil { exposures.count >= 2 && exposures.last == 0 }, "a real 0 later still goes out: \(exposures)")
         ad.bridge.receive(["adId": ad.id, "type": "video.skip", "playhead": 1000], from: sender)
     }
 

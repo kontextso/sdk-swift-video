@@ -22,7 +22,7 @@ struct TrackerTests {
 
     /// The beacons once `expected` arrived, plus a short settle so a stray extra one would show.
     private func fired(_ expected: Int) async -> [(adId: String, event: String, query: [String: String])] {
-        _ = await waitUntil(5) { self.server.beacons.count >= expected }
+        _ = await waitUntil { self.server.beacons.count >= expected }
         await sleepMs(50)
         return server.beacons
     }
@@ -52,7 +52,7 @@ struct TrackerTests {
         Logger.sink = { level, message in if level == .warning { lines.append(message) } }
         let tracker = try makeTracker()
         tracker.fire("impression")
-        #expect(await waitUntil(5) { lines.all.contains { $0.contains("impression beacon answered 500") } })
+        #expect(await waitUntil { lines.all.contains { $0.contains("impression beacon answered 500") } })
     }
 
     /// Log lines collected from URLSession's queue.

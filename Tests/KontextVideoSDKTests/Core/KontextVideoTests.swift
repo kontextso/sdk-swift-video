@@ -75,7 +75,7 @@ struct KontextVideoTests {
         _ = await harness.initialize()
         var reported: [KontextVideo.State] = []
         sdk.initialize(with: KontextVideo.Configuration(publisherToken: "other", adServerURL: harness.server.baseURL)) { reported.append($0) }
-        #expect(await waitUntil(2) { !reported.isEmpty })
+        #expect(await waitUntil { !reported.isEmpty })
         #expect(sdk.configuration?.publisherToken == "test-dev", "the first configuration stays")
         #expect(reported == [.enabled], "the ignored call still hears, with the first call's state")
         #expect(harness.server.requests(to: "/v2/config").count == 1)
@@ -88,7 +88,7 @@ struct KontextVideoTests {
         var second: [KontextVideo.State] = []
         sdk.initialize(with: harness.configuration) { first.append($0) }
         sdk.initialize(with: harness.configuration) { second.append($0) }
-        #expect(await waitUntil(5) { !first.isEmpty && !second.isEmpty })
+        #expect(await waitUntil { !first.isEmpty && !second.isEmpty })
         #expect(first == [.enabled] && second == [.enabled], "both hear once, after /config, not .initializing")
         #expect(harness.server.requests(to: "/v2/config").count == 1)
     }

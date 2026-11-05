@@ -91,7 +91,7 @@ struct VideoAdSKAdNetworkTests {
         try ad.show(from: window.root)
         ad.end(.interrupted)
         // Still presented: the SDK dismisses it and didEnd waits for that (the runner never finishes it, the watchdog does).
-        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] })
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
         #expect(skanCalls.isEmpty)
     }
 
@@ -196,7 +196,7 @@ struct VideoAdSKAdNetworkTests {
             self.harness.server.requests(to: "/v2/debug").compactMap { $0.body?["events"] as? [[String: Any]] }.flatMap { $0 }
                 .filter { $0["name"] as? String == "ad.skanFailed" }
         }
-        #expect(await waitUntil(5) { failures().count == 3 })
+        #expect(await waitUntil { failures().count == 3 })
         #expect(failures().compactMap { ($0["state"] as? [String: Any])?["step"] as? String } == ["start", "end", "dispose"], "each failure once, with its step")
         #expect(failures().compactMap { $0["adId"] as? String } == ["s16a", "s16a", "s16a"], "and the ad it belongs to")
         second.dismiss()

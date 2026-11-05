@@ -56,7 +56,7 @@ struct DebugReporterTests {
         }
         // The SDK's own startup events may go out in a batch of their own, at any moment on a slow runner;
         // what matters is that the twenty ticks travel together.
-        #expect(await waitUntil(5) { !batchesWithTicks().isEmpty })
+        #expect(await waitUntil { !batchesWithTicks().isEmpty })
         await sleepMs(200)
         let batches = batchesWithTicks()
         #expect(batches.count == 1, "twenty events, one request")
@@ -84,10 +84,10 @@ struct DebugReporterTests {
         _ = await harness.initialize()
         harness.server.on("/v2/debug", .failure(.notConnectedToInternet))
         DebugReporter.shared.event("lost-once")
-        #expect(await waitUntil(5) { !self.batches(named: "lost-once").isEmpty })
+        #expect(await waitUntil { !self.batches(named: "lost-once").isEmpty })
         harness.server.on("/v2/debug", .empty())
         DebugReporter.shared.event("after-the-loss")
-        #expect(await waitUntil(5) { !self.batches(named: "after-the-loss").isEmpty })
+        #expect(await waitUntil { !self.batches(named: "after-the-loss").isEmpty })
         await sleepMs(150)
         #expect(batches(named: "lost-once").count == 1, "a failed batch is never sent again")
         #expect(batches(named: "after-the-loss").count == 1, "the next event goes out once")
@@ -103,7 +103,7 @@ struct DebugReporterTests {
         let ads = harness.player.ads(for: .init(id: "ep", language: "en", title: "canary-title"))
         harness.serve(Fixtures.ad(id: "img-priv"))
         _ = try await ads.format(.pause)
-        #expect(await waitUntil(5) { self.allNames().contains("ads.response") })
+        #expect(await waitUntil { self.allNames().contains("ads.response") })
         for body in harness.server.requests(to: "/v2/debug").compactMap(\.body) {
             let text = try #require(String(bytes: JSONSerialization.data(withJSONObject: body), encoding: .utf8))
             for canary in ["canary-user-id", "canary@viewer.test", "canary-hash", "canary-keyword", "canary-tc-string", "canary-gpp", "canary-usp", "canary-title"] {
@@ -123,7 +123,7 @@ struct DebugReporterTests {
         slow.delay = 3   // the first batch stays in flight while the test sends the rest
         harness.server.on("/v2/debug", slow)
         DebugReporter.shared.event("first")
-        #expect(await waitUntil(5) { !self.batches(named: "first").isEmpty })
+        #expect(await waitUntil { !self.batches(named: "first").isEmpty })
         // Only that batch is slow: the later one answers at once, so nothing is left in flight for the
         // next test (the reporter is shared). A request takes its answer when it arrives.
         harness.server.on("/v2/debug", .empty())
@@ -158,7 +158,7 @@ struct DebugReporterTests {
             DebugReporter.shared.event("tick", state: ["i": .number(Double(i))])
         }
         harness.server.on("/v2/debug", .empty())
-        #expect(await waitUntil(3) { self.harness.server.requests(to: "/v2/debug").contains { ($0.body?["events"] as? [[String: Any]])?.count == DebugReporter.maxBuffered } })
+        #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").contains { ($0.body?["events"] as? [[String: Any]])?.count == DebugReporter.maxBuffered } })
         let batch = harness.server.requests(to: "/v2/debug").last?.body?["events"] as? [[String: Any]]
         #expect((batch?.first?["state"] as? [String: Any])?["i"] as? Double == 10, "the oldest ten were dropped")
     }

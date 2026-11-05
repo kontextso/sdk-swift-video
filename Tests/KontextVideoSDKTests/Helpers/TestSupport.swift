@@ -190,9 +190,11 @@ func advanceClock(by seconds: TimeInterval) {
     Environment.now = { previous() + seconds }
 }
 
-/// Polls `condition` on the main actor until it holds or `timeout` passes.
+/// Polls `condition` on the main actor until it holds or `timeout` passes. The timeout is a bound for a
+/// failure, not a delay: a condition that holds returns at once, so it is generous (a busy CI runner starved the
+/// main actor past 2 s and 5 s waits). A test that asserts something happens promptly passes its own, shorter one.
 @MainActor
-func waitUntil(_ timeout: TimeInterval = 2, _ condition: @MainActor () -> Bool) async -> Bool {
+func waitUntil(_ timeout: TimeInterval = 10, _ condition: @MainActor () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }

@@ -720,7 +720,7 @@ struct VideoAdsTests {
             defer { linearDone = true }
             return try await ads.format(.linear)
         }
-        #expect(await waitUntil(5) { self.harness.adsRequests.count == 1 })
+        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
         pause.cancel()
         do {
             _ = try await pause.value

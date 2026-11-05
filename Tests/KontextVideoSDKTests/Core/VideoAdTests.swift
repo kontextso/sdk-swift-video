@@ -243,7 +243,7 @@ struct VideoAdTests {
         #expect(delegate.endReasons.isEmpty, "frozen: 400 ms in the background did not count")
         NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)
         // A generous wait for the remaining ~200 ms: a loaded CI runner resumes tasks seconds late.
-        #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
+        #expect(await waitUntil { delegate.endReasons == [.completed] }, "the remaining ~200 ms run on foreground")
     }
 
     @Test func anOverlayIsRefusedWhileInactiveAndRunsItsClockOnceShownAfterActivation() async throws {
@@ -256,7 +256,7 @@ struct VideoAdTests {
         #expect(ad.isReady && delegate.events.isEmpty, "nothing spent while nobody can see it")
         Environment.isApplicationActive = { true }
         try ad.show(in: harness.player.view)
-        #expect(await waitUntil(5) { delegate.endReasons == [.completed] })
+        #expect(await waitUntil { delegate.endReasons == [.completed] })
     }
 
     @Test func aPagesCloseWithReasonCompleteEndsCompletedWithoutACloseBeacon() async throws {
@@ -278,7 +278,7 @@ struct VideoAdTests {
         try ad.show(in: harness.player.view)
         #expect(ad.duration == 0.2)
         #expect(delegate.endReasons.isEmpty)
-        #expect(await waitUntil(5) { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
+        #expect(await waitUntil { delegate.endReasons == [.completed] }, "the SDK's clock, not the app's")
         #expect(ad.hasEnded)
         #expect(ad.isCompleted, "the duration elapsed")
         #expect(sent == ["ad.show", "ad.hide"])
@@ -486,12 +486,12 @@ struct VideoAdTests {
         // Uncovered: the view is back and the ad goes on.
         covered = false
         window.add(ad.bridge.webView)
-        #expect(await waitUntil(5) { exposures.last.map { $0 > 0 } == true }, "exposed again")
+        #expect(await waitUntil { exposures.last.map { $0 > 0 } == true }, "exposed again")
         send(ad, "video.firstQuartile", ["playhead": 2500])
         #expect(!ad.hasEnded, "still running")
         // A genuine end later: exactly one didEnd.
         send(ad, "video.skip", ["playhead": 3000])
-        #expect(await waitUntil(5) { delegate.endReasons == [.skipped] })
+        #expect(await waitUntil { delegate.endReasons == [.skipped] })
         await sleepMs(100)
         #expect(delegate.endReasons == [.skipped], "one terminal callback")
     }
@@ -505,7 +505,7 @@ struct VideoAdTests {
         await sleepMs(300)
         #expect(delegate.endReasons.isEmpty, "covered: it waits")
         covered = false   // the cover went, and the presentation with it: the view never comes back
-        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "noticed at the next tick")
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "noticed at the next tick")
         await sleepMs(100)
         #expect(delegate.endReasons == [.interrupted], "once")
     }
@@ -514,7 +514,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i31"))
         try presentLinear(ad)
         ad.bridge.webView.removeFromSuperview()
-        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "the app took it away")
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "the app took it away")
     }
 
     @Test func anOpenForAnotherPurposeOpensTheURLAndFiresNothing() async throws {
@@ -734,7 +734,7 @@ struct VideoAdTests {
         let controller = try #require(ad.linearController)
         window.add(controller.view)
         Environment.isApplicationActive = { false }   // backgrounded while the presentation was pending
-        #expect(await waitUntil(5) { delegate.endReasons == [.failed] }, "no evidence anyone saw it")
+        #expect(await waitUntil { delegate.endReasons == [.failed] }, "no evidence anyone saw it")
         #expect(!(await beacons()).contains("creativeView"), "nothing recorded")
     }
 
@@ -754,7 +754,7 @@ struct VideoAdTests {
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
         window.add(controller.view)   // UIKit attached it, but the completion never runs
-        #expect(await waitUntil(5) { ad.state.wasOnScreen })
+        #expect(await waitUntil { ad.state.wasOnScreen })
         let fired = await beacons()
         #expect(delegate.endReasons.isEmpty && fired.contains("creativeView"), "presented, not failed: \(fired)")
     }
@@ -815,7 +815,7 @@ struct VideoAdTests {
         send(late, "video.start", ["playhead": 0])
         send(late, "video.skip", ["playhead": 7_500])
         send(late, "video.skip", ["playhead": 7_500])
-        #expect(await waitUntil(5) { self.harness.server.beacons.contains { $0.event == "skip" } })
+        #expect(await waitUntil { self.harness.server.beacons.contains { $0.event == "skip" } })
         let fired = await beacons()
         #expect(fired.filter { $0 == "progress" }.count == 1, "the 5000 ms checkpoint the skip passed, once: \(fired)")
         #expect(late.hasEnded)
@@ -826,7 +826,7 @@ struct VideoAdTests {
         try presentLinear(early)
         send(early, "video.start", ["playhead": 0])
         send(early, "video.skip", ["playhead": 3_000])
-        #expect(await waitUntil(5) { self.harness.server.beacons.contains { $0.event == "skip" } })
+        #expect(await waitUntil { self.harness.server.beacons.contains { $0.event == "skip" } })
         let fired = await beacons()
         #expect(!fired.contains("progress"), "the 5000 ms checkpoint was not reached: \(fired)")
     }
@@ -979,7 +979,7 @@ struct VideoAdTests {
         let (controller, window) = try await presentLinear(ad, from: spy)
         defer { window.isHidden = true; window.rootViewController = nil }
         controller.view.removeFromSuperview()   // the view left the window, nothing covers it: the meter ends the ad
-        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] })
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] })
         #expect(spy.dismissals == 1, "the controller was still presented: the SDK takes it down")
     }
 

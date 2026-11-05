@@ -187,7 +187,7 @@ struct IntegrationTests {
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)
         ad.reachedScreen()
-        #expect(await waitUntil(3) { ad.isCompleted }, "every video message arrived as a string")
+        #expect(await waitUntil { ad.isCompleted }, "every video message arrived as a string")
         #expect(await waitUntil { Set(self.events(for: "vid-json")).isSuperset(of: ["start", "midpoint", "progress", "complete"]) })
         #expect(delegate.events.contains("impression"))
         await inPage(ad, "window.closeEndCard()")
@@ -207,8 +207,8 @@ struct IntegrationTests {
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
         ad.reachedScreen()
         #expect(delegate.events.isEmpty)
-        #expect(await waitUntil(3) { delegate.events.contains("impression") }, "at video.start")
-        #expect(await waitUntil(3) { ad.isCompleted }, "at video.complete")
+        #expect(await waitUntil { delegate.events.contains("impression") }, "at video.start")
+        #expect(await waitUntil { ad.isCompleted }, "at video.complete")
         #expect(delegate.endReasons.isEmpty, "the end card is up")
         #expect(await waitUntil { Set(self.events(for: "vid-full")).isSuperset(of: ["start", "firstQuartile", "midpoint", "progress", "thirdQuartile", "complete", "creativeView(endCard)"]) })
         let progress = harness.server.beacons.first { $0.adId == "vid-full" && $0.event == "progress" }
@@ -233,7 +233,7 @@ struct IntegrationTests {
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
         ad.reachedScreen()
-        #expect(await waitUntil(3) { delegate.events.contains("impression") })
+        #expect(await waitUntil { delegate.events.contains("impression") })
         await inPage(ad, "window.skip(1500)")
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
         #expect(await waitUntil { self.events(for: "vid-skip").contains("skip") })
@@ -252,7 +252,7 @@ struct IntegrationTests {
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
         ad.reachedScreen()
-        #expect(await waitUntil(3) { delegate.events.contains("impression") })
+        #expect(await waitUntil { delegate.events.contains("impression") })
         await inPage(ad, "window.fail(405)")
         #expect(await waitUntil { delegate.endReasons == [.failed] })
         #expect(delegate.events.suffix(2) == ["fail", "end:failed"])

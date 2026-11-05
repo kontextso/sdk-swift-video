@@ -93,7 +93,7 @@ struct FrameBridgeTests {
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge(isVideo: true)
         bridge.load()
-        #expect(await waitUntil(5) { !recorder.events.isEmpty })
+        #expect(await waitUntil { !recorder.events.isEmpty })
         guard case .error(let code) = recorder.last else { Issue.record("expected error"); return }
         #expect(code == 400)
         #expect(bridge.state == .ended)
@@ -299,7 +299,7 @@ struct FrameBridgeTests {
         #expect(bridge.webView.superview == nil, "no window to park in while in the background")
         #expect(bridge.state == .loading)
         foreground = true
-        #expect(await waitUntil(5) { bridge.webView.superview === window.window }, "parked on return, so the video can buffer")
+        #expect(await waitUntil { bridge.webView.superview === window.window }, "parked on return, so the video can buffer")
         #expect(bridge.webView.alpha == 0 && bridge.webView.isUserInteractionEnabled == false)
         bridge.hide()
         #expect(bridge.webView.superview == nil)

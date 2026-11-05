@@ -276,7 +276,7 @@ struct VideoAdContentTests {
     private func playingPlayer() async throws -> AVPlayer {
         let player = AVPlayer(url: Self.movie)
         player.actionAtItemEnd = .none
-        try #require(await waitUntil(5) { player.currentItem?.status == .readyToPlay }, "the movie loads")
+        try #require(await waitUntil { player.currentItem?.status == .readyToPlay }, "the movie loads")
         player.play()
         return player
     }
@@ -311,7 +311,7 @@ struct VideoAdContentTests {
         player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: player.currentTime().seconds + 0.4, preferredTimescale: 600)
         let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-end")) { $0.track(player) }
         try ad.show(in: view)
-        #expect(await waitUntil(5) { delegate.endReasons == [.interrupted] }, "the item's end")
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "the item's end")
         #expect(player.rate != 0 && !ads.playback.isPlaying, "the player still asks to play, but its item ended: only the end notification told")
     }
 
@@ -392,7 +392,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         player?.pause()
         player = nil
-        #expect(await waitUntil(5) { released == nil }, "an AVPlayer is the app's: held weakly")
+        #expect(await waitUntil { released == nil }, "an AVPlayer is the app's: held weakly")
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "no content left under it, and no wall-time expiry either")
         let (next, _) = try loadedAd(Fixtures.overlayAd(id: "o-c-gone2"), of: ads)
         do {
@@ -578,7 +578,7 @@ struct VideoAdContentTests {
         let (first, firstDelegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-ended1")) { $0.track(player) }
         try first.show(in: view)
         player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: player.currentTime().seconds + 0.2, preferredTimescale: 600)
-        try #require(await waitUntil(5) { firstDelegate.endReasons == [.interrupted] })
+        try #require(await waitUntil { firstDelegate.endReasons == [.interrupted] })
         #expect(player.rate != 0, "actionAtItemEnd .none keeps the rate")
         let (next, delegate) = try loadedAd(Fixtures.overlayAd(id: "o-c-ended2"), of: ads)
         do {
@@ -596,7 +596,7 @@ struct VideoAdContentTests {
         } catch VideoAdError.contentPaused {}
         player.currentItem?.forwardPlaybackEndTime = .invalid
         await player.seek(to: .zero)   // the app plays it again
-        #expect(await waitUntil(2) { ads.playback.isPlaying })
+        #expect(await waitUntil { ads.playback.isPlaying })
         try next.show(in: view)
         next.dismiss()
     }

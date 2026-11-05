@@ -39,7 +39,7 @@ struct ViewabilityMeterTests {
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)
         let sink = attach(meter)
         meter.start()
-        #expect(await waitUntil(5) { sink.verdict != nil })
+        #expect(await waitUntil { sink.verdict != nil })
         #expect(sink.verdict == .viewable)
         #expect(sink.exposures.first == 1)
         #expect(meter.verdict == .viewable)
@@ -51,12 +51,12 @@ struct ViewabilityMeterTests {
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)
         let sink = attach(meter)
         meter.start()
-        #expect(await waitUntil(5) { !sink.exposures.isEmpty })
+        #expect(await waitUntil { !sink.exposures.isEmpty })
         await sleepMs(150)
         #expect(sink.exposures.allSatisfy { $0 == 0 }, "in the background the page hears exposure 0")
         #expect(sink.verdict == nil, "and no viewability clock runs")
         Environment.isApplicationActive = { true }
-        #expect(await waitUntil(5) { sink.verdict == .viewable }, "on return the ad counts again")
+        #expect(await waitUntil { sink.verdict == .viewable }, "on return the ad counts again")
     }
 
     @Test func measuringGoesOnAfterTheVerdictAndTheViewLeavingTheWindowIsReported() async {
@@ -67,11 +67,11 @@ struct ViewabilityMeterTests {
         var detached = 0
         meter.onDetached = { detached += 1 }
         meter.start()
-        #expect(await waitUntil(5) { sink.verdict == .viewable })
+        #expect(await waitUntil { sink.verdict == .viewable })
         view.removeFromSuperview()
-        #expect(await waitUntil(5) { sink.exposures.last == 0 }, "the page still hears exposure after the verdict")
-        #expect(await waitUntil(5) { detached >= 1 })
-        #expect(await waitUntil(5) { detached >= 3 }, "reported on every tick while it stays out")
+        #expect(await waitUntil { sink.exposures.last == 0 }, "the page still hears exposure after the verdict")
+        #expect(await waitUntil { detached >= 1 })
+        #expect(await waitUntil { detached >= 3 }, "reported on every tick while it stays out")
         meter.stop()
     }
 
@@ -80,7 +80,7 @@ struct ViewabilityMeterTests {
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 300, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)
         let sink = attach(meter)
         meter.start()
-        #expect(await waitUntil(5) { sink.verdict != nil })
+        #expect(await waitUntil { sink.verdict != nil })
         #expect(sink.exposures.first == 0.5)
         #expect(sink.verdict == .viewable, "50 % counts")
     }
@@ -248,7 +248,7 @@ struct ViewabilityMeterTests {
         view.frame.origin.x = 0
         await sleepMs(100)
         #expect(sink.verdict == nil, "the dwell starts over after leaving the screen")
-        #expect(await waitUntil(5) { sink.verdict != nil })
+        #expect(await waitUntil { sink.verdict != nil })
         #expect(sink.verdict == .viewable)
     }
 
@@ -269,7 +269,7 @@ struct ViewabilityMeterTests {
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 0, y: 0, width: 200, height: 100)), requiredSeconds: 0.05)
         let sink = attach(meter)
         meter.start()
-        #expect(await waitUntil(5) { sink.verdict != nil })
+        #expect(await waitUntil { sink.verdict != nil })
         meter.stop()
         meter.start()
         await sleepMs(50)
