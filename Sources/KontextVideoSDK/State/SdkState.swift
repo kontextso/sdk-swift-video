@@ -1,5 +1,6 @@
 /// One source of truth: the one place every fact of the SDK's own life lives (where it is, the configuration it
-/// was initialized with, what `/config` said of the reports), and the only way those facts change. Everyone else
+/// was initialized with, what `/config` said of the reports, what the app said of the viewer), and the only way
+/// those facts change. Everyone else
 /// asks it: `KontextVideo.state`, `isInitialized` and `disabledReason`, the error and debug reporters. The data
 /// only: which moves are legal is `SdkLifecycle`'s rule, which `moveTo(_:)` asks. No UIKit, no effects;
 /// `KontextVideo` acts on it (the shell: `/config`, its retry, the reporters).
@@ -18,6 +19,12 @@ struct SdkState {
 
     /// What `/config` said of debug events (`reportDebug`); off until it answers. Set by `recordDebugReporting(_:)`.
     private(set) var isDebugReportingOn = false
+
+    /// What the app set on `KontextVideo.shared` for the next ads request: the viewer (`user`), the consent signals
+    /// (`regulatory`) and the A/B variant (`variantID`). Recorded as given; the request reads them when it is built.
+    private(set) var user: KontextVideo.User?
+    private(set) var regulatory: KontextVideo.Regulatory?
+    private(set) var variantID: String?
 
     /// `initialize(with:)` was called: the phase left `notInitialized`, never to return.
     var isInitialized: Bool { phase != .notInitialized }
@@ -51,5 +58,20 @@ struct SdkState {
     /// `/config`'s `reportDebug`.
     mutating func recordDebugReporting(_ isOn: Bool) {
         isDebugReportingOn = isOn
+    }
+
+    /// The app's `user`, as it set it; `nil` clears it.
+    mutating func recordUser(_ user: KontextVideo.User?) {
+        self.user = user
+    }
+
+    /// The app's `regulatory`, as it set it; `nil` clears its values (the CMP's are read per request).
+    mutating func recordRegulatory(_ regulatory: KontextVideo.Regulatory?) {
+        self.regulatory = regulatory
+    }
+
+    /// The app's `variantID`, as it set it.
+    mutating func recordVariantID(_ variantID: String?) {
+        self.variantID = variantID
     }
 }

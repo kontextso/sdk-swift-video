@@ -238,7 +238,7 @@ struct KontextVideoTests {
         _ = await harness.initialize()
         var messages: [String] = []
         Environment.assertionFailure = { messages.append($0) }
-        #expect(sdk.requireInitialized("x"))
+        #expect(IntegrationGuard.requireInitialized("x"))
         #expect(messages.isEmpty)
     }
 
@@ -271,7 +271,7 @@ struct KontextVideoTests {
             harness.server.on("/v2/config", failure)
             let before = harness.server.requests(to: "/v2/config").count
             let request = ConfigRequest.make(configuration: KontextVideo.Configuration(publisherToken: "t", adServerURL: harness.server.baseURL), installId: "i")
-            await #expect(throws: APIError.self) { try await KontextVideo.sendConfigRequest(request, client: APIClient(baseURL: harness.server.baseURL)) }
+            await #expect(throws: APIError.self) { try await ConfigFetcher.send(request, client: APIClient(baseURL: harness.server.baseURL)) }
             #expect(harness.server.requests(to: "/v2/config").count == before + 1, "no retry: a network failure, a 503, a 429, a 400 alike")
         }
     }

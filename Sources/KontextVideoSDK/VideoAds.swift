@@ -43,19 +43,8 @@ public final class VideoAds {
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
         self.labels = labels
-        KontextVideo.shared.requireInitialized("VideoAds(content:)")
-        // What the publisher passed wrong, said once here rather than as a server 400 later. An empty id or
-        // language makes every request fail: a programmer error, which stops a debug build. The rest is
-        // metadata the request leaves out.
-        let missing = content.missingRequired
-        if !missing.isEmpty {
-            Environment.assertionFailure("KontextVideo.Content: \(missing.joined(separator: ", "))")
-            Logger.error("content \(content.id): \(missing.joined(separator: ", ")); the server will refuse its requests")
-            ErrorReporter.shared.report(.badContent, stage: .integration, sessionId: sessionId, detail: missing.joined(separator: ","))
-        }
-        if !content.leftOut.isEmpty {
-            Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
-        }
+        IntegrationGuard.requireInitialized("VideoAds(content:)")
+        IntegrationGuard.checkContent(content, sessionId: sessionId)
         // An expired ad is otherwise dropped only at the next call; under memory pressure its renderer (the
         // WebView) is released at once. WebKit decides when its processes exit. Valid ads stay loaded: `show`
         // must stay instant.
@@ -96,7 +85,7 @@ public final class VideoAds {
     /// itself continues).
     public func format(_ format: AdFormat) async throws -> VideoAd {
         guard !isDestroyed else { throw VideoAdError.destroyed }
-        guard KontextVideo.shared.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
+        guard IntegrationGuard.requireInitialized("ads.format(_:)") else { throw VideoAdError.notInitialized }
         guard let task = fetcher?.fetch() else { throw VideoAdError.destroyed }
         let noFill: AdsFetcher.NoFills
         do {

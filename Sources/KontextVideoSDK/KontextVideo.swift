@@ -45,18 +45,24 @@ public final class KontextVideo {
     /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
     /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
     public var user: User? {
-        didSet {
-            guard let empty = user?.emptyFields, !empty.isEmpty else { return }
-            if empty.contains("id") { Environment.assertionFailure("KontextVideo.User: id is empty") }
-            Logger.warning("user: \(empty.joined(separator: ", ")) empty, left out of the requests")
+        get { sdkState.user }
+        set {
+            sdkState.recordUser(newValue)
+            IntegrationGuard.checkUser(newValue)
         }
     }
     /// Privacy and consent signals. Set what your consent platform gives you; `coppa` can only come from you.
     /// The next ads request carries them; ads already loaded stay. Setting it to `nil` clears your values
     /// only: the SDK still reads the CMP's shared storage on every request.
-    public var regulatory: Regulatory?
+    public var regulatory: Regulatory? {
+        get { sdkState.regulatory }
+        set { sdkState.recordRegulatory(newValue) }
+    }
     /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
-    public var variantID: String?
+    public var variantID: String? {
+        get { sdkState.variantID }
+        set { sdkState.recordVariantID(newValue) }
+    }
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.
     var isInitialized: Bool { sdkState.isInitialized }
@@ -92,16 +98,8 @@ public final class KontextVideo {
         }
         sdkState.recordConfiguration(configuration)
         Logger.level = configuration.logLevel
-        if !configuration.problems.isEmpty {
-            // A configuration mistake: every request would fail. Stops a debug build here, not at a 400 later.
-            Environment.assertionFailure("KontextVideo.Configuration: \(configuration.problems.joined(separator: ", "))")
-            Logger.error("configuration: \(configuration.problems.joined(separator: ", ")); no ads will load")
-            // An unusable configuration still tries `/config`; a server that answers wants to hear about it.
-            if configuration.publisherToken.isEmpty { ErrorReporter.shared.report(.emptyToken, stage: .integration) }
-            if configuration.problems.contains(where: { $0.hasPrefix("adServerURL") }) {
-                ErrorReporter.shared.report(.badServerURL, stage: .integration)
-            }
-        }
+        // An unusable configuration still tries `/config`; a server that answers wants to hear about it.
+        IntegrationGuard.checkConfiguration(configuration)
         Logger.debug("Initialising, SDK version \(Self.version)")
         sdkState.moveTo(.initializing)
         initTask = Task {
@@ -141,25 +139,6 @@ public final class KontextVideo {
         Logger.warning("Disabled by the server: \(reason)")
     }
 
-    /// Guards a call that needs `initialize(with:)` to have been called first.
-    ///
-    /// Calling the SDK before initialising it is a mistake in the app's code, not a runtime condition,
-    /// so it is handled the way Swift handles programmer errors: `assertionFailure` stops a debug build
-    /// on the first run with the message, where a log line could be overlooked (a common choice for an
-    /// SDK's configure call). A release build only logs and carries on, because the
-    /// order of calls in a real app is not always deterministic and the SDK must not take the app down in
-    /// front of users. Not `throws`: that would put `try` on every publisher's call for a mistake most
-    /// never make.
-    @discardableResult
-    func requireInitialized(_ call: String) -> Bool {
-        guard !isInitialized else { return true }
-        Environment.assertionFailure("KontextVideo: call initialize(with:) before \(call)")
-        Logger.error("\(call) called before initialize(with:); no ads will load")
-        // Kept in memory: it leaves if the app initializes later and `/config` turns the reports on.
-        ErrorReporter.shared.report(.notInitialized, stage: .integration, detail: call)
-        return false
-    }
-
     /// After a failed `/config`, every ads request tries it again first; a load is already an explicit
     /// request for an ad, and one `/config` per load is cheap.
     private func retryConfig() {
@@ -185,28 +164,21 @@ public final class KontextVideo {
         initTask?.cancel()
         initTask = nil
         sdkState = SdkState()
-        user = nil
-        regulatory = nil
-        variantID = nil
         ScreenSlot.resetForTesting()
         DebugReporter.shared.resetForTesting()
         ErrorReporter.shared.resetForTesting()
         Logger.level = .warning
     }
 
-    /// One attempt, whatever the failure: no retry policy for now, every request is sent once. After a failure
-    /// the SDK is `.failed`, and the next ads request tries `/config` again (`waitUntilEnabled`).
-    static func sendConfigRequest(_ request: ConfigRequest, client: APIClient) async throws -> ConfigResponse {
-        try await client.post("config", body: request)
-    }
-
+    /// `/config`, once (`ConfigFetcher`), and what its answer does to the SDK.
     private func fetchConfig(configuration: Configuration) async {
-        let client = APIClient(baseURL: configuration.adServerURL)
-        let request = ConfigRequest.make(configuration: configuration, installId: Self.installId)
-        do {
-            let response = try await Self.sendConfigRequest(request, client: client)
-            // Cancelled meanwhile (`resetForTesting()`): the answer belongs to a state that was reset.
-            guard !Task.isCancelled else { return }
+        let outcome = await ConfigFetcher.fetch(configuration)
+        switch outcome {
+        case .cancelled:
+            return
+        case .failed:
+            sdkState.moveTo(.failed)
+        case .answered(let response):
             switch response {
             case .enabled(let reportDebug, let reportErrors):
                 recordDebugReporting(reportDebug)
@@ -223,24 +195,6 @@ public final class KontextVideo {
                 recordErrorReporting(false)
                 Logger.warning("Disabled by the server: \(reason)")
             }
-        } catch {
-            guard !Task.isCancelled else { return }
-            sdkState.moveTo(.failed)
-            Logger.error("/config failed, no ads until it succeeds: \(error)")
-            // Waits in memory: it leaves once a later `/config` turns the reports on.
-            let failure = ErrorReport.FailedRequest(error)
-            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: failure)
         }
-    }
-}
-
-/// The configuration's check, next to `initialize(with:)`, which makes it.
-extension KontextVideo.Configuration {
-    /// What is wrong with the options, one phrase each; empty when they are usable.
-    var problems: [String] {
-        var problems: [String] = []
-        if publisherToken.isEmpty { problems.append("publisherToken is empty") }
-        if adServerURL.scheme == nil || (adServerURL.host ?? "").isEmpty { problems.append("adServerURL \(adServerURL) is not absolute") }
-        return problems
     }
 }

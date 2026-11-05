@@ -1,0 +1,77 @@
+import Foundation
+
+/// The checks of how the app uses the SDK: a call before `initialize(with:)`, an unusable configuration, a
+/// video's content the server would refuse, a user with empty fields. Each is a mistake in the app's code, not a
+/// runtime condition, and each is handled the same way: a debug build stops at it (`Environment.assertionFailure`,
+/// with the message), a release build logs it and carries on, and what Kontext should hear of is reported
+/// (`ErrorReporter`, stage `integration`).
+///
+/// No main-thread check: every public type is `@MainActor`, so the compiler refuses a call from elsewhere.
+/// `KontextVideo` and `VideoAds` call these where the mistake is made.
+@MainActor
+enum IntegrationGuard {
+    /// Guards a call that needs `initialize(with:)` to have been called first.
+    ///
+    /// Calling the SDK before initialising it is a mistake in the app's code, not a runtime condition,
+    /// so it is handled the way Swift handles programmer errors: `assertionFailure` stops a debug build
+    /// on the first run with the message, where a log line could be overlooked (a common choice for an
+    /// SDK's configure call). A release build only logs and carries on, because the
+    /// order of calls in a real app is not always deterministic and the SDK must not take the app down in
+    /// front of users. Not `throws`: that would put `try` on every publisher's call for a mistake most
+    /// never make.
+    @discardableResult
+    static func requireInitialized(_ call: String) -> Bool {
+        guard !KontextVideo.shared.isInitialized else { return true }
+        Environment.assertionFailure("KontextVideo: call initialize(with:) before \(call)")
+        Logger.error("\(call) called before initialize(with:); no ads will load")
+        // Kept in memory: it leaves if the app initializes later and `/config` turns the reports on.
+        ErrorReporter.shared.report(.notInitialized, stage: .integration, detail: call)
+        return false
+    }
+
+    /// The configuration `initialize(with:)` was given: a mistake there makes every request fail. Stops a debug
+    /// build here, not at a 400 later.
+    static func checkConfiguration(_ configuration: KontextVideo.Configuration) {
+        let problems = configuration.problems
+        guard !problems.isEmpty else { return }
+        Environment.assertionFailure("KontextVideo.Configuration: \(problems.joined(separator: ", "))")
+        Logger.error("configuration: \(problems.joined(separator: ", ")); no ads will load")
+        if configuration.publisherToken.isEmpty { ErrorReporter.shared.report(.emptyToken, stage: .integration) }
+        if problems.contains(where: { $0.hasPrefix("adServerURL") }) {
+            ErrorReporter.shared.report(.badServerURL, stage: .integration)
+        }
+    }
+
+    /// A video's content, said once at `VideoAds(content:)` rather than as a server 400 later. An empty id or
+    /// language makes every request fail: a programmer error, which stops a debug build. The rest is metadata the
+    /// request leaves out.
+    static func checkContent(_ content: KontextVideo.Content, sessionId: String) {
+        let missing = content.missingRequired
+        if !missing.isEmpty {
+            Environment.assertionFailure("KontextVideo.Content: \(missing.joined(separator: ", "))")
+            Logger.error("content \(content.id): \(missing.joined(separator: ", ")); the server will refuse its requests")
+            ErrorReporter.shared.report(.badContent, stage: .integration, sessionId: sessionId, detail: missing.joined(separator: ","))
+        }
+        if !content.leftOut.isEmpty {
+            Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")
+        }
+    }
+
+    /// The viewer the app set: an empty field is left out of the requests; an empty `id` is a programmer error.
+    static func checkUser(_ user: KontextVideo.User?) {
+        guard let empty = user?.emptyFields, !empty.isEmpty else { return }
+        if empty.contains("id") { Environment.assertionFailure("KontextVideo.User: id is empty") }
+        Logger.warning("user: \(empty.joined(separator: ", ")) empty, left out of the requests")
+    }
+}
+
+/// The configuration's check, which `checkConfiguration` reports.
+extension KontextVideo.Configuration {
+    /// What is wrong with the options, one phrase each; empty when they are usable.
+    var problems: [String] {
+        var problems: [String] = []
+        if publisherToken.isEmpty { problems.append("publisherToken is empty") }
+        if adServerURL.scheme == nil || (adServerURL.host ?? "").isEmpty { problems.append("adServerURL \(adServerURL) is not absolute") }
+        return problems
+    }
+}
