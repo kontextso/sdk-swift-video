@@ -327,24 +327,23 @@ struct FrameBridgeTests {
         // without a key window never finishes loading it.
         Environment.isApplicationActive = { true }
         Environment.parkingWindow = { ParkingWindow.window }
+        // The bridge's own limit as the harness sets it, not the 10 s of `reset()`: a cold web content process on a
+        // CI runner took longer, and the page's load is not what this test is about.
+        FrameBridge.loadTimeout = 30
         let probe = "typeof MediaDevices === 'undefined' ? 'none' : typeof MediaDevices.prototype.getUserMedia"
         func readProbe(asks: Bool) async throws -> String? {
             Environment.asksBeforeMediaCapture = { asks }
-            // What the script leaves in the page is the point, not how fast it loads: a CI runner sometimes never
-            // finishes one load, so a second WebView gets a try.
-            for attempt in 1...2 {
-                let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
-                var loaded = false
-                bridge.onEvent = { if case .loaded = $0 { loaded = true } }
-                bridge.load()
-                if await waitUntil(15, { loaded }) {
-                    defer { bridge.hide() }
-                    return try await bridge.webView.evaluateJavaScript(probe) as? String
-                }
-                bridge.hide()
-                if attempt == 2 { Issue.record("the page never loaded, twice") }
+            let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
+            defer { bridge.hide() }
+            var loaded = false
+            bridge.onEvent = { if case .loaded = $0 { loaded = true } }
+            bridge.load()
+            // Never `evaluateJavaScript` on a page that did not load: on a stuck web process it waits for minutes.
+            guard await waitUntil(35, { loaded }) else {
+                Issue.record("the page never loaded")
+                return nil
             }
-            return nil
+            return try await bridge.webView.evaluateJavaScript(probe) as? String
         }
         #expect(try await readProbe(asks: true) == "function", "the control: WebKit has the API")
         #expect(try await readProbe(asks: false) == "undefined")
