@@ -198,7 +198,7 @@ public final class VideoAd {
     /// an ad that already ended (expired, rejected, destroyed, failed) needs no notice and one that was
     /// shown cannot be rejected, so both are no-ops, with a console line; nothing is left to handle.
     public func reject(_ reason: RejectReason = .notUsed) {
-        withContentPlayhead {
+        tracker.withContentPlayhead {
             if wasShown {
                 Logger.warning("\(format) ad \(id.prefix(8)): reject() after show does nothing; the ad was shown")
                 return
@@ -285,7 +285,7 @@ public final class VideoAd {
     /// `containerTooSmall`'s minimum. A full-screen pause ad ignores them: it fills the view. A negative or
     /// non-finite value counts as zero.
     public func show(in view: UIView, insets: UIEdgeInsets = .zero) throws {
-        try withContentPlayhead { try showInline(in: view, insets: insets) }
+        try tracker.withContentPlayhead { try showInline(in: view, insets: insets) }
     }
 
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
@@ -338,7 +338,7 @@ public final class VideoAd {
     /// the video completing, a skip, a close, an error, or an
     /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad.
     public func show(from viewController: UIViewController? = nil) throws {
-        try withContentPlayhead { try showLinear(from: viewController) }
+        try tracker.withContentPlayhead { try showLinear(from: viewController) }
     }
 
     private func showLinear(from viewController: UIViewController?) throws {
@@ -448,7 +448,7 @@ public final class VideoAd {
     /// fire. Everything the ad needs while on screen is set up before anyone outside hears of it: the
     /// impression delegate at the end may end the ad on the spot, and `end()` must find all of it.
     func reachedScreen() {
-        withContentPlayhead {
+        tracker.withContentPlayhead {
             guard state.moveTo(.onScreen) else { return }
             bridge.show(size: (shownAd?.screen as? InlineScreen)?.chosenSize)
             Logger.info("ad \(id.prefix(8)): shown")
@@ -498,7 +498,7 @@ public final class VideoAd {
         // At most one verdict per ad, after its impression: an ad never counted has nothing to be viewable.
         meter.onVerdict = { [weak self] verdict in
             guard self?.state.hasImpression == true else { return }
-            self?.withContentPlayhead { self?.tracker.fire(verdict.rawValue) }
+            self?.tracker.withContentPlayhead { self?.tracker.fire(verdict.rawValue) }
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
         // The app took the view away (navigated off without dismiss()): the ad ends, or it would block every
@@ -555,7 +555,7 @@ public final class VideoAd {
 
     /// The one terminal moment after a successful show. Idempotent.
     func end(_ reason: EndReason) {
-        withContentPlayhead { endNow(reason) }
+        tracker.withContentPlayhead { endNow(reason) }
     }
 
     // Every end releases, in this order (an ad ended before show: `invalidate` releases what it ever had, the

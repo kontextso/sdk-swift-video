@@ -441,7 +441,7 @@ extension VideoAds {
                     ad.invalidate(.expired)
                     continue
                 }
-                ad.withContentPlayhead {
+                ad.tracker.withContentPlayhead {
                     ad.invalidate(.destroyed)
                     ad.tracker.fire("notUsed", notUsed: .destroyed)
                 }

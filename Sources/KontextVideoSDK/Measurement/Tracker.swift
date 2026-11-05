@@ -12,9 +12,9 @@ final class Tracker {
     var contentPlayhead: () -> TimeInterval = { 0 }
     /// The content playhead read before the operation now running; every beacon of it uses this value and
     /// calls no app code. `nil` outside an operation: a beacon then reads `contentPlayhead` itself.
-    var frozenContentPlayhead: TimeInterval?
+    private var frozenContentPlayhead: TimeInterval?
     /// The last value the app's player gave; what an operation started while it is read uses.
-    var lastContentPlayhead: TimeInterval = 0
+    private var lastContentPlayhead: TimeInterval = 0
     /// Whether any URL asks for the content playhead; when none does, nobody reads it.
     let readsContentPlayhead: Bool
 
@@ -32,6 +32,23 @@ final class Tracker {
         self.entries = entries
         session = Environment.session
         readsContentPlayhead = entries.contains { TrackingMacros.asksForContentPlayhead($0.url) }
+    }
+
+    /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
+    /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
+    /// every beacon inside uses that value. Nested calls share the outer read; nothing is read when no URL
+    /// asks for it (`urls`: the operation's, a click's destinations). While the player is read, the last value
+    /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
+    @discardableResult
+    func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
+        let asked = readsContentPlayhead || urls.contains { TrackingMacros.asksForContentPlayhead($0.absoluteString) }
+        guard frozenContentPlayhead == nil, asked else { return try work() }
+        frozenContentPlayhead = lastContentPlayhead
+        defer { frozenContentPlayhead = nil }
+        let playhead = contentPlayhead()
+        lastContentPlayhead = playhead
+        frozenContentPlayhead = playhead
+        return try work()
     }
 
     /// Fires every entry named `event` for `part` (`nil` is the main creative) that has not fired yet.
@@ -131,24 +148,5 @@ extension Tracker {
             if case .outbid(_, let winner) = self { return winner }
             return nil
         }
-    }
-}
-
-extension VideoAd {
-    /// Runs `work` with the content playhead read once, before it. The app's player (`currentTime`) is the one
-    /// piece of app code a beacon calls; read here it sees the ad before the operation changes anything, and
-    /// every beacon inside uses that value. Nested calls share the outer read; nothing is read when no URL
-    /// asks for it (`urls`: the operation's, a click's destinations). While the player is read, the last value
-    /// is the frozen one: an operation it starts reads nothing more, so a player that ends the ad cannot recurse.
-    @discardableResult
-    func withContentPlayhead<T>(alsoFor urls: [URL] = [], _ work: () throws -> T) rethrows -> T {
-        let asked = tracker.readsContentPlayhead || urls.contains { TrackingMacros.asksForContentPlayhead($0.absoluteString) }
-        guard tracker.frozenContentPlayhead == nil, asked else { return try work() }
-        tracker.frozenContentPlayhead = tracker.lastContentPlayhead
-        defer { tracker.frozenContentPlayhead = nil }
-        let playhead = tracker.contentPlayhead()
-        tracker.lastContentPlayhead = playhead
-        tracker.frozenContentPlayhead = playhead
-        return try work()
     }
 }

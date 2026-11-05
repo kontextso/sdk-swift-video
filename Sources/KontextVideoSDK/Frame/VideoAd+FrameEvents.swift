@@ -12,7 +12,7 @@ extension VideoAd {
     func handle(_ event: FrameEvent) {
         var urls: [URL] = []
         if case .click(let url, let fallbackUrl, _) = event { urls = [url] + (fallbackUrl.map { [$0] } ?? []) }
-        withContentPlayhead(alsoFor: urls) { handleNow(event) }
+        tracker.withContentPlayhead(alsoFor: urls) { handleNow(event) }
     }
 
     private func handleNow(_ event: FrameEvent) {
