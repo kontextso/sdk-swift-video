@@ -116,12 +116,11 @@ final class OnScreenTimeClock {
     }
 
     private func pause() {
-        if let since {
-            accumulated += ProcessInfo.processInfo.systemUptime - since
-            self.since = nil
-        }
         timer?.cancel()
         timer = nil
+        guard let since else { return }
+        accumulated += ProcessInfo.processInfo.systemUptime - since
+        self.since = nil
         if !isStopped { Logger.debug("ad \(adId.prefix(8)): clock frozen at \(accumulated) s on screen") }
     }
 

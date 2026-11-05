@@ -30,7 +30,6 @@ enum Environment {
     }
 
     private static let defaultSession = makeSession()
-    /// Read once: the Info.plist does not change while the app runs.
     /// Where `show()` finds its presenter, and what the request reports as the player when nothing else says.
     static var keyWindow: @MainActor () -> UIWindow? = defaultKeyWindow
     /// Where a loading WebView is parked so WebKit runs its page and buffers its video: the key window.
@@ -159,9 +158,7 @@ enum Environment {
         return nil
     }
 
-    /// Whether an ad in `window` can be seen: the app is active and so is the window's own scene. On an
-    /// iPad one window can go to the background while another stays active, which the app-wide state alone
-    /// does not show. A window without a scene (an app without scenes) follows the app.
+    /// Whether something presented over `controller` hides it (`covers`).
     static func defaultIsCovered(_ controller: UIViewController) -> Bool {
         guard let presented = controller.presentedViewController else { return false }
         return covers(presented)
@@ -172,6 +169,9 @@ enum Environment {
         !(presented is UIAlertController)
     }
 
+    /// Whether an ad in `window` can be seen: the app is active and so is the window's own scene. On an
+    /// iPad one window can go to the background while another stays active, which the app-wide state alone
+    /// does not show. A window without a scene (an app without scenes) follows the app.
     private static func defaultIsWindowActive(_ window: UIWindow) -> Bool {
         isWindowActive(appActive: isApplicationActive(), sceneState: window.windowScene?.activationState)
     }
