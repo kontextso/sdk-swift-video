@@ -249,8 +249,8 @@ struct ErrorReporterTests {
 
     @Test func aPresentationUIKitNeverCompletesIsReported() async throws {
         await enableReports()
-        VideoAd.presentationTimeout = 0.1
-        defer { VideoAd.presentationTimeout = 2 }
+        VideoAd.showTimeout = 0.1
+        defer { VideoAd.showTimeout = 2 }
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         let ad = try loadedAd(Fixtures.linearAd(id: "v-er-p"), in: ads)
         try ad.show(from: window.root)

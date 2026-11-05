@@ -27,7 +27,7 @@ sdk-swift-video/
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire: the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo, Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameProtocol (the protocol's rules: accept(message) → Step), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), VideoAd+Click, the SKAdNetwork impression
-│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller and its presentation, Presentation (the slot, the screen, the meter), the host view, VideoAd+Placement (where an overlay or pause ad goes)
+│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, LinearScreen for linear), the linear-ad controller and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), the host view, VideoAd+Placement (where an overlay or pause ad goes)
 │   ├── Measurement/  measuring and reporting: the tracker (beacons), the viewability meter, the active-time clock
 │   ├── Playback/     the tracked content player (ContentPlayback) and ContentRule (how each format follows it: OverlayRule, PauseRule, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
@@ -98,7 +98,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 
 ## Where things are decided
 
-- The lifecycle, in one line: `load` returns a ready ad; `show` either throws or presentation begins; then zero or
+- The lifecycle, in one line: `load` returns a ready ad; `show` either throws or the ad begins to show; then zero or
   more interaction callbacks; then exactly one `didEnd`, whoever ended it. Everything in `VideoAd.swift` serves
   that sentence; `end(_:)` is the only terminal path.
 - One source of truth: every fact of an ad's life (phase, loaded, impression, completed, on screen, the failure) is

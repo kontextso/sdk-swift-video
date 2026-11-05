@@ -6,8 +6,8 @@ import UIKit
 /// the SDK carries no code only tests use (`swiftlint analyze` flags it there).
 @MainActor
 extension VideoAd {
-    var hostView: AdHostView? { (presentation?.screen as? InlineScreen)?.hostView }
-    var linearController: LinearViewController? { (presentation?.screen as? LinearScreen)?.controller }
+    var hostView: AdHostView? { (shownAd?.screen as? InlineScreen)?.hostView }
+    var linearController: LinearViewController? { (shownAd?.screen as? LinearScreen)?.controller }
 
     /// The tracked player changed or a tick came; the rule decides.
     func contentDidChange(_ change: ContentPlayback.Change) { contentRule.contentDidChange(change) }

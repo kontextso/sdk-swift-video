@@ -186,7 +186,7 @@ struct IntegrationTests {
         try ad.show(from: window.root)
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)
-        ad.presented()
+        ad.reachedScreen()
         #expect(await waitUntil(3) { ad.isCompleted }, "every video message arrived as a string")
         #expect(await waitUntil { Set(self.events(for: "vid-json")).isSuperset(of: ["start", "midpoint", "progress", "complete"]) })
         #expect(delegate.events.contains("impression"))
@@ -205,7 +205,7 @@ struct IntegrationTests {
         try ad.show(from: window.root)
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
-        ad.presented()
+        ad.reachedScreen()
         #expect(delegate.events.isEmpty)
         #expect(await waitUntil(3) { delegate.events.contains("impression") }, "at video.start")
         #expect(await waitUntil(3) { ad.isCompleted }, "at video.complete")
@@ -232,7 +232,7 @@ struct IntegrationTests {
         try ad.show(from: window.root)
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
-        ad.presented()
+        ad.reachedScreen()
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
         await inPage(ad, "window.skip(1500)")
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
@@ -251,7 +251,7 @@ struct IntegrationTests {
         try ad.show(from: window.root)
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)   // on screen, as after UIKit's presentation completes; the runner never completes one
-        ad.presented()
+        ad.reachedScreen()
         #expect(await waitUntil(3) { delegate.events.contains("impression") })
         await inPage(ad, "window.fail(405)")
         #expect(await waitUntil { delegate.endReasons == [.failed] })

@@ -80,7 +80,7 @@ struct VideoAdSKAdNetworkTests {
         #expect(skanCalls.isEmpty, "reserved, not on screen yet")
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)
-        ad.presented()
+        ad.reachedScreen()
         #expect(await waitUntil { skanCalls == ["init s3", "start"] })
         ad.end(.interrupted)
         #expect(await waitUntil { skanCalls == ["init s3", "start", "end", "dispose"] })

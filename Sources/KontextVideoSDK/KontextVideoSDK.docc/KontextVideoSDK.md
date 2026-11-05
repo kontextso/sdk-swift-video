@@ -69,7 +69,7 @@ Show an episode's ads only in that episode: a player belongs to one ``VideoAds``
 ## Lifecycle
 
 `format` returns an ad with nothing rendered; `load` renders it; `show` either throws, and nothing happened,
-or presentation begins. Then the impression, at most once, and any clicks; then exactly one
+or the ad begins to show. Then the impression, at most once, and any clicks; then exactly one
 ``VideoAdDelegate/videoAd(_:didEnd:)``, whoever ended it. Nothing is delivered through the delegate before
 `show`: an ad that can no longer be shown says so when `load` or `show` throws a ``VideoAdError``.
 

@@ -100,7 +100,7 @@ struct VideoAdPlacementTests {
         ad.linearController?.loadViewIfNeeded()
         // Presented before the WebView reached a window: the meter's first tick, run at once, has nothing
         // to measure (a second one would take the view as gone).
-        ad.presented()
+        ad.reachedScreen()
         ad.bridge.receive(["adId": ad.id, "type": "video.start", "playhead": 0], from: sender)
         #expect(exposures.isEmpty, "no exposure 0 before the first layout: \(exposures)")
         window.add(ad.bridge.webView)

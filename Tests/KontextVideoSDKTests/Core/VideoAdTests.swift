@@ -62,7 +62,7 @@ struct VideoAdTests {
         // watches, on screen directly.
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)
-        ad.presented()
+        ad.reachedScreen()
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
@@ -658,7 +658,7 @@ struct VideoAdTests {
         #expect(presented.modalPresentationStyle == .fullScreen)
         #expect(presented.view.subviews.first === ad.bridge.webView)
         #expect(presented.prefersStatusBarHidden)
-        ad.presented()   // UIKit's completion
+        ad.reachedScreen()   // UIKit's completion
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.skip", ["playhead": 1000])
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
@@ -679,7 +679,7 @@ struct VideoAdTests {
         #expect(delegate.events == ["impression", "end:dismissed"], "ended from inside the impression callback")
         #expect(clock?.observers.isEmpty == true, "the observers set up at show were removed by the end that followed")
         #expect(clock?.timer == nil && ad.loadedBridge == nil, "no clock running, no WebView")
-        #expect(ad.presentation == nil && KontextVideo.shared.adOnScreen == nil, "the slot is free")
+        #expect(ad.shownAd == nil && KontextVideo.shared.adOnScreen == nil, "the slot is free")
     }
 
     @Test func aMessageAfterTheEndChangesNothing() async throws {
@@ -712,8 +712,8 @@ struct VideoAdTests {
 
     @Test func aPresentationUIKitNeverCompletesEndsTheAdAsFailed() async throws {
         // The runner never completes a modal transition and the controller never reaches a window: what a refused presentation looks like.
-        VideoAd.presentationTimeout = 0.2
-        defer { VideoAd.presentationTimeout = 2 }
+        VideoAd.showTimeout = 0.2
+        defer { VideoAd.showTimeout = 2 }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10c"))
         try ad.show(from: window.root)
         #expect(ad.wasShown && KontextVideo.shared.adOnScreen === ad)
@@ -727,8 +727,8 @@ struct VideoAdTests {
     }
 
     @Test func aControllerOnScreenInAnInactiveAppIsNotTakenAsPresented() async throws {
-        VideoAd.presentationTimeout = 0.1
-        defer { VideoAd.presentationTimeout = 2; Environment.isApplicationActive = { true } }
+        VideoAd.showTimeout = 0.1
+        defer { VideoAd.showTimeout = 2; Environment.isApplicationActive = { true } }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10f"))
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
@@ -748,8 +748,8 @@ struct VideoAdTests {
     }
 
     @Test func aControllerOnScreenWhoseCompletionNeverCameIsTakenAsPresented() async throws {
-        VideoAd.presentationTimeout = 0.1
-        defer { VideoAd.presentationTimeout = 2 }
+        VideoAd.showTimeout = 0.1
+        defer { VideoAd.showTimeout = 2 }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10e"))
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
@@ -793,7 +793,7 @@ struct VideoAdTests {
         #expect(ad.meter == nil && !ad.state.wasOnScreen, "a linear ad's page and meter wait for the presentation")
         send(ad, "video.start", ["playhead": 0])
         #expect(!delegate.events.contains("impression"), "nothing from the page before UIKit confirmed")
-        ad.presented()   // what the presentation completion does
+        ad.reachedScreen()   // what the presentation completion does
         send(ad, "video.start", ["playhead": 0])
         #expect(ad.meter?.countsTime == true && delegate.events.contains("impression"), "the start counts once the ad is presented")
     }
@@ -952,7 +952,7 @@ struct VideoAdTests {
         let controller = try #require(ad.linearController)
         #expect(await waitUntil { spy.presentedViewController === controller })
         window.addSubview(controller.view)
-        ad.presented()
+        ad.reachedScreen()
         return (controller, window)
     }
 

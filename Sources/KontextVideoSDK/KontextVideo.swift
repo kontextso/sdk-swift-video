@@ -61,8 +61,8 @@ public final class KontextVideo {
 
     /// The one ad on screen in the whole app, from any `VideoAds`: taken at `show`, released at `didEnd`; it
     /// retains the ad until then, whatever the app does with its reference.
-    var presentation: Presentation?
-    var adOnScreen: VideoAd? { presentation?.ad }
+    var shownAd: ShownAd?
+    var adOnScreen: VideoAd? { shownAd?.ad }
 
     /// The server's reason while the SDK is switched off, else `nil`.
     var disabledReason: String? {
@@ -184,7 +184,7 @@ public final class KontextVideo {
         user = nil
         regulatory = nil
         variantID = nil
-        presentation = nil
+        shownAd = nil
         reportDebug = false
         DebugReporter.shared.isEnabled = false
         DebugReporter.shared.clearHistory()

@@ -2,7 +2,7 @@
 /// implement the ones you need. The delegate is held weakly, as UIKit's delegates are.
 ///
 /// Nothing is delivered before `show`: an ad that can no longer be shown says so when `load()` or `show`
-/// throws. `show` either throws, and nothing happened, or the presentation is accepted: an overlay or
+/// throws. `show` either throws, and nothing happened, or the show is accepted: an overlay or
 /// pause ad is on screen when it returns (an image or HTML creative's impression may even arrive inside
 /// `show(in:)`); a linear ad has asked UIKit to present it, which can still fail, as `didFail` then says.
 /// After that: the impression (at most once, maybe never) and any interactions; then exactly one terminal
@@ -35,7 +35,7 @@ public protocol VideoAdDelegate: AnyObject {
     /// linear ad (`presenterUnavailable`). `didEnd(.failed)` follows once the ad is cleaned up (for a
     /// linear ad, after its dismissal).
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
-    /// Presentation is over. Exactly once per successful `show`.
+    /// The ad's time on screen is over. Exactly once per successful `show`.
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason)
 }
 

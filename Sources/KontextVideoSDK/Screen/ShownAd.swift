@@ -5,7 +5,7 @@ import Foundation
 /// Made when `show` commits, released when `didEnd` is delivered; the slot is taken and freed here and
 /// nowhere else, and `KontextVideo.adOnScreen` and the owner's showing ad follow it.
 @MainActor
-final class Presentation {
+final class ShownAd {
     /// Retained from `show` to `didEnd`, whatever the app does with its own reference.
     let ad: VideoAd
     private weak var owner: VideoAds?
@@ -22,11 +22,11 @@ final class Presentation {
 
     /// `show` committed: the ad takes the app's one slot and its owner hears it is showing, before any of the
     /// app's code can run, so a show from inside that code finds the slot taken.
-    static func begin(_ ad: VideoAd, owner: VideoAds?, screen: any AdScreen) -> Presentation {
-        let presentation = Presentation(ad: ad, owner: owner, screen: screen)
-        KontextVideo.shared.presentation = presentation
+    static func begin(_ ad: VideoAd, owner: VideoAds?, screen: any AdScreen) -> ShownAd {
+        let shownAd = ShownAd(ad: ad, owner: owner, screen: screen)
+        KontextVideo.shared.shownAd = shownAd
         owner?.adDidBeginShowing(ad)
-        return presentation
+        return shownAd
     }
 
     /// The ad is ending: measuring stops and an inline page leaves the screen. Returns the active time seen,
@@ -39,7 +39,7 @@ final class Presentation {
 
     /// `didEnd` is next: the slot is free and the owner stops following the ad.
     func release() {
-        if KontextVideo.shared.presentation === self { KontextVideo.shared.presentation = nil }
+        if KontextVideo.shared.shownAd === self { KontextVideo.shared.shownAd = nil }
         owner?.adDidEnd(ad)
     }
 }

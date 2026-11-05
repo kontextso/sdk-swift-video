@@ -17,10 +17,10 @@ import WebKit
 /// ```
 ///
 /// How: `show(in:)` makes an `InlineScreen` and `show(from:)` a `LinearScreen` when the ad takes the app's
-/// slot (`Presentation`); then:
+/// slot (`ShownAd`); then:
 /// 1. `show` attaches the page to it (`attach`);
 /// 2. once the creative is on screen, the meter is set up for it (`configure(meter:)`) and it starts what it
-///    counts (`presented()`);
+///    counts (`reachedScreen()`);
 /// 3. at the end, `VideoAd.end(_:)` tears it down (`tearDown(meter:)`: the active time seen) and closes it
 ///    (`close(onGone:)`: `true` when `didEnd` must wait for the screen to be gone).
 /// A screen ends its ad only through `VideoAd.end(_:)`, never by finishing it itself.
@@ -31,7 +31,7 @@ protocol AdScreen: AnyObject {
     /// Sets the meter up for this screen, before it starts.
     func configure(meter: ViewabilityMeter)
     /// The creative is on screen, the meter running: the screen starts what it counts.
-    func presented()
+    func reachedScreen()
     /// The ad is ending: the clock, then `meter`, then the page leave the screen. Returns the active time
     /// seen, seconds.
     func tearDown(meter: ViewabilityMeter?) -> TimeInterval
@@ -93,7 +93,7 @@ final class InlineScreen: AdScreen {
 
     /// The clock starts, with the duration the ad's content rule chose, and the rule starts following the
     /// content with it.
-    func presented() {
+    func reachedScreen() {
         let ad = self.ad
         let clock = ActiveTimeClock(duration: ad.contentRule.wallClockDuration, adId: ad.id) { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
@@ -153,7 +153,7 @@ final class LinearScreen: AdScreen {
         meter.isCovered = { [weak self] in self?.controller.map(Environment.isCovered) ?? false }
     }
 
-    func presented() {}
+    func reachedScreen() {}
 
     /// The controller stays, for `close`.
     func tearDown(meter: ViewabilityMeter?) -> TimeInterval {

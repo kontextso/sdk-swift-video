@@ -92,7 +92,7 @@ struct VideoAdEndBeaconTests {
         try ad.show(from: window.root)
         ad.linearController?.loadViewIfNeeded()
         window.add(ad.bridge.webView)
-        ad.presented()
+        ad.reachedScreen()
     }
 
     @Test func aLinearAdSkippedBeforeItsFirstFrameFiresOnlySkip() async throws {

@@ -67,7 +67,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   WebKit delegates; it carries out each `Step`), `FrameEvent`, `VideoAd+FrameEvents` (what the ad does with each
   message of its page), `VideoAd+Click`, `SKAdNetworkImpression`.
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearViewController`, `LinearPresentation` (its present and dismiss,
-  each with a watchdog), `Presentation` (the slot, the screen, the meter), `AdHostView`, `AdGeometry`, `VideoAd+Placement`.
+  each with a watchdog), `ShownAd` (the ad on screen: the slot, the screen, the meter; `begin` takes the slot, the
+  creative's arrival is `VideoAd.reachedScreen()`), `AdHostView`, `AdGeometry`, `VideoAd+Placement`.
 - `Measurement/`, measuring and reporting: `Tracker` (beacons), `ViewabilityMeter`, `ActiveTimeClock`. `Playback/`: `ContentPlayback` and
   `ContentRule`. `Payloads/` is the
   wire, `Model/AdDescriptor` the ad as the SDK keeps it, `Model/AdLifecycle` the rules of its life (the phases and

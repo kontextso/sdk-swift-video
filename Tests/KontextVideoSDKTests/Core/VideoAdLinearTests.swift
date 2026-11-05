@@ -61,7 +61,7 @@ struct VideoAdLinearTests {
         let controller = try #require(ad.linearController)
         #expect(await waitUntil { presenter.presentedViewController === controller })
         window.addSubview(controller.view)
-        ad.presented()
+        ad.reachedScreen()
         return (controller, window)
     }
 
