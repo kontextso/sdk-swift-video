@@ -492,8 +492,8 @@ public final class VideoAd {
         // MRC: two seconds of the video *played*. Exposure is measured from show, for the page; the
         // viewability clock runs only while the video plays (from `video.start`, not while paused).
         meter.countsTime = descriptor.creative != .video || isVideoPlaying
-        meter.onExposure = { [weak self] percentage, visible in
-            self?.bridge.exposure(percentage: percentage, visibleRectangle: visible)
+        meter.onExposure = { [weak self] exposure in
+            self?.bridge.exposure(percentage: exposure.share, visibleRectangle: exposure.visibleBox)
         }
         // At most one verdict per ad, after its impression: an ad never counted has nothing to be viewable.
         meter.onVerdict = { [weak self] verdict in

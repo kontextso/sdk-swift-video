@@ -48,10 +48,10 @@ enum ViewExposure {
     /// the window, clipped away by an ancestor, hidden or transparent).
     static func visibleShare(of view: UIView) -> Double {
         guard let window = view.window else { return 0 }
-        return exposure(of: view, in: window).0
+        return exposure(of: view, in: window).share
     }
 
-    /// The share of `view` that can be seen, and that part's bounding rectangle in the view's coordinates (`(0, .null)` for nothing):
+    /// The share of `view` that can be seen, and that part's bounding rectangle in the view's coordinates (`Exposure.none` for nothing):
     /// its outline cut by the window and by every ancestor that clips (a scroll view, a container with
     /// `clipsToBounds`); nothing when it or an ancestor is hidden or transparent. Measured on the actual
     /// shapes in window coordinates, not on rectangles: a rotated view or ancestor turns a rectangle into a
@@ -59,27 +59,38 @@ enum ViewExposure {
     /// as it does on screen: three ancestors at 0.1 leave the ad at 0.001, unseen. Areas compare in window coordinates,
     /// where a scaled ancestor shrinks the whole and the visible part alike. Overlap by sibling views is not
     /// measured: only the view's own outline, its ancestors' clipping and the window count.
-    static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
-        guard !window.isHidden, window.alpha > transparent else { return (0, .null) }
+    static func exposure(of view: UIView, in window: UIWindow) -> Exposure {
+        guard !window.isHidden, window.alpha > transparent else { return .none }
         let outline = Polygon.corners(of: view.bounds).map { view.convert($0, to: window) }
         let whole = Polygon.area(outline)
-        guard whole > 0 else { return (0, .null) }
+        guard whole > 0 else { return .none }
         var visible = Polygon.clip(outline, to: Polygon.corners(of: window.bounds))
         var opacity = window.alpha
         var current: UIView? = view
         while let node = current, node !== window, !visible.isEmpty {
             opacity *= node.alpha
-            if node.isHidden || opacity <= transparent { return (0, .null) }
+            if node.isHidden || opacity <= transparent { return .none }
             if node !== view, node.clipsToBounds {
                 visible = Polygon.clip(visible, to: Polygon.corners(of: node.bounds).map { node.convert($0, to: window) })
             }
             current = node.superview
         }
         let seen = Polygon.area(visible)
-        guard seen > 0 else { return (0, .null) }
+        guard seen > 0 else { return .none }
         let inView = visible.map { view.convert($0, from: window) }
         let xs = inView.map(\.x), ys = inView.map(\.y)
         let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!).intersection(view.bounds)
-        return (min(1, Double(seen / whole)), box)
+        return Exposure(share: min(1, Double(seen / whole)), visibleBox: box)
     }
+}
+
+/// How much of a view is on screen at one moment.
+struct Exposure: Equatable {
+    /// The share of the view on screen, 0–1.
+    let share: Double
+    /// The visible part's bounding rectangle in the view's coordinates; `.null` when nothing is seen.
+    let visibleBox: CGRect
+
+    /// Nothing of the view on screen.
+    static let none = Exposure(share: 0, visibleBox: .null)
 }

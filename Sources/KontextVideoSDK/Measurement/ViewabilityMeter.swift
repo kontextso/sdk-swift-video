@@ -8,7 +8,7 @@ import UIKit
 /// ```
 /// every 250 ms: tick()
 ///   ├─ measure:   ViewExposure.exposure(of:in:): share on screen (0–1) and the visible rectangle
-///   ├─ report:    changed? onExposure(share, rect)       → the page, which tells the creative
+///   ├─ report:    changed? onExposure(Exposure)          → the page, which tells the creative
 ///   │             any of it seen? changed: onSeen(bool)  → ActiveTimeClock
 ///   ├─ off-screen: nothing seen for 1 s while its scene is active: onOffScreen  → the ad ends
 ///   └─ dwell:     ≥ 50 % without a break for the required time: onVerdict(.viewable), once
@@ -42,8 +42,9 @@ final class ViewabilityMeter {
     /// The MRC rule's share: at least half the box on screen, for `requiredSeconds` without a break.
     static let threshold: Double = 0.5
 
-    /// Exposure changed: percentage on screen and the visible rectangle in the view's coordinates.
-    var onExposure: ((Double, CGRect) -> Void)?
+    /// Exposure changed: the share on screen (rounded to the percent) and the visible rectangle in the view's
+    /// coordinates (`.zero` when nothing is seen).
+    var onExposure: ((Exposure) -> Void)?
     /// The verdict, once.
     var onVerdict: ((Verdict) -> Void)?
     /// The view left the window and did not come back within one interval: the app removed what the ad
@@ -133,7 +134,7 @@ final class ViewabilityMeter {
         lastTick = now
         // 2. Is the view still there, in a window? Held weakly: the meter never keeps a view alive.
         guard let view, let window = view.window else {
-            if hasMeasured { report(0, visible: .zero) }
+            if hasMeasured { report(Exposure(share: 0, visibleBox: .zero)) }
             exposedSince = nil
             offScreenSince = nil
             // One tick of grace: a view re-parented within the same turn of the run loop is not gone. Two in a
@@ -151,10 +152,11 @@ final class ViewabilityMeter {
         //    app: an iPad window in the background shows nothing) or something covers it.
         let active = Environment.isWindowActive(window)
         let seen = active && isCovered?() != true
-        let (percentage, visible) = seen ? ViewExposure.exposure(of: view, in: window) : (0, .null)
+        let measured = seen ? ViewExposure.exposure(of: view, in: window) : .none
+        let percentage = measured.share
         // 4. Tell: onExposure when it changed, onSeen when "any of it visible" flipped. First, so the page and
         //    the clock are current before the rules below may end the ad.
-        report(percentage, visible: visible.isNull ? .zero : visible)
+        report(Exposure(share: percentage, visibleBox: measured.visibleBox.isNull ? .zero : measured.visibleBox))
         // The page's reaction to the exposure may have ended the ad.
         guard !isStopped else { return }
         // 5. Nothing seen for a second while its scene is active: onOffScreen, the ad ends.
@@ -182,17 +184,17 @@ final class ViewabilityMeter {
 
     /// The page hears about a change of share or of place: half the ad at the top and half at the bottom
     /// are the same percentage and a different `visibleRectangle`.
-    private func report(_ percentage: Double, visible: CGRect) {
-        let rounded = (percentage * 100).rounded() / 100
+    private func report(_ exposure: Exposure) {
+        let rounded = (exposure.share * 100).rounded() / 100
         if isSeen != (rounded > 0) {
             isSeen = rounded > 0
             onSeen?(rounded > 0)
         }
-        let place = visible.integral
+        let place = exposure.visibleBox.integral
         guard rounded != lastPercentage || place != lastVisible else { return }
         lastPercentage = rounded
         lastVisible = place
-        onExposure?(rounded, visible)
+        onExposure?(Exposure(share: rounded, visibleBox: exposure.visibleBox))
     }
 
     /// The verdict is final; measuring goes on for the exposure reports and the detachment check.

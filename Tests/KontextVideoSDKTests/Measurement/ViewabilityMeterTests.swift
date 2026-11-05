@@ -29,7 +29,7 @@ struct ViewabilityMeterTests {
 
     private func attach(_ meter: ViewabilityMeter) -> Sink {
         let sink = Sink()
-        meter.onExposure = { percentage, _ in sink.exposures.append(percentage) }
+        meter.onExposure = { sink.exposures.append($0.share) }
         meter.onVerdict = { sink.verdict = $0 }
         return sink
     }
@@ -198,7 +198,7 @@ struct ViewabilityMeterTests {
         let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
         let meter = ViewabilityMeter(view: view, requiredSeconds: 5)
         var rectangles: [CGRect] = []
-        meter.onExposure = { _, rect in rectangles.append(rect) }
+        meter.onExposure = { rectangles.append($0.visibleBox) }
         meter.start()
         await sleepMs(80)
         view.frame.origin.x = 300          // the right half is off screen: 50 %
