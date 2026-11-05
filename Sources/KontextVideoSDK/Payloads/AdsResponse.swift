@@ -137,3 +137,22 @@ private struct Attempt<Wrapped: Decodable>: Decodable {
         return keys.isEmpty ? "ad" : keys.joined(separator: ".")
     }
 }
+
+/// Reading a no-fill reason from the wire: next to the answer that carries it.
+extension VideoAdError.NoFillReason {
+    /// From the wire; `nil` (left out or malformed) is `unknown`.
+    init(_ raw: String?) {
+        switch raw {
+        case nil: self = .unknown
+        case "noAdMatch": self = .noAdMatch
+        case "contentUnsafe": self = .contentUnsafe
+        case "formatNotEnabled": self = .formatNotEnabled
+        case "frequencyCap": self = .frequencyCap
+        case "geoRestricted": self = .geoRestricted
+        case "temporaryError": self = .temporaryError
+        case "alreadyUsed": self = .alreadyUsed
+        case "unknown": self = .unknown
+        case let raw?: self = .other(raw)
+        }
+    }
+}

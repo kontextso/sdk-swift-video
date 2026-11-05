@@ -25,3 +25,34 @@ enum APIError: Error, CustomStringConvertible {
         }
     }
 }
+
+/// Reading what a request threw as the public `RequestFailure`: next to the errors it reads.
+extension VideoAdError.RequestFailure {
+    /// From what the request threw: `APIClient`'s errors, and a bare `URLError` the same way. Cancellation
+    /// never reaches the app (only `destroy()` or the release cancels a request, and that throws
+    /// `destroyed`), so a cancelled transfer reads as `offline`. Anything else is a request the SDK
+    /// could not complete as the contract says: `badResponse`.
+    init(_ error: Error) {
+        switch error {
+        case APIError.transport(let urlError): self.init(urlError.code)
+        case APIError.http(let status, _): self = status > 0 ? .server(status: status) : .badResponse
+        case APIError.decoding: self = .badResponse
+        case let urlError as URLError: self.init(urlError.code)
+        default: self = .badResponse
+        }
+    }
+
+    /// A transport failure: an answer that arrived broken is `badResponse`, a timeout `timedOut`, and
+    /// every other way of not getting through `offline`.
+    init(_ code: URLError.Code) {
+        switch code {
+        case .timedOut:
+            self = .timedOut
+        case .badServerResponse, .cannotParseResponse, .cannotDecodeRawData, .cannotDecodeContentData,
+             .dataLengthExceedsMaximum, .zeroByteResource:
+            self = .badResponse
+        default:
+            self = .offline
+        }
+    }
+}
