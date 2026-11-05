@@ -12,7 +12,7 @@ extension SerialSuites {
 @MainActor
 struct FrameBridgeTests {
     private let url = URL(string: "https://server.kontext.so/frame/ad-1")!
-    private let main = FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)
+    private let main = FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)
 
     init() { SDKHarness.reset() }
 
@@ -84,7 +84,7 @@ struct FrameBridgeTests {
         for body in ["[1, 2]", "\"ad.loaded\"", "42", "not json", "", "{\"adId\": \"ad-1\", \"type\": "] {
             bridge.receive(body, from: main)
         }
-        let padding = String(repeating: "x", count: FrameBridge.maxMessageBytes)
+        let padding = String(repeating: "x", count: FrameProtocol.maxMessageBytes)
         bridge.receive(json("ad.loaded", ["padding": padding]), from: main)
         #expect(bridge.state == .loading && recorder.events.isEmpty)
         bridge.receive(json("ad.loaded", ["padding": String(padding.prefix(1000))]), from: main)
@@ -108,29 +108,29 @@ struct FrameBridgeTests {
 
     @Test func messagesFromASubframeAreDropped() {
         let (bridge, recorder) = makeBridge()
-        bridge.receive(message("ad.loaded"), from: FrameBridge.Sender(isMainFrame: false, scheme: "https", host: "server.kontext.so", port: 0))
+        bridge.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "server.kontext.so", port: 0))
         #expect(recorder.events.isEmpty)
     }
 
     @Test func messagesFromAnotherOriginAreDropped() {
         let (bridge, recorder) = makeBridge()
-        bridge.receive(message("ad.loaded"), from: FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "evil.test", port: 0))
-        bridge.receive(message("ad.loaded"), from: FrameBridge.Sender(isMainFrame: true, scheme: "http", host: "server.kontext.so", port: 0))
+        bridge.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "evil.test", port: 0))
+        bridge.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "server.kontext.so", port: 0))
         #expect(recorder.events.isEmpty)
     }
 
     @Test func originCheckTreatsPortZeroAsTheDefaultPort() {
         let (https, _) = makeBridge()
-        #expect(https.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)))
-        #expect(https.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 443)))
-        #expect(!https.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 8443)))
+        #expect(https.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)))
+        #expect(https.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 443)))
+        #expect(!https.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 8443)))
 
         let (local, _) = makeBridge(url: URL(string: "http://localhost:5175/frame/ad-1")!)
-        #expect(local.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
-        #expect(!local.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 0)))
+        #expect(local.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
+        #expect(!local.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 0)))
 
         let (custom, _) = makeBridge(url: URL(string: "kontext-test://frames/frame/ad-1")!)
-        #expect(custom.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)))
+        #expect(custom.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)))
     }
 
     @Test func unknownTypesAreDropped() {
@@ -311,7 +311,7 @@ struct FrameBridgeTests {
         shown(bridge)
         bridge.receive(message("video.start", ["playhead": 600_000]), from: main)
         guard case .video(_, let playhead) = recorder.last else { Issue.record("expected start"); return }
-        #expect(playhead == 15000 + FrameBridge.playheadGraceMs)
+        #expect(playhead == 15000 + FrameProtocol.playheadGraceMs)
         bridge.receive(message("video.progress", ["offset": 600_000, "playhead": 600_000]), from: main)
         guard case .progress(let offset, let progressPlayhead) = recorder.last else { Issue.record("expected progress"); return }
         #expect(offset == 16000)
@@ -505,14 +505,14 @@ struct FrameBridgeTests {
 
     @Test func aRedirectWithTheExplicitDefaultPortIsTheSameOrigin() {
         let (https, _) = makeBridge(url: URL(string: "https://server.kontext.so/frame/ad-1")!)
-        #expect(https.isSameOrigin(URL(string: "https://server.kontext.so:443/frame/ad-1/next")!))
-        #expect(https.isSameOrigin(URL(string: "https://server.kontext.so/other")!))
-        #expect(!https.isSameOrigin(URL(string: "https://server.kontext.so:8443/frame/ad-1")!))
-        #expect(!https.isSameOrigin(URL(string: "http://server.kontext.so/frame/ad-1")!))
-        #expect(!https.isSameOrigin(URL(string: "https://evil.test/frame/ad-1")!))
+        #expect(https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:443/frame/ad-1/next")!))
+        #expect(https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so/other")!))
+        #expect(!https.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:8443/frame/ad-1")!))
+        #expect(!https.frameProtocol.isSameOrigin(URL(string: "http://server.kontext.so/frame/ad-1")!))
+        #expect(!https.frameProtocol.isSameOrigin(URL(string: "https://evil.test/frame/ad-1")!))
         let (local, _) = makeBridge(url: URL(string: "http://localhost:5175/frame/ad-1")!)
-        #expect(local.isSameOrigin(URL(string: "http://localhost:5175/x")!))
-        #expect(!local.isSameOrigin(URL(string: "http://localhost/x")!))
+        #expect(local.frameProtocol.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        #expect(!local.frameProtocol.isSameOrigin(URL(string: "http://localhost/x")!))
     }
 
     @Test func aCommittedNavigationThatFailsWhileLoadingFailsTheAd() {
@@ -568,12 +568,12 @@ struct FrameBridgeTests {
         shown(bridge)
         let before = recorder.events.count
         bridge.noteTouch()
-        advanceClock(by: FrameBridge.touchWindow + 0.5)
+        advanceClock(by: FrameProtocol.touchWindow + 0.5)
         bridge.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
         bridge.externalNavigation(to: URL(string: "https://brand.test")!)
         #expect(recorder.events.count == before, "an expired touch opens nothing")
         bridge.noteTouch()
-        advanceClock(by: FrameBridge.touchWindow - 0.1)
+        advanceClock(by: FrameProtocol.touchWindow - 0.1)
         bridge.receive(message("ad.click", ["url": "https://brand.test"]), from: main)
         #expect(recorder.events.count == before + 1, "a touch within the window still does")
     }
@@ -605,21 +605,21 @@ struct FrameBridgeTests {
 
     @Test func originsCompareWithoutCase() {
         let (bridge, _) = makeBridge(url: URL(string: "HTTPS://Server.Kontext.SO/frame/ad-1")!)
-        #expect(bridge.isFrameOrigin(main), "WebKit reports the canonical lowercase origin")
-        #expect(bridge.isSameOrigin(URL(string: "https://server.kontext.so:443/next")!))
+        #expect(bridge.frameProtocol.isFrameOrigin(main), "WebKit reports the canonical lowercase origin")
+        #expect(bridge.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:443/next")!))
         let (local, _) = makeBridge(url: URL(string: "HTTP://LOCALHOST:5175/frame/ad-1")!)
-        #expect(local.isFrameOrigin(FrameBridge.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
-        #expect(local.isSameOrigin(URL(string: "http://localhost:5175/x")!))
+        #expect(local.frameProtocol.isFrameOrigin(FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "localhost", port: 5175)))
+        #expect(local.frameProtocol.isSameOrigin(URL(string: "http://localhost:5175/x")!))
         let (plain, _) = makeBridge(url: URL(string: "HTTP://LOCALHOST/frame/ad-1")!)
-        #expect(plain.isSameOrigin(URL(string: "http://localhost:80/x")!), "the default port, whatever the scheme's case")
-        #expect(!bridge.isSameOrigin(URL(string: "https://other.kontext.so/x")!) && !bridge.isSameOrigin(URL(string: "http://server.kontext.so/x")!), "a different host or scheme is still another origin")
-        #expect(!bridge.isSameOrigin(URL(string: "https://server.kontext.so:8443/x")!), "and a different port")
+        #expect(plain.frameProtocol.isSameOrigin(URL(string: "http://localhost:80/x")!), "the default port, whatever the scheme's case")
+        #expect(!bridge.frameProtocol.isSameOrigin(URL(string: "https://other.kontext.so/x")!) && !bridge.frameProtocol.isSameOrigin(URL(string: "http://server.kontext.so/x")!), "a different host or scheme is still another origin")
+        #expect(!bridge.frameProtocol.isSameOrigin(URL(string: "https://server.kontext.so:8443/x")!), "and a different port")
     }
 
     @Test func navigationsBeforeAndAfterThePageIsReady() {
         let (bridge, _) = makeBridge()
         let page = URL(string: "https://server.kontext.so/frame/ad-1")!
-        let decide = { (target: String, mainFrame: Bool) in bridge.navigationDecision(to: URL(string: target)!, isMainFrame: mainFrame, current: page) }
+        let decide = { (target: String, mainFrame: Bool) in bridge.frameProtocol.navigationDecision(to: URL(string: target)!, isMainFrame: mainFrame, current: page) }
         // Loading: its own origin (redirects) and about:blank go through; elsewhere is a click.
         #expect(decide("https://server.kontext.so/frame/ad-1/v2", true) == .allow)
         #expect(decide("about:blank", true) == .allow)
@@ -628,14 +628,14 @@ struct FrameBridgeTests {
         // Ready: the document stays.
         #expect(decide("https://server.kontext.so/frame/ad-1#endcard", true) == .allow, "a fragment, within the document")
         #expect(decide("https://server.kontext.so/frame/ad-1", true) == .cancel, "the current URL without a fragment loads a new document")
-        #expect(bridge.navigationDecision(to: page, isMainFrame: true, isReload: true, current: page) == .cancel, "so does a reload")
+        #expect(bridge.frameProtocol.navigationDecision(to: page, isMainFrame: true, isReload: true, current: page) == .cancel, "so does a reload")
         let anchored = URL(string: "https://server.kontext.so/frame/ad-1#endcard")!
-        #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, isReload: true, current: anchored) == .cancel, "a reload, even with a fragment")
-        #expect(bridge.navigationDecision(to: anchored, isMainFrame: true, current: anchored) == .allow, "the same fragment again stays within the document")
+        #expect(bridge.frameProtocol.navigationDecision(to: anchored, isMainFrame: true, isReload: true, current: anchored) == .cancel, "a reload, even with a fragment")
+        #expect(bridge.frameProtocol.navigationDecision(to: anchored, isMainFrame: true, current: anchored) == .allow, "the same fragment again stays within the document")
         let submitted = URL(string: "https://server.kontext.so/frame/ad-1#submitted")!
-        #expect(bridge.navigationDecision(to: submitted, isMainFrame: true, isSubmission: true, current: page) == .cancel,
+        #expect(bridge.frameProtocol.navigationDecision(to: submitted, isMainFrame: true, isSubmission: true, current: page) == .cancel,
                 "a form POST to the current URL and a fragment loads a new document")
-        #expect(bridge.navigationDecision(to: URL(string: "https://brand.test/#x")!, isMainFrame: true, isSubmission: true, current: page) == .external)
+        #expect(bridge.frameProtocol.navigationDecision(to: URL(string: "https://brand.test/#x")!, isMainFrame: true, isSubmission: true, current: page) == .external)
         #expect(decide("https://server.kontext.so/frame/other", true) == .cancel, "a same-origin page would replace the creative")
         #expect(decide("about:blank", true) == .cancel, "and so would a blank page")
         #expect(decide("https://brand.test/", true) == .external)

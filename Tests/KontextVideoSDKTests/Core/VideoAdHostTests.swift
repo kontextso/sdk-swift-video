@@ -10,7 +10,7 @@ extension SerialSuites {
 struct VideoAdHostTests {
     private let harness = SDKHarness()
     private let window = TestWindow()
-    private let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+    private let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
 
     final class Heard {
         var ends: [VideoAd.EndReason] = []

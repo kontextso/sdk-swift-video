@@ -19,7 +19,7 @@ extension SerialSuites {
 struct VideoAdEndBeaconTests {
     private let harness = SDKHarness()
     private let window = TestWindow()
-    private let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+    private let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
     private let owners = Owners()
 
     final class Owners {

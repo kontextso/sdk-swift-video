@@ -12,7 +12,7 @@ extension SerialSuites {
 struct ErrorReporterTests {
     private let harness = SDKHarness()
     private let window = TestWindow()
-    private let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+    private let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
     private var reporter: ErrorReporter { ErrorReporter.shared }
 
     init() {
@@ -238,9 +238,9 @@ struct ErrorReporterTests {
         ad.bridge.receive(["adId": "someone-else", "type": "ad.loaded"], from: sender)
         ad.bridge.receive(["type": "ad.loaded"], from: sender)
         ad.bridge.receive(["adId": ad.id, "type": "ad.fromTheFuture"], from: sender)   // a newer page: not a violation
-        ad.bridge.receive(["adId": "x"], from: FrameBridge.Sender(isMainFrame: false, scheme: "https", host: "creative.test", port: 443))
+        ad.bridge.receive(["adId": "x"], from: FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "creative.test", port: 443))
         ad.bridge.receive("[\"not an object\"]", from: sender)   // a JSON string that is no envelope: the same fault
-        ad.bridge.receive(String(repeating: " ", count: FrameBridge.maxMessageBytes + 1), from: sender)
+        ad.bridge.receive(String(repeating: " ", count: FrameProtocol.maxMessageBytes + 1), from: sender)
         #expect(await waitUntil { !self.reports("frame.protocol_violation").isEmpty })
         await sleepMs(50)
         let violations = reports("frame.protocol_violation")

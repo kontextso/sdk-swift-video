@@ -64,7 +64,7 @@ struct VideoAdLoadingTests {
 
     @Test func anErrorRightAfterLoadedMakesLoadThrowCreativeFailed() async throws {
         let (ad, _) = try await make(Fixtures.ad(id: "dead-late"))
-        let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+        let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
         let loading = Task { try await ad.load() }
         #expect(await waitUntil { ad.loadedBridge?.state == .loading })
         ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)

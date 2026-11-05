@@ -2,39 +2,28 @@ import Foundation
 import UIKit
 import WebKit
 
-/// Owns the WebView of one ad and speaks the Kontext Frame Protocol v2 with its page.
+/// Owns the WebView of one ad and carries the Kontext Frame Protocol v2 between it and the ad: the imperative
+/// shell around `FrameProtocol`, which holds the protocol's rules.
 ///
 /// The page posts `JSON.stringify(message)` to `webkit.messageHandlers.kontext`, the same string the Android
-/// bridge takes; an object is also accepted. The bridge answers with `window.postMessage` into the page. One bridge, one ad: it accepts messages only from the main frame
-/// of the page it loaded, carrying its own ad id, and only in an order that makes sense.
+/// bridge takes; an object is also accepted. The bridge answers with `window.postMessage` into the page. One
+/// bridge, one ad: what a message means, and whether it counts, is `FrameProtocol.accept`'s answer; the bridge
+/// carries out the `Step` (logs and reports a drop, stops the load timeout, ends the page, delivers the event).
+///
+/// ```
+///   page ──message──► FrameBridge ──accept──► FrameProtocol
+///                         │  ◄──── Step ──────────┘
+///                         ├─ drop: log, report a violation once
+///                         ├─ loaded / deliver / endThenDeliver ──► onEvent (VideoAd.handle)
+///                         └─ end: stop the page, unpark, release WebKit's hooks
+/// ```
+///
+/// What stays here is what needs WebKit or a timer: the WebView's setup, the message handler, the load and its
+/// timeout, parking, `evaluateJavaScript`, the navigation and UI delegates, and the teardown.
 @MainActor
 final class FrameBridge: NSObject {
-    enum State: Sendable {
-        case loading
-        case loaded
-        case shown
-        case ended
-    }
-
     /// `ad.loaded` must arrive within this. A constant in spirit; a variable so the tests can set it.
     static var loadTimeout: TimeInterval = 10
-    /// A URL is opened only if the viewer touched the WebView this recently.
-    static let touchWindow: TimeInterval = 1
-    /// How far past the video's duration a page playhead may go: the page's rounding, not more.
-    static let playheadGraceMs = 1000
-    /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
-    /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
-    /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
-    /// `itms-services:`, a shortcut, the Settings app), or lead nowhere a viewer could go: `intent:` is an
-    /// Android launch link with no meaning on iOS, and `javascript:`, `data:`, `file:`, `blob:` and `about:`
-    /// would run or load in place. Web, App Store and app deep links open, the host app's own included: which
-    /// links an ad may carry is the ad server's decision.
-    static let refusedSchemes: Set<String> = [
-        "tel", "telprompt", "sms", "mms", "facetime", "facetime-audio", "itms-services", "shortcuts",
-        "app-settings", "prefs", "app-prefs", "x-apple-reminderkit", "x-apple-health",
-        "intent", "javascript", "data", "file", "blob", "about",
-    ]
-
     /// Why the bridge failed: several causes fire the same VAST code, and the error report keeps them apart.
     enum FailureCause: Sendable {
         /// The page reported `ad.error`.
@@ -49,24 +38,16 @@ final class FrameBridge: NSObject {
 
     let adId: String
     let webView: WKWebView
-    private(set) var state: State = .loading
+    /// The protocol's rules and state: what each message means, and whether it counts now.
+    private(set) var frameProtocol: FrameProtocol
+    var state: FrameProtocol.State { frameProtocol.state }
     /// Set as the bridge fails, before the `.error` event goes out.
     private(set) var failureCause: FailureCause?
     /// The system error behind a page that could not load, as a domain and a code.
     private(set) var failureUnderlying: ErrorReporter.Underlying?
-    /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
-    private var reportedProtocolViolation = false
-    /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
-    private var videoStarted = false
-    /// The highest playhead a page may report, in milliseconds: the video's duration and the grace, or a day.
-    private let playheadLimitMs: Int
     var onEvent: ((FrameEvent) -> Void)?
 
-    private let url: URL
-    /// The VAST error code when the page itself does not answer: 400 for a video, 500 otherwise.
-    private let loadErrorCode: Int
     private var loadTimeoutTask: Task<Void, Never>?
-    private var lastTouchAt: TimeInterval = -.infinity
     private let messageHandler = MessageHandler()
     private let touchRecognizer = TouchRecognizer()
 
@@ -74,9 +55,7 @@ final class FrameBridge: NSObject {
     /// capped at a day.
     init(adId: String, url: URL, isVideo: Bool, videoDuration: TimeInterval? = nil) {
         self.adId = adId
-        self.url = url
-        loadErrorCode = isVideo ? 400 : 500
-        playheadLimitMs = videoDuration.map { min(Int(($0 * 1000).rounded()) + Self.playheadGraceMs, 86_400_000) } ?? 86_400_000
+        frameProtocol = FrameProtocol(adId: adId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -157,9 +136,9 @@ final class FrameBridge: NSObject {
     /// to park in; the same active-time check parks it on the first tick the app is active again, or a video
     /// creative would never buffer and the timeout would fail a working ad.
     func load() {
-        Logger.debug("frame \(adId.prefix(8)): loading \(url)")
+        Logger.debug("frame \(adId.prefix(8)): loading \(frameProtocol.pageURL)")
         parkOffscreen()
-        webView.load(URLRequest(url: url))
+        webView.load(URLRequest(url: frameProtocol.pageURL))
         loadTimeoutTask = Task { [weak self] in
             let step = min(0.25, Self.loadTimeout)
             // Active time as it passed, not the step asked for: a tick that fires late counts what it waited.
@@ -177,7 +156,7 @@ final class FrameBridge: NSObject {
             }
             guard let self, state == .loading else { return }
             Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
-            fail(.error(code: loadErrorCode), cause: .loadTimeout)
+            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadTimeout)
         }
     }
 
@@ -216,11 +195,10 @@ final class FrameBridge: NSObject {
 
     /// The page is on screen: it starts whatever the creative does when visible, in the chosen size.
     func show() {
-        guard state == .loaded else {
+        guard frameProtocol.show() else {
             Logger.warning("frame \(adId.prefix(8)): show() in state \(state), ignored")
             return
         }
-        state = .shown
         if let chosenSize {
             send("ad.show", ["size": ["width": chosenSize.width, "height": chosenSize.height]])
         } else {
@@ -268,194 +246,43 @@ final class FrameBridge: NSObject {
 
     // MARK: Page → SDK
 
-    /// Where a message came from, as WebKit reports it.
-    struct Sender: Equatable {
-        let isMainFrame: Bool
-        let scheme: String
-        let host: String
-        /// 0 for the scheme's default port.
-        let port: Int
-    }
-
     fileprivate func receive(_ message: WKScriptMessage) {
-        receive(message.body, from: Sender(message.frameInfo))
+        receive(message.body, from: FrameProtocol.Sender(message.frameInfo))
     }
 
-    /// The largest message string parsed, in UTF-8 bytes; every message of the protocol is far smaller.
-    static let maxMessageBytes = 64 * 1024
-
-    /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
-    /// as WebKit converted it. `nil` for anything else.
-    static func messageObject(_ rawBody: Any) -> [String: Any]? {
-        if let object = rawBody as? [String: Any] { return object }
-        guard let text = rawBody as? String, text.utf8.count <= maxMessageBytes else { return nil }
-        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
-    }
-
-    /// Checks the envelope, the sender and the order; drops anything else without an error.
-    func receive(_ rawBody: Any, from sender: Sender) {
-        guard state != .ended else { return }
-        guard sender.isMainFrame, isFrameOrigin(sender) else {
-            Logger.debug("frame \(adId.prefix(8)): message from another frame dropped")
+    /// One message from the page: `FrameProtocol` decides, the bridge carries out its step.
+    func receive(_ rawBody: Any, from sender: FrameProtocol.Sender) {
+        switch frameProtocol.accept(rawBody, from: sender, now: Environment.now()) {
+        case .ignore:
             return
-        }
-        guard let body = Self.messageObject(rawBody),
-              body["adId"] as? String == adId,
-              let type = body["type"] as? String else {
-            Logger.debug("frame \(adId.prefix(8)): malformed message dropped")
-            reportProtocolViolation("envelope")
-            return
-        }
-        Logger.debug("frame \(adId.prefix(8)): ← \(type)")
-        // Milliseconds into the ad video, a fraction rounded (a page reads `currentTime * 1000`), clamped to the
-        // video's duration (a day without one): a playhead past the end would fire every checkpoint at once.
-        let rawPlayhead = (body["playhead"] as? NSNumber)?.doubleValue ?? 0
-        let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), Double(playheadLimitMs)).rounded()) : 0
-
-        switch type {
-        case "ad.loaded":
-            guard state == .loading else { return }
-            loadTimeoutTask?.cancel()
-            state = .loaded
-            onEvent?(.loaded)
-        case "ad.click", "ad.open":
-            guard state == .shown else { return }
-            // A click whose `url` is missing or unusable but whose `fallbackUrl` is good opens the fallback.
-            let given = (body["url"] as? String).flatMap(Self.url)
-            let fallback = type == "ad.click" ? (body["fallbackUrl"] as? String).flatMap(Self.url) : nil
-            guard let url = given ?? fallback else { return }
-            guard let target = Self.target(url, fallback: given == nil ? nil : fallback) else {
-                Logger.warning("frame \(adId.prefix(8)): \(type) to \(url.absoluteString) dropped, scheme refused")
-                return
-            }
-            guard consumeTouch() else {
-                Logger.warning("frame \(adId.prefix(8)): \(type) to \(url.absoluteString) dropped, no touch before it")
-                return
-            }
-            if type == "ad.click" {
-                onEvent?(.click(url: target.url, fallbackUrl: target.fallback, area: VideoAd.Click.Area(body["area"] as? String)))
+        case .drop(let log, let warning, let violation):
+            if warning {
+                Logger.warning("frame \(adId.prefix(8)): \(log)")
             } else {
-                onEvent?(.open(url: url, purpose: body["purpose"] as? String ?? "unknown"))
+                Logger.debug("frame \(adId.prefix(8)): \(log)")
             }
-        case "ad.close":
-            guard state == .shown else { return }
-            end()
-            onEvent?(.close(reason: (body["reason"] as? String).flatMap(FrameEvent.CloseReason.init(rawValue:)) ?? .close))
-        case "video.skip":
-            guard state == .shown else { return }
-            end()
-            onEvent?(.skip(playhead: playhead))
-        case "video.complete":
-            guard state == .shown, startedBefore(type) else { return }
-            onEvent?(.complete(playhead: playhead))
-        case "video.progress":
-            guard state == .shown, startedBefore(type) else { return }
-            // A checkpoint in milliseconds within a day, a fraction rounded to the nearest; anything else would
-            // fire every checkpoint early.
-            guard let raw = (body["offset"] as? NSNumber)?.doubleValue, raw.isFinite, (0...86_400_000).contains(raw) else {
-                Logger.debug("frame \(adId.prefix(8)): video.progress with a malformed offset dropped")
-                reportProtocolViolation("progress.offset")
-                return
+            if let violation {
+                ErrorReporter.shared.report(.protocolViolation, stage: state == .shown ? .playback : .load, adId: adId, detail: violation)
             }
-            onEvent?(.progress(offset: min(Int(raw.rounded()), playheadLimitMs), playhead: playhead))
-        case let type where type.hasPrefix("video."):
-            guard state == .shown, let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))),
-                  accepts(event, type) else { return }
-            onEvent?(.video(event, playhead: playhead))
-        case "ad.error":
-            guard state == .loading || state == .loaded || state == .shown else { return }
-            // A VAST error code has three digits; any other code from the page goes as 900, undefined error.
-            let given = (body["code"] as? NSNumber)?.doubleValue
-            let code = given.map { (100...999).contains($0) ? Int($0) : 900 } ?? (state == .shown ? 405 : loadErrorCode)
-            fail(.error(code: code), cause: .page)
-        default:
-            Logger.debug("frame \(adId.prefix(8)): unknown message \(type) dropped")
+        case .loaded:
+            Logger.debug("frame \(adId.prefix(8)): ← ad.loaded")
+            loadTimeoutTask?.cancel()
+            onEvent?(.loaded)
+        case .deliver(let event):
+            Logger.debug("frame \(adId.prefix(8)): ← \(event)")
+            onEvent?(event)
+        case .endThenDeliver(let event):
+            Logger.debug("frame \(adId.prefix(8)): ← \(event)")
+            // The page's own error; its close and skip end the page as plainly.
+            if case .error = event { failureCause = .page }
+            end()
+            onEvent?(event)
         }
     }
 
-    /// The viewer touched the WebView; a URL may be opened for `touchWindow` seconds.
+    /// The viewer touched the WebView; a URL may be opened for `FrameProtocol.touchWindow` seconds.
     func noteTouch() {
-        lastTouchAt = Environment.now()
-    }
-
-    /// One tap opens one URL: the touch is spent by the first click, open or navigation it authorized, so a
-    /// page that reports a tap and also navigates on it does not open twice.
-    private func consumeTouch() -> Bool {
-        guard Environment.now() - lastTouchAt <= Self.touchWindow else { return false }
-        lastTouchAt = -.infinity
-        return true
-    }
-
-    /// A URL the page may have opened: anything but the refused schemes.
-    static func isAllowed(_ target: URL) -> Bool {
-        guard let scheme = target.scheme?.lowercased() else { return false }
-        return !refusedSchemes.contains(scheme)
-    }
-
-    /// What a click or open goes to under `isAllowed`, `nil` when nothing may open. The fallback is held to the
-    /// same policy: a refused one is dropped and the URL stays; a refused URL with an allowed fallback opens
-    /// the fallback instead.
-    static func target(_ url: URL, fallback: URL?) -> (url: URL, fallback: URL?)? {
-        let fallback = fallback.flatMap { isAllowed($0) ? $0 : nil }
-        if isAllowed(url) { return (url, fallback) }
-        return fallback.map { ($0, nil) }
-    }
-
-    /// The page's origin and nothing else. WebKit reports port 0 for a scheme's default port, so an
-    /// explicit 443 in the URL and the origin's 0 are the same origin.
-    func isFrameOrigin(_ sender: Sender) -> Bool {
-        isPageOrigin(scheme: sender.scheme, host: sender.host, port: sender.port == 0 ? Self.defaultPort(for: sender.scheme) : sender.port)
-    }
-
-    /// Whether `target` is in the page's origin, with the default port and an explicit one the same.
-    func isSameOrigin(_ target: URL) -> Bool {
-        isPageOrigin(scheme: target.scheme, host: target.host, port: Self.effectivePort(of: target))
-    }
-
-    /// Scheme and host compare without case, as browsers canonicalize them; Foundation keeps the case as
-    /// written. `port` is the effective one, the scheme's default when none was given.
-    private func isPageOrigin(scheme: String?, host: String?, port: Int) -> Bool {
-        scheme?.lowercased() == url.scheme?.lowercased() && host?.lowercased() == url.host?.lowercased()
-            && port == Self.effectivePort(of: url)
-    }
-
-    private static func effectivePort(of url: URL) -> Int {
-        url.port ?? defaultPort(for: url.scheme)
-    }
-
-    private static func defaultPort(for scheme: String?) -> Int {
-        switch scheme?.lowercased() {
-        case "https": return 443
-        case "http": return 80
-        default: return 0
-        }
-    }
-
-    /// What a top-level navigation may do. While the page loads: its own origin (redirects included) and
-    /// `about:blank`; anything else is a click the page could not report. Once it is ready the document
-    /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
-    /// the same origin or a reload of itself, is refused, or the creative and its close control would vanish
-    /// under an ad still shown. A navigation stays within the document, as browsers decide it, when the
-    /// target carries a fragment and differs from the current URL in nothing else; a reload, a form submission
-    /// or any request that is not a GET (`isSubmission`, whatever its fragment), or the current URL without a
-    /// fragment, loads a new document. A subframe (the creative's own iframe) navigates freely.
-    enum NavigationDecision: Equatable {
-        case allow, cancel, external
-    }
-
-    func navigationDecision(to target: URL, isMainFrame: Bool, isReload: Bool = false, isSubmission: Bool = false,
-                            current: URL?) -> NavigationDecision {
-        guard isMainFrame else { return .allow }
-        let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
-        if state == .loading { return ours ? .allow : .external }
-        if let current, !isReload, !isSubmission, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
-        return ours ? .cancel : .external
-    }
-
-    private static func withoutFragment(_ url: URL) -> String {
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        components?.fragment = nil
-        return components?.string ?? url.absoluteString
+        frameProtocol.noteTouch(now: Environment.now())
     }
 
     /// Terminal with an error; after the end nothing is reported any more.
@@ -466,43 +293,9 @@ final class FrameBridge: NSObject {
         onEvent?(event)
     }
 
-    /// The page broke the message contract: a fault of the frame page, reported once per ad. Only a message
-    /// from the ad's own page, before the end, can be one. A message from another frame, one after the end, or
-    /// one of an unknown type is not: creatives post messages of their own, late messages are expected, and a
-    /// newer page may send types this SDK does not know yet.
-    /// `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads; the
-    /// rest need the start before them.
-    private func accepts(_ event: FrameEvent.VideoEvent, _ type: String) -> Bool {
-        switch event {
-        case .start:
-            videoStarted = true
-            return true
-        case .mute, .unmute:
-            return true
-        default:
-            return startedBefore(type)
-        }
-    }
-
-    /// Whether `video.start` came before this video message; one that did not is dropped: progress, quartiles
-    /// or a complete for a video that never started would be billed with no impression.
-    private func startedBefore(_ type: String) -> Bool {
-        guard !videoStarted else { return true }
-        Logger.debug("frame \(adId.prefix(8)): \(type) before video.start dropped")
-        reportProtocolViolation("video.beforeStart")
-        return false
-    }
-
-    private func reportProtocolViolation(_ detail: String) {
-        guard !reportedProtocolViolation else { return }
-        reportedProtocolViolation = true
-        ErrorReporter.shared.report(.protocolViolation, stage: state == .shown ? .playback : .load, adId: adId, detail: detail)
-    }
-
     /// Terminal: the page is stopped and nothing is accepted or sent any more.
     private func end() {
-        guard state != .ended else { return }
-        state = .ended
+        guard frameProtocol.end() else { return }
         loadTimeoutTask?.cancel()
         unpark()
         webView.stopLoading()
@@ -512,26 +305,14 @@ final class FrameBridge: NSObject {
         webView.loadHTMLString("", baseURL: nil)
     }
 
-    /// A URL the page sent. A click-through may carry a beacon macro (`[KONTEXT_FIREID]`): its brackets are
-    /// percent-encoded first, or `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it
-    /// (iOS 17); the tracker reads the encoded form.
-    static func url(_ raw: String) -> URL? {
-        // As on Android: a space or a control character makes a URL unusable (iOS 17 would encode it and open
-        // something else), and so does a web link without a host.
-        let unusable = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
-        guard !raw.unicodeScalars.contains(where: unusable.contains), let url = URL(string: Tracker.encodingBrackets(raw)) else { return nil }
-        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host?.isEmpty ?? true { return nil }
-        return url
-    }
-
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
     /// without one it is a forced redirect and goes nowhere.
     func externalNavigation(to target: URL) {
-        guard state == .shown, Self.isAllowed(target), consumeTouch() else {
+        guard let click = frameProtocol.externalNavigation(to: target, now: Environment.now()) else {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.absoluteString) cancelled")
             return
         }
-        onEvent?(.click(url: target, fallbackUrl: nil, area: .creative))
+        onEvent?(click)
     }
 }
 
@@ -546,8 +327,8 @@ extension FrameBridge: WKNavigationDelegate {
         let type = navigationAction.navigationType
         let isSubmission = type == .formSubmitted || type == .formResubmitted
             || (navigationAction.request.httpMethod ?? "GET").uppercased() != "GET"
-        switch navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false,
-                                    isReload: type == .reload, isSubmission: isSubmission, current: webView.url) {
+        switch frameProtocol.navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false,
+                                                  isReload: type == .reload, isSubmission: isSubmission, current: webView.url) {
         case .allow:
             decisionHandler(.allow)
         case .cancel:
@@ -572,7 +353,7 @@ extension FrameBridge: WKNavigationDelegate {
         if isMainFrame, state == .loading, let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
             Logger.warning("frame \(adId.prefix(8)): page answered \(status)")
             failureUnderlying = ErrorReporter.Underlying(httpStatus: status)
-            fail(.error(code: loadErrorCode), cause: .loadFailed)
+            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
             return .cancel
         }
         return canShowMIMEType ? .allow : .cancel
@@ -593,7 +374,7 @@ extension FrameBridge: WKNavigationDelegate {
         guard state == .loaded || state == .shown else { return }
         Logger.warning("frame \(adId.prefix(8)): the page replaced itself after it was ready; the ad ends")
         webView.stopLoading()
-        fail(.error(code: state == .shown ? 405 : loadErrorCode), cause: .page)
+        fail(.error(code: frameProtocol.failureCode), cause: .page)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -611,7 +392,7 @@ extension FrameBridge: WKNavigationDelegate {
         guard state == .loading, !Self.isInterruption(error) else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
         failureUnderlying = ErrorReporter.Underlying(error)
-        fail(.error(code: loadErrorCode), cause: .loadFailed)
+        fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
     }
 
     /// `NSURLErrorCancelled`, and WebKit's "frame load interrupted by policy change" (102) after a `.cancel` decision.
@@ -624,7 +405,7 @@ extension FrameBridge: WKNavigationDelegate {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Logger.warning("frame \(adId.prefix(8)): web content process terminated")
         // 405 is a failure while playing; an ad loaded but never shown gets the load error, like any other.
-        fail(.error(code: state == .shown ? 405 : loadErrorCode), cause: .processTerminated)
+        fail(.error(code: frameProtocol.failureCode), cause: .processTerminated)
     }
 }
 
@@ -693,7 +474,7 @@ private final class TouchRecognizer: UIGestureRecognizer, UIGestureRecognizerDel
     }
 }
 
-extension FrameBridge.Sender {
+extension FrameProtocol.Sender {
     /// In an extension, so the memberwise initializer the tests use stays synthesized.
     @MainActor
     init(_ frame: WKFrameInfo) {

@@ -12,7 +12,7 @@ extension SerialSuites {
 struct VideoAdTests {
     private let harness = SDKHarness()
     private let window = TestWindow()
-    private let sender = FrameBridge.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
+    private let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
     /// Keeps every `VideoAds` a test created alive for the test's duration: the ad holds its owner weakly.
     private let owners = Owners()
 

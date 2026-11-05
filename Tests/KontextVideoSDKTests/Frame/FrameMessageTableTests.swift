@@ -17,7 +17,7 @@ extension SerialSuites {
 @Suite
 @MainActor
 struct FrameMessageTableTests {
-    private let main = FrameBridge.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)
+    private let main = FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)
 
     init() { SDKHarness.reset() }
 
