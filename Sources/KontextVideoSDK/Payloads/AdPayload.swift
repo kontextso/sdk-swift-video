@@ -282,60 +282,83 @@ struct AdPayload: Decodable, Sendable {
         case kind, url
     }
 
+    /// The fields in a fixed order, so a broken ad fails at the same field whatever else is wrong with it.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        guard !id.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "the ad id is empty") }
+        id = try Self.id(from: container)
         format = try container.decode(AdFormat.self, forKey: .format)
         creative = try container.decode(Creative.self, forKey: .creative)
         price = try container.decode(Price.self, forKey: .price)
-        expires = try Self.milliseconds(.expires, in: container)
-        // An ad that is expired on arrival is not an ad the server meant to give.
-        guard expires > 0 else { throw DecodingError.dataCorruptedError(forKey: .expires, in: container, debugDescription: "expires must be positive") }
+        expires = try Self.expires(from: container)
         tracking = try container.decode([TrackingEntry].self, forKey: .tracking).compactMap(\.event)
         attribution = try? container.decodeIfPresent(Attribution.self, forKey: .attribution)   // best effort: never fails the ad
+        trigger = try Self.trigger(from: container)
+        rendering = try Self.rendering(from: container)
+        details = try Self.details(of: format, from: container)
+    }
 
+    // MARK: Readers, one per group of fields
+
+    private static func id(from container: KeyedDecodingContainer<CodingKeys>) throws -> String {
+        let id = try container.decode(String.self, forKey: .id)
+        guard !id.isEmpty else { throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "the ad id is empty") }
+        return id
+    }
+
+    private static func expires(from container: KeyedDecodingContainer<CodingKeys>) throws -> Int {
+        let expires = try milliseconds(.expires, in: container)
+        // An ad that is expired on arrival is not an ad the server meant to give.
+        guard expires > 0 else { throw DecodingError.dataCorruptedError(forKey: .expires, in: container, debugDescription: "expires must be positive") }
+        return expires
+    }
+
+    private static func trigger(from container: KeyedDecodingContainer<CodingKeys>) throws -> Trigger {
         let trigger = try container.nestedContainer(keyedBy: TriggerKeys.self, forKey: .trigger)
         switch try trigger.decode(String.self, forKey: .kind) {
         case "manual":
-            self.trigger = .manual
+            return .manual
         case "window":
-            self.trigger = .window(from: try Self.milliseconds(.from, in: trigger), to: try Self.milliseconds(.to, in: trigger))
+            return .window(from: try milliseconds(.from, in: trigger), to: try milliseconds(.to, in: trigger))
         case let kind:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: trigger, debugDescription: "unknown trigger kind \(kind)")
         }
+    }
 
+    private static func rendering(from container: KeyedDecodingContainer<CodingKeys>) throws -> Rendering {
         let rendering = try container.nestedContainer(keyedBy: RenderingKeys.self, forKey: .rendering)
         switch try rendering.decode(String.self, forKey: .kind) {
         case "frame":
             // A web page to load: http or https, with a host and a valid port. Anything else (a local file,
             // inline content, another app's scheme) is not a frame page.
             let text = try rendering.decode(String.self, forKey: .url)
-            guard Self.isWellFormedURL(text), let url = URL(string: text), let scheme = url.scheme?.lowercased(),
-                  Self.frameSchemes.contains(scheme) || Environment.testFrameSchemes.contains(scheme),
+            guard isWellFormedURL(text), let url = URL(string: text), let scheme = url.scheme?.lowercased(),
+                  frameSchemes.contains(scheme) || Environment.testFrameSchemes.contains(scheme),
                   let host = url.host, !host.isEmpty, (url.port.map { (1...65_535).contains($0) } ?? true) else {
                 throw DecodingError.dataCorruptedError(forKey: .url, in: rendering, debugDescription: "the frame URL must be an http or https page with a host")
             }
-            self.rendering = .frame(url)
+            return .frame(url)
         case let kind:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: rendering, debugDescription: "unknown rendering kind \(kind)")
         }
+    }
 
+    /// What `format` adds to the common fields.
+    private static func details(of format: AdFormat, from container: KeyedDecodingContainer<CodingKeys>) throws -> Details {
         switch format {
         case .overlay:
-            details = .overlay(
+            return .overlay(
                 position: try container.decode(OverlayPosition.self, forKey: .position),
-                sizes: try Self.sizes(from: container),
-                duration: try Self.nonNegative(.duration, in: container)
+                sizes: try sizes(from: container),
+                duration: try nonNegative(.duration, in: container)
             )
         case .pause:
             let position = try container.decode(PausePosition.self, forKey: .position)
-            details = .pause(position: position, sizes: position == .fullscreen ? [] : try Self.sizes(from: container))
+            return .pause(position: position, sizes: position == .fullscreen ? [] : try sizes(from: container))
         case .linear:
-            let duration = try Self.milliseconds(.duration, in: container)
+            let duration = try milliseconds(.duration, in: container)
             // A video of no length has nothing to play, and its progress beacons no moment to fire at.
             guard duration > 0 else { throw DecodingError.dataCorruptedError(forKey: .duration, in: container, debugDescription: "duration must be positive") }
-            details = .linear(duration: duration, skipOffset: try Self.nonNegative(.skipOffset, in: container))
+            return .linear(duration: duration, skipOffset: try nonNegative(.skipOffset, in: container))
         }
     }
 }
