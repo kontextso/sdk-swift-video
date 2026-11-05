@@ -29,8 +29,8 @@ sdk-swift-video/
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the page's state, PageState), FrameBridge (the WebView that carries out each Step) and its events, VideoAd+FrameEvents (what the ad does with each message), the SKAdNetwork impression
 │   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ShownAd (the ad on screen: the slot, the screen, the meter), InlineAdView (what an overlay or pause ad puts into the player's view), VideoAd+Placement (where an overlay or pause ad goes, on InlineScreen)
-│   ├── Measurement/  measuring and reporting: the tracker (beacons) and its macros, the viewability meter, what a view exposes and its geometry, the active-time clock
-│   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of ActiveTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
+│   ├── Measurement/  what the viewer saw (visibility, time on screen) and the beacons that report it: the tracker (beacons) and its macros, the viewability meter, what a view exposes and its geometry, the on-screen time clock
+│   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of OnScreenTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Diagnostics/  what the SDK tells: Logger (the console); ErrorReporter (faults to /v2/error: the mode, scheduling, retries, the server's answers), ErrorReport (one report: its vocabulary and fields), ReportQueue (the waiting reports and their batches, pure); DebugReporter (debug events to /v2/debug), EventHistory (the last events, an error report's history); ReportFormat (capping, the timestamp, a state value), shared so neither reporter reaches into the other
 │   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
@@ -50,7 +50,7 @@ with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns
 until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
 
 The rule for the tree: the root is what the app calls, `Model/` is the model, `State/` is the state of the SDK and of each ad and their legal moves, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
-web page and its messages, `Screen/` puts the ad on screen, `Measurement/` measures and reports (together the Notion hub's "Rendering" section), `Diagnostics/` is what the SDK tells (logs, error and debug reports), `Platform/` the system calls and seams under the rest.
+web page and its messages, `Screen/` puts the ad on screen, `Measurement/` is what the viewer saw (visibility, time on screen) and the beacons that report it (together the Notion hub's "Rendering" section), `Diagnostics/` is what the SDK tells (logs, error and debug reports), `Platform/` the system calls and seams under the rest.
 
 ## Building
 
@@ -181,7 +181,7 @@ Tests/KontextVideoSDKTests/
 │                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), all without a
 │                 WebView; the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
-├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the active-time clock
+├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the on-screen time clock
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
 ├── Diagnostics/  the logger, the error reporter, the report queue (ReportQueueTests), the event history
 │                 (EventHistoryTests), the debug reporter

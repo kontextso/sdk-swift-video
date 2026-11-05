@@ -9,7 +9,7 @@ import UIKit
 /// every 250 ms: tick()
 ///   ├─ measure:   ViewExposure.exposure(of:in:): share on screen (0–1) and the visible rectangle
 ///   ├─ report:    changed? onExposure(Exposure)          → the page, which tells the creative
-///   │             any of it seen? changed: onSeen(bool)  → ActiveTimeClock
+///   │             any of it seen? changed: onSeen(bool)  → OnScreenTimeClock
 ///   ├─ off-screen: nothing seen for 1 s while its scene is active: onOffScreen  → the ad ends
 ///   └─ dwell:     ≥ 50 % without a break for the required time: onVerdict(.viewable), once
 /// stop() at the ad's end: no verdict yet? .notViewable (.viewUndetermined when the view is gone)
@@ -24,7 +24,7 @@ import UIKit
 /// The timing is here: the 50 % stretch starts again when the share drops, the video pauses, or the loop stalled
 /// (a frozen app cannot prove the time was continuous).
 ///
-/// Not `ActiveTimeClock`: that one adds up any time seen, with breaks; this one judges the 50 % rule.
+/// Not `OnScreenTimeClock`: that one adds up any time seen, with breaks; this one judges the 50 % rule.
 @MainActor
 final class ViewabilityMeter {
     enum Verdict: String {

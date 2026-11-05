@@ -7,7 +7,7 @@ import UIKit
 extension SerialSuites {
 @Suite
 @MainActor
-struct ActiveTimeClockTests {
+struct OnScreenTimeClockTests {
     init() {
         SDKHarness.reset()
         Environment.isApplicationActive = { true }
@@ -20,7 +20,7 @@ struct ActiveTimeClockTests {
 
     @Test func anElapsedDurationIsReportedOnceWhateverTheActivityDoesAfter() async {
         var elapsed = 0
-        let clock = ActiveTimeClock(duration: 0.01, adId: "clock-1") { elapsed += 1 }
+        let clock = OnScreenTimeClock(duration: 0.01, adId: "clock-1") { elapsed += 1 }
         defer { clock.stop() }
         clock.start(in: nil)
         #expect(await waitUntil { elapsed == 1 })
@@ -35,7 +35,7 @@ struct ActiveTimeClockTests {
     }
 
     @Test func itCountsOnlyWhileTheMeterSaysTheAdIsSeen() {
-        let clock = ActiveTimeClock(duration: nil, adId: "clock-seen") {}
+        let clock = OnScreenTimeClock(duration: nil, adId: "clock-seen") {}
         defer { clock.stop() }
         clock.start(in: nil)
         #expect(clock.isCounting)
@@ -47,7 +47,7 @@ struct ActiveTimeClockTests {
 
     @Test func aStoppedClockNeverReportsAndKeepsItsTime() async {
         var elapsed = 0
-        let clock = ActiveTimeClock(duration: 0.05, adId: "clock-2") { elapsed += 1 }
+        let clock = OnScreenTimeClock(duration: 0.05, adId: "clock-2") { elapsed += 1 }
         clock.start(in: nil)
         await sleepMs(20)
         let counted = clock.stop()
@@ -62,7 +62,7 @@ struct ActiveTimeClockTests {
         let host = TestWindow()
         defer { host.tearDown() }
         let scene = try #require(host.window.windowScene, "the test host has a window scene")
-        let clock = ActiveTimeClock(duration: 60, adId: "clock-3") {}
+        let clock = OnScreenTimeClock(duration: 60, adId: "clock-3") {}
         defer { clock.stop() }
         clock.start(in: host.window)
         #expect(clock.timer != nil, "counting: the scene is active")

@@ -27,7 +27,7 @@ final class PauseRule: ContentRule {
 
     /// A pause ad is on screen: from here on, content seen playing after it was seen paused ends it. Content
     /// that already played at `show` must pause first: a rate change of playing content is no resume.
-    func started(clock: ActiveTimeClock) {
+    func started(onScreenClock clock: OnScreenTimeClock) {
         guard ad.isTrackingContent, let playback = ad.contentPlayback else { return }
         hasContentPausedSinceShow = !playback.isPlaying
     }

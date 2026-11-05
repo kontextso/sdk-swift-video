@@ -17,7 +17,7 @@ import Foundation
 /// 1. before `show`'s checks: the ad on screen ends if its content stopped (`endIfContentStopped`), and the
 ///    new ad may refuse to go up (`refusesShow`); an inline ad is also checked against its episode
 ///    (`checksEpisode`);
-/// 2. once on screen: the rule learns the ad's clock (`started(clock:)`), whose duration it chose
+/// 2. once on screen: the rule learns the ad's clock (`started(onScreenClock:)`), whose duration it chose
 ///    (`wallClockDuration`);
 /// 3. on every change of the tracked player, and on its ticks, through the owner (`contentDidChange`);
 /// 4. at the end: its own timers stop (`cancel`).
@@ -59,11 +59,11 @@ protocol ContentRule: AnyObject {
     /// `show` refuses an ad whose episode no longer plays in the tracked player: an ad requested for an
     /// episode is counted for it. Not a linear ad, which is not tied to what plays under it.
     var checksEpisode: Bool { get }
-    /// The duration the ad's active-time clock ends it at, `nil` for none: an overlay's `duration` when it
+    /// The duration the ad's on-screen time clock ends it at, `nil` for none: an overlay's `duration` when it
     /// does not follow a player (one that does counts seconds of video instead). Read once, at show.
     var wallClockDuration: TimeInterval? { get }
     /// The ad is on screen with its clock running: the rule starts following the content from here.
-    func started(clock: ActiveTimeClock)
+    func started(onScreenClock clock: OnScreenTimeClock)
     /// The tracked player changed, or a tick came.
     func contentDidChange(_ change: ContentPlayback.Change)
     /// The ad ends when its content no longer fits it: before another ad's `show`, and after its own view
@@ -91,7 +91,7 @@ final class NoContentRule: ContentRule {
     var refusesShow: Bool { false }
     var checksEpisode: Bool { false }
     var wallClockDuration: TimeInterval? { nil }
-    func started(clock: ActiveTimeClock) {}
+    func started(onScreenClock clock: OnScreenTimeClock) {}
     func contentDidChange(_ change: ContentPlayback.Change) {}
     func endIfContentStopped() {}
     func cancel() {}

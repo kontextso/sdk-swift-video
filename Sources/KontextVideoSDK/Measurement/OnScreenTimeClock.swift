@@ -25,7 +25,7 @@ import UIKit
 /// a break). This clock counts any part seen, with breaks. It only counts and tells; the ad decides what an
 /// elapsed duration means.
 @MainActor
-final class ActiveTimeClock {
+final class OnScreenTimeClock {
     /// When the duration has run out on active time; called at most once, never after `stop()`.
     private let onElapsed: () -> Void
     /// The overlay's `duration`, seconds; `nil` when nothing should end the ad on time.

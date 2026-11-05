@@ -103,7 +103,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         let expected = "overlay \(ad.id.prefix(8)) shown before track(): its duration counts on-screen time, not video time"
         #expect(warnings.filter { $0.contains("before track()") } == [expected], "once, at show")
-        #expect(ad.wasShown && !ad.hasEnded && delegate.endReasons.isEmpty && ad.clock != nil, "shown as before, on its clock")
+        #expect(ad.wasShown && !ad.hasEnded && delegate.endReasons.isEmpty && ad.onScreenClock != nil, "shown as before, on its clock")
         ad.dismiss()
     }
 
@@ -122,7 +122,7 @@ struct VideoAdContentTests {
     @Test func anOverlayShownBeforeTheFirstTrackFollowsTheContentFromThenOnActiveTime() async throws {
         let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-late2", duration: 60_000)) { _ in }
         try ad.show(in: view)
-        let clock = try #require(ad.clock)
+        let clock = try #require(ad.onScreenClock)
         #expect(clock.timer != nil, "no player at show: the duration counts active time")
         ads.track(harness.player)   // a player made after the overlay went up
         #expect(ads.playback.isTicking, "the track starts the ticks")
@@ -607,7 +607,7 @@ struct VideoAdContentTests {
         try ad.show(in: view)
         let scene = try #require(window.window.windowScene)
         NotificationCenter.default.post(name: UIScene.willDeactivateNotification, object: scene)
-        #expect(ad.clock?.isCounting == false)
+        #expect(ad.onScreenClock?.isCounting == false)
         advanceClock(by: 3)
         harness.player.playhead = 3   // background audio played on
         NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene)

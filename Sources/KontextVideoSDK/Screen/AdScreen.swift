@@ -10,7 +10,7 @@ import WebKit
 ///
 /// ```
 ///                 holds the page              measures                       leaves the screen
-/// InlineScreen    InlineAdView in the player  meter + ActiveTimeClock;       removed at once: didEnd now
+/// InlineScreen    InlineAdView in the player  meter + OnScreenTimeClock;       removed at once: didEnd now
 ///                                             out of sight 1 s ends it
 /// LinearScreen    LinearAdViewController      meter; a sheet over it         dismissed through UIKit:
 ///                 presented full screen       counts as covered              didEnd once it is gone
@@ -42,7 +42,7 @@ protocol AdScreen: AnyObject {
 }
 
 /// An overlay or pause ad inside the app's player view: the `InlineAdView` that holds the page, and the
-/// `ActiveTimeClock` that counts the time it is seen (and ends an overlay whose `duration` ran out on it).
+/// `OnScreenTimeClock` that counts the time it is seen (and ends an overlay whose `duration` ran out on it).
 /// Its placement (the app's insets, the size variant chosen at `show`) lives here too, read by
 /// `VideoAd+Placement` at `show` and at every layout pass.
 @MainActor
@@ -58,7 +58,7 @@ final class InlineScreen: AdScreen {
     /// The view the SDK put into the player's view; `nil` before `attach` and after the end.
     private(set) var hostView: InlineAdView?
     /// Time seen on screen; made once the creative is on screen.
-    private(set) var clock: ActiveTimeClock?
+    private(set) var onScreenClock: OnScreenTimeClock?
 
     init(ad: VideoAd, extraInsets: UIEdgeInsets) {
         self.ad = ad
@@ -92,7 +92,7 @@ final class InlineScreen: AdScreen {
     /// The meter is the one answer to "is it seen": the clock counts only then, and an ad out of sight in an
     /// active scene (a feed cell swiped away) ends, freeing the app's slot.
     func configure(meter: ViewabilityMeter) {
-        meter.onSeen = { [weak self] seen in self?.clock?.setSeen(seen) }
+        meter.onSeen = { [weak self] seen in self?.onScreenClock?.setSeen(seen) }
         let ad = self.ad
         meter.onOffScreen = { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
@@ -105,20 +105,20 @@ final class InlineScreen: AdScreen {
     /// content with it.
     func reachedScreen() {
         let ad = self.ad
-        let clock = ActiveTimeClock(duration: ad.contentRule.wallClockDuration, adId: ad.id) { [weak ad] in
+        let clock = OnScreenTimeClock(duration: ad.contentRule.wallClockDuration, adId: ad.id) { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(ad.duration ?? 0) s on screen elapsed")
             ad.state.markCompleted()
             ad.end(.completed)
         }
-        self.clock = clock
+        onScreenClock = clock
         clock.setSeen(ad.meter?.isSeen ?? true)
         clock.start(in: hostView?.window)
-        ad.contentRule.started(clock: clock)
+        ad.contentRule.started(onScreenClock: clock)
     }
 
     func tearDown(meter: ViewabilityMeter?) -> TimeInterval {
-        let activeTime = clock?.stop() ?? 0
+        let activeTime = onScreenClock?.stop() ?? 0
         meter?.stop()
         hostView?.removeFromSuperview()
         hostView = nil

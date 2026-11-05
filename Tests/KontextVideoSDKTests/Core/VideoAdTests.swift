@@ -324,7 +324,7 @@ struct VideoAdTests {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p10d", duration: 100))
         #expect(ad.duration == nil, "a pause ad has no duration, whatever the wire says")
         try ad.show(in: harness.player.view)
-        let clock = try #require(ad.clock, "its active time is counted, for overlayViewDuration")
+        let clock = try #require(ad.onScreenClock, "its active time is counted, for overlayViewDuration")
         #expect(clock.timer == nil, "the clock has no duration: nothing ends a pause ad on time")
         await sleepMs(200)
         #expect(delegate.endReasons.isEmpty && !ad.isCompleted)
@@ -670,9 +670,9 @@ struct VideoAdTests {
 
     @Test func dismissingFromInsideTheImpressionCallbackLeavesNothingRunning() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "p10c"))
-        var clock: ActiveTimeClock?
+        var clock: OnScreenTimeClock?
         delegate.onImpression = { ad in
-            clock = ad.clock
+            clock = ad.onScreenClock
             ad.dismiss()
         }
         try ad.show(in: harness.player.view)

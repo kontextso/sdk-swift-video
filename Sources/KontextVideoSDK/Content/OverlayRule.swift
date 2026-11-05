@@ -39,7 +39,7 @@ final class OverlayRule: ContentRule {
     /// the playhead whenever its scene comes back: video played while it could not be seen counts nothing.
     /// A pause while the scene was away is checked again once it is back. Shown with no player tracked, it says
     /// so: its duration then is time on screen, which an app that calls `track(_:)` after `show` may not expect.
-    func started(clock: ActiveTimeClock) {
+    func started(onScreenClock clock: OnScreenTimeClock) {
         guard ad.isTrackingContent, let playback = ad.contentPlayback else {
             Logger.warning("overlay \(ad.id.prefix(8)) shown before track(): its duration counts on-screen time, not video time")
             return
@@ -87,7 +87,7 @@ final class OverlayRule: ContentRule {
         }
         guard change == .tick, let contentClock, !ad.hasEnded else { return }
         // Seconds of video while the overlay is seen: not while its scene is inactive or it is out of sight.
-        if contentClock.advance(to: playback.playhead, isCounting: ad.clock?.isCounting == true, rate: playback.rate) {
+        if contentClock.advance(to: playback.playhead, isCounting: ad.onScreenClock?.isCounting == true, rate: playback.rate) {
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(contentClock.duration) s of video elapsed")
             ad.state.markCompleted()
             ad.end(.completed)
@@ -113,7 +113,7 @@ final class OverlayRule: ContentRule {
     /// the check after the scene's return. Returns whether the overlay stays. Before its clock exists (the
     /// view still being attached) a pause ends it as always.
     private func freezesOnPause() -> Bool {
-        if ad.clock?.isSceneActive == false, !wasContentPausedWhileInactive {
+        if ad.onScreenClock?.isSceneActive == false, !wasContentPausedWhileInactive {
             Logger.info("ad \(ad.id.prefix(8)): the content paused while the scene is not active; the overlay freezes")
             wasContentPausedWhileInactive = true
         }
@@ -129,7 +129,7 @@ final class OverlayRule: ContentRule {
             try? await Task.sleep(nanoseconds: UInt64(Self.contentResumeGrace * 1_000_000_000))
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
-            guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.clock?.isSceneActive == true,
+            guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.onScreenClock?.isSceneActive == true,
                   let playback = ad.contentPlayback else { return }
             wasContentPausedWhileInactive = false
             if playback.isPlaying {

@@ -148,7 +148,7 @@ public final class VideoAd {
     /// video creative's viewability clock runs. Kept here because the meter may not exist yet when the
     /// video starts: a linear ad's meter waits for the presentation to finish.
     var isVideoPlaying = false
-    var clock: ActiveTimeClock? { (shownAd?.screen as? InlineScreen)?.clock }
+    var onScreenClock: OnScreenTimeClock? { (shownAd?.screen as? InlineScreen)?.onScreenClock }
     /// How the ad follows the tracked content player, by format (`Content/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
     private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// An overlay's `duration` in seconds of video, the twin of `ActiveTimeClock`: that one counts time on screen,
+/// An overlay's `duration` in seconds of video, the twin of `OnScreenTimeClock`: that one counts time on screen,
 /// this one video time: the playhead's progress while the overlay is on screen and
 /// its scene active (`resync` when the scene comes back, so time hidden counts nothing). A step backwards,
 /// or one faster than the playback speed allows for the real time since the playhead last moved, is a seek
