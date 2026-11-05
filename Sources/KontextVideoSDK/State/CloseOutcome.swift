@@ -1,5 +1,3 @@
-import Foundation
-
 /// How a page's `ad.close` ends an ad, as a pure rule over plain values: the close reason the page gave, whether the
 /// ad is linear, and whether its video completed. The ad's state decides it, so it lives with the state; the ad
 /// carries it out (`VideoAd+FrameEvents`).

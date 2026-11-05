@@ -1,5 +1,3 @@
-import Foundation
-
 /// Whether a `show` may begin, and if not, why: the checks in the order they run, over plain facts. The first
 /// that fails is the refusal the app gets; nothing is fired.
 ///

@@ -1,5 +1,3 @@
-import Foundation
-
 /// The `/config` request: the twin of `AdsFetcher`, for the one request that switches the SDK on. One attempt,
 /// whatever the failure: no retry policy for now, every request is sent once. After a failure the SDK is
 /// `.failed`, and the next ads request tries `/config` again (`KontextVideo.waitUntilEnabled`).

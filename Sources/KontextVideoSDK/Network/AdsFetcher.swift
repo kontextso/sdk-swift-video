@@ -1,5 +1,4 @@
 import AppTrackingTransparency
-import Foundation
 
 /// One ads request at a time for one `VideoAds`, shared by every `format(_:)` that waits meanwhile.
 ///
