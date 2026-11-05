@@ -62,22 +62,10 @@ extension VideoAd {
             // Skip or through Close alike, as video ad tracking counts it; `close` is for closing what already finished.
             // `isCompleted` is set only by the page's `complete` event, never by a close. Overlay and pause ads have no
             // "watch to the end": a close is .closed, or .resumed when it resumed the content.
-            if format == .linear, !isCompleted {
-                tracker.fire("skip")
-                end(.skipped)
-            } else {
-                switch reason {
-                case .complete:
-                    isCompleted = true
-                    end(.completed)
-                case .resume:
-                    tracker.fire("close")
-                    end(.resumed)
-                case .close:
-                    tracker.fire("close")
-                    end(.closed)
-                }
-            }
+            let outcome = reason.outcome(isLinear: format == .linear, isCompleted: isCompleted)
+            if outcome.endReason == .completed { isCompleted = true }
+            if let beacon = outcome.beacon { tracker.fire(beacon) }
+            end(outcome.endReason)
         case .skip(let playhead):
             tracker.adPlayhead = playhead
             // Checkpoints the video passed before the skip that the page never reported, then the skip.
@@ -113,6 +101,20 @@ extension VideoAd {
             // The end card, when there is one, becomes visible now.
             tracker.fire("creativeView", part: "endCard")
             Logger.info("ad \(id.prefix(8)): complete")
+        }
+    }
+}
+
+extension FrameEvent.CloseReason {
+    /// How the page's close ends an ad: the beacon it fires, if any, and the end reason (the table at the
+    /// `.close` case of `handleNow`). A linear ad whose video has not completed is skipped, whatever the reason;
+    /// otherwise `complete` completes with no beacon, `resume` and `close` fire `close`.
+    func outcome(isLinear: Bool, isCompleted: Bool) -> (beacon: String?, endReason: VideoAd.EndReason) {
+        if isLinear, !isCompleted { return ("skip", .skipped) }
+        switch self {
+        case .complete: return (nil, .completed)
+        case .resume: return ("close", .resumed)
+        case .close: return ("close", .closed)
         }
     }
 }

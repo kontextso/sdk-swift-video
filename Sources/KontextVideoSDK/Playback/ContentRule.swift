@@ -24,6 +24,30 @@ import Foundation
 /// A rule ends its ad only through `VideoAd.end(_:)`, the one terminal path. Tracking can begin after
 /// `show` (a player made late): a rule reads `isTracking` each time instead of deciding once.
 ///
+/// What each rule does with a change of the tracked player, by the state it is in (an ad on screen over a
+/// tracked player; "end" is `end(.interrupted)` unless it says otherwise):
+///
+/// ```
+/// OverlayRule          playing                               frozen (paused while its scene was away)
+///   contentChanged     end                                   end
+///   contentEnded       end                                   end
+///   pause              end; freeze if the scene is inactive  stay frozen
+///   play               ignore                                go on (unfreeze)
+///   tick               count its seconds of video; end       stay frozen while paused, go on once playing
+///                      (.completed) once they reach duration
+///   jumped (a seek)    count again from the new playhead     count again from the new playhead
+///   the scene returns  ignore                                wait contentResumeGrace; still paused: end
+///
+/// PauseRule            not seen paused yet (shown over       paused
+///                      playing content)
+///   contentChanged     end                                   end
+///   contentEnded       now paused: wait                      wait
+///   pause              now paused: wait                      wait
+///   play, tick, jumped playing: ignore                       playing: end; paused: wait
+///
+/// NoContentRule        ignore every change
+/// ```
+///
 /// Without a tracked player both overlay and pause ads run on active time and the app's calls alone.
 /// `.interrupted` has other causes too (the view leaving the window, too little room), so the app reads
 /// its player's state rather than the reason.

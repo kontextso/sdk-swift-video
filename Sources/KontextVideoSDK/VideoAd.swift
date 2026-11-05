@@ -51,6 +51,15 @@ public final class VideoAd {
     //
     // This class keeps what every format shares: show's checks, the page's events and beacons, and the
     // one terminal path, end(_:) then finish(_:). Rules and screens end an ad only through end(_:).
+    //
+    // The rest of VideoAd lives in:
+    //
+    //   Frame/VideoAd+FrameEvents.swift    handle, handleNow: what the ad does with each message of its page
+    //   Frame/VideoAd+Click.swift          click, openClick, open: a click's beacon, delegate and URL
+    //   Screen/VideoAd+Placement.swift     frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
+    //   VideoAd+Types.swift                its value types: Price, RejectReason, InvalidationReason, Size, Position
+    //   VideoAd+Errors.swift               the errors show and load throw, and the creative's error report
+    //   Model/AdLifecycle.swift            the phases and their legal steps, behind every public flag
 
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     // business at `show`; nothing of that is exposed.
