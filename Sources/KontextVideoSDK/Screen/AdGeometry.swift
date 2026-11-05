@@ -3,8 +3,8 @@ import UIKit
 /// The geometry of an overlay or pause ad in the player's view, as pure arithmetic: no views and no ad, only
 /// rectangles and scales. Where the ad goes: a variant scaled down to fit the view's safe area, never enlarged
 /// and never below its smallest scale, centred, at the top or the bottom. `VideoAd` picks the variant at
-/// `show`; `InlineAdView` asks again when the view resizes. Whether the viewer could see a view is in
-/// `ViewabilityMeter`.
+/// `show`; `InlineAdView` asks again when the view resizes. Whether the viewer could see a view is
+/// `ViewExposure`'s.
 @MainActor
 enum AdGeometry {
     /// Below this share of the nominal size a scalable ad is not shown.
@@ -41,7 +41,7 @@ enum AdGeometry {
         min(1, bounds.width / CGFloat(size.width), bounds.height / CGFloat(size.height))
     }
 
-    /// How far a variant may shrink: to `minimumScale`, or not at all when the creative is not scalable.
+    /// The smallest scale a variant may be shown at: half for a scalable ad, full size for a fixed one.
     static func smallestScale(of size: VideoAd.Size) -> CGFloat {
         size.isScalable ? minimumScale : 1
     }
