@@ -238,82 +238,26 @@ final class ViewabilityMeter {
 
     private static func exposure(of view: UIView, in window: UIWindow) -> (Double, CGRect) {
         guard !window.isHidden, window.alpha > Self.transparent else { return (0, .null) }
-        let outline = corners(of: view.bounds).map { view.convert($0, to: window) }
-        let whole = abs(signedArea(outline))
+        let outline = Polygon.corners(of: view.bounds).map { view.convert($0, to: window) }
+        let whole = Polygon.area(outline)
         guard whole > 0 else { return (0, .null) }
-        var visible = clip(outline, to: corners(of: window.bounds))
+        var visible = Polygon.clip(outline, to: Polygon.corners(of: window.bounds))
         var opacity = window.alpha
         var current: UIView? = view
         while let node = current, node !== window, !visible.isEmpty {
             opacity *= node.alpha
             if node.isHidden || opacity <= Self.transparent { return (0, .null) }
             if node !== view, node.clipsToBounds {
-                visible = clip(visible, to: corners(of: node.bounds).map { node.convert($0, to: window) })
+                visible = Polygon.clip(visible, to: Polygon.corners(of: node.bounds).map { node.convert($0, to: window) })
             }
             current = node.superview
         }
-        let seen = abs(signedArea(visible))
+        let seen = Polygon.area(visible)
         guard seen > 0 else { return (0, .null) }
         let inView = visible.map { view.convert($0, from: window) }
         let xs = inView.map(\.x), ys = inView.map(\.y)
         let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!).intersection(view.bounds)
         return (min(1, Double(seen / whole)), box)
-    }
-
-    private static func corners(of rect: CGRect) -> [CGPoint] {
-        [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
-    }
-
-    /// `subject` cut by the convex polygon `clipper` (Sutherland–Hodgman). Every outline here is the image
-    /// of a rectangle under an affine transform, so the clipper is always convex.
-    private static func clip(_ subject: [CGPoint], to clipper: [CGPoint]) -> [CGPoint] {
-        guard clipper.count >= 3 else { return [] }
-        // The clipper's winding decides which side of each edge is inside.
-        let sign: CGFloat = signedArea(clipper) >= 0 ? 1 : -1
-        var output = subject
-        for index in clipper.indices {
-            guard !output.isEmpty else { break }
-            let edgeStart = clipper[index], edgeEnd = clipper[(index + 1) % clipper.count]
-            // Split into typed steps: one expression was too much for the Swift 6.1 type checker (Xcode 16.4).
-            let edge = CGVector(dx: edgeEnd.x - edgeStart.x, dy: edgeEnd.y - edgeStart.y)
-            let inside = { (point: CGPoint) -> Bool in
-                let along: CGFloat = edge.dx * (point.y - edgeStart.y)
-                let across: CGFloat = edge.dy * (point.x - edgeStart.x)
-                return sign * (along - across) >= 0
-            }
-            let input = output
-            output = []
-            for pointIndex in input.indices {
-                let current = input[pointIndex], previous = input[(pointIndex + input.count - 1) % input.count]
-                if inside(current) {
-                    if !inside(previous) { output.append(intersection(previous, current, edgeStart, edgeEnd)) }
-                    output.append(current)
-                } else if inside(previous) {
-                    output.append(intersection(previous, current, edgeStart, edgeEnd))
-                }
-            }
-        }
-        return output
-    }
-
-    /// The area of a polygon (shoelace formula), its sign the winding: `abs` of it is the area, whatever the
-    /// winding. 0 for fewer than three points.
-    private static func signedArea(_ polygon: [CGPoint]) -> CGFloat {
-        var twice: CGFloat = 0
-        for index in polygon.indices {
-            let a = polygon[index], b = polygon[(index + 1) % polygon.count]
-            twice += a.x * b.y - b.x * a.y
-        }
-        return twice / 2
-    }
-
-    /// Where segment `p1`–`p2` crosses the line through `q1`–`q2`.
-    private static func intersection(_ p1: CGPoint, _ p2: CGPoint, _ q1: CGPoint, _ q2: CGPoint) -> CGPoint {
-        let d1 = CGPoint(x: p2.x - p1.x, y: p2.y - p1.y), d2 = CGPoint(x: q2.x - q1.x, y: q2.y - q1.y)
-        let denominator = d1.x * d2.y - d1.y * d2.x
-        guard abs(denominator) > .ulpOfOne else { return p2 }
-        let t = ((q1.x - p1.x) * d2.y - (q1.y - p1.y) * d2.x) / denominator
-        return CGPoint(x: p1.x + t * d1.x, y: p1.y + t * d1.y)
     }
 
     /// The page hears about a change of share or of place: half the ad at the top and half at the bottom
