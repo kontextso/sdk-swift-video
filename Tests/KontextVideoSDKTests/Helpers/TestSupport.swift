@@ -228,6 +228,9 @@ struct SDKHarness {
         server.on("/v2/error", .empty())
         FrameBridge.loadTimeout = 30  // a CI runner can be slow; the warm-up below keeps real loads far under it
         Environment.isApplicationActive = { true }
+        // A window is active when the app is, whatever its scene's activation state, which on a runner is the OS's and
+        // can dip while a test measures. Tests of the scene rule set their own.
+        Environment.isWindowActive = { _ in Environment.isApplicationActive() }
         ViewabilityMeter.interval = 0.05
         Environment.keyWindow = { nil }
         // Pages load in a window, as in an app: WebKit deprioritizes the web process of a WebView outside

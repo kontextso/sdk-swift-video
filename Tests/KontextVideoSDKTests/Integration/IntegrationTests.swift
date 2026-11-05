@@ -52,7 +52,9 @@ struct IntegrationTests {
         #expect(delegate.events == ["impression"])
         #expect(harness.player.view.subviews.count == 1)
         #expect(await waitUntil { Set(self.events(for: "img-pause")).isSuperset(of: ["creativeView", "iconView", "impression"]) })
-        #expect(await waitUntil(8) { self.events(for: "img-pause").contains("viewable") }, "50 % for 1 s; a CI runner is slow")
+        // The one viewability check on real time and the meter's own timer (the others move the clock and tick it):
+        // 50 % for 1 s, with room for a slow runner's late ticks, each gap of which restarts the second.
+        #expect(await waitUntil(30) { self.events(for: "img-pause").contains("viewable") })
         let impression = harness.server.beacons.first { $0.adId == "img-pause" && $0.event == "impression" }
         #expect(impression?.query["cph"] == "00:00:03.250", "the content playhead at the impression")
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double

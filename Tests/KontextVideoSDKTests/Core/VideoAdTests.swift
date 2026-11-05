@@ -760,20 +760,28 @@ struct VideoAdTests {
     }
 
     @Test func aVideoIsViewableOnlyWhileItPlays() async throws {
-        ViewabilityMeter.interval = 0.02
-        defer { ViewabilityMeter.interval = 0.25 }
+        // The meter's own timer out of the way: the test ticks it on a clock it moves, so a slow runner's late
+        // ticks (a gap restarts the dwell) cannot change the outcome. IntegrationTests keeps one check on real time.
+        ViewabilityMeter.interval = 10_000
         let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "v9d", creative: "video"))
         try ad.show(in: harness.player.view)
-        await sleepMs(150)   // on screen in full, autoplay refused: the video has not started
-        #expect(!(await beacons()).contains("viewable"), "exposed, but no video played yet")
+        let meter = try #require(ad.meter)
+        func play(_ seconds: TimeInterval) {
+            for _ in 0..<Int((seconds * 10).rounded()) {
+                advanceClock(by: 0.1)
+                meter.tick()
+            }
+        }
+        play(3)   // on screen in full, autoplay refused: the video has not started
+        #expect(meter.verdict == nil, "exposed, but no video played yet")
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.pause", ["playhead": 500])
-        await sleepMs(150)
-        #expect(!(await beacons()).contains("viewable"), "paused: the clock does not run")
+        play(3)
+        #expect(meter.verdict == nil, "paused: the clock does not run")
         send(ad, "video.resume", ["playhead": 500])
-        // Two seconds of the video played while exposed; a slow runner's ticks come late (it takes 4-5 s locally),
-        // so wait with room, not sleep.
-        #expect(await waitUntil(15) { harness.server.beacons.contains { $0.event == "viewable" } })
+        play(2.1)
+        #expect(meter.verdict == .viewable, "two seconds of the video played while exposed")
+        #expect(await waitUntil { harness.server.beacons.contains { $0.event == "viewable" } })
         ad.dismiss()
     }
 
