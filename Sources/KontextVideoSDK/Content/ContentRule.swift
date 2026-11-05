@@ -96,21 +96,3 @@ final class NoContentRule: ContentRule {
     func endIfContentStopped() {}
     func cancel() {}
 }
-
-extension VideoAd {
-    /// The app code a `show` runs before its checks: an ad on screen over content that stopped ends (its
-    /// `didEnd`), and the player is read. Every check after it sees what that code left. Returns whether the
-    /// content refuses this ad: an overlay over paused content.
-    func runAppCodeBeforeShow() -> Bool {
-        // An ad already shown leaves the ad on screen alone; `show` throws `alreadyShown` right after.
-        if !wasShown { KontextVideo.shared.adOnScreen?.contentRule.endIfContentStopped() }
-        return contentRule.refusesShow
-    }
-}
-
-extension VideoAd {
-    /// The tracked content of this ad's `VideoAds`, `nil` once the owner is gone.
-    var contentPlayback: ContentPlayback? { owner?.playback }
-    /// This ad follows the content: its `VideoAds` tracks a player, alive or gone.
-    var isTrackingContent: Bool { contentPlayback?.isTracking == true }
-}

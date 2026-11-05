@@ -148,6 +148,10 @@ public final class VideoAd {
     /// How the ad follows the tracked content player, by format (`Content/ContentRule.swift`). Made on first
     /// use: it holds the ad, which `init` cannot hand out.
     private(set) lazy var contentRule: any ContentRule = makeContentRule(for: self)
+    /// The tracked content of this ad's `VideoAds`, `nil` once the owner is gone.
+    var contentPlayback: ContentPlayback? { owner?.playback }
+    /// This ad follows the content: its `VideoAds` tracks a player, alive or gone.
+    var isTrackingContent: Bool { contentPlayback?.isTracking == true }
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
     private(set) var skAdNetwork: SKAdNetworkImpression?
 
@@ -282,6 +286,15 @@ public final class VideoAd {
     /// non-finite value counts as zero.
     public func show(in view: UIView, insets: UIEdgeInsets = .zero) throws {
         try tracker.withContentPlayhead { try showInline(in: view, insets: insets) }
+    }
+
+    /// The app code a `show` runs before its checks: an ad on screen over content that stopped ends (its
+    /// `didEnd`), and the player is read. Every check after it sees what that code left. Returns whether the
+    /// content refuses this ad: an overlay over paused content.
+    private func runAppCodeBeforeShow() -> Bool {
+        // An ad already shown leaves the ad on screen alone; `show` throws `alreadyShown` right after.
+        if !wasShown { KontextVideo.shared.adOnScreen?.contentRule.endIfContentStopped() }
+        return contentRule.refusesShow
     }
 
     private func showInline(in view: UIView, insets: UIEdgeInsets) throws {
