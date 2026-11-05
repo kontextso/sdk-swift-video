@@ -55,7 +55,6 @@ public final class VideoAd {
     // The rest of VideoAd lives in:
     //
     //   Frame/VideoAd+FrameEvents.swift    handle, handleNow: what the ad does with each message of its page
-    //   Frame/VideoAd+Click.swift          click, openClick, open: a click's beacon, delegate and URL
     //   Screen/VideoAd+Placement.swift     InlineScreen's frame(in:), refit, tooSmall, fullscreenFrame: where the ad goes
     //   VideoAd+Types.swift                its value types: Price, RejectReason, InvalidationReason, Size, Position
     //   VideoAd+Errors.swift               the errors show and load throw, and the creative's error report
@@ -515,6 +514,33 @@ public final class VideoAd {
         shownAd?.screen.configure(meter: meter)
         shownAd?.meter = meter
         meter.start()
+    }
+
+    // MARK: Clicks
+
+    /// The page's `ad.click`: the `click` beacon, the click-through with the same fire id, then `didClick`.
+    func click(_ url: URL, fallback fallbackUrl: URL?, area: Click.Area) {
+        Logger.info("ad \(id.prefix(8)): click (\(area)) \(url.absoluteString)")
+        // The end card selects its own `click` entries; anything else, and an end-card click on an ad without
+        // them (an overlay or pause ad), is the creative's: every accepted click is counted.
+        // One occurrence: the beacon and the click-through carry the same fire id (Tracking Events page).
+        let fireId = tracker.fire("click", part: area == .endCard && tracker.has("click", part: "endCard") ? "endCard" : nil)
+        openClick(tracker.clickThrough(url, fireId: fireId), fallback: fallbackUrl.map { tracker.clickThrough($0, fireId: fireId) })
+        // The delegate hears nothing after `didEnd`. Opening the click-through does not end the ad today; the check
+        // keeps that rule if it ever does.
+        guard !hasEnded else { return }
+        delegate?.videoAd(self, didClick: Click(area: area))
+    }
+
+    /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
+    /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
+    func openClick(_ url: URL, fallback: URL?) {
+        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return LinkOpener.open(url, fallback: fallback) }
+        // The viewer's tap is honored even if the ad ends while the sheet loads: the URL opens when it fails.
+        Task {
+            if await skAdNetwork.presentStore() { return }
+            LinkOpener.open(url, fallback: fallback)
+        }
     }
 
     // MARK: Ending

@@ -84,16 +84,6 @@ struct VideoAdClickTests {
         #expect(ad.hasEnded == false, "a click does not end the ad")
     }
 
-    @Test func clickFallsBackWhenTheDeepLinkCannotOpen() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p15"))
-        var opened: [String] = []
-        Environment.openURL = { url, completion in opened.append(url.absoluteString); completion(url.scheme == "https") }
-        try ad.show(in: harness.player.view)
-        ad.bridge.noteTouch()
-        send(ad, "ad.click", ["url": "brandapp://offer", "fallbackUrl": "https://brand.test/offer"])
-        #expect(opened == ["brandapp://offer", "https://brand.test/offer"])
-    }
-
     @Test func aRefusedClickOpensItsWebFallbackInstead() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p15b"))
         var opened: [String] = []

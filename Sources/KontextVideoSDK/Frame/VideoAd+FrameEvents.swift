@@ -45,7 +45,7 @@ extension VideoAd {
             if purpose == "adChoices" {
                 tracker.fire("iconClick")
             }
-            Self.open(url, fallback: nil)
+            LinkOpener.open(url, fallback: nil)
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
             // outcome of a video that never started (`endNow`). A fact of the linear format, not of its screen.

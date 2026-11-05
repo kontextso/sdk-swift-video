@@ -80,18 +80,6 @@ struct FrameProtocol {
     static let touchWindow: TimeInterval = 1
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
-    /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
-    /// `UIApplication.open` hands it to the app registered for it: these call, message or install something
-    /// without a page in between (`tel:`, `sms:`, `facetime:`, an enterprise app install through
-    /// `itms-services:`, a shortcut, the Settings app), or lead nowhere a viewer could go: `intent:` is an
-    /// Android launch link with no meaning on iOS, and `javascript:`, `data:`, `file:`, `blob:` and `about:`
-    /// would run or load in place. Web, App Store and app deep links open, the host app's own included: which
-    /// links an ad may carry is the ad server's decision.
-    static let refusedSchemes: Set<String> = [
-        "tel", "telprompt", "sms", "mms", "facetime", "facetime-audio", "itms-services", "shortcuts",
-        "app-settings", "prefs", "app-prefs", "x-apple-reminderkit", "x-apple-health",
-        "intent", "javascript", "data", "file", "blob", "about",
-    ]
 
     let adId: String
     /// The page the bridge loaded: its origin is the only one whose messages count.
@@ -167,8 +155,8 @@ struct FrameProtocol {
         guard state == .shown else { return .ignore }
         let type = message.type
         // A click whose `url` is missing or unusable but whose `fallbackUrl` is good opens the fallback.
-        let given = message.url.flatMap(Self.url)
-        let fallback = type == "ad.click" ? message.fallbackUrl.flatMap(Self.url) : nil
+        let given = message.url.flatMap(LinkOpener.url)
+        let fallback = type == "ad.click" ? message.fallbackUrl.flatMap(LinkOpener.url) : nil
         guard let url = given ?? fallback else { return .ignore }
         guard let target = Self.target(url, fallback: given == nil ? nil : fallback) else {
             return .drop(log: "\(type) to \(url.absoluteString) dropped, scheme refused", warning: true)
@@ -261,35 +249,17 @@ struct FrameProtocol {
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
     /// without one it is a forced redirect and goes nowhere (`nil`).
     mutating func externalNavigation(to target: URL, now: TimeInterval) -> FrameEvent? {
-        guard state == .shown, Self.isAllowed(target), consumeTouch(now: now) else { return nil }
+        guard state == .shown, LinkOpener.isAllowed(target), consumeTouch(now: now) else { return nil }
         return .click(url: target, fallbackUrl: nil, area: .creative)
     }
 
-    /// A URL the page may have opened: anything but the refused schemes.
-    static func isAllowed(_ target: URL) -> Bool {
-        guard let scheme = target.scheme?.lowercased() else { return false }
-        return !refusedSchemes.contains(scheme)
-    }
-
-    /// What a click or open goes to under `isAllowed`, `nil` when nothing may open. The fallback is held to the
-    /// same policy: a refused one is dropped and the URL stays; a refused URL with an allowed fallback opens
-    /// the fallback instead.
+    /// What a click or open goes to under `LinkOpener.isAllowed`, `nil` when nothing may open. The fallback is held
+    /// to the same policy: a refused one is dropped and the URL stays; a refused URL with an allowed fallback
+    /// opens the fallback instead.
     static func target(_ url: URL, fallback: URL?) -> (url: URL, fallback: URL?)? {
-        let fallback = fallback.flatMap { isAllowed($0) ? $0 : nil }
-        if isAllowed(url) { return (url, fallback) }
+        let fallback = fallback.flatMap { LinkOpener.isAllowed($0) ? $0 : nil }
+        if LinkOpener.isAllowed(url) { return (url, fallback) }
         return fallback.map { ($0, nil) }
-    }
-
-    /// A URL the page sent. A click-through may carry a beacon macro (`[KONTEXT_FIREID]`): its brackets are
-    /// percent-encoded first, or `URL(string:)` refuses the string (iOS 16) or re-encodes the whole of it
-    /// (iOS 17); the tracker reads the encoded form.
-    static func url(_ raw: String) -> URL? {
-        // As on Android: a space or a control character makes a URL unusable (iOS 17 would encode it and open
-        // something else), and so does a web link without a host.
-        let unusable = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
-        guard !raw.unicodeScalars.contains(where: unusable.contains), let url = URL(string: Tracker.encodingBrackets(raw)) else { return nil }
-        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https", url.host?.isEmpty ?? true { return nil }
-        return url
     }
 
     // MARK: Origins and navigation
