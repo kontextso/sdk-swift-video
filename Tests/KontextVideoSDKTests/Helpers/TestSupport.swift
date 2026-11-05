@@ -283,7 +283,7 @@ struct SDKHarness {
         ViewabilityMeter.interval = 0.25
         ViewabilityMeter.offScreenGrace = 1
         // The runner never completes a modal transition: a linear ad's didEnd comes from the fallback.
-        VideoAd.dismissalTimeout = 0.05
+        LinearScreen.dismissalTimeout = 0.05
         DebugReporter.interval = 0.1
         ErrorReporter.interval = 0.01
         ContentPlayback.tickInterval = 0.25

@@ -73,8 +73,8 @@ struct VideoAdLinearTests {
     // MARK: A dismissal that never finishes
 
     @Test func aDismissalUIKitNeverFinishesIsReportedAndDidEndComesOnceAfterTheWatchdog() async throws {
-        VideoAd.dismissalTimeout = 0.05
-        defer { VideoAd.dismissalTimeout = 1; Logger.level = .warning }
+        LinearScreen.dismissalTimeout = 0.05
+        defer { LinearScreen.dismissalTimeout = 1; Logger.level = .warning }
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportErrors: true)))
         let presenter = Presenter()
         presenter.completes = false

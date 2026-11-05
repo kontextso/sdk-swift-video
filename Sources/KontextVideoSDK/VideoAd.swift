@@ -300,20 +300,7 @@ public final class VideoAd {
         // The public call fits the format: a fact of the linear format, not of its screen.
         guard format != .linear else { throw wrongShowMethod("show(in:)", use: "show(from:)") }
         try checkShowable()
-        guard ViewExposure.canBeSeen(view) else {
-            Logger.warning("ad \(id.prefix(8)): cannot show, the view is not on screen or is hidden")
-            throw VideoAdError.cannotShowNow
-        }
-        guard ViewExposure.isInFront(view) else {
-            Logger.warning("ad \(id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
-            throw VideoAdError.cannotShowNow
-        }
-        let container = view
-        let area = CGRect(origin: .zero, size: container.bounds.size)
-        let screen = InlineScreen(ad: self, extraInsets: AdGeometry.cleaned(insets))
-        let adFrame = descriptor.position == .fullscreen
-            ? screen.fullscreenFrame(in: area, safeArea: container.safeAreaInsets)
-            : try screen.frame(in: area, safeArea: AdGeometry.adding(screen.extraInsets, to: container.safeAreaInsets))
+        let screen = try InlineScreen.prepare(for: self, in: view, insets: insets)
         // Nothing throws from here on. Reserved before UIKit runs any of the app's code: taking the WebView out
         // of its parking window calls that window's overridable hooks, and adding the host calls the
         // container's. A show from there finds the slot taken; a destroy from there ends this ad, and each
@@ -322,9 +309,9 @@ public final class VideoAd {
         reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
-        let host = screen.attach(webView, to: container, adFrame: adFrame, coversWhole: descriptor.position == .fullscreen)
+        let isSeen = screen.attach(webView)
         // Off screen (the hook's doing, or a feed showing the player's middle, not its top card): ended, no impression.
-        if !hasEnded, !ViewExposure.canBeSeen(host) || ViewExposure.visibleShare(of: webView) == 0 {
+        if !hasEnded, !isSeen {
             Logger.warning("ad \(id.prefix(8)): nothing of the ad is on screen where it was placed; ended as interrupted")
             end(.interrupted)
             return
@@ -353,25 +340,7 @@ public final class VideoAd {
         // The public call fits the format: a fact of the linear format, not of its screen.
         guard format == .linear else { throw wrongShowMethod("show(from:)", use: "show(in:)") }
         try checkShowable()
-        let presenter: UIViewController
-        if let viewController {
-            guard ViewExposure.canBeSeen(viewController.view), viewController.presentedViewController == nil,
-                  !viewController.isBeingPresented, !viewController.isBeingDismissed else {
-                Logger.warning("ad \(id.prefix(8)): cannot present, the view controller is not on screen or already presenting")
-                throw VideoAdError.cannotShowNow
-            }
-            presenter = viewController
-        } else {
-            guard let top = LinearAdViewController.topPresenter(), ViewExposure.canBeSeen(top.view) else {
-                Logger.warning("ad \(id.prefix(8)): cannot present, no view controller on the key window can present now")
-                throw VideoAdError.cannotShowNow
-            }
-            presenter = top
-        }
-        guard ViewExposure.isInFront(presenter.view) else {
-            Logger.warning("ad \(id.prefix(8)): cannot present, the app or the presenter's scene is not in front; the ad stays ready")
-            throw VideoAdError.cannotShowNow
-        }
+        let presenter = try LinearScreen.presenter(from: viewController, adId: id)
         // Reserved first, so a completion that runs at once finds the ad shown and the slot taken, and before
         // the WebView leaves its parking window, whose overridable hooks are the app's code (a show from
         // there finds the slot taken; a destroy ends this ad, checked below). The page is shown, and the
@@ -381,13 +350,13 @@ public final class VideoAd {
         reserve(on: screen)
         let webView = bridge.takeWebView()
         guard !hasEnded else { return }
-        let controller = screen.attach(webView)
+        screen.attach(webView)
         // The meter starts once the presentation is on screen; a tick during the transition would read
         // exposure 0 and make the page pause the video it has just started.
         Logger.debug("ad \(id.prefix(8)): reserved, waiting for UIKit to present it")
-        LinearPresentation.present(controller, from: presenter, adId: id, timeout: Self.showTimeout) { [weak self] in
+        screen.present(from: presenter) { [weak self] in
             self?.state.phase == .reserved
-        } onPresented: { [weak self, weak controller] in
+        } onPresented: { [weak self] controller in
             guard case .ending? = self?.state.phase else { return self?.reachedScreen() ?? () } // ended mid-animation: UIKit dropped that dismiss
             if controller?.isBeingDismissed == false { controller?.presentingViewController?.dismiss(animated: true) }
         } onFailed: { [weak self] in
@@ -400,12 +369,6 @@ public final class VideoAd {
 
     /// The ends a video before its first frame reports as `close`: none fired a beacon of its own.
     private static let closedBeforeFirstFrame: [EndReason] = [.dismissed, .destroyed, .interrupted, .completed]
-
-    /// How long a linear ad may take to reach the screen before the ad gives up on it.
-    static var showTimeout: TimeInterval = 2
-    /// How long a linear dismissal may take before `didEnd` comes anyway, once the controller left the screen (five
-    /// times that if not): a completion UIKit never calls must not keep the app waiting, nor one still running be cut.
-    static var dismissalTimeout: TimeInterval = 1
 
     /// Ends an overlay or pause ad because the app says so: the page is removed, `overlayViewDuration`
     /// fires, and the delegate gets `didEnd(.dismissed)`. Terminal; the ad cannot be shown again. For an
@@ -643,7 +606,7 @@ public final class VideoAd {
     /// Reported over a linear ad's controller UIKit did not take down: the app is not kept waiting for `didEnd`,
     /// and the log says so.
     private func reportDismissalTimedOut() {
-        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(Self.dismissalTimeout * 5)) s; didEnd delivered anyway")
+        Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(LinearScreen.dismissalTimeout * 5)) s; didEnd delivered anyway")
         DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
         ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
                                     recovery: .didEndDelivered)

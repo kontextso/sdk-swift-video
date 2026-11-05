@@ -20,6 +20,10 @@ final class InlineScreen: AdScreen {
     private(set) var onScreenClock: OnScreenTimeClock?
     var meter: ViewabilityMeter?
 
+    /// The player's view the ad goes into, and where in it; set by `prepare`.
+    private weak var container: UIView?
+    private var adFrame: CGRect = .zero
+
     init(ad: VideoAd, extraInsets: UIEdgeInsets) {
         self.ad = ad
         self.extraInsets = extraInsets
@@ -27,13 +31,36 @@ final class InlineScreen: AdScreen {
 
     var isInline: Bool { true }
 
-    /// Puts `webView` into `container` at `adFrame`, inside a host over the whole container that follows its
-    /// resizes. Adding the host runs the container's overridable hooks, the app's code: the host is known
-    /// first, so an end from there finds and removes it.
-    func attach(_ webView: UIView, to container: UIView, adFrame: CGRect, coversWhole: Bool) -> InlineAdView {
+    /// The checks and the placement of an overlay or pause ad in `view`, before anything is reserved: the view must
+    /// be on screen and in front of the viewer, and the ad must fit it (`frame(in:safeArea:)`). Throws
+    /// `cannotShowNow` or `containerTooSmall`, with nothing fired; the ad stays ready.
+    static func prepare(for ad: VideoAd, in view: UIView, insets: UIEdgeInsets) throws -> InlineScreen {
+        guard ViewExposure.canBeSeen(view) else {
+            Logger.warning("ad \(ad.id.prefix(8)): cannot show, the view is not on screen or is hidden")
+            throw VideoAdError.cannotShowNow
+        }
+        guard ViewExposure.isInFront(view) else {
+            Logger.warning("ad \(ad.id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
+            throw VideoAdError.cannotShowNow
+        }
+        let area = CGRect(origin: .zero, size: view.bounds.size)
+        let screen = InlineScreen(ad: ad, extraInsets: AdGeometry.cleaned(insets))
+        screen.adFrame = ad.descriptor.position == .fullscreen
+            ? screen.fullscreenFrame(in: area, safeArea: view.safeAreaInsets)
+            : try screen.frame(in: area, safeArea: AdGeometry.adding(screen.extraInsets, to: view.safeAreaInsets))
+        screen.container = view
+        return screen
+    }
+
+    /// Puts `webView` into the prepared view at the prepared frame, inside a host over the whole view that follows
+    /// its resizes. Adding the host runs the view's overridable hooks, the app's code: the host is known first, so
+    /// an end from there finds and removes it. Returns whether anything of the ad is on screen where it was placed
+    /// (the hook's doing, or a feed showing the player's middle, not its top card, can leave nothing).
+    func attach(_ webView: UIView) -> Bool {
+        guard let container else { return false }
         let ad = self.ad
         let host = InlineAdView(frame: container.bounds, content: webView)
-        host.coversWhole = coversWhole
+        host.coversWhole = ad.descriptor.position == .fullscreen
         host.content.frame = adFrame
         host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
         host.onUnfit = { [weak ad] in
@@ -46,7 +73,7 @@ final class InlineScreen: AdScreen {
         }
         hostView = host
         container.addSubview(host)
-        return host
+        return ViewExposure.canBeSeen(host) && ViewExposure.visibleShare(of: webView) > 0
     }
 
     /// The meter is the one answer to "is it seen": the clock counts only then, and an ad out of sight in an

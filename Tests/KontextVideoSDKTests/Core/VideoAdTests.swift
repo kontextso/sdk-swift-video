@@ -712,8 +712,8 @@ struct VideoAdTests {
 
     @Test func aPresentationUIKitNeverCompletesEndsTheAdAsFailed() async throws {
         // The runner never completes a modal transition and the controller never reaches a window: what a refused presentation looks like.
-        VideoAd.showTimeout = 0.2
-        defer { VideoAd.showTimeout = 2 }
+        LinearScreen.showTimeout = 0.2
+        defer { LinearScreen.showTimeout = 2 }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10c"))
         try ad.show(from: window.root)
         #expect(ad.wasShown && KontextVideo.shared.adOnScreen === ad)
@@ -727,8 +727,8 @@ struct VideoAdTests {
     }
 
     @Test func aControllerOnScreenInAnInactiveAppIsNotTakenAsPresented() async throws {
-        VideoAd.showTimeout = 0.1
-        defer { VideoAd.showTimeout = 2; Environment.isApplicationActive = { true } }
+        LinearScreen.showTimeout = 0.1
+        defer { LinearScreen.showTimeout = 2; Environment.isApplicationActive = { true } }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10f"))
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
@@ -748,8 +748,8 @@ struct VideoAdTests {
     }
 
     @Test func aControllerOnScreenWhoseCompletionNeverCameIsTakenAsPresented() async throws {
-        VideoAd.showTimeout = 0.1
-        defer { VideoAd.showTimeout = 2 }
+        LinearScreen.showTimeout = 0.1
+        defer { LinearScreen.showTimeout = 2 }
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i10e"))
         try ad.show(from: window.root)
         let controller = try #require(ad.linearController)
@@ -965,8 +965,8 @@ struct VideoAdTests {
     }
 
     @Test func aLinearAdIsDismissedFromItsPresenterSoACoverOverItGoesToo() async throws {
-        VideoAd.dismissalTimeout = 0.05
-        defer { VideoAd.dismissalTimeout = 1 }
+        LinearScreen.dismissalTimeout = 0.05
+        defer { LinearScreen.dismissalTimeout = 1 }
         let spy = DismissSpy()
         let (ad, delegate, ads) = try await makeAd(Fixtures.linearAd(id: "i13b"))
         let (_, window) = try await presentLinear(ad, from: spy)
