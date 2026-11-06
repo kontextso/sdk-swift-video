@@ -76,6 +76,10 @@ final class InlineScreen: AdScreen {
         armUnfit(host)
         hostView = host
         container.addSubview(host)
+        // The page loaded parked at the window's size and safe area; WebKit passes the new frame and safe area
+        // to the page only at the next commit. Committed now, so the page's first moment on screen, and the
+        // `ad.show` sent next, already read the view it is in: its size, and no safe-area insets.
+        CATransaction.flush()
         return ViewExposure.canBeSeen(host) && ViewExposure.visibleShare(of: webView) > 0
     }
 

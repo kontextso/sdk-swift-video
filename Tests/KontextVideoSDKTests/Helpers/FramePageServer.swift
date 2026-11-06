@@ -17,6 +17,7 @@ import WebKit
 /// - `err-…`: sends `ad.error` with code 502 instead of `ad.loaded`.
 ///
 /// `?json=1` posts every message as `JSON.stringify(message)`, the contract's transport, instead of an object.
+/// `?cover=1` asks for `initial-scale=1, viewport-fit=cover`, a page that reads `env(safe-area-inset-*)`.
 @MainActor
 final class FramePageServer: NSObject, WKURLSchemeHandler {
     static let scheme = "kontext-test"
@@ -34,10 +35,11 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let step = Int(query.first { $0.name == "step" }?.value ?? "") ?? 60
         let json = query.contains { $0.name == "json" }
+        let cover = query.contains { $0.name == "cover" }
         Task { @MainActor in
             served.append(adId)
         }
-        let html = Self.page(adId: adId, step: step, json: json)
+        let html = Self.page(adId: adId, step: step, json: json, cover: cover)
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/html; charset=utf-8"])!
         urlSchemeTask.didReceive(response)
         urlSchemeTask.didReceive(Data(html.utf8))
@@ -46,10 +48,10 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
 
     nonisolated func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
-    nonisolated static func page(adId: String, step: Int, json: Bool = false) -> String {
+    nonisolated static func page(adId: String, step: Int, json: Bool = false, cover: Bool = false) -> String {
         let kind = adId.split(separator: "-").first.map(String.init) ?? "img"
         return """
-        <!doctype html><html data-ad-id="\(adId)"><head><meta name="viewport" content="width=device-width"></head>
+        <!doctype html><html data-ad-id="\(adId)"><head><meta name="viewport" content="width=device-width\(cover ? ", initial-scale=1, viewport-fit=cover" : "")"></head>
         <body style="margin:0;background:#246;color:#fff;font:14px sans-serif">
         <div id="box" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">\(adId)</div>
         <script>
