@@ -100,6 +100,10 @@ final class FrameBridge: NSObject {
         }
     }
 
+    /// The most active time one tick of the load timeout counts: a late tick on a busy main thread, not a gap the
+    /// app spent suspended.
+    static let longestTick: TimeInterval = 2
+
     /// Loads the page. `ad.loaded` must arrive within `loadTimeout` of active time: WebKit does not run a
     /// page in the background, so time there does not count. A load started in the background finds no window
     /// to park in; the same active-time check parks it on the first tick the app is active again, or a video
@@ -110,15 +114,17 @@ final class FrameBridge: NSObject {
         webView.load(URLRequest(url: frameProtocol.pageURL))
         loadTimeoutTask = Task { [weak self] in
             let step = min(0.25, Self.loadTimeout)
-            // Active time as it passed, not the step asked for: a tick that fires late counts what it waited.
+            // Active time as it passed, not the step asked for: a tick that fires late counts what it waited, up to
+            // `longestTick`. More is not a late tick but a suspension: the app was in the background between two
+            // ticks that both found it active, and that time must not fail a healthy load.
             var waited: TimeInterval = 0
-            var last = ProcessInfo.processInfo.systemUptime
+            var last = Environment.now()
             while waited < Self.loadTimeout {
                 try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
                 guard !Task.isCancelled else { return }
-                let now = ProcessInfo.processInfo.systemUptime
+                let now = Environment.now()
                 if Environment.isApplicationActive() {
-                    waited += now - last
+                    waited += min(now - last, Self.longestTick)
                     if let self, state == .loading, !isParked { parkOffscreen() }
                 }
                 last = now

@@ -99,6 +99,18 @@ struct FrameBridgeTests {
         #expect(bridge.state == .ended)
     }
 
+    @Test func aSuspensionBetweenTwoActiveTicksDoesNotTimeTheLoadOut() async {
+        FrameBridge.loadTimeout = 5
+        let (bridge, events) = makeBridge()
+        bridge.load()
+        await sleepMs(300)
+        advanceClock(by: 600)   // ten minutes suspended, active at the tick before and the tick after
+        await sleepMs(600)
+        // The page itself may fail to load meanwhile (no network here); what counts is that no timeout did.
+        #expect(bridge.failureCause != .loadTimeout, "a load is not timed out by the background gap: \(events.events)")
+        bridge.hide()
+    }
+
     @Test func loadedBeforeTheTimeoutCancelsIt() async {
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge()
