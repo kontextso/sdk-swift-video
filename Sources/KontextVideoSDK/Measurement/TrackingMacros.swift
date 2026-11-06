@@ -26,7 +26,8 @@ enum TrackingMacros {
             .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
             .replacingOccurrences(of: "[KONTEXT_VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
             .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
-            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: encode(notUsed?.winningPrice.map { String($0) } ?? ""))
+            // A price that is not a price (NaN, infinite, negative) from the app's `reject` is left empty, not sent as `nan`.
+            .replacingOccurrences(of: "[KONTEXT_WINNINGPRICE]", with: encode(notUsed?.winningPrice.flatMap { $0.isFinite && $0 >= 0 ? String($0) : nil } ?? ""))
             .replacingOccurrences(of: "[KONTEXT_WINNER]", with: encode(notUsed?.winner ?? ""))
         // A macro the SDK does not know stays, encoded: a bare `[` makes Foundation re-encode the whole
         // URL, and every `%3A` above would become `%253A`.

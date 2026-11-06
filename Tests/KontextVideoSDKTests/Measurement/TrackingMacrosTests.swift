@@ -35,4 +35,15 @@ struct TrackingMacrosTests {
         #expect(reads == 1, "its two names are one read")
         #expect(both == "https://t.test/?m=00%3A00%3A01.500&c=00%3A00%3A01.500&f=f")
     }
+
+    @Test func aWinningPriceThatIsNotAPriceIsLeftEmpty() {
+        let price = { (value: Double) in
+            TrackingMacros.substitute("https://t.test/?p=[KONTEXT_WINNINGPRICE]", contentPlayhead: { 0 }, adPlayheadMs: 0, errorCode: nil,
+                                      fireId: "f", viewDurationMs: nil, notUsed: .outbid(winningPrice: value, winner: nil))
+        }
+        for nonsense in [Double.nan, .infinity, -.infinity, -1] {
+            #expect(price(nonsense) == "https://t.test/?p=", "\(nonsense)")
+        }
+        #expect(price(2.5) == "https://t.test/?p=2.5" && price(0) == "https://t.test/?p=0.0")
+    }
 }
