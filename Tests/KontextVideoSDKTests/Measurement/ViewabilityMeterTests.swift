@@ -252,6 +252,20 @@ struct ViewabilityMeterTests {
         #expect(sink.verdict == .viewable)
     }
 
+    @Test func stoppingBeforeAnyMeasurementIsUndetermined() async {
+        defer { window.tearDown() }
+        let outside = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 100))   // never in a window
+        let zero = makeView(.zero)                                               // in one, with no size
+        for view in [outside, zero] {
+            let meter = ViewabilityMeter(view: view, requiredSeconds: 5)
+            let sink = attach(meter)
+            meter.start()
+            await sleepMs(60)
+            meter.stop()
+            #expect(sink.verdict == .viewUndetermined, "nothing was measured: \(view.frame)")
+        }
+    }
+
     @Test func viewGoneIsUndetermined() async {
         defer { window.tearDown() }
         var view: UIView? = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))

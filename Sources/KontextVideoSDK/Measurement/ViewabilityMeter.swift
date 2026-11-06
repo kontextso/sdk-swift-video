@@ -115,13 +115,14 @@ final class ViewabilityMeter {
         tick()
     }
 
-    /// The ad ended: a verdict is still owed when none was reached.
+    /// The ad ended: a verdict is still owed when none was reached. `notViewable` claims a measurement: a view gone,
+    /// or one never measured (never in a window with a size, a linear ad ended before its layout), is undetermined.
     func stop() {
         isStopped = true
         timer?.invalidate()
         timer = nil
         if verdict == nil {
-            decide(view == nil ? .viewUndetermined : .notViewable)
+            decide(view == nil || !hasMeasured ? .viewUndetermined : .notViewable)
         }
     }
 
