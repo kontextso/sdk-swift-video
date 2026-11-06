@@ -25,6 +25,30 @@ struct AwaitSharedTests {
         await #expect(throws: Boom.self) { try await awaitShared(failed) }
     }
 
+    @Test func waitersThatGaveUpLeaveNothingBehindOnWorkThatNeverEnds() async throws {
+        let gate = Gate()
+        defer { gate.open = true }
+        let endless = Task<String, Never> { @MainActor in
+            while !gate.open { try? await Task.sleep(nanoseconds: 5_000_000) }
+            return "late"
+        }
+        for _ in 0..<100 {
+            #expect(try await awaitShared(endless, timeout: 0.001) == nil)
+        }
+        #expect(Fanout<String>.waiting(on: endless) == 0, "a waiter that timed out left the task's waiters")
+        let cancelled = Task { try await awaitShared(endless) }
+        await sleepMs(20)
+        #expect(Fanout<String>.waiting(on: endless) == 1)
+        cancelled.cancel()
+        _ = await cancelled.result
+        await sleepMs(20)
+        #expect(Fanout<String>.waiting(on: endless) == 0, "a cancelled waiter left too")
+        let last = Task { try await awaitShared(endless, timeout: 60) }
+        await sleepMs(20)
+        gate.open = true
+        #expect(try await last.value == "late", "the one watcher still delivers to whoever waits")
+    }
+
     @Test func awaitSharedSharesAFailureAmongItsWaiters() async {
         let gate = Gate()
         let work = Task<Int, Error> { @MainActor in

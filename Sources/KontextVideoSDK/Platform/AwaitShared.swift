@@ -17,7 +17,7 @@ func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>) async th
                 return
             }
             waiter.continuation = continuation
-            Task { @MainActor in waiter.resume(with: await task.result.mapError { $0 as Error }) }
+            waiter.leave = Fanout.join(task) { waiter.resume(with: $0) }
         }
     } onCancel: {
         Task { @MainActor in waiter.resume(with: .failure(CancellationError())) }
@@ -41,8 +41,7 @@ func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>, timeout:
                 try? await Task.sleep(seconds: timeout)
                 waiter.resume(with: .success(nil))
             }
-            Task { @MainActor in
-                let result = await task.result.mapError { $0 as Error }
+            waiter.leave = Fanout.join(task) { result in
                 waiter.resume(with: result.map { Optional($0) })
                 deadline.cancel()
             }
@@ -52,14 +51,63 @@ func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>, timeout:
     }
 }
 
-/// One caller's continuation, resumed once: by the work's result or by the caller's cancellation,
-/// whichever comes first.
+/// One caller's continuation, resumed once: by the work's result, its timeout or the caller's cancellation,
+/// whichever comes first. Resumed, it leaves its task's `Fanout`, so a caller that gave up holds nothing.
 @MainActor
 private final class Waiter<T: Sendable> {
     var continuation: CheckedContinuation<T, Error>?
+    /// Removes this waiter from the task's fan-out; set once it joined.
+    var leave: (() -> Void)?
 
     func resume(with result: Result<T, Error>) {
         continuation?.resume(with: result)
         continuation = nil
+        leave?()
+        leave = nil
     }
 }
+
+/// The waiters of one shared task, and the one watcher that awaits it for all of them: a waiter per caller
+/// spawning its own watcher left one task and one waiter behind per request for as long as the shared task ran,
+/// which for a lookup that never returns (a WebKit hang) is the life of the process. A waiter that gave up leaves.
+@MainActor
+final class Fanout<T: Sendable> {
+    /// The fan-out of each running task, by the task.
+    private static var running: [AnyHashable: Fanout<T>] {
+        get { fanoutsByType[ObjectIdentifier(T.self)] as? [AnyHashable: Fanout<T>] ?? [:] }
+        set { fanoutsByType[ObjectIdentifier(T.self)] = newValue }
+    }
+    private var deliveries: [Int: (Result<T, Error>) -> Void] = [:]
+    private var nextId = 0
+
+    /// Adds `deliver` to `task`'s waiters, starting its watcher if it has none; returns how to leave.
+    static func join<Failure: Error>(_ task: Task<T, Failure>, deliver: @escaping (Result<T, Error>) -> Void) -> () -> Void {
+        let key = AnyHashable(task)
+        let fanout: Fanout<T>
+        if let existing = running[key] {
+            fanout = existing
+        } else {
+            fanout = Fanout<T>()
+            running[key] = fanout
+            Task { @MainActor in
+                let result = await task.result.mapError { $0 as Error }
+                running[key] = nil
+                for deliver in fanout.deliveries.values { deliver(result) }
+                fanout.deliveries = [:]
+            }
+        }
+        let id = fanout.nextId
+        fanout.nextId += 1
+        fanout.deliveries[id] = deliver
+        return { [weak fanout] in fanout?.deliveries[id] = nil }
+    }
+
+    /// How many callers wait on `task` now. Tests only, which the analyzer does not see.
+    static func waiting<Failure: Error>(on task: Task<T, Failure>) -> Int { // swiftlint:disable:this unused_declaration
+        running[AnyHashable(task)]?.deliveries.count ?? 0
+    }
+}
+
+/// Every type's fan-outs, by the type: a static stored property cannot be generic.
+@MainActor
+private var fanoutsByType: [ObjectIdentifier: Any] = [:]
