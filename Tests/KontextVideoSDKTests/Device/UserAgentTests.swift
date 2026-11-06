@@ -20,3 +20,42 @@ struct UserAgentTests {
         #expect(UserAgent.defaultUserAgentWait == 2)
     }
 }
+
+/// The shared lookup's failure branches: a lookup that found none is tried again, and a cancelled caller stops
+/// waiting at once while the lookup goes on. Serialized: it replaces `Environment.userAgent`.
+extension SerialSuites {
+@Suite
+@MainActor
+struct UserAgentLookupTests {
+    init() { SDKHarness.reset() }
+
+    @Test func aLookupThatFoundNoneIsTriedAgainByTheNextCaller() async {
+        var lookups = 0
+        Environment.userAgent = {
+            lookups += 1
+            return lookups == 1 ? nil : "UA"
+        }
+        #expect(await UserAgent.requestUserAgent() == nil)
+        #expect(await UserAgent.requestUserAgent() == "UA")
+        #expect(lookups == 2)
+    }
+
+    @Test func aCancelledCallerReturnsAtOnceAndTheLookupGoesOn() async {
+        UserAgent.userAgentWait = 60
+        var lookups = 0
+        var release: CheckedContinuation<Void, Never>?
+        Environment.userAgent = {
+            lookups += 1
+            await withCheckedContinuation { release = $0 }
+            return "UA"
+        }
+        let caller = Task { await UserAgent.requestUserAgent() }
+        #expect(await waitUntil { release != nil })
+        caller.cancel()
+        #expect(await caller.value == nil, "cancelled before the lookup answered")
+        release?.resume()
+        #expect(await UserAgent.requestUserAgent() == "UA", "the same lookup answers the next caller")
+        #expect(lookups == 1)
+    }
+}
+}
