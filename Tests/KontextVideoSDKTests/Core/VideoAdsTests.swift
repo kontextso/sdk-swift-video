@@ -381,6 +381,28 @@ struct VideoAdsTests {
         #expect(reason == .formatNotEnabled)
     }
 
+    /// One request answers every format: a format the app never asks for is not an error in its log.
+    @Test func anUnaskedFormatNotEnabledIsQuietAndAnAskedOneWarnsOnce() async throws {
+        let ads = await makeAds()
+        Logger.level = .debug
+        defer { Logger.level = .warning; Logger.sink = nil }
+        var logged: [(level: KontextVideo.Configuration.LogLevel, message: String)] = []
+        Logger.sink = { level, message in logged.append((level, message)) }
+        harness.server.on("/v2/video/ads", .json(["enabled": true, "formats": [
+            Fixtures.filledEntry(Fixtures.ad(id: "img-p-ne")), Fixtures.noFillEntry("formatNotEnabled", format: "overlay"),
+        ]]))
+        _ = try await ads.format(.pause)
+        // Only this message: the simulator's tracking prompt warns on its own.
+        let loud = { logged.filter { ($0.level == .error || $0.level == .warning) && $0.message.contains("no configuration") } }
+        #expect(loud().isEmpty, "no warning or error at fetch: \(logged)")
+        #expect(logged.contains { $0.level == .info && $0.message.contains("overlay for ep-1: no configuration") }, "logged quietly at fetch")
+        logged.removeAll()
+        guard case .noFill(let reason)? = await error({ try await ads.format(.overlay) }) else { Issue.record("expected noFill"); return }
+        #expect(reason == .formatNotEnabled)
+        #expect(loud().map(\.level) == [.warning])
+        #expect(loud().first?.message == "overlay for ep-1: no configuration for this format in the Kontext dashboard (formatNotEnabled)")
+    }
+
     @Test func anExpiredBidIsDroppedSilentlyBeforeTheNextRequest() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p11", expires: 30_000))

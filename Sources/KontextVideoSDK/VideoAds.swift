@@ -114,7 +114,11 @@ public final class VideoAds {
         }
         try checkStillUsable()
         if let ad = validHeld(format) { return ad }
-        throw VideoAdError.noFill(reason: noFill[format] ?? .unknown)
+        let reason = noFill[format] ?? .unknown
+        // The answer covers every format, so its no-fills are logged quietly; a format the app asks for and
+        // the dashboard does not configure is a setup mistake the developer must see.
+        if reason == .formatNotEnabled { Logger.warning(notEnabledMessage(format, reason: reason)) }
+        throw VideoAdError.noFill(reason: reason)
     }
 
     /// The held ad of `format` while it is valid. One that expired since the answer (app code ran before
@@ -185,9 +189,10 @@ public final class VideoAds {
     }
 
     private func logNoFill(_ format: AdFormat, reason: VideoAdError.NoFillReason) {
-        // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later".
+        // `formatNotEnabled` is the dashboard, not the moment: say so, it is not "try again later". Every
+        // format's answer comes here, asked for or not: quiet here; `format(_:)` warns for the one asked for.
         if reason == .formatNotEnabled {
-            Logger.error("\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))")
+            Logger.info(notEnabledMessage(format, reason: reason))
         } else {
             Logger.info("\(format) for \(content.id): no fill (\(reason))")
         }
@@ -195,6 +200,10 @@ public final class VideoAds {
         let knownReason: String
         if case .other = reason { knownReason = "other" } else { knownReason = reason.description }
         DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(knownReason)])
+    }
+
+    private func notEnabledMessage(_ format: AdFormat, reason: VideoAdError.NoFillReason) -> String {
+        "\(format) for \(content.id): no configuration for this format in the Kontext dashboard (\(reason))"
     }
 
     // MARK: Playhead
