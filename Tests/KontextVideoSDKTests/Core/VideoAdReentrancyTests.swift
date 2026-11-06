@@ -45,7 +45,7 @@ struct VideoAdReentrancyTests {
     }
 
     private func beacons() async -> [String] {
-        await sleepMs(80)
+        await beaconsSettled()
         return harness.server.beacons.map(\.event)
     }
 

@@ -211,6 +211,22 @@ func waitUntil(_ timeout: TimeInterval = 10, _ condition: @MainActor () -> Bool)
     return condition()
 }
 
+/// Waits until every beacon the SDK sent has reached the stub server: no task of the beacon session is still
+/// running (the stub records a request before it answers). Then a positive check finds its beacon however slow the
+/// runner, and a negative one knows nothing is still on its way, with no fixed sleep to overrun.
+@MainActor
+func beaconsSettled(_ timeout: TimeInterval = 10) async {
+    let session = BeaconTransport.session(over: Environment.session)
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        let running = await withCheckedContinuation { continuation in
+            session.getAllTasks { tasks in continuation.resume(returning: tasks.filter { $0.state == .running }.count) }
+        }
+        if running == 0 { return }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+}
+
 @MainActor
 func sleepMs(_ ms: Int) async {
     try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)

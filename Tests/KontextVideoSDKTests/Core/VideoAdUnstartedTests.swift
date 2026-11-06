@@ -59,7 +59,7 @@ struct VideoAdUnstartedTests {
 
     /// The events the server received for `adId`, after the beacons in flight arrived.
     private func events(_ adId: String) async -> [String] {
-        await sleepMs(80)
+        await beaconsSettled()
         return harness.server.beacons.filter { $0.adId == adId }.map { $0.event }
     }
 

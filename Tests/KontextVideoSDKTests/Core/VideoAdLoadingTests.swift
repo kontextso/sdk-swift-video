@@ -48,7 +48,7 @@ struct VideoAdLoadingTests {
     }
 
     private func beacons(_ event: String) async -> [[String: String]] {
-        await sleepMs(80)
+        await beaconsSettled()
         return harness.server.beacons.filter { $0.event == event }.map(\.query)
     }
 

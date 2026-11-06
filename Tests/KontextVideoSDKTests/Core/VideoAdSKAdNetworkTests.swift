@@ -44,7 +44,7 @@ struct VideoAdSKAdNetworkTests {
     }
 
     private func beacons() async -> [String] {
-        await sleepMs(80)
+        await beaconsSettled()
         return harness.server.beacons.map { beacon in beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event }
     }
 

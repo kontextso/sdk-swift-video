@@ -55,7 +55,7 @@ struct VideoAdEndBeaconTests {
     /// The events the server received for `adId`, once `last` arrived and the beacons still in flight did.
     private func events(_ adId: String, after last: String) async -> [String] {
         _ = await waitUntil { harness.server.beacons.contains { $0.adId == adId && $0.event == last } }
-        await sleepMs(80)
+        await beaconsSettled()
         return harness.server.beacons.filter { $0.adId == adId }.map { $0.event }
     }
 
