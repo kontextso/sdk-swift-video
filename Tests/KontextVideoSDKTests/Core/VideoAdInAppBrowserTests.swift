@@ -203,6 +203,96 @@ struct VideoAdInAppBrowserTests {
         ad.dismiss()
     }
 
+    /// iOS answers whether an app claims a web link later, as on a device: `answer` gives that answer.
+    private func universalLinkAnswersLater() -> (Bool) -> Void {
+        var pending: [@MainActor (Bool) -> Void] = []
+        Environment.openUniversalLink = { _, completion in pending.append(completion) }
+        return { claimed in
+            let answers = pending
+            pending = []
+            answers.forEach { $0(claimed) }
+        }
+    }
+
+    /// The app pauses its player in `didClick`, before iOS said whether an app claims the link: the viewer is
+    /// already on the way to the browser, so the overlay freezes, the browser appears, and after Done the content
+    /// playing again lets it go on.
+    @Test func aPauseInDidClickBeforeTheBrowserAppearsFreezesTheOverlay() async throws {
+        VideoAd.contentResumeGrace = 0.1
+        defer { VideoAd.contentResumeGrace = 1 }
+        let browser = Browser()
+        let answer = universalLinkAnswersLater()
+        let (ad, delegate) = try await makeAd(Fixtures.overlayAd(id: "o-browser-didclick", duration: 5000), tracksContent: true)
+        delegate.onClick = { [harness] ad in
+            harness.player.isPlaying = false
+            ad.contentDidChange(.playingChanged(isPlaying: false))
+        }
+        try ad.show(in: harness.player.view)
+        click(ad)
+        #expect(delegate.clicks.count == 1 && browser.urls.isEmpty && ad.isOpeningLink, "the link still opening")
+        #expect(!ad.hasEnded && ad.wasContentPausedWhileInactive, "frozen, not ended")
+        answer(false)   // no app claims it: the browser
+        #expect(browser.urls.map(\.absoluteString) == ["https://brand.test/offer"] && ad.inAppBrowser.isOpen)
+        #expect(!ad.isOpeningLink)
+        await sleepMs(250)   // past the grace, under the browser
+        #expect(!ad.hasEnded && ad.wasContentPausedWhileInactive, "still frozen under the browser")
+        browser.tapDone()
+        harness.player.isPlaying = true
+        ad.contentDidChange(.tick)
+        await sleepMs(250)
+        #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "it goes on")
+        ad.dismiss()
+    }
+
+    /// The click's link opened nothing (no browser could appear, and iOS opened nothing): the viewer never left, so a
+    /// pause from `didClick` is read as after any return: still paused after the grace, the overlay ends; playing
+    /// again within it, it goes on.
+    @Test func aPauseInDidClickWhenTheLinkOpensNothingFollowsTheNormalRules() async throws {
+        VideoAd.contentResumeGrace = 0.1
+        defer { VideoAd.contentResumeGrace = 1 }
+        Environment.openURL = { _, completion in completion(false) }
+        for playsAgain in [false, true] {
+            let answer = universalLinkAnswersLater()
+            let (ad, delegate) = try await makeAd(Fixtures.overlayAd(id: "o-nothing-\(playsAgain)", duration: 5000), tracksContent: true)
+            harness.player.isPlaying = true
+            delegate.onClick = { [harness] ad in
+                harness.player.isPlaying = false
+                ad.contentDidChange(.playingChanged(isPlaying: false))
+            }
+            try ad.show(in: harness.player.view)
+            click(ad)
+            #expect(!ad.hasEnded && ad.wasContentPausedWhileInactive && ad.isOpeningLink)
+            answer(false)
+            #expect(!ad.isOpeningLink && !ad.inAppBrowser.isOpen, "cleared: nothing opened")
+            #expect(!ad.hasEnded, "the grace first")
+            if playsAgain {
+                harness.player.isPlaying = true
+                ad.contentDidChange(.tick)
+            }
+            await sleepMs(250)
+            if playsAgain {
+                #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "it goes on")
+                ad.dismiss()
+            } else {
+                #expect(delegate.endReasons == [.interrupted], "still paused: the overlay ends")
+            }
+        }
+    }
+
+    /// A link iOS opens nothing for before `didClick` (an app link with the app not installed): the viewer never left,
+    /// so a pause from `didClick` ends the overlay as any pause does, as on Android when nothing opens.
+    @Test func aPauseInDidClickAfterTheLinkOpenedNothingEndsTheOverlay() async throws {
+        Environment.openURL = { _, completion in completion(false) }
+        let (ad, delegate) = try await makeAd(Fixtures.overlayAd(id: "o-nothing-now", duration: 5000), tracksContent: true)
+        delegate.onClick = { [harness] ad in
+            harness.player.isPlaying = false
+            ad.contentDidChange(.playingChanged(isPlaying: false))
+        }
+        try ad.show(in: harness.player.view)
+        click(ad, "brandapp://offer")
+        #expect(delegate.clicks.count == 1 && !ad.isOpeningLink && delegate.endReasons == [.interrupted])
+    }
+
     @Test func aClickInTheBrowserFiresClickOnceAndTellsTheDelegateOnce() async throws {
         let browser = Browser()
         let (ad, delegate) = try await makeAd(Fixtures.ad(id: "p-browser-once"))

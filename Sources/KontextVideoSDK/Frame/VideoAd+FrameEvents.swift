@@ -44,7 +44,7 @@ extension VideoAd {
         case .open(let url, let purpose):
             Logger.info("ad \(id.prefix(8)): open (\(purpose)) \(url.absoluteString)")
             tracker.record(event)
-            LinkOpener.open(url, fallback: nil, browser: inAppBrowser)
+            LinkOpener.open(url, fallback: nil, browser: inAppBrowser, completion: linkOpening())
         case .close(let reason):
             // The page's own close control; not fired for the app's dismiss() or destroy(), except as the
             // outcome of a video that never started (`endNow`). A fact of the linear format, not of its screen.

@@ -50,6 +50,7 @@ final class PauseRule: ContentRule {
         endIfContentResumed(isPlaying: playback.isPlaying)
     }
 
+    func linkOpened() {}
     func cancel() {}
 
     private func endIfContentResumed(isPlaying: Bool) {

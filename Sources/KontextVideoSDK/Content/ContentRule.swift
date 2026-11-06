@@ -69,6 +69,8 @@ protocol ContentRule: AnyObject {
     /// The ad ends when its content no longer fits it: before another ad's `show`, and after its own view
     /// was attached, for a change no callback reported while that ran.
     func endIfContentStopped()
+    /// The links of the ad's clicks finished opening (`VideoAd.isOpeningLink`), somewhere or nowhere.
+    func linkOpened()
     /// The ad is ending: the rule's own timers stop.
     func cancel()
 }
@@ -94,5 +96,6 @@ final class NoContentRule: ContentRule {
     func started(onScreenClock clock: OnScreenTimeClock) {}
     func contentDidChange(_ change: ContentPlayback.Change) {}
     func endIfContentStopped() {}
+    func linkOpened() {}
     func cancel() {}
 }

@@ -108,6 +108,14 @@ final class OverlayRule: ContentRule {
         ad.end(.interrupted)
     }
 
+    /// The click's link opened: in the in-app browser, which keeps the viewer away until "Done", or outside the app,
+    /// whose scene then goes inactive, or nowhere, and the viewer never left. A pause while it opened (one from
+    /// `didClick`) froze the overlay: the viewer still here, it is read again as after any return.
+    func linkOpened() {
+        guard wasContentPausedWhileInactive, !isViewerAway else { return }
+        recheckContentAfterGrace()
+    }
+
     func cancel() {
         contentRecheck?.cancel()
         contentRecheck = nil
@@ -126,11 +134,11 @@ final class OverlayRule: ContentRule {
         return wasContentPausedWhileInactive
     }
 
-    /// The viewer is not in front of the player: the overlay's scene is not active, or the in-app browser of its
-    /// own click covers it. `false` before the overlay's clock exists.
+    /// The viewer is not in front of the player: the overlay's scene is not active, the in-app browser of its
+    /// own click covers it, or that click's link is still opening. `false` before the overlay's clock exists.
     private var isViewerAway: Bool {
         guard let clock = ad.onScreenClock else { return false }
-        return !clock.isSceneActive || ad.inAppBrowser.isOpen
+        return !clock.isSceneActive || ad.inAppBrowser.isOpen || ad.isOpeningLink
     }
 
     /// The viewer is back over an overlay frozen by a pause (the scene active, the browser closed): the app may be
@@ -143,7 +151,7 @@ final class OverlayRule: ContentRule {
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
             guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.onScreenClock?.isSceneActive == true,
-                  !ad.inAppBrowser.isOpen, let playback = ad.contentPlayback else { return }
+                  !ad.inAppBrowser.isOpen, !ad.isOpeningLink, let playback = ad.contentPlayback else { return }
             wasContentPausedWhileInactive = false
             if playback.isPlaying {
                 Logger.info("ad \(ad.id.prefix(8)): the content plays again; the overlay goes on")

@@ -156,6 +156,12 @@ public final class VideoAd {
     private(set) var skAdNetwork: SKAdNetworkImpression?
     /// The in-app browser this ad's clicks open web links in; its screen follows it while it is up.
     private(set) lazy var inAppBrowser = InAppBrowser { [weak self] in self?.loadedBridge?.webView.window }
+    /// Links of this ad's clicks and `ad.open`s still opening: from the tap until the link opened somewhere (the
+    /// in-app browser, another app, the App Store sheet) or nowhere. The app hears `didClick` meanwhile, and
+    /// opening a web link waits for iOS to say whether an app claims it, so the viewer counts as away until then
+    /// (`isOpeningLink`): a pause from `didClick` freezes an overlay as one under the browser does.
+    private(set) var linksOpening = 0
+    var isOpeningLink: Bool { linksOpening > 0 }
 
     /// Nothing is rendered here; `load()` does that. Expiry is checked at the next call, never by a timer.
     init(descriptor: AdDescriptor, owner: VideoAds) {
@@ -582,11 +588,23 @@ public final class VideoAd {
     /// where its `LinkRoute` says (a web link no app claims in the in-app browser).
     func openClick(_ url: URL, fallback: URL?) {
         let browser = inAppBrowser
-        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return LinkOpener.open(url, fallback: fallback, browser: browser) }
+        let opened = linkOpening()
+        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return LinkOpener.open(url, fallback: fallback, browser: browser, completion: opened) }
         // The viewer's tap is honored even if the ad ends while the sheet loads: the URL opens when it fails.
         Task {
-            if await skAdNetwork.presentStore() { return }
-            LinkOpener.open(url, fallback: fallback, browser: browser)
+            if await skAdNetwork.presentStore() { return opened(true) }
+            LinkOpener.open(url, fallback: fallback, browser: browser, completion: opened)
+        }
+    }
+
+    /// Counts a link as opening (`isOpeningLink`) until the returned completion runs, once, whatever opened. Once
+    /// none is left, the content rule hears it: the viewer may never have left.
+    func linkOpening() -> @MainActor (Bool) -> Void {
+        linksOpening += 1
+        return { [weak self] _ in
+            guard let self else { return }
+            linksOpening -= 1
+            if linksOpening == 0, !hasEnded { contentRule.linkOpened() }
         }
     }
 
