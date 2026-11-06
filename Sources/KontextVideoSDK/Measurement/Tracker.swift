@@ -32,6 +32,9 @@ final class Tracker {
     private let progressByOffset: [Int: [Int]]
     private let progressOffsets: [Int]
     private var fired: Set<Int> = []
+    /// `video.start` was recorded. Mute, unmute and skip may come before it (the viewer's); they fire their own
+    /// beacons, but a video that never started passed no checkpoint.
+    private var hasVideoStarted = false
     private let session: URLSession
 
     init(adId: String, entries: [AdPayload.TrackingEvent]) {
@@ -79,19 +82,20 @@ final class Tracker {
         case .skip(let playhead):
             adPlayhead = playhead
             // Checkpoints the video passed before the skip that the page never reported, then the skip.
-            fireProgress(upTo: playhead)
+            catchUpProgress(upTo: playhead)
             fire("skip")
         case .video(let moment, let playhead):
             adPlayhead = playhead
+            if moment == .start { hasVideoStarted = true }
             fire(moment.rawValue)
-            fireProgress(upTo: playhead)
+            catchUpProgress(upTo: playhead)
         case .progress(let offset, let playhead):
             adPlayhead = playhead
-            fireProgress(upTo: max(offset, playhead))
+            catchUpProgress(upTo: max(offset, playhead))
         case .complete(let playhead):
             adPlayhead = playhead
             // Checkpoints before the end that the page never reported, then the end itself.
-            fireProgress(upTo: playhead)
+            catchUpProgress(upTo: playhead)
             fire("complete")
             // The end card, when there is one, becomes visible now.
             fire("creativeView", part: "endCard")
@@ -146,6 +150,13 @@ final class Tracker {
             guard progressByOffset[offset]?.contains(where: { !fired.contains($0) }) == true else { continue }
             fire("progress", offset: offset)
         }
+    }
+
+    /// `fireProgress` for a page event: nothing before `video.start`, which the protocol lets a mute, an unmute and a
+    /// skip precede.
+    private func catchUpProgress(upTo playheadMs: Int) {
+        guard hasVideoStarted else { return }
+        fireProgress(upTo: playheadMs)
     }
 
     /// The click-through with the beacon macros substituted, `[KONTEXT_FIREID]` with the click's own fire id:

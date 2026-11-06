@@ -613,6 +613,28 @@ struct VideoAdTests {
         #expect(harness.server.beacons.first { $0.event == "pause" }?.query["aph"] == "00:00:03.000")
     }
 
+    @Test func aMuteBeforeTheStartFiresNoProgress() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "v-pre"))
+        try presentLinear(ad)
+        // Allowed before video.start, as the viewer's: their own beacons, but no checkpoint of a video not started.
+        send(ad, "video.mute", ["playhead": 6000])
+        send(ad, "video.unmute", ["playhead": 6000])
+        #expect(await harness.beaconArrives("unmute"))
+        #expect(await !beacons().contains("progress"), "no checkpoint before the start")
+        send(ad, "video.start", ["playhead": 6000])
+        #expect(await harness.beaconArrives("progress"), "the start catches up the checkpoints passed")
+    }
+
+    @Test func aSkipBeforeTheStartFiresNoProgress() async throws {
+        let (skipped, _, _) = try await makeAd(Fixtures.linearAd(id: "v-pre-skip"))
+        try presentLinear(skipped)
+        send(skipped, "video.skip", ["playhead": 6000])
+        #expect(await harness.beaconArrives("skip"))
+        _ = await beacons()
+        #expect(!harness.server.beacons.contains { $0.adId == "v-pre-skip" && $0.event == "progress" },
+                "the skip of a video not started passed no checkpoint")
+    }
+
     @Test func completeFiresCompleteAndTheEndCardsCreativeView() async throws {
         let (ad, delegate, _) = try await makeAd(Fixtures.linearAd(id: "i5"))
         try presentLinear(ad)
