@@ -25,6 +25,23 @@ struct LinearViewControllerTests {
         #expect(interruptions() == 3)
     }
 
+    /// A presenter that allows landscape only, as a landscape player screen does.
+    final class LandscapeOnly: UIViewController {
+        override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    }
+
+    @Test func theAdFollowsThePresentersOrientations() async throws {
+        let (controller, _) = makeController()
+        #expect(controller.supportedInterfaceOrientations == .all, "not presented yet")
+        let window = TestWindow()
+        defer { window.tearDown() }
+        let presenter = LandscapeOnly()
+        window.window.rootViewController = presenter
+        presenter.present(controller, animated: false)
+        #expect(await waitUntil { controller.presentingViewController === presenter })
+        #expect(controller.supportedInterfaceOrientations == .landscape)
+    }
+
     @Test func aCoveredViewIsNotAnInterruption() {
         let (controller, interruptions) = makeController()
         controller.viewDisappeared(isBeingDismissed: false, isMovingFromParent: false, hasPresenter: true)

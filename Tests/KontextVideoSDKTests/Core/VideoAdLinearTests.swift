@@ -184,5 +184,14 @@ struct VideoAdLinearTests {
         #expect(exposures.last.map { $0 > 50 } == true, "exposed again: \(exposures)")
         #expect(ad.meter?.verdict == .viewable)
     }
+
+    @Test func showFromAControllerWhoseViewIsNotLoadedThrowsWithoutLoadingIt() async throws {
+        let (ad, _, ads) = try await makeAd(Fixtures.linearAd(id: "l-unloaded"))
+        defer { ads.destroy() }
+        let controller = UIViewController()
+        #expect(throws: VideoAdError.cannotShowNow) { try ad.show(from: controller) }
+        #expect(!controller.isViewLoaded, "the app's viewDidLoad does not run only to be refused")
+        #expect(ad.isReady)
+    }
 }
 }

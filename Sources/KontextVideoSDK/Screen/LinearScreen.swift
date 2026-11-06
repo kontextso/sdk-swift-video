@@ -25,7 +25,9 @@ final class LinearScreen: AdScreen {
     static func presenter(from viewController: UIViewController?, adId: String) throws -> UIViewController {
         let presenter: UIViewController
         if let viewController {
-            guard ViewExposure.canBeSeen(viewController.view), viewController.presentedViewController == nil,
+            // `viewIfLoaded`: a controller whose view never loaded is not on screen, and loading it here would run
+            // the app's `viewDidLoad` only to refuse.
+            guard let view = viewController.viewIfLoaded, ViewExposure.canBeSeen(view), viewController.presentedViewController == nil,
                   !viewController.isBeingPresented, !viewController.isBeingDismissed else {
                 Logger.warning("ad \(adId.prefix(8)): cannot present, the view controller is not on screen or already presenting")
                 throw VideoAdError.cannotShowNow

@@ -39,6 +39,12 @@ final class LinearAdViewController: UIViewController {
         view.addSubview(webView)
     }
 
+    /// The presenter's orientations: a full-screen ad over a landscape-only player stays landscape, and one over a
+    /// portrait-locked app does not rotate it. Before it is presented, any.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        presentingViewController?.supportedInterfaceOrientations ?? .all
+    }
+
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
@@ -74,7 +80,7 @@ extension LinearAdViewController {
             controller = presented
         }
         // Still presenting (its modal is mid-dismissal), or mid-transition itself: UIKit would refuse.
-        guard controller.view.window != nil, controller.presentedViewController == nil,
+        guard controller.viewIfLoaded?.window != nil, controller.presentedViewController == nil,
               !controller.isBeingPresented, !controller.isBeingDismissed else { return nil }
         return controller
     }
