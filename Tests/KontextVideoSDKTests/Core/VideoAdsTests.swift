@@ -679,19 +679,11 @@ struct VideoAdsTests {
 
     @Test func aKillSwitchInTheAnswerToADestroyedVideoAdsStillSwitchesTheSDKOff() async throws {
         let ads = await makeAds()
-        let gate = StubServer.Gate()
-        defer { gate.open() }
-        var disabled = StubServer.Response.json(Fixtures.disabled("killed"))
-        disabled.gate = gate
-        harness.server.on("/v2/video/ads", disabled)
-        let call = Task { await error { try await ads.format(.pause) } }
-        #expect(await waitUntil { self.harness.adsRequests.count == 1 })
-        // The answer arrives off the main thread while the main thread is busy; the app destroys the VideoAds before
-        // the request resumes on it with the answer (a destroy earlier cancels the POST, and nothing arrives).
-        gate.open()
-        Thread.sleep(forTimeInterval: 0.3)
-        ads.destroy()
-        let failure = await call.value
+        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("killed")))
+        // The app destroys the VideoAds as the answer is back, before the request reads it (a destroy earlier
+        // cancels the POST, and nothing arrives).
+        Environment.adsAnswerArrived = { ads.destroy() }
+        let failure = await error { try await ads.format(.pause) }
         #expect(failure == .destroyed, "the caller's VideoAds is gone: \(String(describing: failure))")
         #expect(await waitUntil { KontextVideo.shared.state == .disabled(reason: "killed") }, "the answer still switches the SDK off")
     }

@@ -76,6 +76,9 @@ enum Environment {
     /// counting while the device sleeps (`CLOCK_MONOTONIC`; `systemUptime` stops in sleep, and an ad must
     /// expire in a locked pocket too). Never a `Date`: the user cannot set this one. Tests move it.
     nonisolated(unsafe) static var now: () -> TimeInterval = defaultNow
+    /// Runs when an ads request's answer is back on the main actor, before anything reads it: where a test does
+    /// what an app could do at that moment (destroy the `VideoAds`). Nothing in an app.
+    static var adsAnswerArrived: @MainActor () -> Void = {}
     /// Custom schemes a frame page may come from besides http and https: the one the tests serve their pages
     /// over (`schemeHandlers`). Tests only: empty in an app; not cleared by `reset`, as decoding runs before any
     /// harness.
@@ -107,6 +110,7 @@ enum Environment {
         skAdNetwork = defaultSKAdNetwork()
         storeProduct = defaultStoreProduct()
         now = defaultNow
+        adsAnswerArrived = {}
     }
 
     // The production defaults, each written once: the initializers above and `reset()` use them.

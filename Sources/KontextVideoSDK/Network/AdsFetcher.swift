@@ -91,6 +91,7 @@ final class AdsFetcher {
             let response: AdsResponse
             do {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
+                Environment.adsAnswerArrived()
                 // The kill switch before anything asks for the owner: it switches the whole SDK off even when this
                 // `VideoAds` was destroyed or released as the answer came, or other videos would go on requesting.
                 if case .disabled(let reason) = response { KontextVideo.shared.disable(reason: reason) }
