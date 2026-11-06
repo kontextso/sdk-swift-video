@@ -604,10 +604,12 @@ public final class VideoAd {
     //  9. delegate: held weakly, nothing to drop; `didEnd` is the last call (finish).
     private func endNow(_ reason: EndReason) {
         guard state.moveTo(.ending(reason)) else { return }
+        // The rule stops following the content first, as in the Kotlin SDK: a player paused or resumed from `didFail`
+        // reaches no rule of this ad.
+        contentRule.cancel()
         if reason == .failed, let failure = state.failure {
             delegate?.videoAd(self, didFail: failure)
         }
-        contentRule.cancel()
         // The ad was on screen, whatever ended it; `[KONTEXT_VIEWDURATION]` is the active time, not the wall clock.
         let activeTime = screen?.tearDown() ?? 0
         skAdNetwork?.end()
