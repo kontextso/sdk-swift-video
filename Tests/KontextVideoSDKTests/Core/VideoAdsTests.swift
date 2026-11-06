@@ -37,10 +37,11 @@ struct VideoAdsTests {
     }
 
     /// The `notUsed` beacons that arrived. Expecting some: waits for that many (they travel through
-    /// URLSession); expecting none: gives them 80 ms to show up.
+    /// URLSession); then, as for none, until no beacon is still on its way (`beaconsSettled`), however slow.
     private func notUsedBeacons(expecting count: Int = 0) async -> [(adId: String, reason: String?)] {
         let arrived = { self.harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.adId, $0.query["reason"]) } }
-        if count == 0 { await sleepMs(80) } else { _ = await waitUntil { arrived().count >= count } }
+        if count > 0 { _ = await waitUntil { arrived().count >= count } }
+        await beaconsSettled()
         return arrived()
     }
 
