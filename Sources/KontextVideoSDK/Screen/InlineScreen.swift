@@ -61,17 +61,33 @@ final class InlineScreen: AdScreen {
         host.coversWhole = ad.descriptor.position == .fullscreen
         host.content.frame = adFrame
         host.place = { [weak self] bounds, safeArea in self?.refit(in: bounds, safeArea: safeArea) }
-        host.onUnfit = { [weak ad] in
-            // Not inside UIKit's layout pass: ending removes the view being laid out.
-            Task { @MainActor [weak ad] in
-                guard let ad, !ad.hasEnded else { return }
-                Logger.warning("ad \(ad.id.prefix(8)): the view became too small for the ad; ended as interrupted")
-                ad.end(.interrupted)
-            }
-        }
+        armUnfit(host)
         hostView = host
         container.addSubview(host)
         return ViewExposure.canBeSeen(host) && ViewExposure.visibleShare(of: webView) > 0
+    }
+
+    /// How long a view too small for the ad may stay so before the ad ends: containers pass through small sizes
+    /// on their way to a bigger one (a SwiftUI transition, a Split View drag, a collapsing header). Tests shorten it.
+    static var unfitGrace: TimeInterval = 0.5
+
+    /// A layout pass where the ad no longer fits: after `unfitGrace` (not inside UIKit's layout pass, where ending
+    /// would remove the view being laid out) the fit is asked again; still too small, the ad ends `.interrupted`;
+    /// fitting again, it is placed and the next misfit is watched for the same way.
+    private func armUnfit(_ host: InlineAdView) {
+        host.onUnfit = { [weak self, weak host] in
+            Task { @MainActor [weak self, weak host] in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, Self.unfitGrace) * 1_000_000_000))
+                guard let self, !ad.hasEnded else { return }
+                if let host, let player = host.superview, let frame = host.place?(host.bounds, player.safeAreaInsets) {
+                    host.content.frame = frame
+                    armUnfit(host)
+                    return
+                }
+                Logger.warning("ad \(ad.id.prefix(8)): the view stayed too small for the ad for \(Self.unfitGrace) s; ended as interrupted")
+                ad.end(.interrupted)
+            }
+        }
     }
 
     /// The meter is the one answer to "is it seen": the clock counts only then, and an ad out of sight in an

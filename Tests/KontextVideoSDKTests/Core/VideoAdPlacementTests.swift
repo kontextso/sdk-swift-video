@@ -251,6 +251,30 @@ struct VideoAdPlacementTests {
         #expect(player.subviews.isEmpty)
     }
 
+    @Test func aContainerThatShrinksForAMomentAndGrowsBackKeepsTheAd() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o2g", format: "overlay", position: "bottom",
+                                                      size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: 6000))
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        window.add(player)
+        try ad.show(in: player)
+        let placed = adFrame(in: player)
+        // A transition passes through a size the ad does not fit, then lands on a bigger one.
+        player.frame.size = CGSize(width: 100, height: 20)
+        player.layoutIfNeeded()
+        await sleepMs(50)
+        player.frame.size = CGSize(width: 390, height: 220)
+        player.layoutIfNeeded()
+        await sleepMs(Int(InlineScreen.unfitGrace * 1000) + 300)
+        #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "back to a fitting size within the grace: \(delegate.events)")
+        #expect(adFrame(in: player) == placed)
+        // A second misfit is watched for the same way: staying too small ends it.
+        player.frame.size = CGSize(width: 100, height: 20)
+        player.layoutIfNeeded()
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "still too small after the grace: \(delegate.events)")
+    }
+
     @Test func aFullscreenPauseAdFollowsAResizedPlayer() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6r", position: "fullscreen", size: nil))
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))

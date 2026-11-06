@@ -273,7 +273,7 @@ public final class VideoAd {
     /// three. Otherwise `show` was accepted: the ad is on screen, or, if code of yours that UIKit or the player
     /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`); from `show` until `didEnd`
     /// the SDK retains it. The ad follows the
-    /// view when it resizes or rotates: the same variant is fitted again, and a view too small for it ends it
+    /// view when it resizes or rotates: the same variant is fitted again, and a view still too small for it half a second later ends it
     /// with `.interrupted`. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
     /// stops, and a pause ad when the content plays again, both as `.interrupted`; an overlay whose content
     /// paused in the background stays until a second after the app's return, and goes on if it plays again.

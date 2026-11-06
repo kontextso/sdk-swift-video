@@ -290,6 +290,7 @@ struct SDKHarness {
         PlayerFallback.noted = []
         ViewabilityMeter.interval = 0.25
         ViewabilityMeter.offScreenGrace = 1
+        InlineScreen.unfitGrace = 0.5
         // The runner never completes a modal transition: a linear ad's didEnd comes from the fallback.
         LinearScreen.dismissalTimeout = 0.05
         DebugReporter.interval = 0.1

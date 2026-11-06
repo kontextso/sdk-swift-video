@@ -34,7 +34,7 @@ import UIKit
 /// 2. At every layout pass of `InlineAdView`: `refit(in:safeArea:)`. A full-screen pause ad takes the view less
 ///    its safe area, no variants. Otherwise `AdGeometry.frame` of `chosenSize`, inside the safe area plus the
 ///    app's insets, gives where `InlineAdView` puts the web view; `nil`: it no longer fits, `InlineAdView` calls
-///    `onUnfit` and the ad ends `.interrupted`.
+///    `onUnfit`, and the ad ends `.interrupted` if it still does not fit `InlineScreen.unfitGrace` later.
 ///
 /// Example: variants 320×80 and 300×50 pt, an inline player of 393×221 pt, the app's controls 44 pt at the
 /// bottom. The room is 393×177; both variants fit at full size, so the biggest: 320×80, centred, just above
