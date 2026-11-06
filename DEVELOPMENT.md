@@ -174,17 +174,20 @@ Tests/KontextVideoSDKTests/
 ├── Network/      the client: transport, status codes, the error body
 ├── Device/       the user agent's fallback (UserAgentTests)
 ├── Payloads/     decoding the answers, building the requests (device facts, consent and ATT included);
-│                 CorpusTests runs the shared malformed-answer corpus
+│                 the JSON checks, nesting included (StrictJSONTests); CorpusTests runs the shared malformed-answer corpus
 ├── Corpus/       a copy of the video-sdk-corpus repo (internal), written by its sync.sh: never edit it
 │                 here; its README has the format and how to add a case
 ├── Frame/        a page message read (FrameMessageTests), the protocol as tables (FrameProtocolTableTests) and rule by
-│                 rule (FrameProtocolTests), every message in every state (FrameMessageTableTests), the navigations (FrameNavigationTests), one tap
+│                 rule (FrameProtocolTests), every message in every state through the bridge's calls (FrameStateTableTests), the navigations (FrameNavigationTests), one tap
 │                 one URL (TouchGateTests), all without a
 │                 WebView; the bridge with its WebView (FrameBridgeTests)
 ├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
 ├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the on-screen time clock
+├── Content/      the tracked player (ContentPlaybackTests), an overlay's video time (ContentTimeClockTests), the TTSDK
+│                 adapter (TTVideoEngineAdapterTests)
 ├── Core/         KontextVideo, VideoAds, VideoAd (before show and on screen)
-├── Diagnostics/  the logger, the error reporter, the report queue (ReportQueueTests), the event history
+├── Diagnostics/  the logger, the error reporter, a report's fields (ErrorReportTests), the report queue
+│                 (ReportQueueTests), the byte cap and state values (ReportFormatTests), the event history
 │                 (EventHistoryTests), the debug reporter
 ├── Platform/     the environment's seams, awaitShared, the link opener
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end

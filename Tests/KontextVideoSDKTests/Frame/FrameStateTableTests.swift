@@ -17,7 +17,7 @@ import Testing
 extension SerialSuites {
 @Suite
 @MainActor
-struct FrameMessageTableTests {
+struct FrameStateTableTests {
     private let main = FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "server.kontext.so", port: 0)
 
     init() { SDKHarness.reset() }
