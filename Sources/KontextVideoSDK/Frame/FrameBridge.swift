@@ -279,8 +279,15 @@ final class FrameBridge: NSObject {
     }
 
     /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
-    /// without one it is a forced redirect and goes nowhere.
+    /// without one it is a forced redirect and goes nowhere. While the page loads it cannot be a click (no touch,
+    /// nothing shown): the page redirected to another origin (a CDN handing over to an edge host), which WebKit
+    /// then reports only as a cancelled load. It fails the load now, not after the load timeout as a timeout.
     func externalNavigation(to target: URL) {
+        if state == .loading {
+            Logger.warning("frame \(adId.prefix(8)): the page redirected to another origin while loading; the load fails")
+            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
+            return
+        }
         guard let click = frameProtocol.externalNavigation(to: target, now: Environment.now()) else {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.absoluteString) cancelled")
             return

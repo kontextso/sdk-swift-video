@@ -120,6 +120,14 @@ struct FrameBridgeTests {
         #expect(bridge.failureUnderlying?.code == URLError.networkConnectionLost.rawValue)
     }
 
+    @Test func aCrossOriginRedirectWhileLoadingFailsAtOnce() {
+        let (bridge, events) = makeBridge()
+        bridge.load()
+        bridge.externalNavigation(to: URL(string: "https://other.example/x")!)
+        guard case .error(let code)? = events.last else { Issue.record("expected an error, not the load timeout"); return }
+        #expect(code == 500 && bridge.state == .ended && bridge.failureCause == .loadFailed)
+    }
+
     @Test func navigationsStoppedOnPurposeDoNotFailTheAd() {
         let (bridge, events) = makeBridge()
         bridge.load()
