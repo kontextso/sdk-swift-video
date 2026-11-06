@@ -35,8 +35,8 @@ struct EventHistoryTests {
         let huge = String(repeating: "i", count: 100_000)
         DebugReporter.shared.event("ad.huge", adId: huge, state: ["format": .string(huge), "count": 3])
         let kept = try #require(EventHistory.recentUncapped().last)
-        #expect(kept.adId?.utf8.count == ReportFormat.maxStoredLength, "a server's huge id is not kept whole")
-        if case .string(let format)? = kept.state?["format"] { #expect(format.utf8.count == ReportFormat.maxStoredLength) }
+        #expect(kept.adId?.utf8.count == 64, "a server's huge id is not kept whole; 64 bytes, as on Android")
+        if case .string(let format)? = kept.state?["format"] { #expect(format.utf8.count == 64) } else { Issue.record("format kept") }
         #expect(kept.state?["count"].map { "\($0)" } == "3")
     }
 

@@ -1,8 +1,7 @@
 import Foundation
 
 /// How the SDK's reports write their fields, shared by `ErrorReporter` and `DebugReporter` so neither reaches into
-/// the other: a state value as JSON, the timestamp, the cap on every string field of an error report, and the cap
-/// on every string the reporters keep.
+/// the other: a state value as JSON, the timestamp, the cap on every string field the reporters keep.
 enum ReportFormat {
     /// A string, a number or a boolean: a debug event's state, and an error report's history.
     enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
@@ -36,12 +35,10 @@ enum ReportFormat {
     }
 
     /// UTF-8 bytes kept of every string field: ids, `detail`, the underlying error's domain, history names
-    /// and values. Bytes, not characters: one character can carry any number of combining marks.
+    /// and values, a debug event's name, ad id and state values. Bytes, not characters: one character can carry
+    /// any number of combining marks. Ids are about 36; a server sending far longer ones must not grow the buffers
+    /// the SDK holds for the app's life.
     static let maxFieldLength = 64
-
-    /// UTF-8 bytes kept of every string a debug event or the history keeps (the ad id, a state value): ids are about
-    /// 36, and a server sending far longer ones must not grow the buffers the SDK holds for the app's life.
-    static let maxStoredLength = 256
 
     /// `text` cut to `limit` UTF-8 bytes, at a Unicode scalar boundary so it stays valid text.
     static func capped(_ text: String, to limit: Int = maxFieldLength) -> String {

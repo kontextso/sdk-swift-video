@@ -58,10 +58,12 @@ final class DebugReporter {
     /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
     /// device console, in the same shape, whether or not the server asked for it.
     func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: ReportFormat.Value]? = nil) {
-        // Kept small from the start: the history and the buffer hold these for the app's life.
-        let adId = adId.map { ReportFormat.capped($0, to: ReportFormat.maxStoredLength) }
+        // Every string capped as the event is kept, as an error report's are (`ReportFormat.maxFieldLength`, as on
+        // Android): the history and the buffer hold these for the app's life, and an ad id has no length limit.
+        let name = ReportFormat.capped(name)
+        let adId = adId.map { ReportFormat.capped($0) }
         let state = state?.mapValues { value -> ReportFormat.Value in
-            if case .string(let text) = value { return .string(ReportFormat.capped(text, to: ReportFormat.maxStoredLength)) }
+            if case .string(let text) = value { return .string(ReportFormat.capped(text)) }
             return value
         }
         Logger.debug(Self.line(name, adId: adId, state: state))
