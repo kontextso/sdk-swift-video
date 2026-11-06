@@ -80,7 +80,10 @@ enum ViewExposure {
         let inView = visible.map { view.convert($0, from: window) }
         let xs = inView.map(\.x), ys = inView.map(\.y)
         let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!).intersection(view.bounds)
-        return Exposure(share: min(1, Double(seen / whole)), visibleBox: box)
+        // Explicit, not left to `min`'s argument order: a degenerate transform can make the ratio NaN or infinite.
+        let share = Double(seen / whole)
+        guard share.isFinite, box.width.isFinite, box.height.isFinite else { return .none }
+        return Exposure(share: min(1, max(0, share)), visibleBox: box)
     }
 }
 
