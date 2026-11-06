@@ -16,6 +16,9 @@ extension VideoAds {
     /// page's engine with that page's `VideoAds` when the page becomes current. An object that is not a
     /// `TTVideoEngine` (it lacks those properties) is followed as never playing, with an error on the console.
     public func track(ttVideoEngine engine: NSObject, currentItem: (@MainActor () -> AnyHashable?)? = nil) {
+        // destroy() is terminal, and the adapter is shared: a destroyed VideoAds must not change the episode another
+        // VideoAds tracking the same engine reads.
+        guard !isDestroyed else { return }
         // One adapter per engine: the SDK tells an engine tracked by two `VideoAds` by the adapter it is given.
         let adapter = TTVideoEngineAdapter.adapter(for: engine)
         adapter.item = currentItem

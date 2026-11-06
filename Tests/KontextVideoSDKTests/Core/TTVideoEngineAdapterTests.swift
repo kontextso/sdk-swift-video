@@ -1,4 +1,5 @@
 import Foundation
+@testable import KontextVideoSDK
 @testable import KontextVideoTTSDK
 import Testing
 
@@ -68,4 +69,25 @@ struct TTVideoEngineAdapterTests {
         #expect(adapter.seekPublisher == nil)
         #expect(adapter.contentChangedPublisher == nil)
     }
+}
+
+/// The adapter is shared by every `VideoAds` tracking one engine. Serialized: it creates `VideoAds`.
+extension SerialSuites {
+@Suite
+@MainActor
+struct TTVideoEngineOwnersTests {
+    private let harness = SDKHarness()
+
+    @Test func aDestroyedVideoAdsLeavesTheSharedAdapterAlone() async {
+        _ = await harness.initialize()
+        let engine = TTVideoEngineAdapterTests.FakeEngine()
+        let live = VideoAds(content: .init(id: "ep-tt-live", language: "en"))
+        let gone = VideoAds(content: .init(id: "ep-tt-gone", language: "en"))
+        defer { live.destroy() }
+        live.track(ttVideoEngine: engine) { "episode-1" }
+        gone.destroy()
+        gone.track(ttVideoEngine: engine) { "episode-2" }
+        #expect(TTVideoEngineAdapter.adapter(for: engine).currentItem == AnyHashable("episode-1"), "the live owner's episode stays")
+    }
+}
 }
