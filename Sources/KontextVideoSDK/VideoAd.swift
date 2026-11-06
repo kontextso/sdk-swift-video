@@ -470,6 +470,12 @@ public final class VideoAd {
         ScreenSlot.take(self, owner: owner)
     }
 
+    /// `didEnd` was delivered (the phase reached `ended`): a linear ad being dismissed has ended but still owes it.
+    var hasDeliveredEnd: Bool {
+        if case .ended = state.phase { return true }
+        return false
+    }
+
     /// The creative is on screen: the page is told, the meter and the clocks run, the beacons of the moment
     /// fire. Everything the ad needs while on screen is set up before anyone outside hears of it: the
     /// impression delegate at the end may end the ad on the spot, and `end()` must find all of it.

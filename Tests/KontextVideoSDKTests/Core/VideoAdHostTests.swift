@@ -118,6 +118,80 @@ struct VideoAdHostTests {
         ad.dismiss()
     }
 
+    /// Lets every block queued on the main queue so far run: SwiftUI's deferred updates.
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+    }
+
+    @Test func aHostDismantledBeforeItsDeferredUpdateNeverAdoptsTheAd() async throws {
+        let slot = slot()
+        let ad = try await loaded(Fixtures.ad(id: "p-h-10"))
+        slot.request(ad)
+        slot.dismantle()   // SwiftUI removed the host, still in its window, before the update was applied
+        await drainMainQueue()
+        #expect(!ad.wasShown && ad.delegate == nil && slot.ad == nil && ad.isReady, "never adopted, never shown")
+    }
+
+    @Test func theLatestUpdateWinsAfterABurst() async throws {
+        let slot = slot()
+        let first = try await loaded(Fixtures.ad(id: "p-h-11"))
+        let second = try await loaded(Fixtures.ad(id: "p-h-12"))
+        slot.request(first)
+        slot.request(second)
+        slot.request(nil)
+        await drainMainQueue()
+        #expect(!first.wasShown && !second.wasShown && first.delegate == nil && second.delegate == nil)
+        slot.request(second)
+        await drainMainQueue()
+        #expect(second.wasShown && !first.wasShown, "one apply, of the latest wish")
+        slot.request(nil)
+        await drainMainQueue()
+    }
+
+    @Test func aDismantledHostFreesTheSlotAtOnceAndReportsTheEndAfterTheUpdate() async throws {
+        let slot = slot()
+        let ad = try await loaded(Fixtures.ad(id: "p-h-13"))
+        slot.set(ad)
+        #expect(ad.wasShown)
+        slot.dismantle()
+        #expect(KontextVideo.shared.adOnScreen == nil, "the app's one slot is free before SwiftUI goes on")
+        #expect(heard.ends.isEmpty, "not inside SwiftUI's update")
+        await drainMainQueue()
+        #expect(heard.ends == [.dismissed])
+    }
+
+    @Test func aLinearAdInAHostPresentsFromTheHostsWindowNotTheKeyWindow() async throws {
+        let other = TestWindow()
+        defer { other.tearDown() }
+        let key = window.window
+        Environment.keyWindow = { key }
+        let slot = VideoAdSlotView()
+        slot.frame = CGRect(x: 0, y: 0, width: 390, height: 220)
+        other.add(slot)
+        let ad = try await loaded(Fixtures.linearAd(id: "l-h-14"))
+        slot.set(ad)
+        #expect(ad.wasShown, "\(heard.failures)")
+        #expect(other.root.presentedViewController is LinearAdViewController || ad.linearController?.presentingViewController === other.root,
+                "presented from the host's own window")
+        #expect(window.root.presentedViewController == nil, "not from the key window")
+        heard.owners.forEach { $0.destroy() }
+    }
+
+    @Test func aLinearAdBeingDismissedWhenTheHostLeavesStillReportsItsEnd() async throws {
+        LinearScreen.dismissalTimeout = 0.05
+        let ad = try await loaded(Fixtures.linearAd(id: "l-h-15"))
+        do {
+            let slot = slot()
+            slot.set(ad)
+            #expect(ad.wasShown)
+            heard.owners.forEach { $0.destroy() }   // the ad ends: its dismissal starts, didEnd waits for it
+            #expect(ad.hasEnded && heard.ends.isEmpty, "being dismissed")
+            slot.dismantle()
+            slot.removeFromSuperview()
+        }
+        #expect(await waitUntil { self.heard.ends == [.destroyed] }, "the end is still heard after the host left")
+    }
+
     @Test func tapsOutsideTheAdGoThroughToThePlayer() {
         let slot = slot()
         #expect(slot.hitTest(CGPoint(x: 10, y: 10), with: nil) == nil)

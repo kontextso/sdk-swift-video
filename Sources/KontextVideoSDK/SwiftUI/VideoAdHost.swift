@@ -4,8 +4,8 @@ import UIKit
 /// Shows a video ad from SwiftUI: place it over your player, usually in an `.overlay { }`, and set `ad` to a
 /// loaded ad to show it, to `nil` (or another ad) to dismiss the one shown; it is dismissed too when the host
 /// leaves the view hierarchy. An overlay or pause ad shows where the host is placed; a linear ad is presented
-/// full screen from the top view controller and is never dismissed by the host: it ends by itself or by the
-/// viewer.
+/// full screen from the top view controller of the host's window and is never dismissed by the host: it ends by
+/// itself or by the viewer, and its `onEnd` still comes after the host left.
 ///
 /// The host is the ad's delegate: hear the ad through `onImpression`, `onClick` and `onEnd`, and set your
 /// state's ad back to `nil` in `onEnd`. `onShowFailed` means it could not be shown, for the reasons `show`
@@ -51,12 +51,11 @@ public struct VideoAdHost: UIViewRepresentable {
         slot.onClick = onClick
         slot.onEnd = onEnd
         // After this update: showing or dismissing calls back into the app, which changes its state.
-        let ad = ad
-        DispatchQueue.main.async { [weak slot] in slot?.set(ad) }
+        slot.request(ad)
     }
 
     public static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
-        (uiView as? VideoAdSlotView)?.set(nil)
+        (uiView as? VideoAdSlotView)?.dismantle()
     }
 }
 
@@ -74,6 +73,13 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
     private(set) var ad: VideoAd?
     /// Given and not shown yet: it shows at the first moment the view is in a window with a size.
     private var isPending = false
+    /// The ad SwiftUI's latest update asked for, applied after that update (`request`).
+    private var wanted: VideoAd?
+    /// An apply of `wanted` is queued: a burst of updates folds into one.
+    private var isApplyScheduled = false
+    /// SwiftUI removed the host (`dismantleUIView`): nothing is adopted or shown here any more, and the end of an ad
+    /// it dismissed is told after SwiftUI's update.
+    private(set) var isDismantled = false
     /// Slots let go of while their linear ad plays: kept until its `didEnd`, which the app still needs to hear.
     private static var awaitingLinearEnd: [VideoAdSlotView] = []
 
@@ -85,6 +91,30 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    /// SwiftUI's update asks for `ad`: applied (`set`) on the main queue after the update, since showing and
+    /// dismissing call back into the app, which changes its state. Only the latest wish is applied, and none after
+    /// `dismantle()`: a show queued before the host left must not adopt or show the ad in a view that is leaving.
+    func request(_ ad: VideoAd?) {
+        guard !isDismantled else { return }
+        wanted = ad
+        guard !isApplyScheduled else { return }
+        isApplyScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            isApplyScheduled = false
+            guard !isDismantled else { return }
+            set(wanted)
+        }
+    }
+
+    /// SwiftUI removes the host: the ad shown here is dismissed at once, freeing the app's one slot before SwiftUI
+    /// goes on; its `onEnd` comes after the update. A linear ad plays on, and its end is still heard.
+    func dismantle() {
+        isDismantled = true
+        wanted = nil
+        set(nil)
     }
 
     /// Shows `ad` here, replacing the one shown; `nil` dismisses it. The same ad again does nothing; an ad shown
@@ -118,11 +148,13 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
     }
 
     private func showIfPossible() {
-        guard isPending, let ad, window != nil, bounds.width > 0, bounds.height > 0 else { return }
+        guard !isDismantled, isPending, let ad, let window, bounds.width > 0, bounds.height > 0 else { return }
         isPending = false
         do {
             if ad.format == .linear {
-                try ad.show()
+                // From this host's own window: with two scenes, the key window may be the other one.
+                guard let presenter = LinearAdViewController.topPresenter(in: window) else { throw VideoAdError.cannotShowNow }
+                try ad.show(from: presenter)
             } else {
                 try ad.show(in: self, insets: insets)
             }
@@ -136,12 +168,11 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
     // A linear ad ends by itself or by the viewer (dismiss() does not apply to it): it keeps playing, and this
     // slot stays its delegate until its end.
     private func release(_ ad: VideoAd) {
-        if ad.wasShown, !ad.hasEnded {
-            if ad.format == .linear {
-                Self.awaitingLinearEnd.append(self)
-            } else {
-                ad.dismiss() // its didEnd reaches onEnd
-            }
+        if ad.format == .linear, ad.wasShown, !ad.hasDeliveredEnd {
+            // Also while it is being dismissed (`hasEnded` already, `didEnd` not yet): the end is still owed.
+            Self.awaitingLinearEnd.append(self)
+        } else if ad.wasShown, !ad.hasEnded {
+            ad.dismiss() // its didEnd reaches onEnd
         }
         if !ad.wasShown, ad.delegate === self { ad.delegate = nil }
     }
@@ -156,7 +187,13 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
 
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
         if self.ad === ad { self.ad = nil }
-        onEnd?(ad, reason)
         Self.awaitingLinearEnd.removeAll { $0 === self }
+        guard let onEnd else { return }
+        // Dismissed by SwiftUI's removal: the app's state changes after that update, not inside it.
+        if isDismantled {
+            DispatchQueue.main.async { onEnd(ad, reason) }
+        } else {
+            onEnd(ad, reason)
+        }
     }
 }

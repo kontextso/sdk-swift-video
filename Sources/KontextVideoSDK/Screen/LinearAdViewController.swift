@@ -64,7 +64,12 @@ extension LinearAdViewController {
     /// being dismissed or is mid-transition; a system alert or sheet on top is a plain controller that
     /// can, and the ad goes over it, as a peer's would.
     static func topPresenter() -> UIViewController? {
-        guard var controller = Environment.keyWindow()?.rootViewController else { return nil }
+        topPresenter(in: Environment.keyWindow())
+    }
+
+    /// The same in a given window: the SwiftUI host presents from its own scene, which need not be the key one.
+    static func topPresenter(in window: UIWindow?) -> UIViewController? {
+        guard var controller = window?.rootViewController else { return nil }
         while let presented = controller.presentedViewController, !presented.isBeingDismissed {
             controller = presented
         }
