@@ -46,4 +46,15 @@ struct TrackingMacrosTests {
         }
         #expect(price(2.5) == "https://t.test/?p=2.5" && price(0) == "https://t.test/?p=0.0")
     }
+
+    @Test func anIPv6HostKeepsItsBracketsAndStillParses() {
+        let template = "https://[2001:db8::1]:8080/t?e=[KONTEXT_FIREID]&u=[UNKNOWN]#[x]"
+        let filled = TrackingMacros.substitute(template, contentPlayhead: { 0 }, adPlayheadMs: 0, errorCode: nil, fireId: "f",
+                                               viewDurationMs: nil, notUsed: nil)
+        #expect(filled == "https://[2001:db8::1]:8080/t?e=f&u=%5BUNKNOWN%5D#%5Bx%5D")
+        #expect(URL(string: filled)?.host == "2001:db8::1" && URL(string: filled)?.port == 8080)
+        #expect(TrackingMacros.encodingBrackets("http://[::1]") == "http://[::1]", "a host alone")
+        #expect(TrackingMacros.encodingBrackets("[X]?a=[Y]") == "%5BX%5D?a=%5BY%5D", "no authority: every bracket")
+        #expect(LinkOpener.url("https://[2001:db8::1]/offer?f=[KONTEXT_FIREID]")?.host == "2001:db8::1", "a click-through to an IPv6 host")
+    }
 }

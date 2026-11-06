@@ -47,9 +47,13 @@ enum TrackingMacros {
     }
 
     /// Brackets percent-encoded, as a URL carries them: `URL(string:)` refuses a bare one, or re-encodes the
-    /// whole string around it.
+    /// whole string around it. Not in the authority (`scheme://` up to the first `/`, `?` or `#`): there they
+    /// delimit an IPv6 literal (`https://[2001:db8::1]:8080/p`), which encoded is no longer a host.
     static func encodingBrackets(_ text: String) -> String {
-        text.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D")
+        let encode = { (part: Substring) in part.replacingOccurrences(of: "[", with: "%5B").replacingOccurrences(of: "]", with: "%5D") }
+        guard let separator = text.range(of: "://") else { return encode(text[...]) }
+        let authorityEnd = text[separator.upperBound...].firstIndex { "/?#".contains($0) } ?? text.endIndex
+        return encode(text[..<separator.upperBound]) + text[separator.upperBound..<authorityEnd] + encode(text[authorityEnd...])
     }
 
     /// Playheads beyond this (`TenYears`, the content playhead's cap too) are nonsense and clamped: a value near
