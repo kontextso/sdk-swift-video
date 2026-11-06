@@ -34,4 +34,19 @@ struct PolygonTests {
         let parallel = Polygon.intersection(CGPoint(x: 0, y: 0), CGPoint(x: 10, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 10, y: 1))
         #expect(parallel == CGPoint(x: 10, y: 0), "parallel lines: the segment's end")
     }
+
+    @Test func touchingContainedAndFlatShapes() {
+        let neighbour = Polygon.corners(of: CGRect(x: 10, y: 0, width: 10, height: 10))
+        #expect(Polygon.area(Polygon.clip(square, to: neighbour)) == 0, "sharing an edge is no overlap")
+        let corner = Polygon.corners(of: CGRect(x: 10, y: 10, width: 5, height: 5))
+        #expect(Polygon.area(Polygon.clip(square, to: corner)) == 0, "sharing a corner is none either")
+        let inner = Polygon.corners(of: CGRect(x: 2, y: 2, width: 4, height: 4))
+        #expect(Polygon.area(Polygon.clip(inner, to: square)) == 16, "a subject inside the clipper is whole")
+        #expect(Polygon.area(Polygon.clip(square, to: inner)) == 16, "a subject larger than the clipper is cut to it")
+        #expect(Polygon.area(Polygon.clip(square, to: square)) == 100, "itself")
+        let flat = Polygon.corners(of: CGRect(x: 0, y: 5, width: 10, height: 0))
+        #expect(Polygon.area(flat) == 0 && Polygon.area(Polygon.clip(flat, to: square)) == 0, "a view with no height has no area")
+        #expect(Polygon.area(Polygon.clip(square, to: flat)) == 0, "nor does what a flat clipper keeps")
+        #expect(Polygon.clip([], to: square).isEmpty && Polygon.area([]) == 0)
+    }
 }

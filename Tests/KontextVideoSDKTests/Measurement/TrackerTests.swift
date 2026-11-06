@@ -292,6 +292,156 @@ struct TrackerTests {
         #expect(copies == ["1", "2"], "invalid entries before and between valid ones stop nothing")
     }
 
+    // MARK: Page events
+
+    /// Every beacon name the SDK fires, once each, for ad `adId`; progress at 1 s and 5 s; the end card's view.
+    private func everyEntry(_ adId: String) -> [AdPayload.TrackingEvent] {
+        let names = ["impression", "loaded", "error", "iconClick", "creativeView", "start", "firstQuartile", "midpoint", "thirdQuartile",
+                     "pause", "resume", "mute", "unmute", "skip", "complete", "click", "close", "notUsed"]
+        let base = "https://ads.test/events/\(adId)/"
+        return names.map { AdPayload.TrackingEvent(event: $0, url: base + "\($0)?aph=[ADPLAYHEAD]&code=[ERRORCODE]", offset: nil, part: nil) }
+            + [1000, 5000].map { (offset: Int) in
+                AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=\(offset)", offset: offset, part: nil)
+            }
+            + [AdPayload.TrackingEvent(event: "creativeView", url: base + "creativeView?part=endCard", offset: nil, part: "endCard")]
+    }
+
+    /// A beacon written short: `name`, `name(part)`, `progress@offset`.
+    private func short(_ beacon: (adId: String, event: String, query: [String: String])) -> String {
+        if let offset = beacon.query["offset"] { return "\(beacon.event)@\(offset)" }
+        return beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event
+    }
+
+    @Test func everyPageEventFiresItsBeaconsAndNoOthers() async throws {
+        // events recorded, whether `video.start` came first, the beacons expected (any order)
+        let rows: [(String, [FrameEvent], Bool, [String])] = [
+            ("loaded", [.loaded], false, ["loaded"]),
+            ("error", [.error(code: 405)], false, ["error"]),
+            ("adChoices", [.open(url: URL(string: "https://adchoices.test")!, purpose: "adChoices")], false, ["iconClick"]),
+            ("otherOpen", [.open(url: URL(string: "https://privacy.test")!, purpose: "privacy")], false, []),
+            ("click", [.click(url: URL(string: "https://brand.test")!, fallbackUrl: nil, area: .creative)], false, []),
+            ("close", [.close(reason: .close), .close(reason: .resume), .close(reason: .complete)], false, []),
+            ("skipUnstarted", [.skip(playhead: 6000)], false, ["skip"]),
+            ("skip", [.skip(playhead: 6000)], true, ["start", "progress@1000", "progress@5000", "skip"]),
+            ("quartiles", [.video(.firstQuartile, playhead: 2500), .video(.midpoint, playhead: 5000), .video(.thirdQuartile, playhead: 7500)], true,
+             ["start", "firstQuartile", "progress@1000", "midpoint", "progress@5000", "thirdQuartile"]),
+            ("toggles", [.video(.pause, playhead: 0), .video(.resume, playhead: 0), .video(.pause, playhead: 0), .video(.mute, playhead: 0),
+                         .video(.unmute, playhead: 0)], true, ["start", "pause", "resume", "pause", "mute", "unmute"]),
+            ("onceOnly", [.video(.firstQuartile, playhead: 0), .video(.firstQuartile, playhead: 0), .video(.start, playhead: 0)], true,
+             ["start", "firstQuartile"]),
+            ("muteUnstarted", [.video(.mute, playhead: 6000), .video(.unmute, playhead: 6000)], false, ["mute", "unmute"]),
+            ("progressUnstarted", [.progress(offset: 5000, playhead: 5000)], false, []),
+            ("progressByOffset", [.progress(offset: 1000, playhead: 0)], true, ["start", "progress@1000"]),
+            ("progressByPlayhead", [.progress(offset: 0, playhead: 5000)], true, ["start", "progress@1000", "progress@5000"]),
+            ("progressBetween", [.progress(offset: 999, playhead: 999)], true, ["start"]),
+            ("complete", [.complete(playhead: 9000)], true, ["start", "progress@1000", "progress@5000", "complete", "creativeView(endCard)"]),
+            ("completeUnstarted", [.complete(playhead: 9000)], false, ["complete", "creativeView(endCard)"]),
+            ("completeTwice", [.complete(playhead: 9000), .complete(playhead: 9000)], true,
+             ["start", "progress@1000", "progress@5000", "complete", "creativeView(endCard)"]),
+        ]
+        for (adId, events, started, _) in rows {
+            let tracker = Tracker(adId: adId, entries: everyEntry(adId))
+            if started { tracker.record(.video(.start, playhead: 0)) }
+            events.forEach(tracker.record)
+        }
+        let total = rows.reduce(0) { $0 + $1.3.count }
+        let beacons = await fired(total)
+        #expect(beacons.count == total, "\(beacons.count) beacons, \(total) expected")
+        for (adId, _, _, expected) in rows {
+            let seen = beacons.filter { $0.adId == adId }.map(short).sorted()
+            #expect(seen == expected.sorted(), "\(adId)")
+        }
+        let skip = try #require(beacons.first { $0.adId == "skip" && $0.event == "skip" })
+        #expect(skip.query["aph"] == "00:00:06.000", "the beacon carries the event's playhead")
+        let error = try #require(beacons.first { $0.adId == "error" })
+        #expect(error.query["code"] == "405" && error.query["aph"] == "00:00:00.000")
+        let loaded = try #require(beacons.first { $0.adId == "loaded" })
+        #expect(loaded.query["code"]?.isEmpty == true, "[ERRORCODE] is empty on any other beacon")
+    }
+
+    @Test func aPartAndAnOffsetSelectOnlyTheirOwnEntries() async throws {
+        let base = "https://ads.test/events/parts/"
+        let tracker = Tracker(adId: "parts", entries: [
+            AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=1000&part=endCard", offset: 1000, part: "endCard"),
+            AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=none", offset: nil, part: nil),
+            AdPayload.TrackingEvent(event: "click", url: base + "click?part=endCard", offset: nil, part: "endCard"),
+            AdPayload.TrackingEvent(event: "click", url: base + "click", offset: nil, part: nil),
+        ])
+        tracker.fireProgress(upTo: 10_000)
+        #expect(await fired(0).isEmpty, "a progress entry without an offset, or of a part, is not the video's checkpoint")
+        tracker.fire("progress")
+        tracker.fire("click", part: "endCard")
+        let beacons = await fired(2)
+        #expect(beacons.map(short).sorted() == ["click(endCard)", "progress@none"])
+        #expect(tracker.has("click", part: "endCard") && tracker.has("click", part: nil) && !tracker.has("close", part: nil))
+    }
+
+    // MARK: The content playhead
+
+    private func playheadTracker(_ adId: String) -> Tracker {
+        Tracker(adId: adId, entries: ["impression", "start", "pause"].map {
+            AdPayload.TrackingEvent(event: $0, url: "https://ads.test/events/\(adId)/\($0)?m=[MEDIAPLAYHEAD]", offset: nil, part: nil)
+        })
+    }
+
+    @Test func anOperationReadsTheContentPlayheadOnceForAllItsBeaconsNestedOnesIncluded() async throws {
+        let tracker = playheadTracker("ph-nested")
+        var reads = 0
+        tracker.contentPlayhead = { reads += 1; return TimeInterval(reads) }
+        tracker.withContentPlayhead {
+            tracker.fire("impression")
+            tracker.withContentPlayhead { tracker.fire("start") }
+        }
+        #expect(reads == 1)
+        tracker.fire("pause")   // outside an operation: its own read
+        let beacons = await fired(3)
+        #expect(reads == 2)
+        #expect(Set(beacons.filter { $0.event != "pause" }.map { $0.query["m"] }) == ["00:00:01.000"], "one moment for the operation")
+        #expect(beacons.first { $0.event == "pause" }?.query["m"] == "00:00:02.000")
+    }
+
+    @Test func anOperationThatThrowsLeavesNoFrozenPlayhead() async throws {
+        struct Failure: Error {}
+        let tracker = playheadTracker("ph-throw")
+        var reads = 0
+        tracker.contentPlayhead = { reads += 1; return TimeInterval(reads) }
+        #expect(throws: Failure.self) { try tracker.withContentPlayhead { throw Failure() } }
+        tracker.withContentPlayhead { tracker.fire("start") }
+        #expect(reads == 2, "the next operation reads again")
+        let beacon = try #require(await fired(1).first)
+        #expect(beacon.query["m"] == "00:00:02.000")
+    }
+
+    @Test func thePlayerIsNotReadWhenNothingAsksForItUnlessAClickThroughDoes() {
+        let tracker = Tracker(adId: "ph-none", entries: [
+            AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ph-none/impression", offset: nil, part: nil),
+        ])
+        var reads = 0
+        tracker.contentPlayhead = { reads += 1; return 1 }
+        #expect(!tracker.readsContentPlayhead)
+        tracker.withContentPlayhead { tracker.fire("impression") }
+        #expect(reads == 0)
+        tracker.withContentPlayhead(alsoFor: [URL(string: "https://brand.test/?m=%5BCONTENTPLAYHEAD%5D")!]) {}
+        #expect(reads == 1, "a click's destination asks for it")
+    }
+
+    @Test func anOperationStartedWhileThePlayerIsReadUsesTheLastValueAndReadsNothing() async throws {
+        let tracker = playheadTracker("ph-reentrant")
+        var reads = 0
+        tracker.contentPlayhead = {
+            reads += 1
+            // The app's player, read by the second operation, starts a third: it must not read the player again.
+            if reads == 2 { tracker.withContentPlayhead { tracker.fire("pause") } }
+            return TimeInterval(reads) * 10
+        }
+        tracker.withContentPlayhead { tracker.fire("impression") }
+        tracker.withContentPlayhead { tracker.fire("start") }
+        #expect(reads == 2)
+        let beacons = await fired(3)
+        #expect(beacons.first { $0.event == "pause" }?.query["m"] == "00:00:10.000", "the last value the player gave")
+        #expect(beacons.first { $0.event == "start" }?.query["m"] == "00:00:20.000")
+    }
+
     @Test func aFailedBeaconIsNotRetried() async throws {
         server.on("/events/", .failure(.notConnectedToInternet))
         let tracker = try makeTracker()

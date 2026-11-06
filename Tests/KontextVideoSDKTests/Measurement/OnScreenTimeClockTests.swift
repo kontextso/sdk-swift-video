@@ -70,6 +70,64 @@ struct OnScreenTimeClockTests {
         #expect(clock.stop() == counted, "a second stop changes nothing")
     }
 
+    @Test func aDurationOfZeroOrLessElapsesAtOnce() async {
+        for duration in [0, -5, -.infinity] as [TimeInterval] {
+            var elapsed = 0
+            let clock = OnScreenTimeClock(duration: duration, adId: "clock-zero") { elapsed += 1 }
+            clock.start(in: nil)
+            #expect(await waitUntil { elapsed == 1 }, "\(duration)")
+            clock.stop()
+        }
+    }
+
+    @Test func nothingCountsBeforeTheStartOrInAnInactiveApp() async {
+        let clock = OnScreenTimeClock(duration: 0.01, adId: "clock-idle") {}
+        defer { clock.stop() }
+        await sleepMs(20)
+        #expect(clock.elapsed == 0 && !clock.isCounting && clock.timer == nil, "not started")
+        Environment.isApplicationActive = { false }
+        var elapsed = 0
+        let inactive = OnScreenTimeClock(duration: 0.01, adId: "clock-inactive") { elapsed += 1 }
+        defer { inactive.stop() }
+        inactive.start(in: nil)
+        await sleepMs(50)
+        #expect(!inactive.isCounting && !inactive.isSceneActive && inactive.elapsed == 0 && elapsed == 0, "the app was not in front")
+        post(UIApplication.didBecomeActiveNotification)
+        #expect(await waitUntil { elapsed == 1 }, "counted from the return")
+    }
+
+    @Test func aSecondStartAndAStartAfterStopDoNothing() {
+        var resumes = 0
+        let clock = OnScreenTimeClock(duration: nil, adId: "clock-twice") {}
+        clock.onResume = { resumes += 1 }
+        clock.start(in: nil)
+        let observers = clock.observers.count
+        clock.start(in: nil)
+        #expect(clock.observers.count == observers && resumes == 1, "one set of observers, one resume")
+        clock.stop()
+        clock.start(in: nil)
+        #expect(clock.observers.isEmpty && !clock.isCounting && resumes == 1, "stopped for good")
+        clock.setSeen(true)
+        #expect(!clock.isCounting)
+    }
+
+    @Test func onResumeIsCalledOnEveryReturnToCounting() {
+        var resumes = 0
+        let clock = OnScreenTimeClock(duration: nil, adId: "clock-resume") {}
+        defer { clock.stop() }
+        clock.onResume = { resumes += 1 }
+        clock.start(in: nil)
+        clock.setSeen(false)
+        clock.setSeen(true)
+        clock.setSeen(true)
+        post(UIApplication.willResignActiveNotification)
+        clock.setSeen(false)
+        post(UIApplication.didBecomeActiveNotification)
+        #expect(resumes == 2 && !clock.isCounting, "start, back into sight; not while still unseen")
+        clock.setSeen(true)
+        #expect(resumes == 3 && clock.isCounting)
+    }
+
     @Test func inAWindowTheClockFollowsThatWindowsSceneNotTheApp() async throws {
         let host = TestWindow()
         defer { host.tearDown() }
