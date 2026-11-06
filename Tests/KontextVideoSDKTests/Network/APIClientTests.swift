@@ -205,6 +205,25 @@ struct APIClientTests {
         }
     }
 
+    /// The streaming path (iOS 15 and later): a `Content-Length` past the limit is refused at the head, before a
+    /// byte of the body; a chunked answer, which has none, by the body's count.
+    @Test func anAnswerWhoseLengthIsPastTheLimitStopsAtTheHead() async throws {
+        let small = APIClient(baseURL: server.baseURL, responseLimit: 4_096)
+        for (path, chunked) in [("/v2/declared", false), ("/v2/undeclared", true)] {
+            server.on(path, .streamed(6 * 1024 * 1024, chunked: chunked))
+            do {
+                let _: Reply = try await small.post(String(path.dropFirst("/v2/".count)), body: Body(hello: "x"))
+                Issue.record("expected a throw for \(path)")
+            } catch let error as APIError {
+                guard case .transport(let urlError) = error else { Issue.record("expected transport for \(path), got \(error)"); continue }
+                #expect(urlError.code == .dataLengthExceedsMaximum, "\(path)")
+            }
+        }
+        #expect(await waitUntil(StubServer.streamGrace * 3) { self.server.streams.contains { $0.path == "/v2/declared" } })
+        let declared = server.streams.first { $0.path == "/v2/declared" }
+        #expect(declared?.cancelled == true && declared?.delivered == 0, "a declared length past the limit stops at the head")
+    }
+
     /// The iOS 14 path, run here on any version: a data delegate that stops the transfer past the limit.
     @Test func theCappedLoadStopsAnAnswerPastTheLimitWhileItArrives() async throws {
         let limit = 4_096
