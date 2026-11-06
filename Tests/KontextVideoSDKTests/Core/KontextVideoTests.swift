@@ -56,6 +56,14 @@ struct KontextVideoTests {
         #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: "http://localhost:5175")!).problems.isEmpty, "a local mock")
         #expect(KontextVideo.Configuration(publisherToken: "").problems == ["publisherToken is empty"])
         #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: "server.megabrain.co")!).problems.count == 1)
+        for bad in ["ftp://ads.test", "myapp://ads.test", "https://u:p@ads.test", "https://ads.test?x=1", "https://ads.test#f",
+                    "https://ads.test:0", "https://ads.test:70000"] {
+            guard let url = URL(string: bad) else { continue }   // one Foundation refuses cannot reach the configuration
+            #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: url).problems.count == 1, "\(bad)")
+        }
+        for good in ["https://ads.test", "https://ads.test:8443/prefix", "http://192.168.1.5:3002", "HTTPS://ads.test"] {
+            #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: good)!).problems.isEmpty, "\(good)")
+        }
         var assertions: [String] = []
         Environment.assertionFailure = { assertions.append($0) }
         sdk.initialize(with: KontextVideo.Configuration(publisherToken: "", adServerURL: harness.server.baseURL))

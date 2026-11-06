@@ -92,7 +92,19 @@ extension KontextVideo.Configuration {
     var problems: [String] {
         var problems: [String] = []
         if publisherToken.isEmpty { problems.append("publisherToken is empty") }
-        if adServerURL.scheme == nil || (adServerURL.host ?? "").isEmpty { problems.append("adServerURL \(adServerURL) is not absolute") }
+        if let problem = Self.problem(with: adServerURL) { problems.append("adServerURL \(adServerURL) \(problem)") }
         return problems
+    }
+
+    /// What is wrong with a server URL, or `nil`: an `http` or `https` base with a host, a port within 1-65535 when
+    /// given, and nothing the routes cannot be appended to (credentials, a query, a fragment). A path is a base
+    /// the routes go under.
+    private static func problem(with url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased(), (url.host ?? "").isEmpty == false else { return "is not absolute" }
+        guard scheme == "http" || scheme == "https" else { return "is not http or https" }
+        if let port = url.port, !(1...65_535).contains(port) { return "has an invalid port" }
+        if url.user != nil || url.password != nil { return "carries credentials" }
+        if url.query != nil || url.fragment != nil { return "has a query or a fragment" }
+        return nil
     }
 }
