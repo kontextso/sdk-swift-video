@@ -283,8 +283,23 @@ public final class VideoAd {
     /// safe area's edge. Kept while the ad is shown, through resizes and rotations, and counted in
     /// `containerTooSmall`'s minimum. A full-screen pause ad ignores them: it fills the view. A negative or
     /// non-finite value counts as zero.
+    ///
+    /// A show of this same ad made by your own code that this call ran (an overlay over paused content ends here,
+    /// and its `didEnd` shows this pause ad) counts as this call's: it returns normally, the ad is on screen.
     public func show(in view: UIView, insets: UIEdgeInsets = .zero) throws {
-        try tracker.withContentPlayhead { try showInline(in: view, insets: insets) }
+        try acceptingAShowFromInside { try tracker.withContentPlayhead { try showInline(in: view, insets: insets) } }
+    }
+
+    /// Runs a show; `alreadyShown` for an ad that was not shown when the call began means app code this call ran
+    /// showed it (the usual pause flow: the ended overlay's `didEnd` shows the pause ad): the show the app asked for
+    /// happened, so the call returns normally instead of throwing.
+    private func acceptingAShowFromInside(_ show: () throws -> Void) throws {
+        let wasShownBefore = wasShown
+        do {
+            try show()
+        } catch VideoAdError.alreadyShown where !wasShownBefore && wasShown {
+            Logger.debug("ad \(id.prefix(8)): shown by app code this show ran; accepted as this show")
+        }
     }
 
     /// The app code a `show` runs before its checks: an ad on screen over content that stopped ends (its
@@ -332,8 +347,10 @@ public final class VideoAd {
     /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`). Only the SDK dismisses it:
     /// the video completing, a skip, a close, an error, or an
     /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad.
+    ///
+    /// A show of this same ad made by your own code that this call ran counts as this call's: it returns normally.
     public func show(from viewController: UIViewController? = nil) throws {
-        try tracker.withContentPlayhead { try showLinear(from: viewController) }
+        try acceptingAShowFromInside { try tracker.withContentPlayhead { try showLinear(from: viewController) } }
     }
 
     private func showLinear(from viewController: UIViewController?) throws {

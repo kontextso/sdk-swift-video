@@ -507,10 +507,8 @@ struct VideoAdContentTests {
         overlay.delegate = hook
         try overlay.show(in: view)
         harness.player.isPlaying = false
-        do {
-            try pause.show(in: view)
-            Issue.record("expected alreadyShown")
-        } catch VideoAdError.alreadyShown {}
+        // Shown by the app's code this show ran: the show counts as this call's, which returns normally.
+        try pause.show(in: view)
         #expect(pause.hasEnded && pauseDelegate.endReasons == [.dismissed])
         #expect(KontextVideo.shared.adOnScreen == nil, "an ended ad never takes the slot again")
         owner.destroy()

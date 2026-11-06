@@ -57,9 +57,13 @@ final class RecordingDelegate: VideoAdDelegate {
         onImpression?(ad)
     }
 
+    /// What the app does inside `didClick`; a test that dismisses or destroys from there sets it.
+    var onClick: ((VideoAd) -> Void)?
+
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click) {
         events.append("click:\(click.area)")
         clicks.append(click)
+        onClick?(ad)
     }
 
     /// What the app does inside `didFail`; a test that destroys from there sets it.
@@ -71,9 +75,13 @@ final class RecordingDelegate: VideoAdDelegate {
         onFail?(ad)
     }
 
+    /// What the app does inside `didEnd`; a test that shows the next ad from there sets it.
+    var onEnd: ((VideoAd, VideoAd.EndReason) -> Void)?
+
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason) {
         events.append("end:\(reason)")
         endReasons.append(reason)
+        onEnd?(ad, reason)
     }
 }
 

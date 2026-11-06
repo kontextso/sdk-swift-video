@@ -286,6 +286,30 @@ struct VideoAdReentrancyTests {
         #expect(!fired.contains("impression") && !fired.contains("overlayViewDuration"), "never on screen: no view duration: \(fired)")
     }
 
+    @Test func aPauseAdShownFromTheDidEndThatItsOwnShowCausedIsAcceptedOnce() async throws {
+        // The viewer pauses: the app shows a pause ad; show's content check ends the overlay over the paused content,
+        // and the overlay's didEnd shows that same pause ad. The outer show must not throw for an ad on screen.
+        let (overlay, overlayDelegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o13p"))
+        ads.track(harness.player)
+        try overlay.show(in: harness.player.view)
+        let pause = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p13p")), owner: ads)
+        pause.bridge.load()
+        pause.bridge.receive(["adId": pause.id, "type": "ad.loaded"], from: sender)
+        let pauseDelegate = RecordingDelegate()
+        pause.delegate = pauseDelegate
+        var inner: Error?
+        overlayDelegate.onEnd = { [view = harness.player.view] _, _ in
+            do { try pause.show(in: view) } catch { inner = error }
+        }
+        harness.player.isPlaying = false
+        try pause.show(in: harness.player.view)
+        #expect(inner == nil, "the show from didEnd was accepted: \(String(describing: inner))")
+        #expect(overlayDelegate.endReasons == [.interrupted] && pause.wasShown && KontextVideo.shared.adOnScreen === pause)
+        #expect(harness.player.view.subviews.count == 1, "one host, the pause ad's")
+        pause.dismiss()
+        #expect(pauseDelegate.endReasons == [.dismissed], "one didEnd: \(pauseDelegate.events)")
+    }
+
     /// A custom player that plays at the first read of `isPlaying` and is paused from the second on.
     final class StopsAfterFirstRead: ContentPlayer {
         var currentTime: TimeInterval = 0
