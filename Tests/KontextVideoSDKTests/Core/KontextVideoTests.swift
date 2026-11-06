@@ -57,11 +57,12 @@ struct KontextVideoTests {
         #expect(KontextVideo.Configuration(publisherToken: "").problems == ["publisherToken is empty"])
         #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: "server.megabrain.co")!).problems.count == 1)
         for bad in ["ftp://ads.test", "myapp://ads.test", "https://u:p@ads.test", "https://ads.test?x=1", "https://ads.test#f",
-                    "https://ads.test:0", "https://ads.test:70000"] {
+                    "https://ads.test:0", "https://ads.test:65536", "https://ads.test:70000", "https://", "ads.test", " https://ads.test"] {
             guard let url = URL(string: bad) else { continue }   // one Foundation refuses cannot reach the configuration
             #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: url).problems.count == 1, "\(bad)")
         }
-        for good in ["https://ads.test", "https://ads.test:8443/prefix", "http://192.168.1.5:3002", "HTTPS://ads.test"] {
+        for good in ["https://ads.test", "https://ads.test:8443/prefix", "http://192.168.1.5:3002", "HTTPS://ads.test",
+                     "http://10.0.2.2:3002/", "https://ads.test/prefix/", "https://ads.test:65535"] {
             #expect(KontextVideo.Configuration(publisherToken: "p", adServerURL: URL(string: good)!).problems.isEmpty, "\(good)")
         }
         var assertions: [String] = []
