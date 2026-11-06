@@ -104,6 +104,10 @@ final class FrameBridge: NSObject {
     /// app spent suspended.
     static let longestTick: TimeInterval = 2
 
+    /// When the app last became active, on `Environment.now`: a suspension between two ticks that both found the
+    /// app active counts only from here.
+    private var lastActivation = -TimeInterval.infinity
+
     /// Loads the page. `ad.loaded` must arrive within `loadTimeout` of active time: WebKit does not run a
     /// page in the background, so time there does not count. A load started in the background finds no window
     /// to park in; the same active-time check parks it on the first tick the app is active again, or a video
@@ -112,11 +116,18 @@ final class FrameBridge: NSObject {
         Logger.debug("frame \(adId.prefix(8)): loading \(frameProtocol.pageURL)")
         parkOffscreen()
         webView.load(URLRequest(url: frameProtocol.pageURL))
+        // The app's return from a suspension, for the ticks below.
+        let activation = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lastActivation = Environment.now() }
+        }
         loadTimeoutTask = Task { [weak self] in
+            defer { NotificationCenter.default.removeObserver(activation) }
             let step = min(0.25, Self.loadTimeout)
             // Active time as it passed, not the step asked for: a tick that fires late counts what it waited, up to
-            // `longestTick`. More is not a late tick but a suspension: the app was in the background between two
-            // ticks that both found it active, and that time must not fail a healthy load.
+            // `longestTick`. A suspension between two ticks that both found the app active is not counted: the
+            // tick after it counts from the app's return (`lastActivation`), so that time does not fail a healthy
+            // load.
             var waited: TimeInterval = 0
             var last = Environment.now()
             while waited < Self.loadTimeout {
@@ -124,7 +135,8 @@ final class FrameBridge: NSObject {
                 guard !Task.isCancelled else { return }
                 let now = Environment.now()
                 if Environment.isApplicationActive() {
-                    waited += min(now - last, Self.longestTick)
+                    let from = max(last, self?.lastActivation ?? last)
+                    waited += min(max(now - from, 0), Self.longestTick)
                     if let self, state == .loading, !isParked { parkOffscreen() }
                 }
                 last = now

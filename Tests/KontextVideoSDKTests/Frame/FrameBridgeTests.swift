@@ -111,6 +111,23 @@ struct FrameBridgeTests {
         bridge.hide()
     }
 
+    @Test func aSuspensionNearTheDeadlineDoesNotTimeTheLoadOut() async {
+        Environment.isApplicationActive = { true }
+        FrameBridge.loadTimeout = 2.6
+        // A page that loads and never reports ready (`dead-`): only the timeout can end it.
+        FramePageServer().install()
+        let (bridge, events) = makeBridge(url: URL(string: "\(Fixtures.frameOrigin)/frame/dead-2")!)
+        bridge.load()
+        await sleepMs(900)
+        // Suspended between two ticks that both find the app active; it comes back with the activation notice.
+        advanceClock(by: 600)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        await sleepMs(600)
+        // 1.5 s of active time: counting the gap as a late tick (2 s) would have passed the 2.6 s.
+        #expect(bridge.state == .loading, "the suspension counts nothing: \(events.events)")
+        #expect(await waitUntil(5) { bridge.failureCause == .loadTimeout }, "the active time still runs out")
+    }
+
     @Test func loadedBeforeTheTimeoutCancelsIt() async {
         FrameBridge.loadTimeout = 0.1
         let (bridge, recorder) = makeBridge()
