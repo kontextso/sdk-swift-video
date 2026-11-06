@@ -8,7 +8,7 @@ import Testing
 struct NestingDepthTests {
     struct Reply: Decodable { let b: [Int] }
 
-    private let deep = String(repeating: "[", count: APIClient.maxNestingDepth * 2)
+    private let deep = String(repeating: "[", count: StrictJSON.maxNestingDepth * 2)
 
     @Test func bracketsInTextAreNotNestingWhateverTheEscapes() throws {
         // An escaped quote, an escaped backslash then an escaped quote, a bracket written as a code.
@@ -20,7 +20,7 @@ struct NestingDepthTests {
 
     @Test func anEscapedBackslashThenAQuoteEndsTheString() {
         // `C:\\` ends the string, so the brackets after it are nesting, and one level too many.
-        let nesting = String(repeating: "[", count: APIClient.maxNestingDepth) + String(repeating: "]", count: APIClient.maxNestingDepth)
+        let nesting = String(repeating: "[", count: StrictJSON.maxNestingDepth) + String(repeating: "]", count: StrictJSON.maxNestingDepth)
         let data = Data(#"{"p": "C:\\", "x": \#(nesting)}"#.utf8)
         do {
             _ = try APIClient.decode([String: [Int]].self, from: data)

@@ -1,0 +1,7 @@
+{
+  "description": "enabled twice, false then true (raw file): a key twice in one object, the answer is refused",
+  "responseFile": "enabled-twice.raw.json",
+  "expect": {
+    "result": "malformed"
+  }
+}

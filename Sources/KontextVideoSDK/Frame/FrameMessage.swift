@@ -65,7 +65,7 @@ struct FrameMessage: Equatable {
         return number.doubleValue
     }
 
-    /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
+    /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`, `StrictJSON`), or an object
     /// as WebKit converted it whose text fields together stay within the same budget (WebKit already built it;
     /// what the SDK would read, keep and log out of it is what is bounded). `nil` for anything else.
     private static func object(_ rawBody: Any) -> [String: Any]? {
@@ -74,6 +74,9 @@ struct FrameMessage: Equatable {
             return textBytes <= maxMessageBytes ? object : nil
         }
         guard let text = rawBody as? String, text.utf8.count <= maxMessageBytes else { return nil }
-        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+        // `StrictJSON`: a key twice (two types, two ids) would be read as one of them silently.
+        let data = Data(text.utf8)
+        guard (try? StrictJSON.check(data)) != nil else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 }
