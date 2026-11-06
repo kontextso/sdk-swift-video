@@ -33,7 +33,8 @@ final class BeaconTransport: RedirectLimit, URLSessionDataDelegate, @unchecked S
     static func session(over base: URLSession) -> URLSession {
         if let current, current.base === base { return current.beacons }
         current?.beacons.finishTasksAndInvalidate()
-        let beacons = URLSession(configuration: base.configuration, delegate: BeaconTransport(), delegateQueue: nil)
+        // A tracking chain may hand a beacon on to a plain `http` server.
+        let beacons = URLSession(configuration: base.configuration, delegate: BeaconTransport(allowsDowngrade: true), delegateQueue: nil)
         current = (base, beacons)
         return beacons
     }

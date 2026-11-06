@@ -54,7 +54,7 @@ struct APIClient: Sendable {
             // Redirects are followed as URLSession does by default, the body included (a 307 or 308 re-sends
             // the POST): deliberate. The base URL is ours and the routes do not redirect today; a redirect
             // would be our own server's, for example a move behind a new host, and refusing it would turn
-            // that into an outage of every installed SDK.
+            // that into an outage of every installed SDK. Never from `https` to `http` (`RedirectLimit`).
             (data, response) = try await load(request)
         } catch let error as URLError {
             throw APIError.transport(error)

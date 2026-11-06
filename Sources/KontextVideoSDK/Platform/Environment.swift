@@ -26,7 +26,8 @@ enum Environment {
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configure(configuration)
-        return URLSession(configuration: configuration, delegate: RedirectLimit(), delegateQueue: nil)
+        // The API's requests carry identifiers and consent: never re-sent from `https` to `http`.
+        return URLSession(configuration: configuration, delegate: RedirectLimit(allowsDowngrade: false), delegateQueue: nil)
     }
 
     private static let defaultSession = makeSession()
