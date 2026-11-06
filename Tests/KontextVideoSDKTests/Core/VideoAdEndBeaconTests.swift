@@ -23,10 +23,6 @@ struct VideoAdEndBeaconTests {
     private let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     private static let reasons: [VideoAd.EndReason] = [.completed, .skipped, .closed, .resumed, .failed, .interrupted, .dismissed, .destroyed]
 
     init() {

@@ -16,10 +16,6 @@ struct VideoAdSKAdNetworkTests {
     /// Keeps every `VideoAds` a test created alive for the test's duration: the ad holds its owner weakly.
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     init() {
         harness.player.view.frame.origin.y = 120
         window.add(harness.player.view)

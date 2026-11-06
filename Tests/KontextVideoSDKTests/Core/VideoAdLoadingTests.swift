@@ -16,10 +16,6 @@ struct VideoAdLoadingTests {
     /// The `VideoAds` behind each ad: releasing it would destroy the ad.
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     init() {
         pages.install()
         window.add(harness.player.view)

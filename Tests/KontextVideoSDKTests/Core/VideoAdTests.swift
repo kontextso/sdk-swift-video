@@ -16,10 +16,6 @@ struct VideoAdTests {
     /// Keeps every `VideoAds` a test created alive for the test's duration: the ad holds its owner weakly.
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     init() {
         // Below the status bar and above the home indicator: the placement tests here assume a view with
         // no safe-area insets; VideoAdPlacementTests covers the insets.

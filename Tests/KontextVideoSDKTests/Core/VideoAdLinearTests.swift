@@ -16,10 +16,6 @@ struct VideoAdLinearTests {
     /// Keeps every `VideoAds` a test created alive for the test's duration: the ad holds its owner weakly.
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     /// A presenter that records the dismissals asked of it; with `completes` off it never calls back, as when
     /// UIKit drops a dismissal's completion.
     final class Presenter: UIViewController {

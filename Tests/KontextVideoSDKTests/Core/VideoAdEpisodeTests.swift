@@ -17,10 +17,6 @@ struct VideoAdEpisodeTests {
     private let owners = Owners()
     private let view = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     /// The example's bundled clip: a real movie, so AVFoundation plays it rather than failing the item.
     private static let movie = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Example/Example/Resources/sample-episode.mp4")

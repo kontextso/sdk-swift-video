@@ -17,10 +17,6 @@ struct VideoAdPlacementTests {
     /// Keeps the `VideoAds` alive for the test: the ad holds its owner weakly.
     private let owners = Owners()
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     /// A loaded ad, owned by a `VideoAds`.
     private func makeAd(_ payload: [String: Any]) async throws -> (VideoAd, VideoAds, VideoAds?) {
         _ = await harness.initialize()

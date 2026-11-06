@@ -17,6 +17,12 @@ final class TestPlayer: ContentPlayer {
         view = UIView(frame: CGRect(origin: .zero, size: size))
     }
 
+    /// Its view, and the ads in it, released on the main thread (`TestWindow`'s deinit says why).
+    deinit {
+        let objects = MainThreadRelease(view)
+        DispatchQueue.main.async { objects.drop() }
+    }
+
     func ads(for content: KontextVideo.Content) -> VideoAds {
         let ads = VideoAds(content: content)
         ads.usePlayhead { [unowned self] in playhead }
@@ -166,10 +172,36 @@ final class TestWindow {
         root.view.addSubview(view)
     }
 
+    /// Swift Testing may drop a suite, and the window it made, off the main thread once its test returns. A UIKit
+    /// view or controller freed there leaves its layer pointing at a freed delegate, and the main thread's next
+    /// layout pass crashed in `layoutSublayersOfLayer:`. The last references go to the main queue instead.
+    deinit {
+        let objects = MainThreadRelease((window, root))
+        DispatchQueue.main.async { objects.drop() }
+    }
+
     func tearDown() {
         window.isHidden = true
         window.rootViewController = nil
     }
+}
+
+/// The `VideoAds` a test keeps alive for its length. Released on the main thread, like `TestWindow`: they hold
+/// views and WebViews, and Swift Testing may drop the suite holding this off it.
+final class Owners {
+    var all: [VideoAds] = []
+
+    deinit {
+        let objects = MainThreadRelease(all)
+        DispatchQueue.main.async { objects.drop() }
+    }
+}
+
+/// Holds objects until `drop()` runs on the main thread, where UIKit wants them released.
+private final class MainThreadRelease: @unchecked Sendable {
+    private var objects: Any?
+    init(_ objects: Any) { self.objects = objects }
+    func drop() { objects = nil }
 }
 
 /// One visible window for the whole run where the bridge parks loading pages. Never made key, so it does

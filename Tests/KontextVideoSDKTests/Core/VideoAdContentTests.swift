@@ -19,10 +19,6 @@ struct VideoAdContentTests {
     private let owners = Owners()
     private let view = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
 
-    final class Owners {
-        var all: [VideoAds] = []
-    }
-
     /// A custom player with a publisher, and a count of the subscriptions it still has.
     final class PublishingPlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
