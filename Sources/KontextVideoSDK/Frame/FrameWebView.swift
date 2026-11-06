@@ -87,7 +87,8 @@ final class FrameWebView: WKWebView {
 
 extension FrameWebView: WKUIDelegate {
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // A `target="_blank"` link: no new window, treated like any other navigation out.
+        // A new window WebKit did not first ask the navigation delegate about (`window.open`): no window, treated like
+        // any other navigation out. A `target="_blank"` link is decided there and never gets here.
         if let target = navigationAction.request.url {
             onNewWindow?(target)
         }

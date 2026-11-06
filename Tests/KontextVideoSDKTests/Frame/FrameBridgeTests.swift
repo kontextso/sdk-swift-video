@@ -166,6 +166,71 @@ struct FrameBridgeTests {
         bridge.hide()
     }
 
+    /// A `target="_blank"` link of the page's own origin, tapped while shown: WebKit asks the navigation delegate
+    /// first, with no target frame. That is not the page replacing itself: it is the new window, a click, and the
+    /// window itself is never created.
+    @Test func aSameOriginNewWindowLinkAfterATouchIsAClick() {
+        let (bridge, recorder) = makeBridge()
+        bridge.load()
+        shown(bridge)
+        bridge.noteTouch()
+        let target = URL(string: "https://server.kontext.so/landing")!
+        var decision: WKNavigationActionPolicy?
+        bridge.webView(bridge.webView, decidePolicyFor: NewWindowAction(target), decisionHandler: { decision = $0 })
+        #expect(decision == .cancel, "no window")
+        guard case .click(let url, _, _)? = recorder.last else { Issue.record("expected a click, got \(recorder.events)"); return }
+        #expect(url == target && bridge.state == .shown)
+        bridge.hide()
+    }
+
+    /// The same while the page loads, of any origin (a tag's popunder): dropped, and the load goes on.
+    @Test func aNewWindowNavigationWhileLoadingIsDroppedAndTheLoadGoesOn() {
+        let (bridge, recorder) = makeBridge()
+        bridge.load()
+        for target in ["https://popunder.example/x", "https://server.kontext.so/other"] {
+            var decision: WKNavigationActionPolicy?
+            bridge.webView(bridge.webView, decidePolicyFor: NewWindowAction(URL(string: target)!), decisionHandler: { decision = $0 })
+            #expect(decision == .cancel, "\(target)")
+        }
+        #expect(bridge.state == .loading && recorder.events.isEmpty && bridge.failureCause == nil, "not a load failure")
+        bridge.hide()
+    }
+
+    /// The real path: a page in a window taps its own `target="_blank"` link after the viewer's touch.
+    @Test func aPagesSameOriginBlankLinkReachesTheBridgeAsAClick() async throws {
+        FramePageServer().install()
+        Environment.isApplicationActive = { true }
+        Environment.parkingWindow = { ParkingWindow.window }
+        FrameBridge.loadTimeout = 30
+        let bridge = FrameBridge(adId: "img-blank", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-blank")!, isVideo: false)
+        defer { bridge.hide() }
+        let recorder = Recorder()
+        bridge.onEvent = { recorder.events.append($0) }
+        bridge.load()
+        guard await waitUntil(35, { bridge.state == .loaded }) else { Issue.record("the page never loaded"); return }
+        bridge.show()
+        bridge.noteTouch()
+        let target = "\(Fixtures.frameOrigin)/landing"
+        _ = try await bridge.webView.evaluateJavaScript("""
+            var a = document.createElement('a'); a.href = '\(target)'; a.target = '_blank';
+            document.body.appendChild(a); a.click(); 'ok'
+            """)
+        let clicked = await waitUntil(5) {
+            recorder.events.contains { if case .click(let url, _, _) = $0 { return url.absoluteString == target } else { return false } }
+        }
+        #expect(clicked, "\(recorder.events)")
+        #expect(bridge.state == .shown)
+    }
+
+    /// A navigation action for a new window: WebKit gives it no target frame.
+    private final class NewWindowAction: WKNavigationAction {
+        private let target: URL
+        init(_ target: URL) { self.target = target }
+        override var request: URLRequest { URLRequest(url: target) }
+        override var targetFrame: WKFrameInfo? { nil }
+        override var navigationType: WKNavigationType { .linkActivated }
+    }
+
     @Test func navigationsStoppedOnPurposeDoNotFailTheAd() {
         let (bridge, events) = makeBridge()
         bridge.load()

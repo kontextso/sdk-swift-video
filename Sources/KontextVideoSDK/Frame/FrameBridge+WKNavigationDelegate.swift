@@ -10,10 +10,17 @@ extension FrameBridge: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
+        // No target frame: a new window (`target="_blank"`), asked here before `createWebViewWith`. Not the page
+        // replacing itself, whatever its origin, and never a load failure: a navigation out, and no window.
+        guard let frame = navigationAction.targetFrame else {
+            decisionHandler(.cancel)
+            externalNavigation(to: target)
+            return
+        }
         let type = navigationAction.navigationType
         let isSubmission = type == .formSubmitted || type == .formResubmitted
             || (navigationAction.request.httpMethod ?? "GET").uppercased() != "GET"
-        switch frameProtocol.navigationDecision(to: target, isMainFrame: navigationAction.targetFrame?.isMainFrame != false,
+        switch frameProtocol.navigationDecision(to: target, isMainFrame: frame.isMainFrame,
                                                   isReload: type == .reload, isSubmission: isSubmission, current: webView.url) {
         case .allow:
             decisionHandler(.allow)
