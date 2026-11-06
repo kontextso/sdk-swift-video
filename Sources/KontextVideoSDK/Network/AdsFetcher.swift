@@ -9,8 +9,8 @@ import AppTrackingTransparency
 /// `fetch()` runs, once per request:
 /// 1. wait for `/config` (switched off or failed: no request);
 /// 2. the ATT dialog, when the publisher left it to the SDK, before the first request;
-/// 3. the body (`AdsRequest`), with the held ids read after the waits, so an ad shown, rejected or expired during
-///    them is not sent as held;
+/// 3. the body (`AdsRequest`), with the held ids and the playhead read after every wait (the user agent's too), so
+///    an ad shown, rejected or expired during them is not sent as held;
 /// 4. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
 /// 5. a failure is reported once here, and thrown as the request error every caller gets;
 /// 6. the answer: the kill switch switches the SDK off and drops every ad; each dropped ad is reported; the rest
@@ -74,12 +74,13 @@ final class AdsFetcher {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
-            // 3. What is held is read after the waits (`/config`, the ATT dialog): an ad shown, rejected or expired
-            // during them is not sent as held, or the server would re-serve it and the format answer no-fill.
-            let held = try current().validHeldIds()
-            let playhead = try current().playhead
-            let body = await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered), content: content,
-                                             labels: labels, player: .make(playhead: playhead), sessionId: sessionId, held: held)
+            // 3. What is held, and the playhead, are read after every wait (`/config`, the ATT dialog, the device
+            // facts with the user agent, inside `make`): an ad shown, rejected or expired during them is not sent as
+            // held, or the server would re-serve it and the format answer no-fill.
+            let body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
+                                                 content: content, labels: labels, player: .make(playhead: current().playhead), sessionId: sessionId,
+                                                 held: current().validHeldIds())
+            let held = body.held
             // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
             try current().checkStillUsable()
             try current().requestWasSent(body.requestId)

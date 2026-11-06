@@ -32,14 +32,18 @@ struct AdsRequest: Encodable, Sendable {
     }
 
     /// Every wait first (the device facts, the user agent among them), then, with nothing left to wait for,
-    /// what the viewer or the app may change at any moment: the user, the variant, the consent and the
-    /// tracking status (`tracking` is read here, after the waits). A consent update or an ATT answer made
-    /// while the request was being built is what it sends.
+    /// what the viewer or the app may change at any moment: the user, the variant, the consent, the
+    /// tracking status, the playhead and the held ids (`tracking`, `player` and `held` are read here, after the
+    /// waits; the last two throw for a `VideoAds` gone meanwhile). A consent update, an ATT answer or a reject
+    /// made while the request was being built is what it sends.
     @MainActor
     static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: @autoclosure () -> TrackingInfo, content: KontextVideo.Content,
-                     labels: [String: String], player: PlayerSnapshot, sessionId: String, held: [String]) async -> AdsRequest {
+                     labels: [String: String], player: @autoclosure () throws -> PlayerSnapshot, sessionId: String,
+                     held: @autoclosure () throws -> [String]) async rethrows -> AdsRequest {
         let device = await AdsDevice.current()
         let tracking = tracking()
+        let player = try player()
+        let held = try held()
         // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
         let regulatory = ConsentStorage.read(merging: sdk.regulatory)
         return AdsRequest(

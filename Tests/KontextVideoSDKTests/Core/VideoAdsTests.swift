@@ -192,6 +192,31 @@ struct VideoAdsTests {
         #expect(lookups == 1, "one lookup, not restarted by the request that gave up on it")
     }
 
+    @Test func anAdRejectedWhileTheUserAgentIsLookedUpIsNotSentAsHeld() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-ua-held"))
+        let held = try await ads.format(.pause)
+        UserAgent.userAgentWait = 60
+        UserAgent.lookup = nil
+        var release: CheckedContinuation<Void, Never>?
+        Environment.userAgent = {
+            await withCheckedContinuation { release = $0 }
+            return "Mozilla/5.0 (test)"
+        }
+        var playhead: TimeInterval = 1
+        ads.usePlayhead { playhead }
+        harness.serve(Fixtures.ad(id: "img-ua-next"))
+        let call = Task { try await ads.format(.pause) }
+        #expect(await waitUntil { release != nil }, "the lookup is out")
+        held.reject()
+        playhead = 7
+        release?.resume()
+        _ = try await call.value
+        let body = try #require(harness.adsRequests.last?.body)
+        #expect(body["held"] as? [String] == [], "rejected during the wait: not held")
+        #expect((body["player"] as? [String: Any])?["playhead"] as? Int == 7000, "the playhead after the wait")
+    }
+
     @Test func creatingAVideoAdsSendsNothing() async {
         _ = await makeAds()
         await sleepMs(50)
