@@ -37,8 +37,8 @@ final class OnScreenTimeClock {
     private var accumulated: TimeInterval = 0
     private var isStopped = false
     /// The longest the timer waits at once: a day. A nonsense server duration must not trap the `UInt64`
-    /// conversion of its nanoseconds.
-    private static let longestWait: TimeInterval = 86_400
+    /// conversion of its nanoseconds; a longer one waits again for the rest. Tests shorten it.
+    static var longestWait: TimeInterval = 86_400
     /// The duration ran out and `onElapsed` was called: it never runs again, whatever the scene or the meter do.
     private var hasElapsed = false
     /// Waits out the rest of the duration during an active stretch.
@@ -133,10 +133,16 @@ final class OnScreenTimeClock {
 
     private func startTimer() {
         guard timer == nil, !hasElapsed, let duration else { return }
-        let remaining = min(max(0, duration - elapsed), Self.longestWait)
+        let left = max(0, duration - elapsed)
+        let remaining = min(left, Self.longestWait)
         timer = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
             guard let self, !Task.isCancelled, !isStopped, !hasElapsed else { return }
+            // A capped wait is one stretch of a longer duration, not its end: wait again for the rest.
+            if remaining < left {
+                timer = nil
+                return startTimer()
+            }
             hasElapsed = true
             onElapsed()
         }

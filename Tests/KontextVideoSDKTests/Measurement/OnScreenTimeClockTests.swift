@@ -34,6 +34,17 @@ struct OnScreenTimeClockTests {
         #expect(clock.timer == nil, "no timer waits for a second expiry")
     }
 
+    @Test func aDurationLongerThanTheLongestWaitWaitsAgainForTheRest() async {
+        OnScreenTimeClock.longestWait = 0.05   // a day, shortened
+        defer { OnScreenTimeClock.longestWait = 86_400 }
+        var elapsed = 0
+        let clock = OnScreenTimeClock(duration: 0.3, adId: "clock-long") { elapsed += 1 }
+        defer { clock.stop() }
+        clock.start(in: nil)
+        #expect(await waitUntil { elapsed == 1 })
+        #expect(clock.elapsed >= 0.3, "the whole duration, not one capped wait: \(clock.elapsed)")
+    }
+
     @Test func itCountsOnlyWhileTheMeterSaysTheAdIsSeen() {
         let clock = OnScreenTimeClock(duration: nil, adId: "clock-seen") {}
         defer { clock.stop() }
