@@ -270,13 +270,16 @@ public final class VideoAd {
     /// (the view is not in a window, no part of it is inside its window (a pager's neighbour page, a view
     /// scrolled away), it has no area, or it, an ancestor or its window is hidden or transparent;
     /// or the app is not active or the view's window scene is not in the foreground and active: the content
-    /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
-    /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
+    /// in Picture in Picture only, the lock screen, background audio, Control Center over the app; or the app
+    /// presented another view controller over the one holding the view, a sheet or a full-screen cover, not
+    /// an alert or a popover), `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
     /// three. Otherwise `show` was accepted: the ad is on screen, or, if code of yours that UIKit or the player
     /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`); from `show` until `didEnd`
     /// the SDK retains it. The ad follows the
     /// view when it resizes or rotates: the same variant is fitted again, and a view still too small for it half a second later ends it
-    /// with `.interrupted`. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
+    /// with `.interrupted`. A view controller the app presents over the one holding the view (a sheet, a
+    /// full-screen cover; not an alert or a popover) ends the ad with `.interrupted` too, within a quarter of a
+    /// second. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
     /// stops, and a pause ad when the content plays again, both as `.interrupted`; an overlay whose content
     /// paused in the background stays until a second after the app's return, and goes on if it plays again.
     ///

@@ -1,3 +1,4 @@
+import StoreKit
 import UIKit
 
 /// An overlay or pause ad inside the app's player view: the `InlineAdView` that holds the page, and the
@@ -46,6 +47,10 @@ final class InlineScreen: AdScreen {
         }
         guard ViewExposure.isInFront(view) else {
             Logger.warning("ad \(ad.id.prefix(8)): cannot show, the app or the view's scene is not in front; the ad stays ready")
+            throw VideoAdError.cannotShowNow
+        }
+        guard coveringPresentation(over: view) == nil else {
+            Logger.warning("ad \(ad.id.prefix(8)): cannot show, another screen of the app covers the view's; the ad stays ready")
             throw VideoAdError.cannotShowNow
         }
         let area = CGRect(origin: .zero, size: view.bounds.size)
@@ -103,6 +108,12 @@ final class InlineScreen: AdScreen {
         guard let meter else { return }
         meter.onSeen = { [weak self] seen in self?.onScreenClock?.setSeen(seen) }
         let ad = self.ad
+        // UIKit has no event for a controller presented over another: the meter's tick asks.
+        meter.onTick = { [weak self] in
+            guard let self, !ad.hasEnded, let container, Self.coveringPresentation(over: container) != nil else { return }
+            Logger.warning("ad \(ad.id.prefix(8)): another screen of the app covers the ad's; ended as interrupted")
+            ad.end(.interrupted)
+        }
         meter.onOffScreen = { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
             Logger.warning("ad \(ad.id.prefix(8)): out of sight for \(ViewabilityMeter.offScreenGrace) s; ended as interrupted")
@@ -133,6 +144,30 @@ final class InlineScreen: AdScreen {
         hostView?.removeFromSuperview()
         hostView = nil
         return activeTime
+    }
+
+    /// A controller the app presented over the one holding `view`, or over one of its parents: a sheet, a form
+    /// sheet, a full-screen cover, a screen over the current context. The viewer left the player for another
+    /// screen of the app, as another Activity covering the player's on Android. Not an alert or a popover: the
+    /// player stays in view around them, as around an Android dialog, which does not stop the Activity. Not the
+    /// App Store sheet an ad's click opens either: on Android a click leaves the app, which only freezes the ad.
+    /// Nor one being dismissed. A view in no controller's view (added to the window itself) follows the window's
+    /// root controller.
+    static func coveringPresentation(over view: UIView) -> UIViewController? {
+        var responder: UIResponder? = view
+        while let current = responder, !(current is UIViewController) { responder = current.next }
+        var controller = responder as? UIViewController ?? ViewExposure.window(of: view)?.rootViewController
+        while let current = controller {
+            if let presented = current.presentedViewController, !presented.isBeingDismissed, hidesThePlayer(presented) {
+                return presented
+            }
+            controller = current.parent
+        }
+        return nil
+    }
+
+    private static func hidesThePlayer(_ presented: UIViewController) -> Bool {
+        Environment.covers(presented) && presented.modalPresentationStyle != .popover && !(presented is SKStoreProductViewController)
     }
 
     /// Gone already: `tearDown` removed the host.

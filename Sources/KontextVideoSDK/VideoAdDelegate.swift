@@ -101,8 +101,10 @@ extension VideoAd {
         case failed
         /// The presentation disappeared for a reason the SDK did not cause: the presenting view controller
         /// was dismissed under a linear ad, the view holding an overlay or pause ad left the window (the
-        /// app navigated away without `dismiss()`), or that view stayed too small for the ad for half a second (it shrank or
-        /// rotated). A view that left is noticed within about two measuring intervals (0.5 s). For an overlay
+        /// app navigated away without `dismiss()`), the app presented another view controller over the one holding
+        /// that view (a sheet or a full-screen cover; not an alert or a popover), or that view stayed too small for
+        /// the ad for half a second (it shrank or rotated). A view that left is noticed within about two measuring
+        /// intervals (0.5 s), a presented controller within one (0.25 s). For an overlay
         /// with a player tracked by `track(_:)`, also the content pausing (a pause in the background counts
         /// only if the content is still paused a second after the app's return), ending or moving to another item; for a
         /// pause ad with a tracked player, the content playing again, resumed from anywhere (Resume tapped on

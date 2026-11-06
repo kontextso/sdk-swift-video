@@ -7,6 +7,7 @@ import UIKit
 ///
 /// ```
 /// every 250 ms: tick()
+///   ├─ screen:    onTick, the ad's screen's own check (a controller presented over an inline ad's)
 ///   ├─ measure:   ViewExposure.exposure(of:in:): share on screen (0–1) and the visible rectangle
 ///   ├─ report:    changed? onExposure(Exposure)          → the page, which tells the creative
 ///   │             any of it seen? changed: onSeen(bool)  → OnScreenTimeClock
@@ -47,6 +48,9 @@ final class ViewabilityMeter {
     var onExposure: ((Exposure) -> Void)?
     /// The verdict, once.
     var onVerdict: ((Verdict) -> Void)?
+    /// Runs first on every tick: a check of the ad's screen that has no event of its own (a controller the app
+    /// presented over the one holding an overlay or pause ad). It may end the ad; the tick then stops there.
+    var onTick: (() -> Void)?
     /// The view left the window and did not come back within one interval: the app removed what the ad
     /// sits in, or covered it (UIKit takes a full-screen-covered controller's view out of the window).
     /// On every tick while it stays out, from the second: an owner that waits out a cover hears again once
@@ -128,6 +132,9 @@ final class ViewabilityMeter {
 
     /// One measurement. Internal so tests can drive it with a frozen clock; the timer calls it otherwise.
     func tick() {
+        // 0. The screen's own check, which may end the ad.
+        onTick?()
+        guard !isStopped else { return }
         // 1. Did the loop stall (more than two ticks, and at least half a second, since the last: the app froze or
         //    slept)? Then the 50 % stretch cannot be called continuous, and it starts again below.
         let now = Environment.now()

@@ -75,6 +75,25 @@ struct ViewabilityMeterTests {
         meter.stop()
     }
 
+    /// The screen's own check runs first on every tick, before the window check; a stop there ends the tick.
+    @Test func theScreensCheckRunsFirstOnEveryTickAndAStopThereEndsTheTick() {
+        defer { window.tearDown() }
+        let view = makeView(CGRect(x: 0, y: 0, width: 200, height: 100))
+        let meter = ViewabilityMeter(view: view, requiredSeconds: 1)
+        let sink = attach(meter)
+        var checks = 0
+        meter.onTick = { checks += 1 }
+        meter.tick()
+        #expect(checks == 1 && sink.exposures == [1])
+        view.removeFromSuperview()
+        meter.tick()
+        #expect(checks == 2, "also while the view is out of its window")
+        window.add(view)
+        meter.onTick = { meter.stop() }
+        meter.tick()
+        #expect(sink.exposures.count == 2, "nothing measured after the stop: \(sink.exposures)")
+    }
+
     @Test func viewHalfOffScreenReportsHalfExposure() async {
         defer { window.tearDown() }
         let meter = ViewabilityMeter(view: makeView(CGRect(x: 300, y: 0, width: 200, height: 100)), requiredSeconds: 0.1)
