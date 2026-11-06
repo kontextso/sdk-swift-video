@@ -116,6 +116,104 @@ struct FrameProtocolTableTests {
         #expect(core(.shown).failureCode == 405 && core(.loaded).failureCode == 400)
     }
 
+    @Test func theErrorCodeForEveryKindOfValue() {
+        // The VAST range is 100...999 inclusive; any other number is 900; a code that is no number is the state's own.
+        let rows: [(Any, Int)] = [
+            (100, 100), (999, 999), (99, 900), (1000, 900), (0, 900), (-0.0, 900), (-1, 900), (-400, 900), (42, 900),
+            (Int(Int32.max), 900), (1e300, 900),
+            (403.4, 403), (403.6, 403), ("403", 405), (true, 405), (NSNull(), 405), ([403], 405), (["code": 403], 405),
+        ]
+        for (sent, expected) in rows {
+            var core = core(.shown)
+            let step = core.accept(message("ad.error", ["code": sent]), from: main, now: 0)
+            guard case .error(let code)? = event(step) else { Issue.record("expected an error for \(sent)"); continue }
+            #expect(code == expected, "code \(sent)")
+        }
+        // As the page posts it, a JSON string: a number past a Double is no code the SDK can read.
+        var core = core(.shown)
+        let step = core.accept(#"{"adId":"ad-1","type":"ad.error","code":1e400}"#, from: main, now: 0)
+        switch event(step) {
+        case .error(let code)?: #expect(code == 900 || code == 405, "\(code)")
+        case nil: #expect(kind(step) == "drop", "or the envelope is refused")
+        default: Issue.record("unexpected \(step)")
+        }
+    }
+
+    @Test func everyCloseReasonAndOnesTheSDKDoesNotKnow() {
+        let rows: [(Any?, FrameEvent.CloseReason)] = [
+            ("close", .close), ("resume", .resume), ("complete", .complete), (nil, .close), ("", .close),
+            ("CLOSE", .close), ("Resume", .close), ("COMPLETE", .close), ("swipe", .close), (7, .close), (true, .close),
+        ]
+        for (sent, expected) in rows {
+            var core = core(.shown)
+            let step = core.accept(message("ad.close", sent.map { ["reason": $0] } ?? [:]), from: main, now: 0)
+            guard case .close(let reason)? = event(step) else { Issue.record("expected a close for \(String(describing: sent))"); continue }
+            #expect(reason == expected && kind(step) == "end", "\(String(describing: sent))")
+        }
+    }
+
+    @Test func theProgressOffsetForEveryKindOfValue() {
+        let day = FrameProtocol.dayMs
+        // sent, the offset delivered or nil when dropped as a violation
+        let rows: [(Any?, Int?)] = [
+            (0, 0), (-0.0, 0), (0.4, 0), (4957.59, 4958), (day, day), (Double(day) + 0.4, nil), (day + 1, nil), (-0.4, nil), (-1, nil),
+            (-5, nil), (1e300, nil), (Double.infinity, nil), (-Double.infinity, nil),
+            (nil, nil), ("1000", nil), (true, nil), (NSNull(), nil), ([1000], nil), (["ms": 1000], nil),
+        ]
+        for (sent, expected) in rows {
+            var core = core(.shown)
+            let step = core.accept(message("video.progress", sent.map { ["offset": $0] } ?? [:]), from: main, now: 0)
+            if let expected {
+                guard case .progress(let offset, _)? = event(step) else { Issue.record("expected progress for \(String(describing: sent))"); continue }
+                #expect(offset == expected, "\(String(describing: sent))")
+            } else {
+                #expect(violation(step) == "progress.offset", "\(String(describing: sent))")
+            }
+        }
+    }
+
+    @Test func aNegativeOrZeroVideoDurationBoundsThePlayheadAtTheGrace() {
+        for duration in [-30.0, 0, -0.0] {
+            let core = FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: duration)
+            #expect(core.playheadLimitMs == FrameProtocol.playheadGraceMs, "\(duration)")
+        }
+        #expect(FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: 15.0004).playheadLimitMs == 16_000, "rounded")
+        var core = core(.shown, videoDuration: -30)
+        guard case .video(_, let playhead)? = event(core.accept(message("video.pause", ["playhead": 5000]), from: main, now: 0)) else {
+            Issue.record("expected a video event"); return
+        }
+        #expect(playhead == FrameProtocol.playheadGraceMs)
+    }
+
+    @Test func anOpenTakesNoFallbackAndAClickWithNeitherURLIsIgnored() {
+        var core = core(.shown)
+        core.noteTouch(now: 1)
+        let open = core.accept(message("ad.open", ["url": "tel:1", "fallbackUrl": "https://brand.test"]), from: main, now: 1)
+        #expect(kind(open) == "drop", "an open's refused URL is not saved by a fallback")
+        let neither = core.accept(message("ad.click", ["url": "", "fallbackUrl": 5]), from: main, now: 1)
+        #expect(kind(neither) == "ignore")
+        let fallbackOnly = core.accept(message("ad.click", ["fallbackUrl": "https://brand.test/f"]), from: main, now: 1)
+        guard case .click(let url, let fallback, let area)? = event(fallbackOnly) else { Issue.record("expected the fallback"); return }
+        #expect(url.absoluteString == "https://brand.test/f" && fallback == nil && area == .creative, "the touch was still there for it")
+    }
+
+    @Test func theClickAreaForEveryValue() {
+        let rows: [(Any?, VideoAd.Click.Area)] = [
+            (nil, .creative), ("creative", .creative), ("endCard", .endCard), ("cta", .other("cta")), ("", .other("")),
+            ("EndCard", .other("EndCard")), (7, .creative), (NSNull(), .creative),
+        ]
+        for (sent, expected) in rows {
+            var core = core(.shown)
+            core.noteTouch(now: 1)
+            var extra: [String: Any] = ["url": "https://brand.test"]
+            extra["area"] = sent
+            guard case .click(_, _, let area)? = event(core.accept(message("ad.click", extra), from: main, now: 1)) else {
+                Issue.record("expected a click for \(String(describing: sent))"); continue
+            }
+            #expect(area == expected, "\(String(describing: sent))")
+        }
+    }
+
     // MARK: Envelope and sender
 
     @Test func theEnvelopeAndTheSender() {

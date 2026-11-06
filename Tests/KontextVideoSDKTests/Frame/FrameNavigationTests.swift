@@ -33,6 +33,51 @@ struct FrameNavigationTests {
         #expect(navigation.decision(to: anchored, isMainFrame: true, current: anchored, phase: .shown) == .allow, "the same fragment again")
     }
 
+    @Test func theOriginIsSchemeHostAndPortWhateverTheirCase() {
+        // target, the page's origin
+        let rows: [(String, Bool)] = [
+            ("https://server.kontext.so/x", true), ("HTTPS://SERVER.KONTEXT.SO/x", true), ("https://server.kontext.so:443/x", true),
+            ("http://server.kontext.so/x", false), ("https://server.kontext.so:444/x", false), ("https://cdn.server.kontext.so/x", false),
+            ("https://kontext.so/x", false), ("https://server.kontext.so.evil.test/x", false), ("wss://server.kontext.so/x", false),
+        ]
+        for (target, ours) in rows {
+            #expect(navigation.isSameOrigin(URL(string: target)!) == ours, "\(target)")
+        }
+        #expect(FrameNavigation.defaultPort(for: "HTTPS") == 443 && FrameNavigation.defaultPort(for: "Http") == 80)
+        #expect(FrameNavigation.defaultPort(for: "wss") == 0 && FrameNavigation.defaultPort(for: nil) == 0)
+    }
+
+    @Test func schemesThatAreNoPageFailTheLoadAndAreNoClickOnceShown() {
+        for target in ["javascript:alert(1)", "data:text/html,<p>x</p>", "file:///etc/hosts", "myapp://open"] {
+            let url = URL(string: target)!
+            #expect(navigation.decision(to: url, isMainFrame: true, current: Self.page, phase: .loading) == .failLoad, "\(target) while loading")
+            #expect(navigation.decision(to: url, isMainFrame: true, current: Self.page, phase: .shown) == .external, "\(target) once shown")
+        }
+        var touch = TouchGate()
+        touch.note(now: 1)
+        for target in ["javascript:alert(1)", "data:text/html,x", "file:///etc/hosts"] {
+            let click = FrameNavigation.click(to: URL(string: target)!, phase: .shown, touch: &touch, now: 1)
+            #expect(click == nil, "\(target) is never opened")
+        }
+        let afterRefusals = FrameNavigation.click(to: URL(string: "https://brand.test")!, phase: .shown, touch: &touch, now: 1)
+        #expect(afterRefusals != nil, "a refused navigation out keeps the touch")
+    }
+
+    @Test func aFragmentStaysWithinTheDocumentOnlyOnTheCurrentURL() {
+        let fragment = URL(string: "https://server.kontext.so/frame/ad-1#endcard")!
+        #expect(navigation.decision(to: fragment, isMainFrame: true, current: nil, phase: .shown) == .cancel, "no current document known")
+        let elsewhere = URL(string: "https://server.kontext.so/frame/ad-2#endcard")!
+        #expect(navigation.decision(to: elsewhere, isMainFrame: true, current: Self.page, phase: .shown) == .cancel, "another path")
+        let query = URL(string: "https://server.kontext.so/frame/ad-1?v=2#endcard")!
+        #expect(navigation.decision(to: query, isMainFrame: true, current: Self.page, phase: .shown) == .cancel, "another query")
+        let empty = URL(string: "https://server.kontext.so/frame/ad-1#")!
+        #expect(navigation.decision(to: empty, isMainFrame: true, current: Self.page, phase: .shown) == .allow, "an empty fragment is one")
+        for phase in [FramePhase.loaded, .ended] {
+            #expect(navigation.decision(to: fragment, isMainFrame: true, current: Self.page, phase: phase) == .allow, "\(phase)")
+            #expect(navigation.decision(to: Self.page, isMainFrame: true, current: Self.page, phase: phase) == .cancel, "\(phase)")
+        }
+    }
+
     @Test func aNavigationOutIsAClickOnlyWhenShownAllowedAndTouched() {
         let target = URL(string: "https://brand.test")!
         var touch = TouchGate()

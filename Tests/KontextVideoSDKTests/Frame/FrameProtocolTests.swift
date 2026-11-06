@@ -4,8 +4,8 @@ import Testing
 
 /// The Kontext Frame Protocol's rules one by one, as a page meets them: which message is accepted in which state,
 /// from whom, and what the SDK gets out of it. Driven through `FramePageDriver`, the bridge's calls without a
-/// WebView; `FrameProtocolTableTests` holds the same rules as tables, `FrameBridgeTests` the bridge that carries
-/// them out.
+/// WebView; `FrameProtocolTableTests` holds the same rules as tables (every value of a field, every state of a
+/// message), `FrameBridgeTests` the bridge that carries them out.
 @Suite
 @MainActor
 struct FrameProtocolTests {
@@ -183,19 +183,6 @@ struct FrameProtocolTests {
         #expect(page.state == .shown, "the end card may follow")
     }
 
-    @Test func closeWithoutAReasonOrWithAnUnknownOneReadsAsClose() {
-        let (page, recorder) = makePage()
-        shown(page)
-        page.receive(message("ad.close"), from: main)
-        guard case .close(let reason) = recorder.last else { Issue.record("expected close"); return }
-        #expect(reason == .close)
-        let (other, otherRecorder) = makePage()
-        shown(other)
-        other.receive(message("ad.close", ["reason": "swipe"]), from: main)
-        guard case .close(let unknown) = otherRecorder.last else { Issue.record("expected close"); return }
-        #expect(unknown == .close, "a reason the SDK does not know is a plain close")
-    }
-
     @Test func skipEndsThePage() {
         let (page, recorder) = makePage(isVideo: true)
         shown(page)
@@ -278,21 +265,6 @@ struct FrameProtocolTests {
         page.receive(message("video.start", ["playhead": 1e12]), from: main)
         guard case .video(_, let playhead) = recorder.last else { Issue.record("expected start"); return }
         #expect(playhead == 86_400_000)
-    }
-
-    @Test func aPageCodeOutsideTheVASTRangeGoesAs900() {
-        for (sent, expected) in [(0, 900), (-1, 900), (42, 900), (99, 900), (100, 100), (999, 999), (1000, 900), (Int(Int32.max), 900)] {
-            let (page, recorder) = makePage(isVideo: true)
-            shown(page)
-            page.receive(message("ad.error", ["code": sent]), from: main)
-            guard case .error(let code) = recorder.last else { Issue.record("expected error for \(sent)"); return }
-            #expect(code == expected, "code \(sent)")
-        }
-        let (huge, hugeRecorder) = makePage(isVideo: true)
-        shown(huge)
-        huge.receive(message("ad.error", ["code": 1e300]), from: main)
-        guard case .error(let hugeCode) = hugeRecorder.last else { Issue.record("expected error"); return }
-        #expect(hugeCode == 900)
     }
 
     @Test func clickNeedsAShownPageAndARecentTouch() {
@@ -465,20 +437,6 @@ struct FrameProtocolTests {
         page.receive(message("video.skip", ["playhead": 1234.5]), from: main)
         guard case .skip(let skipped)? = recorder.last else { Issue.record("expected skip"); return }
         #expect(skipped == 1235)
-    }
-
-    @Test func aMalformedProgressOffsetIsDropped() {
-        let (page, recorder) = makePage(isVideo: true)
-        started(page)
-        let before = recorder.events.count
-        for offset in [1e300, -5, Double.infinity, 86_400_001] as [Double] {
-            page.receive(message("video.progress", ["offset": offset, "playhead": 0]), from: main)
-        }
-        page.receive(message("video.progress", ["offset": "5000", "playhead": 0]), from: main)
-        #expect(recorder.events.count == before, "no progress event from a malformed offset")
-        page.receive(message("video.progress", ["offset": 5000, "playhead": 5000]), from: main)
-        guard case .progress(let offset, _)? = recorder.last else { Issue.record("expected progress"); return }
-        #expect(offset == 5000, "a valid checkpoint still works")
     }
 
     @Test func originsCompareWithoutCase() {
