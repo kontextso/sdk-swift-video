@@ -25,6 +25,8 @@ import Foundation
 ///   video.skip        ignore      ignore      endThenDeliver           ignore
 ///   video.start       ignore      ignore      deliver                  ignore
 ///   other video.*     ignore      ignore      deliver after start      ignore
+///                                             (and before complete:
+///                                             after it only mute, unmute)
 ///   video.mute/unmute ignore      ignore      deliver (also before start)  ignore
 ///   ad.error          endThenDeliver (code: the page's, else 400/500 before show, 405 after)   ignore
 ///   unknown type      drop        drop        drop                     ignore   (video.<unknown> too)
@@ -61,6 +63,8 @@ struct FrameProtocol {
 
     /// How far past the video's duration a page playhead may go: the page's rounding, not more.
     static let playheadGraceMs = 1000
+    /// The playhead's bound when the video's duration is not known.
+    static let dayMs = 86_400_000
 
     let adId: String
     /// The page the bridge loaded: its origin is the only one whose messages count.
@@ -74,19 +78,22 @@ struct FrameProtocol {
     private(set) var state: FramePhase = .loading
     /// `video.start` arrived: the video's progress, quartiles, pause, resume and complete count only after it.
     private var isVideoStarted = false
+    /// `video.complete` was delivered: the video is over, and only the viewer's mute and unmute still count. A late
+    /// start or resume would restart the video's dwell and fire pause and resume beacons for a video that ended.
+    private var isVideoCompleted = false
     /// A page that broke the message contract is reported once: a loop of bad messages is one fault.
     private var hasReportedViolation = false
     /// One tap opens one URL: clicks, opens and navigations out share it.
     private var touch = TouchGate()
 
-    /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
-    /// capped at a day.
+    /// `videoDuration`: the video's length when the server gives one (a linear ad), the playhead's bound with a
+    /// grace; without it a day.
     init(adId: String, pageURL: URL, isVideo: Bool, videoDuration: TimeInterval?) {
         self.adId = adId
         self.pageURL = pageURL
         navigation = FrameNavigation(pageURL: pageURL)
         loadErrorCode = isVideo ? 400 : 500
-        playheadLimitMs = videoDuration.map { min(Int(($0 * 1000).rounded()) + Self.playheadGraceMs, 86_400_000) } ?? 86_400_000
+        playheadLimitMs = videoDuration.map { Int((max(0, $0) * 1000).rounded()) + Self.playheadGraceMs } ?? Self.dayMs
     }
 
     /// The code of a failure the bridge decides itself (the page replaced, the web process gone): 405 while
@@ -166,19 +173,23 @@ struct FrameProtocol {
         switch type {
         case "video.complete":
             if let dropped = droppedBeforeStart(type) { return dropped }
+            guard !isVideoCompleted else { return .ignore }
+            isVideoCompleted = true
             return .deliver(.complete(playhead: playhead))
         case "video.progress":
             if let dropped = droppedBeforeStart(type) { return dropped }
-            // A checkpoint in milliseconds within a day, a fraction rounded to the nearest; anything else would
-            // fire every checkpoint early.
-            guard let raw = message.offset, raw.isFinite, (0...86_400_000).contains(raw) else {
+            guard !isVideoCompleted else { return .ignore }
+            // A checkpoint in milliseconds within the video (a day when its length is not known), a fraction
+            // rounded to the nearest; anything else would fire every checkpoint early.
+            guard let raw = message.offset, raw.isFinite, (0...Double(max(Self.dayMs, playheadLimitMs))).contains(raw) else {
                 return .drop(log: "video.progress with a malformed offset dropped", violation: violation("progress.offset"))
             }
             return .deliver(.progress(offset: min(Int(raw.rounded()), playheadLimitMs), playhead: playhead))
         default:
             guard let event = FrameEvent.VideoEvent(rawValue: name) else { return .drop(log: "unknown message \(type) dropped") }
-            // `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads;
-            // the rest need the start before them.
+            // `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads,
+            // or after it completed; the rest need the start before them and nothing after the complete.
+            if isVideoCompleted, event != .mute, event != .unmute { return .ignore }
             switch event {
             case .start: isVideoStarted = true
             case .mute, .unmute: break

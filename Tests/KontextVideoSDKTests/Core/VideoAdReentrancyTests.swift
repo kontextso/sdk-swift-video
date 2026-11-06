@@ -381,6 +381,21 @@ struct VideoAdReentrancyTests {
         ad.dismiss()
     }
 
+    @Test func aVideoThatCompletedFiresNoPauseOrResumeAndCountsNoMoreTime() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.overlayAd(id: "o18c", creative: "video"))
+        try ad.show(in: harness.player.view)
+        send(ad, "video.start", ["playhead": 0])
+        send(ad, "video.complete", ["playhead": 1000])
+        send(ad, "video.resume", ["playhead": 1000])
+        send(ad, "video.pause", ["playhead": 1000])
+        send(ad, "video.mute", ["playhead": 1000])
+        #expect(await harness.beaconArrives("mute"), "the viewer's mute still counts")
+        let fired = await beacons()
+        #expect(!fired.contains("resume") && !fired.contains("pause"), "a video that ended neither pauses nor resumes: \(fired)")
+        #expect(ad.meter?.countsTime == false, "the video is over: nothing counts towards its dwell")
+        ad.dismiss()
+    }
+
     /// A custom player that plays at the first read of `isPlaying` and is paused from the second on.
     final class StopsAfterFirstRead: ContentPlayer {
         var currentTime: TimeInterval = 0

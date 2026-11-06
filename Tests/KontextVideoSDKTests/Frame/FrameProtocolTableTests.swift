@@ -216,6 +216,33 @@ struct FrameProtocolTableTests {
         #expect(holds18)
     }
 
+    @Test func afterTheVideoCompletedOnlyMuteAndUnmuteCount() {
+        var core = core(.shown)
+        #expect(kind(core.accept(message("video.complete"), from: main, now: 0)) == "deliver")
+        for type in ["video.resume", "video.start", "video.pause", "video.firstQuartile", "video.complete"] {
+            let holds = kind(core.accept(message(type), from: main, now: 0)) == "ignore"
+            #expect(holds, "\(type) after video.complete")
+        }
+        let holds1 = kind(core.accept(message("video.progress", ["offset": 1000]), from: main, now: 0)) == "ignore"
+        #expect(holds1, "progress after video.complete")
+        let holds2 = kind(core.accept(message("video.mute"), from: main, now: 0)) == "deliver"
+            && kind(core.accept(message("video.unmute"), from: main, now: 0)) == "deliver"
+        #expect(holds2, "the viewer's mute and unmute still count")
+        let holds3 = kind(core.accept(message("video.skip"), from: main, now: 0)) == "end"
+        #expect(holds3, "the page may still end")
+    }
+
+    @Test func aVideoLongerThanADayHasItsProgressPastADay() {
+        let day = 86_400_000
+        var long = core(.shown, videoDuration: 2 * 86_400)
+        let step = long.accept(message("video.progress", ["offset": day + day / 2, "playhead": day + day / 2]), from: main, now: 0)
+        guard case .progress(let offset, let playhead)? = event(step) else { Issue.record("expected progress"); return }
+        #expect(offset == day + day / 2 && playhead == day + day / 2)
+        var unknown = core(.shown)
+        let holds = violation(unknown.accept(message("video.progress", ["offset": day + 1]), from: main, now: 0)) == "progress.offset"
+        #expect(holds, "without a duration, a day is the bound")
+    }
+
     // MARK: Touches and navigation
 
     @Test func oneTouchOpensOneURLWithinTheWindow() {
