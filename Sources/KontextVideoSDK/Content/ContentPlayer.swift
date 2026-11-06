@@ -67,10 +67,10 @@ extension ContentPlayer {
         return nil
     }
 
-    /// No item changes reported: `isPlaying` tells the end.
+    /// No item changes reported: another item is told from `currentItem`, read as the content plays.
     public var contentChangedPublisher: AnyPublisher<Void, Never>? {
         PlayerFallback.note("contentChangedPublisher", of: Self.self, level: .info,
-                            "another item or the end is told from isPlaying only; declare it as AnyPublisher<Void, Never>? to report them")
+                            "another item is told from currentItem, read as the content plays; declare it as AnyPublisher<Void, Never>? to report item changes (not an item's end)")
         return nil
     }
 }
