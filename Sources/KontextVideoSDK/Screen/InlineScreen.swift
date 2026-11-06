@@ -103,14 +103,17 @@ final class InlineScreen: AdScreen {
     }
 
     /// The meter is the one answer to "is it seen": the clock counts only then, and an ad out of sight in an
-    /// active scene (a feed cell swiped away) ends, freeing the app's slot.
+    /// active scene (a feed cell swiped away) ends, freeing the app's slot. Under its own click's in-app browser
+    /// the ad is covered: not seen, so its clocks and its viewability wait, and neither out of sight nor ended.
     func configure() {
         guard let meter else { return }
         meter.onSeen = { [weak self] seen in self?.onScreenClock?.setSeen(seen) }
         let ad = self.ad
+        meter.isCovered = { [weak ad] in ad?.inAppBrowser.isOpen == true }
         // UIKit has no event for a controller presented over another: the meter's tick asks.
         meter.onTick = { [weak self] in
-            guard let self, !ad.hasEnded, let container, Self.coveringPresentation(over: container) != nil else { return }
+            guard let self, !ad.hasEnded, let container,
+                  Self.coveringPresentation(over: container, except: ad.inAppBrowser.controller) != nil else { return }
             Logger.warning("ad \(ad.id.prefix(8)): another screen of the app covers the ad's; ended as interrupted")
             ad.end(.interrupted)
         }
@@ -150,15 +153,15 @@ final class InlineScreen: AdScreen {
     /// sheet, a full-screen cover, a screen over the current context. The viewer left the player for another
     /// screen of the app, as another Activity covering the player's on Android. Not an alert or a popover: the
     /// player stays in view around them, as around an Android dialog, which does not stop the Activity. Not the
-    /// App Store sheet an ad's click opens either: on Android a click leaves the app, which only freezes the ad.
-    /// Nor one being dismissed. A view in no controller's view (added to the window itself) follows the window's
-    /// root controller.
-    static func coveringPresentation(over view: UIView) -> UIViewController? {
+    /// App Store sheet an ad's click opens either, nor `except`, the in-app browser it opens: the ad's own click,
+    /// which covers it only until the viewer comes back. Nor one being dismissed. A view in no controller's view
+    /// (added to the window itself) follows the window's root controller.
+    static func coveringPresentation(over view: UIView, except allowed: UIViewController? = nil) -> UIViewController? {
         var responder: UIResponder? = view
         while let current = responder, !(current is UIViewController) { responder = current.next }
         var controller = responder as? UIViewController ?? ViewExposure.window(of: view)?.rootViewController
         while let current = controller {
-            if let presented = current.presentedViewController, !presented.isBeingDismissed, hidesThePlayer(presented) {
+            if let presented = current.presentedViewController, presented !== allowed, !presented.isBeingDismissed, hidesThePlayer(presented) {
                 return presented
             }
             controller = current.parent

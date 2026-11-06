@@ -71,11 +71,15 @@ final class LinearScreen: AdScreen {
                                    onPresented: { [weak controller] in onPresented(controller) }, onFailed: onFailed)
     }
 
-    /// A sheet over the ad (a click's store page) leaves its view in the window, where the meter would still
-    /// see it whole, and makes UIKit remove the view until the sheet goes: neither is the ad leaving. Out of
-    /// sight is no end either: the viewer's own doing, and it comes back.
+    /// A sheet over the ad (a click's store page, its in-app browser) leaves its view in the window, where the
+    /// meter would still see it whole, and makes UIKit remove the view until the sheet goes: neither is the ad
+    /// leaving. Covered reads as exposure 0, on which the page pauses its video, and it plays on once exposed
+    /// again. Out of sight is no end either: the viewer's own doing, and it comes back.
     func configure() {
-        meter?.isCovered = { [weak self] in self?.controller.map(Environment.isCovered) ?? false }
+        meter?.isCovered = { [weak self] in
+            guard let self else { return false }
+            return ad.inAppBrowser.isOpen || controller.map(Environment.isCovered) ?? false
+        }
     }
 
     func reachedScreen() {}

@@ -28,8 +28,10 @@ public protocol VideoAdDelegate: AnyObject {
     func videoAdDidRecordImpression(_ ad: VideoAd)
     /// The viewer tapped the ad and the SDK took the click: it fired the click beacons and is opening the
     /// target (the URL, its fallback when the first cannot open, or the App Store sheet for an app-install
-    /// ad). Neither which target opened nor whether it did is reported. `click.area`
-    /// says where the viewer tapped. Once per tap.
+    /// ad). A web link opens in an in-app browser over your app, unless an installed app claims it; an app's
+    /// link and an App Store link open that app. Your app stays in front under the browser: an overlay or pause
+    /// ad stays up, its time paused, and a linear ad's video pauses until the viewer taps Done. Neither which
+    /// target opened nor whether it did is reported. `click.area` says where the viewer tapped. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
     /// linear ad (`cannotShowNow`: within 2 s of `show`, or 10 s when the controller reached a window

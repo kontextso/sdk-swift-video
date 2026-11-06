@@ -45,6 +45,13 @@ enum Environment {
     static var asksBeforeMediaCapture: @MainActor () -> Bool = defaultAsksBeforeMediaCapture
     /// Opens a URL the page asked for; the completion says whether it could.
     static var openURL: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenURL
+    /// Opens a web link only in an installed app that claims it (a universal link); the completion says whether
+    /// one did. Nothing opens otherwise.
+    static var openUniversalLink: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenUniversalLink
+    /// Presents a web link in the in-app browser over the top view controller of the window, and returns the
+    /// browser's controller, `nil` when none could present it; the closure runs with that controller at the
+    /// viewer's "Done".
+    static var presentInAppBrowser: @MainActor (URL, UIWindow?, @escaping @MainActor (UIViewController) -> Void) -> UIViewController? = defaultPresentInAppBrowser
     /// A programmer error: stops a debug build. Tests record it instead.
     static var assertionFailure: (String) -> Void = defaultAssertionFailure
     /// Where the IAB consent keys are read from.
@@ -92,6 +99,8 @@ enum Environment {
         parkingWindow = defaultParkingWindow
         schemeHandlers = defaultSchemeHandlers
         openURL = defaultOpenURL
+        openUniversalLink = defaultOpenUniversalLink
+        presentInAppBrowser = defaultPresentInAppBrowser
         asksBeforeMediaCapture = defaultAsksBeforeMediaCapture
         assertionFailure = defaultAssertionFailure
         consentDefaults = defaultConsentDefaults
@@ -199,6 +208,17 @@ enum Environment {
         UIApplication.shared.open(url, options: [:]) { opened in
             Task { @MainActor in completion(opened) }
         }
+    }
+
+    private static func defaultOpenUniversalLink(_ url: URL, completion: @escaping @MainActor (Bool) -> Void) {
+        UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
+            Task { @MainActor in completion(opened) }
+        }
+    }
+
+    private static func defaultPresentInAppBrowser(_ url: URL, in window: UIWindow?,
+                                                   onFinish: @escaping @MainActor (UIViewController) -> Void) -> UIViewController? {
+        InAppBrowser.present(url, in: window, onFinish: onFinish)
     }
 
     private static func defaultAsksBeforeMediaCapture() -> Bool {

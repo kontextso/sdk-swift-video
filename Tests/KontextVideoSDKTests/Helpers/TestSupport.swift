@@ -296,6 +296,10 @@ struct SDKHarness {
         Environment.consentDefaults.removePersistentDomain(forName: "KontextVideoSDKTests")
         Environment.skAdNetwork = skAdNetwork
         Environment.storeProduct = storeProduct
+        // No app claims a web link and no in-app browser appears, so a web click opens through `openURL`, which
+        // the tests record. The tests of the routing and of the browser set their own.
+        Environment.openUniversalLink = { _, completion in completion(false) }
+        Environment.presentInAppBrowser = { _, _, _ in nil }
         // A fixed user agent: the real one comes from a WebView, one more web content process, and every ads
         // request waits up to 2 s for it; on a stalled CI runner the request left as a 2 s wait gave up. The
         // tests of the lookup itself (and the request tests on `reset()` alone) set or use their own.

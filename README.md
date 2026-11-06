@@ -72,6 +72,8 @@ player, see [KontextVideoTTSDK](Sources/KontextVideoTTSDK/README.md).
 
 ## Good to know
 
+A click opens a web link in an in-app browser over your app (an app's own link, a universal link an installed app claims, and an App Store link open that app). Your app stays in front: the ad waits under the browser, its time paused, and goes on when the viewer taps Done.
+
 A custom player passed to `VideoAds.track(_:)` is held strongly. If it references the `VideoAds` (or the object that owns it, such as your player model), the two keep each other alive until `destroy()`: call `destroy()` when the viewer leaves the video, or don't reference the ads from the adapter.
 
 ## License

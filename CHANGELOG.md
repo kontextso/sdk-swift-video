@@ -38,6 +38,7 @@ In progress.
 * A DocC catalog: the API reference builds with `xcodebuild docbuild`.
 
 ### Changed
+* A click opens a web link in an in-app browser (`SFSafariViewController`) over your app instead of Safari, unless an installed app claims the link (a universal link); an app's own link (`brandapp://…`) and an App Store link (`apps.apple.com`, `itunes.apple.com`, `itms-apps:`) still open that app, an app-install ad's signed click still opens the App Store sheet, and the fallback still opens when nothing opened the first. The AdChoices link opens the same way. Your app stays in front: an overlay or pause ad under the browser stays up, its duration, on-screen time and viewability paused until the viewer taps Done; a linear ad's video pauses and plays on after Done. The `click` beacon and `didClick` are unchanged.
 * An ad whose `trigger` is a `window` (timed mode) is dropped and reported as malformed, as an unknown trigger kind is; its format answers as a no-fill unless another ad fills it. The SDK has no timed mode, and such an ad was shown at whatever moment the app chose.
 * A video ad on screen that ended before its first frame fires the `close` beacon only when the app, an interruption, a destroy or its own time ended it, as the Kotlin SDK does; a skip or the page's own close no longer adds a second `close` after its `skip` or `close`, and an image ad never fires one in its impression's place.
 * A page message may be up to 1 MB (was 64 KB).

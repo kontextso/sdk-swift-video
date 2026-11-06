@@ -154,6 +154,8 @@ public final class VideoAd {
     var isTrackingContent: Bool { contentPlayback?.isTracking == true }
     /// Apple's install attribution of an app-install ad; `nil` for every other ad.
     private(set) var skAdNetwork: SKAdNetworkImpression?
+    /// The in-app browser this ad's clicks open web links in; its screen follows it while it is up.
+    private(set) lazy var inAppBrowser = InAppBrowser { [weak self] in self?.loadedBridge?.webView.window }
 
     /// Nothing is rendered here; `load()` does that. Expiry is checked at the next call, never by a timer.
     init(descriptor: AdDescriptor, owner: VideoAds) {
@@ -279,7 +281,8 @@ public final class VideoAd {
     /// view when it resizes or rotates: the same variant is fitted again, and a view still too small for it half a second later ends it
     /// with `.interrupted`. A view controller the app presents over the one holding the view (a sheet, a
     /// full-screen cover; not an alert or a popover) ends the ad with `.interrupted` too, within a quarter of a
-    /// second. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
+    /// second; the App Store sheet and the in-app browser of the ad's own click do not end it, and under the
+    /// browser its time on screen waits until the viewer taps Done. With a player tracked by `VideoAds.track(_:)`, an overlay also ends when the content
     /// stops, and a pause ad when the content plays again, both as `.interrupted`; an overlay whose content
     /// paused in the background stays until a second after the app's return, and goes on if it plays again.
     ///
@@ -544,8 +547,8 @@ public final class VideoAd {
             Logger.info("ad \(self?.id.prefix(8) ?? ""): \(verdict.rawValue)")
         }
         // The app took the view away (navigated off without dismiss()): the ad ends, or it would block every
-        // show in the app. Not a linear ad covered full screen (the screen's `isCovered`): UIKit removes its view
-        // until the cover goes.
+        // show in the app. Not an ad covered (the screen's `isCovered`: a linear ad under a full-screen cover, an
+        // ad under its click's in-app browser): UIKit may remove its view until the cover goes.
         meter.onDetached = { [weak self] in
             guard let self, !hasEnded else { return }
             if self.meter?.isCovered?() == true { return }   // asked again each tick
@@ -575,13 +578,15 @@ public final class VideoAd {
     }
 
     /// A click: an app-install ad whose network signed the click opens the App Store product sheet inside
-    /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL.
+    /// the app, with the attribution; every other ad, and a sheet that could not be presented, opens the URL
+    /// where its `LinkRoute` says (a web link no app claims in the in-app browser).
     func openClick(_ url: URL, fallback: URL?) {
-        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return LinkOpener.open(url, fallback: fallback) }
+        let browser = inAppBrowser
+        guard let skAdNetwork, skAdNetwork.skan.hasFidelity1 else { return LinkOpener.open(url, fallback: fallback, browser: browser) }
         // The viewer's tap is honored even if the ad ends while the sheet loads: the URL opens when it fails.
         Task {
             if await skAdNetwork.presentStore() { return }
-            LinkOpener.open(url, fallback: fallback)
+            LinkOpener.open(url, fallback: fallback, browser: browser)
         }
     }
 

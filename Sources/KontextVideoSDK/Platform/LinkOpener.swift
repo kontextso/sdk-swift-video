@@ -6,6 +6,15 @@ import Foundation
 /// Web, App Store and app deep links open, the host app's own included: which links an ad may carry is the ad
 /// server's decision. Refused: the schemes that call, message or install something without a page in between,
 /// and the ones that lead nowhere a viewer could go (`refusedSchemes`).
+///
+/// Each target goes where its `LinkRoute` says, and the fallback the same way when the first opened nothing:
+/// ```
+/// refused             nothing opens
+/// .app, .store        UIApplication.open: the app it names, the App Store app
+/// .web                the app that claims it (universal links only), else the ad's in-app browser,
+///                     else Safari (no view controller could present the browser)
+/// ```
+/// The App Store sheet of an app-install ad's signed click comes before all of this (`VideoAd.openClick`).
 @MainActor
 enum LinkOpener {
     /// Schemes a tap never opens, whatever the page says. The URL comes from whoever bought the ad, and
@@ -40,19 +49,28 @@ enum LinkOpener {
     }
 
     /// Opens `url`, else `fallback` when the first cannot be opened (an app that is not installed) or may not
-    /// be. `completion` says whether one of them opened.
-    static func open(_ url: URL, fallback: URL?, completion: @escaping @MainActor (Bool) -> Void = { _ in }) {
-        openOne(url) { opened in
+    /// be; a web link in `browser` when no app claims it. `completion` says whether one of them opened.
+    static func open(_ url: URL, fallback: URL?, browser: InAppBrowser, completion: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        openOne(url, browser: browser) { opened in
             guard !opened, let fallback else { return completion(opened) }
-            openOne(fallback, completion: completion)
+            openOne(fallback, browser: browser, completion: completion)
         }
     }
 
-    private static func openOne(_ url: URL, completion: @escaping @MainActor (Bool) -> Void) {
+    private static func openOne(_ url: URL, browser: InAppBrowser, completion: @escaping @MainActor (Bool) -> Void) {
         guard isAllowed(url) else {
             Logger.warning("the link \(url.absoluteString) is not allowed to open")
             return completion(false)
         }
-        Environment.openURL(url, completion)
+        switch LinkRoute(url) {
+        case .app, .store:
+            Environment.openURL(url, completion)
+        case .web:
+            Environment.openUniversalLink(url) { opened in
+                if opened || browser.open(url) { return completion(true) }
+                Logger.warning("the in-app browser could not be presented; \(url.absoluteString) opens outside the app")
+                Environment.openURL(url, completion)
+            }
+        }
     }
 }

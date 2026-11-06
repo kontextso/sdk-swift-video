@@ -74,7 +74,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
 - `Screen/`, putting the ad on screen: `AdScreen`, `LinearAdViewController`, `LinearPresentation` (its present and dismiss,
   each with a watchdog), `ScreenSlot` (the app's one ad on screen: taken at `show`, freed at `didEnd`, here and nowhere
   else; the ad holds its screen, the screen its meter; the creative's arrival is `VideoAd.reachedScreen()`), `InlineAdView`, `AdGeometry`, `InlineScreen+Placement` (where an inline ad goes, from `InlineScreen`'s
-  insets and chosen size; the page gets the size at `FrameBridge.show(size:)`).
+  insets and chosen size; the page gets the size at `FrameBridge.show(size:)`), `InAppBrowser` (the in-app browser
+  a click opens a web link in; the screens treat the ad under it as covered, not ended).
 - `Measurement/`, what the viewer saw (visibility, time on screen) and the beacons that report it: `Tracker` (beacons), `TrackingMacros` (a URL's macros filled in), `ViewabilityMeter` (the 50 % rule's loop), `ViewExposure` (how much of a view is seen) and `Polygon` (its geometry), `OnScreenTimeClock`, `SKAdNetworkImpression` (Apple's install-attribution impression of an app-install ad). `Content/`: `ContentPlayer`, `ContentPlayback`, `PlayerOwnership`, `ContentTimeClock` and
   `ContentRule`. `Payloads/` is the ad server's API: /config, /ads, its
   error body, the app's inputs as sent, and Apple attribution; `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
@@ -88,7 +89,8 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   and dropped-ad reports, the kill switch), `ConfigFetcher` (its twin for `/config`: one attempt and its failure
   report). `Diagnostics/IntegrationGuard` holds the checks of the app's integration (initialized, the configuration,
   the content, the user): each stops a debug build, logs and reports. `Device/` what the SDK reads, `Platform/Environment.swift` the
-  seams the tests replace.
+  seams the tests replace, `Platform/LinkOpener` and `LinkRoute` which links open and where (an app, the App Store,
+  the in-app browser).
 
 ## Glossary
 

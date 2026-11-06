@@ -73,6 +73,10 @@ or the ad begins to show. Then the impression, at most once, and any clicks; the
 ``VideoAdDelegate/videoAd(_:didEnd:)``, whoever ended it. Nothing is delivered through the delegate before
 `show`: an ad that can no longer be shown says so when `load` or `show` throws a ``VideoAdError``.
 
+A click opens a web link in an in-app browser over your app, unless an installed app claims it; an app's own
+link and an App Store link open that app. The ad waits under the browser, its time paused, and goes on when
+the viewer taps Done.
+
 At most one ad is on screen in the whole app. The SDK never requests an ad by itself: every request comes
 from your `format(_:)` call.
 

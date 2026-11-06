@@ -5,7 +5,8 @@ import Foundation
 /// cannot be shown over paused content. A pause while the overlay's scene is not active (the app in the
 /// background, where iOS pauses the player itself and apps often pause their own) does not end it: the
 /// overlay freezes, as its clock does, and once the scene is active again the content has
-/// `contentResumeGrace` to play again before that pause ends it as any other.
+/// `contentResumeGrace` to play again before that pause ends it as any other. A pause under the in-app browser
+/// of the overlay's own click is the same: the viewer is away, and comes back at "Done".
 @MainActor
 final class OverlayRule: ContentRule {
     unowned let ad: VideoAd
@@ -16,7 +17,7 @@ final class OverlayRule: ContentRule {
 
     /// The overlay's `duration` in seconds of video, once on screen over a tracked player.
     private(set) var contentClock: ContentTimeClock?
-    /// A pause came while the scene was not active: the overlay is frozen, not ended.
+    /// A pause came while the viewer was away (`isViewerAway`): the overlay is frozen, not ended.
     private(set) var wasContentPausedWhileInactive = false
     /// That overlay's check after its scene came back.
     private(set) var contentRecheck: Task<Void, Never>?
@@ -110,22 +111,29 @@ final class OverlayRule: ContentRule {
         contentRecheck = nil
     }
 
-    /// A pause while the overlay's scene is not active freezes the overlay instead of ending it: leaving the
+    /// A pause while the viewer is away (`isViewerAway`) freezes the overlay instead of ending it: leaving the
     /// app pauses an `AVPlayer` and, often, the app's own player, and the viewer coming back expects the
     /// overlay still there. It stays frozen, whatever the content reports, until the content plays again or
-    /// the check after the scene's return. Returns whether the overlay stays. Before its clock exists (the
+    /// the check after the viewer's return. Returns whether the overlay stays. Before its clock exists (the
     /// view still being attached) a pause ends it as always.
     private func freezesOnPause() -> Bool {
-        if ad.onScreenClock?.isSceneActive == false, !wasContentPausedWhileInactive {
-            Logger.info("ad \(ad.id.prefix(8)): the content paused while the scene is not active; the overlay freezes")
+        if isViewerAway, !wasContentPausedWhileInactive {
+            Logger.info("ad \(ad.id.prefix(8)): the content paused while the viewer is away (the scene not active, or the click's browser up); the overlay freezes")
             wasContentPausedWhileInactive = true
         }
         return wasContentPausedWhileInactive
     }
 
-    /// The scene is back over an overlay frozen by a pause: the app may be about to play the content again,
-    /// so the pause is read once more after `contentResumeGrace`. Still paused, with the scene still active,
-    /// the overlay ends as on any pause; a scene that left again waits for its next return.
+    /// The viewer is not in front of the player: the overlay's scene is not active, or the in-app browser of its
+    /// own click covers it. `false` before the overlay's clock exists.
+    private var isViewerAway: Bool {
+        guard let clock = ad.onScreenClock else { return false }
+        return !clock.isSceneActive || ad.inAppBrowser.isOpen
+    }
+
+    /// The viewer is back over an overlay frozen by a pause (the scene active, the browser closed): the app may be
+    /// about to play the content again, so the pause is read once more after `contentResumeGrace`. Still paused,
+    /// with the viewer still there, the overlay ends as on any pause; a viewer away again waits for the next return.
     private func recheckContentAfterGrace() {
         contentRecheck?.cancel()
         contentRecheck = Task { [weak self] in
@@ -133,7 +141,7 @@ final class OverlayRule: ContentRule {
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
             guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.onScreenClock?.isSceneActive == true,
-                  let playback = ad.contentPlayback else { return }
+                  !ad.inAppBrowser.isOpen, let playback = ad.contentPlayback else { return }
             wasContentPausedWhileInactive = false
             if playback.isPlaying {
                 Logger.info("ad \(ad.id.prefix(8)): the content plays again; the overlay goes on")

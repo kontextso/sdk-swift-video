@@ -57,13 +57,15 @@ final class ViewabilityMeter {
     /// the cover is gone and the view did not come back.
     var onDetached: (() -> Void)?
     /// Whether something the meter cannot see covers the view while it stays in its window: a sheet presented
-    /// over a linear ad (the App Store product page after a click). Asked on every tick; covered reads as 0.
+    /// over a linear ad (the App Store product page after a click), the in-app browser of the ad's click. Asked
+    /// on every tick; covered reads as 0, and is not out of sight.
     var isCovered: (() -> Bool)?
     /// The ad became seen (some of it on screen in an active scene) or unseen: the one answer to "is it
     /// seen" the clock and the slot follow. From the first real measurement on, at every change.
     var onSeen: ((Bool) -> Void)?
-    /// The view stayed in its window, its scene active, with nothing of it on screen for `offScreenGrace`: a
-    /// feed cell swiped away, a view scrolled or moved out of sight. On every tick while that lasts.
+    /// The view stayed in its window, its scene active and nothing covering it (`isCovered`), with nothing of it
+    /// on screen for `offScreenGrace`: a feed cell swiped away, a view scrolled or moved out of sight. On every
+    /// tick while that lasts.
     var onOffScreen: (() -> Void)?
     /// How long a view in an active scene may show nothing before `onOffScreen`. A constant in spirit: only
     /// tests set it, shorter to run fast.
@@ -159,7 +161,8 @@ final class ViewabilityMeter {
         // 3. Measure: the share on screen and its rectangle; 0 while the ad's own scene is not active (not the
         //    app: an iPad window in the background shows nothing) or something covers it.
         let active = Environment.isWindowActive(window)
-        let seen = active && isCovered?() != true
+        let covered = isCovered?() == true
+        let seen = active && !covered
         let measured = seen ? ViewExposure.exposure(of: view, in: window) : .none
         let percentage = measured.share
         // 4. Tell: onExposure when it changed, onSeen when "any of it visible" flipped. First, so the page and
@@ -167,8 +170,8 @@ final class ViewabilityMeter {
         report(Exposure(share: percentage, visibleBox: measured.visibleBox.isNull ? .zero : measured.visibleBox))
         // The page's reaction to the exposure may have ended the ad.
         guard !isStopped else { return }
-        // 5. Nothing seen for a second while its scene is active: onOffScreen, the ad ends.
-        if active, percentage == 0 {
+        // 5. Nothing seen for a second while its scene is active and nothing covers it: onOffScreen, the ad ends.
+        if active, !covered, percentage == 0 {
             if offScreenSince == nil || stalled { offScreenSince = now }
             if let since = offScreenSince, now - since >= Self.offScreenGrace {
                 onOffScreen?()

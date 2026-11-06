@@ -28,12 +28,12 @@ sdk-swift-video/
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire, and the request's rules for them: what is left out, a COPPA user; the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the frame's phase, FramePhase: where the ad's frame, its web page, is), TouchGate (one tap, one URL), FrameNavigation (the page's navigations), FrameBridge (carries out each Step), FrameWebView (the WebView locked down for one ad) and its events, VideoAd+FrameEvents (what the ad does with each message)
-│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ScreenSlot (the app's one ad on screen, taken at show and freed at didEnd), InlineAdView (what an overlay or pause ad puts into the player's view), InlineScreen+Placement (where an overlay or pause ad goes, on InlineScreen)
+│   ├── Screen/       putting the ad on screen: AdScreen (InlineScreen for overlay and pause, with the app's insets and the chosen size; LinearScreen for linear), LinearAdViewController and its presentation, ScreenSlot (the app's one ad on screen, taken at show and freed at didEnd), InlineAdView (what an overlay or pause ad puts into the player's view), InlineScreen+Placement (where an overlay or pause ad goes, on InlineScreen), InAppBrowser (the in-app browser a click opens over the ad, and whether it is up)
 │   ├── Measurement/  what the viewer saw (visibility, time on screen) and the beacons that report it: the tracker (beacons) and its macros, the viewability meter, what a view exposes and its geometry, the on-screen time clock, the SKAdNetwork impression
 │   ├── Content/      the app's content player: ContentPlayer (the public protocol and its defaults), ContentPlayback (the tracked player), PlayerOwnership (a player belongs to one VideoAds at a time), ContentTimeClock (an overlay's video time, the twin of OnScreenTimeClock), ContentRule (how each format follows it; OverlayRule and PauseRule in their own files, NoContentRule)
 │   ├── SwiftUI/      VideoAdHost: show an ad from SwiftUI by setting it (a UIViewRepresentable over a pass-through view)
 │   ├── Diagnostics/  what the SDK tells: Logger (the console); IntegrationGuard (the app's integration mistakes); ErrorReporter (faults to /v2/error: the mode, scheduling, retries, the server's answers), ErrorReport (one report: its vocabulary and fields), ReportQueue (the waiting reports and their batches, pure); DebugReporter (debug events to /v2/debug), EventHistory (the last events, an error report's history); ReportFormat (capping, the timestamp, a state value), shared so neither reporter reaches into the other
-│   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them)
+│   ├── Platform/     the SDK's ground: Environment (the seams tests replace), awaitShared (work a caller can stop waiting for), LinkOpener (which links an ad may open, and opening them), LinkRoute (where a link goes: an app, the App Store, the web; pure)
 │   └── PrivacyInfo.xcprivacy
 ├── Sources/KontextVideoTTSDK/   the optional KontextVideoTTSDK product: ads.track(ttVideoEngine:), TTSDK read through Objective-C (see its README)
 ├── Tests/KontextVideoSDKTests/   Swift Testing suites, one per source file, plus the whole flows (see Tests)
@@ -116,7 +116,7 @@ Xcode's debug builds are inspectable; nothing to configure in the SDK.
 - Pure rules sit apart from the code that acts on them ("functional core, imperative shell"), each with a table
   test: `State/SdkLifecycle` (which SDK phase may follow which), `State/AdLifecycle` (which phase may follow which; `AdState` moves only when it allows, each milestone once; `VideoAd` acts on each move), `Frame/FrameMessage` (how a
   page message is read), `Frame/FrameProtocol` (what each page message means in each state; `FrameBridge` carries out the `Step`), `FrameEvent.CloseReason.outcome`
-  (the beacon and end reason of a page's close), and the decision table in `Content/ContentRule.swift`.
+  (the beacon and end reason of a page's close), `Platform/LinkRoute` (where a link opens), and the decision table in `Content/ContentRule.swift`.
 - The page never fires a beacon; `Tracker` fires every entry once (through `BeaconClient`), except `click`, `pause`, `resume`, `mute` and
   `unmute`, which fire on every occurrence, from the places in `VideoAd.handle(_:)`.
 - WebKit loads a video's data only for a WebView that is in a window, so `FrameBridge` parks a loading WebView
@@ -181,7 +181,7 @@ Tests/KontextVideoSDKTests/
 │                 rule (FrameProtocolTests), every message in every state through the bridge's calls (FrameStateTableTests), the navigations (FrameNavigationTests), one tap
 │                 one URL (TouchGateTests), all without a
 │                 WebView; the bridge with its WebView (FrameBridgeTests)
-├── Screen/       the linear-ad controller (LinearAdViewControllerTests)
+├── Screen/       the linear-ad controller (LinearAdViewControllerTests), the in-app browser (InAppBrowserTests)
 ├── Measurement/  the tracker, its macros (TrackingMacrosTests), the meter, its geometry (PolygonTests), the on-screen time clock
 ├── Content/      the tracked player (ContentPlaybackTests), an overlay's video time (ContentTimeClockTests), the TTSDK
 │                 adapter (TTVideoEngineAdapterTests)
@@ -189,7 +189,7 @@ Tests/KontextVideoSDKTests/
 ├── Diagnostics/  the logger, the error reporter, a report's fields (ErrorReportTests), the report queue
 │                 (ReportQueueTests), the byte cap and state values (ReportFormatTests), the event history
 │                 (EventHistoryTests), the debug reporter
-├── Platform/     the environment's seams, awaitShared, the link opener
+├── Platform/     the environment's seams, awaitShared, the link opener, where a link goes (LinkRouteTests)
 └── Integration/  a real WKWebView loading real pages, the API and beacons stubbed: every flow end to end
 ```
 
