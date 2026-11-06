@@ -10,25 +10,21 @@ struct DecodingTests {
 
     // MARK: ConfigResponse
 
-    @Test func configEnabledWithReportDebug() throws {
-        let response = try decode(ConfigResponse.self, ["enabled": true, "reportDebug": true])
-        guard case .enabled(let reportDebug, _) = response else { Issue.record("expected enabled"); return }
-        #expect(reportDebug == true)
-    }
-
-    @Test func configEnabledDefaultsReportDebugToFalse() throws {
-        guard case .enabled(let reportDebug, _) = try decode(ConfigResponse.self, ["enabled": true]) else { Issue.record("expected enabled"); return }
-        #expect(reportDebug == false)
-    }
-
-    @Test func configDisabledCarriesTheReason() throws {
-        guard case .disabled(let reason) = try decode(ConfigResponse.self, Fixtures.disabled("appVersionDisabled")) else { Issue.record("expected disabled"); return }
-        #expect(reason == "appVersionDisabled")
-    }
-
-    @Test func configDisabledWithoutReasonIsUnknown() throws {
-        guard case .disabled(let reason) = try decode(ConfigResponse.self, ["enabled": false]) else { Issue.record("expected disabled"); return }
-        #expect(reason == "unknown")
+    @Test func configEnabledOrDisabledWithItsReportDebugOrReason() throws {
+        let cases: [(body: [String: Any], expected: String)] = [
+            (["enabled": true, "reportDebug": true], "enabled reportDebug=true"),
+            (["enabled": true], "enabled reportDebug=false"),
+            (Fixtures.disabled("appVersionDisabled"), "disabled appVersionDisabled"),
+            (["enabled": false], "disabled unknown"),
+        ]
+        for (body, expected) in cases {
+            let response = try decode(ConfigResponse.self, body)
+            let read = switch response {
+            case .enabled(let reportDebug, _): "enabled reportDebug=\(reportDebug)"
+            case .disabled(let reason): "disabled \(reason)"
+            }
+            #expect(read == expected, "\(body)")
+        }
     }
 
     // MARK: AdsResponse
@@ -53,20 +49,17 @@ struct DecodingTests {
         #expect(response.result(for: .overlay)?.format == .overlay)
     }
 
-    @Test func adsResponseNoFillIgnoresWhatItDoesNotRead() throws {
-        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.noFillEntry("temporaryError", format: "pause", nextRequestAt: 38_000)]])
-        #expect(response.result(for: .pause)?.noFillReason == .temporaryError)
-    }
-
-    @Test func adsResponseNoFillDefaults() throws {
-        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [["format": "pause", "ads": []]]])
-        #expect(response.result(for: .pause)?.noFillReason == .unknown)
-    }
-
-    @Test func adsResponseNoFillReasonsTheSDKDoesNotKnowPassThrough() throws {
-        let response = try decode(AdsResponse.self, ["enabled": true, "formats": [Fixtures.noFillEntry("brandNew", format: "pause")]])
-        #expect(response.result(for: .pause)?.noFillReason == .other("brandNew"))
-        #expect(response.result(for: .pause)?.noFillReason?.description == "brandNew", "the wire name survives for logs")
+    @Test func adsResponseNoFillReasons() throws {
+        let cases: [(entry: [String: Any], expected: VideoAdError.NoFillReason)] = [
+            (Fixtures.noFillEntry("temporaryError", format: "pause", nextRequestAt: 38_000), .temporaryError),   // what it does not read is ignored
+            (["format": "pause", "ads": []], .unknown),   // no reason
+            (Fixtures.noFillEntry("brandNew", format: "pause"), .other("brandNew")),   // one the SDK does not know passes through
+        ]
+        for (entry, expected) in cases {
+            let response = try decode(AdsResponse.self, ["enabled": true, "formats": [entry]])
+            #expect(response.result(for: .pause)?.noFillReason == expected, "\(entry)")
+        }
+        #expect(VideoAdError.NoFillReason.other("brandNew").description == "brandNew", "the wire name survives for logs")
     }
 
     @Test func aSizeMustBePositive() throws {

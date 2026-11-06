@@ -59,32 +59,21 @@ struct FrameProtocolTests {
         #expect(page.state == .loaded, "within the bound it parses")
     }
 
-    @Test func messagesWithAnotherAdIdAreDropped() {
-        let (page, recorder) = makePage()
-        page.receive(message("ad.loaded", adId: "ad-2"), from: main)
-        #expect(page.state == .loading)
-        #expect(recorder.events.isEmpty)
-    }
-
-    @Test func malformedBodiesAreDropped() {
-        let (page, recorder) = makePage()
-        page.receive("ad.loaded", from: main)
-        page.receive(["adId": "ad-1"], from: main)
-        page.receive(["type": "ad.loaded"], from: main)
-        #expect(recorder.events.isEmpty)
-    }
-
-    @Test func messagesFromASubframeAreDropped() {
-        let (page, recorder) = makePage()
-        page.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "server.kontext.so", port: 0))
-        #expect(recorder.events.isEmpty)
-    }
-
-    @Test func messagesFromAnotherOriginAreDropped() {
-        let (page, recorder) = makePage()
-        page.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "evil.test", port: 0))
-        page.receive(message("ad.loaded"), from: FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "server.kontext.so", port: 0))
-        #expect(recorder.events.isEmpty)
+    @Test func messagesFromAnotherAdMalformedOrFromAnotherFrameAreDropped() {
+        let cases: [(label: String, body: Any, sender: FrameProtocol.Sender)] = [
+            ("another ad's id", message("ad.loaded", adId: "ad-2"), main),
+            ("not an object", "ad.loaded", main),
+            ("no type", ["adId": "ad-1"], main),
+            ("no adId", ["type": "ad.loaded"], main),
+            ("a subframe", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "server.kontext.so", port: 0)),
+            ("another host", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "evil.test", port: 0)),
+            ("another scheme", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "server.kontext.so", port: 0)),
+        ]
+        for (label, body, sender) in cases {
+            let (page, recorder) = makePage()
+            page.receive(body, from: sender)
+            #expect(page.state == .loading && recorder.events.isEmpty, "\(label)")
+        }
     }
 
     @Test func originCheckTreatsPortZeroAsTheDefaultPort() {

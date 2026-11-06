@@ -69,13 +69,30 @@ struct VideoAdContentTests {
         return (ad, delegate, ads)
     }
 
-    @Test func anOverlayEndsAsInterruptedWhenTheContentPauses() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-pause"))
+    /// An overlay follows playing content and a pause ad paused content: what each is shown over, and what ends it.
+    enum Follower: CaseIterable, Sendable {
+        case overlay, pause
+
+        func payload(_ id: String) -> [String: Any] {
+            self == .overlay ? Fixtures.overlayAd(id: "o-\(id)") : Fixtures.ad(id: "p-\(id)")
+        }
+
+        /// The playing state it is shown over; the other one ends it.
+        var isShownWhilePlaying: Bool { self == .overlay }
+
+        var other: Follower { self == .overlay ? .pause : .overlay }
+    }
+
+    @Test(arguments: Follower.allCases)
+    func anAdFollowingTheContentEndsAsInterruptedWhenThePlayingStateFlips(_ follower: Follower) async throws {
+        let (ad, delegate, _) = try await makeAd(follower.payload("c-flip"))
+        harness.player.isPlaying = follower.isShownWhilePlaying
         try ad.show(in: view)
         await sleepMs(60)
-        #expect(delegate.endReasons.isEmpty, "playing: it stays")
-        harness.player.isPlaying = false
-        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "read on a tick, without a publisher")
+        #expect(delegate.endReasons.isEmpty, "\(follower): the state it was shown over: it stays")
+        // A pause, or a resume outside the app's code: lock screen, headset, PiP.
+        harness.player.isPlaying = !follower.isShownWhilePlaying
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "\(follower): read on a tick, without a publisher")
         #expect(view.subviews.isEmpty && !ad.isCompleted)
         #expect(KontextVideo.shared.adOnScreen == nil)
     }
@@ -129,13 +146,15 @@ struct VideoAdContentTests {
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "from the track on it follows the content: a pause ends it")
     }
 
-    @Test func aPublisherEndsTheOverlayWithoutWaitingForATick() async throws {
+    @Test(arguments: Follower.allCases)
+    func aPublisherEndsTheAdWithoutWaitingForATick(_ follower: Follower) async throws {
         ContentPlayback.tickInterval = 30
         let player = PublishingPlayer()
-        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-pub")) { $0.track(player) }
+        player.isPlaying = follower.isShownWhilePlaying
+        let (ad, delegate, _) = try await makeAd(follower.payload("c-pub")) { $0.track(player) }
         try ad.show(in: view)
-        player.isPlaying = false
-        #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] })
+        player.isPlaying = !follower.isShownWhilePlaying
+        #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] }, "\(follower)")
     }
 
     @Test func aMistypedPublisherFallsBackWithOneWarning() async throws {
@@ -203,18 +222,20 @@ struct VideoAdContentTests {
         ad.dismiss()
     }
 
-    @Test func aPauseAdShownRightAfterThePauseFindsTheScreenFree() async throws {
-        ContentPlayback.tickInterval = 30   // no tick comes in between: the pause ad's show ends the overlay
-        let (overlay, overlayDelegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-hand"))
-        let pause = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p-c-hand")), owner: ads)
-        pause.bridge.load()
-        pause.bridge.receive(["adId": pause.id, "type": "ad.loaded"], from: sender)
-        try overlay.show(in: view)
-        harness.player.isPlaying = false
-        try pause.show(in: view)
-        #expect(overlayDelegate.endReasons == [.interrupted], "the overlay ended first")
-        #expect(KontextVideo.shared.adOnScreen === pause)
-        pause.dismiss()
+    @Test(arguments: Follower.allCases)
+    func theOtherAdShownRightAfterTheFlipFindsTheScreenFree(_ first: Follower) async throws {
+        ContentPlayback.tickInterval = 30   // no tick comes in between: the next ad's show ends the first
+        let (shown, shownDelegate, ads) = try await makeAd(first.payload("c-hand"))
+        let next = VideoAd(descriptor: try Fixtures.descriptor(first.other.payload("c-hand-next")), owner: ads)
+        next.bridge.load()
+        next.bridge.receive(["adId": next.id, "type": "ad.loaded"], from: sender)
+        harness.player.isPlaying = first.isShownWhilePlaying
+        try shown.show(in: view)
+        harness.player.isPlaying = !first.isShownWhilePlaying
+        try next.show(in: view)
+        #expect(shownDelegate.endReasons == [.interrupted], "the \(first) ended first")
+        #expect(KontextVideo.shared.adOnScreen === next)
+        next.dismiss()
     }
 
     @Test func aPauseAdEndsWhenTheNextPageOfAFeedTakesThePlayer() async throws {
@@ -766,51 +787,41 @@ struct VideoAdContentTests {
         }
     }
 
-    @Test func aDestroyWhileThePublisherIsReadLeavesNoSubscription() async {
-        _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-setup1", language: "en"))
-        let player = SetupHookPlayer()
-        player.onRead = { [weak ads] in ads?.destroy() }
-        ads.track(player)
-        #expect(ads.isDestroyed && !ads.playback.isTracking && player.subscriptions == 0)
+    /// Where `SetupHookPlayer` runs the app's code while it is tracked.
+    enum SetupHook: CaseIterable, Sendable {
+        case publisherRead, subscription, itemRead
+
+        @MainActor
+        func install(on player: SetupHookPlayer, _ hook: @escaping () -> Void) {
+            switch self {
+            case .publisherRead: player.onRead = hook
+            case .subscription: player.onSubscribe = hook
+            case .itemRead: player.onItemRead = hook
+            }
+        }
     }
 
-    @Test func aDestroyWhileSubscribingLeavesNoSubscription() async {
+    @Test(arguments: SetupHook.allCases)
+    func aDestroyWhileTrackingLeavesNoSubscription(_ hook: SetupHook) async {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-setup2", language: "en"))
+        let ads = VideoAds(content: .init(id: "ep-setup-destroy-\(hook)", language: "en"))
         let player = SetupHookPlayer()
-        player.onSubscribe = { [weak ads] in ads?.destroy() }
+        hook.install(on: player) { [weak ads] in ads?.destroy() }
         ads.track(player)
-        #expect(ads.isDestroyed && !ads.playback.isTracking && player.subscriptions == 0)
+        #expect(ads.isDestroyed && !ads.playback.isTracking && player.subscriptions == 0, "\(hook): the destroy won")
     }
 
-    @Test func aTrackWhileThePublisherIsReadKeepsTheLastPlayersSubscription() async {
+    @Test(arguments: [SetupHook.publisherRead, .itemRead])
+    func aTrackWhileTrackingKeepsTheLastPlayersSubscription(_ hook: SetupHook) async {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-setup3", language: "en"))
+        let ads = VideoAds(content: .init(id: "ep-setup-track-\(hook)", language: "en"))
         defer { ads.destroy() }
         let middle = SetupHookPlayer()
         let last = SetupHookPlayer()
         last.currentTime = 99
-        middle.onRead = { [weak ads] in ads?.track(last) }
+        hook.install(on: middle) { [weak ads] in ads?.track(last) }
         ads.track(middle)
-        #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0)
-    }
-
-    @Test func aTrackOrDestroyWhileTheItemIsReadWins() async {
-        _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-setup4", language: "en"))
-        defer { ads.destroy() }
-        let middle = SetupHookPlayer()
-        let last = SetupHookPlayer()
-        last.currentTime = 99
-        middle.onItemRead = { [weak ads] in ads?.track(last) }
-        ads.track(middle)
-        #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0, "the inner track won")
-        let other = VideoAds(content: .init(id: "ep-setup5", language: "en"))
-        let gone = SetupHookPlayer()
-        gone.onItemRead = { [weak other] in other?.destroy() }
-        other.track(gone)
-        #expect(other.isDestroyed && !other.playback.isTracking && gone.subscriptions == 0, "the destroy won")
+        #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0, "\(hook): the inner track won")
     }
 
     @Test func aDestroyInTheOldSubscriptionsCancellationLeavesNothingTracked() async {
@@ -872,37 +883,17 @@ struct VideoAdContentTests {
         #expect(!ads.playback.isTracking)
     }
 
-    @Test func withoutATrackedPlayerTheOverlayIgnoresPauses() async throws {
-        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-none")) { _ in }
+    @Test(arguments: Follower.allCases)
+    func withoutATrackedPlayerTheAdIgnoresPlayback(_ follower: Follower) async throws {
+        let (ad, delegate, ads) = try await makeAd(follower.payload("c-none")) { _ in }
         try ad.show(in: view)
         #expect(!ads.playback.isTicking, "no player to watch: no ticks")
         await sleepMs(60)
-        #expect(delegate.endReasons.isEmpty)
+        #expect(delegate.endReasons.isEmpty, "\(follower)")
         ad.dismiss()
     }
 
     // MARK: A pause ad follows the content the other way
-
-    @Test func aPauseAdEndsAsInterruptedWhenTheContentPlaysAgain() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-resume"))
-        harness.player.isPlaying = false
-        try ad.show(in: view)
-        await sleepMs(60)
-        #expect(delegate.endReasons.isEmpty, "paused: it stays")
-        harness.player.isPlaying = true   // resumed outside the app's code: lock screen, headset, PiP
-        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "read on a tick, without a publisher")
-        #expect(view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
-    }
-
-    @Test func aPublisherEndsThePauseAdWithoutWaitingForATick() async throws {
-        ContentPlayback.tickInterval = 30
-        let player = PublishingPlayer()
-        player.isPlaying = false
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-pub")) { $0.track(player) }
-        try ad.show(in: view)
-        player.isPlaying = true
-        #expect(await waitUntil(0.5) { delegate.endReasons == [.interrupted] })
-    }
 
     @Test func anAVPlayerPlayEndsThePauseAd() async throws {
         let player = try await playingPlayer()
@@ -924,29 +915,6 @@ struct VideoAdContentTests {
         #expect(delegate.endReasons.isEmpty)
         harness.player.isPlaying = true
         #expect(await waitUntil { delegate.endReasons == [.interrupted] })
-    }
-
-    @Test func anOverlayShownRightAfterThePlayFindsTheScreenFree() async throws {
-        ContentPlayback.tickInterval = 30   // no tick comes in between: the overlay's show ends the pause ad
-        let (pause, pauseDelegate, ads) = try await makeAd(Fixtures.ad(id: "p-c-hand2"))
-        let overlay = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.overlayAd(id: "o-c-hand2")), owner: ads)
-        overlay.bridge.load()
-        overlay.bridge.receive(["adId": overlay.id, "type": "ad.loaded"], from: sender)
-        harness.player.isPlaying = false
-        try pause.show(in: view)
-        harness.player.isPlaying = true
-        try overlay.show(in: view)
-        #expect(pauseDelegate.endReasons == [.interrupted], "the pause ad ended first")
-        #expect(KontextVideo.shared.adOnScreen === overlay)
-        overlay.dismiss()
-    }
-
-    @Test func withoutATrackedPlayerThePauseAdIgnoresPlayback() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-c-none")) { _ in }
-        try ad.show(in: view)
-        await sleepMs(60)
-        #expect(delegate.endReasons.isEmpty)
-        ad.dismiss()
     }
 
     /// A player model that owns its `VideoAds` and is its tracked player: the cycle the docs warn about.

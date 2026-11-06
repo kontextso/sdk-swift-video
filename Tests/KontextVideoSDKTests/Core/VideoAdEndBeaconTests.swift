@@ -91,22 +91,15 @@ struct VideoAdEndBeaconTests {
         ad.reachedScreen()
     }
 
-    @Test func aLinearAdSkippedBeforeItsFirstFrameFiresOnlySkip() async throws {
-        let (ad, delegate) = try await makeAd(Fixtures.linearAd(id: "el-skip"))
+    /// A skip, or a close before the end, which is a skip: either way the skip is the outcome.
+    @Test(arguments: [("el-skip", "video.skip", "playhead"), ("el-close", "ad.close", "reason")])
+    func aLinearAdEndedBeforeItsFirstFrameFiresOnlySkip(id: String, type: String, field: String) async throws {
+        let (ad, delegate) = try await makeAd(Fixtures.linearAd(id: id))
         try presentLinear(ad)
-        send(ad, "video.skip", ["playhead": 0])
-        #expect(await waitUntil { delegate.endReasons == [.skipped] })
-        let fired = await events("el-skip", after: "skip")
-        #expect(!fired.contains("close"), "the skip is the outcome: \(fired)")
-    }
-
-    @Test func aLinearAdClosedBeforeItsFirstFrameFiresOnlySkip() async throws {
-        let (ad, delegate) = try await makeAd(Fixtures.linearAd(id: "el-close"))
-        try presentLinear(ad)
-        send(ad, "ad.close", ["reason": "close"])
-        #expect(await waitUntil { delegate.endReasons == [.skipped] })
-        let fired = await events("el-close", after: "skip")
-        #expect(!fired.contains("close"), "a close before the end is a skip, and the skip is the outcome: \(fired)")
+        send(ad, type, field == "playhead" ? ["playhead": 0] : ["reason": "close"])
+        #expect(await waitUntil { delegate.endReasons == [.skipped] }, "\(type)")
+        let fired = await events(id, after: "skip")
+        #expect(!fired.contains("close"), "\(type): the skip is the outcome: \(fired)")
     }
 }
 }
