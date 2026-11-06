@@ -310,6 +310,77 @@ struct VideoAdReentrancyTests {
         #expect(pauseDelegate.endReasons == [.dismissed], "one didEnd: \(pauseDelegate.events)")
     }
 
+    // MARK: The app's commonest calls from its delegate
+
+    @Test func theNextAdShownFromDidEndFindsTheSlotFree() async throws {
+        let (first, firstDelegate, _) = try await makeAd(Fixtures.ad(id: "p14a"))
+        let (next, nextDelegate, _) = try await makeAd(Fixtures.ad(id: "p14b"))
+        var nested: Error?
+        firstDelegate.onEnd = { [view = harness.player.view] _, _ in
+            do { try next.show(in: view) } catch { nested = error }
+        }
+        try first.show(in: harness.player.view)
+        first.dismiss()
+        #expect(nested == nil && next.wasShown && KontextVideo.shared.adOnScreen === next, "\(String(describing: nested))")
+        #expect(firstDelegate.events == ["impression", "end:dismissed"] && nextDelegate.events == ["impression"])
+        next.dismiss()
+    }
+
+    @Test func destroyOrDismissFromDidClickDeliversOneDidEndAfterTheClick() async throws {
+        Environment.openURL = { _, completion in completion(true) }
+        for destroys in [true, false] {
+            let (ad, delegate, ads) = try await makeAd(Fixtures.ad(id: destroys ? "p15d" : "p15m"))
+            delegate.onClick = { ad in if destroys { ads.destroy() } else { ad.dismiss() } }
+            try ad.show(in: harness.player.view)
+            ad.bridge.noteTouch()
+            send(ad, "ad.click", ["url": "https://brand.test/offer"])
+            #expect(delegate.events == ["impression", "click:creative", destroys ? "end:destroyed" : "end:dismissed"], "\(delegate.events)")
+        }
+    }
+
+    @Test func rejectAndLoadInsideDidEndAreNoOps() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p16r"))
+        var loadError: Error?
+        delegate.onEnd = { ad, _ in
+            ad.reject()
+            Task { do { try await ad.load() } catch { loadError = error } }
+        }
+        try ad.show(in: harness.player.view)
+        ad.dismiss()
+        await sleepMs(50)
+        #expect(delegate.events == ["impression", "end:dismissed"], "one didEnd: \(delegate.events)")
+        #expect(loadError == nil, "load() on a shown ad returns: it was loaded")
+        #expect(!harness.beaconNames().contains("notUsed"), "a shown ad cannot be rejected")
+    }
+
+    @Test func releasingTheVideoAdsInsideDidEndIsSafe() async throws {
+        _ = await harness.initialize()
+        var ads: VideoAds? = harness.player.ads(for: .init(id: "ep-release", language: "en"))
+        let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p17r")), owner: try #require(ads))
+        ad.bridge.load()
+        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        delegate.onEnd = { _, _ in ads = nil }
+        try ad.show(in: harness.player.view)
+        ad.dismiss()
+        #expect(ads == nil && delegate.endReasons == [.dismissed], "one didEnd, the owner released inside it")
+    }
+
+    @Test func aRepeatedVideoStartCountsOneStartAndOneImpression() async throws {
+        let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o18v", creative: "video"))
+        try ad.show(in: harness.player.view)
+        for _ in 0..<3 { send(ad, "video.start", ["playhead": 0]) }
+        for _ in 0..<2 { send(ad, "video.complete", ["playhead": 1000]) }
+        #expect(await harness.beaconArrives("complete"))
+        await sleepMs(80)
+        let fired = harness.beaconNames()
+        #expect(fired.filter { $0 == "start" }.count == 1 && fired.filter { $0 == "impression" }.count == 1, "\(fired)")
+        #expect(fired.filter { $0 == "complete" }.count == 1)
+        #expect(delegate.events.filter { $0 == "impression" }.count == 1)
+        ad.dismiss()
+    }
+
     /// A custom player that plays at the first read of `isPlaying` and is paused from the second on.
     final class StopsAfterFirstRead: ContentPlayer {
         var currentTime: TimeInterval = 0
