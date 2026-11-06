@@ -298,16 +298,19 @@ final class FrameBridge: NSObject {
         webView.loadHTMLString("", baseURL: nil)
     }
 
-    /// A navigation out of our origin is a click the page could not report: honoured only after a touch;
-    /// without one it is a forced redirect and goes nowhere. While the page loads it cannot be a click (no touch,
-    /// nothing shown): the page redirected to another origin (a CDN handing over to an edge host), which WebKit
-    /// then reports only as a cancelled load. It fails the load now, not after the load timeout as a timeout.
+    /// The page's own load went to another origin (a CDN handing over to an edge host; `FrameNavigation`'s
+    /// `failLoad`): cancelled, WebKit would report it only as a cancelled load, so it fails the load now, not after
+    /// the load timeout as a timeout.
+    func redirectedWhileLoading(to target: URL) {
+        guard state == .loading else { return }
+        Logger.warning("frame \(adId.prefix(8)): the page redirected to \(target.host ?? "another origin") while loading; the load fails")
+        fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
+    }
+
+    /// A navigation out of our origin, or a new window, is a click the page could not report: honoured only after
+    /// a touch while shown; otherwise it is a forced redirect or a popup and goes nowhere. A new window while the
+    /// page loads (a tag's popunder, from any frame) is dropped like that and does not fail the load.
     func externalNavigation(to target: URL) {
-        if state == .loading {
-            Logger.warning("frame \(adId.prefix(8)): the page redirected to another origin while loading; the load fails")
-            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
-            return
-        }
         guard let click = frameProtocol.externalNavigation(to: target, now: Environment.now()) else {
             Logger.warning("frame \(adId.prefix(8)): navigation to \(target.absoluteString) cancelled")
             return

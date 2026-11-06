@@ -23,6 +23,9 @@ extension FrameBridge: WKNavigationDelegate {
         case .external:
             decisionHandler(.cancel)
             externalNavigation(to: target)
+        case .failLoad:
+            decisionHandler(.cancel)
+            redirectedWhileLoading(to: target)
         }
     }
 

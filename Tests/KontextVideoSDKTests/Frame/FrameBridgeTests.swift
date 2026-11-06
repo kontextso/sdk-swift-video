@@ -152,9 +152,18 @@ struct FrameBridgeTests {
     @Test func aCrossOriginRedirectWhileLoadingFailsAtOnce() {
         let (bridge, events) = makeBridge()
         bridge.load()
-        bridge.externalNavigation(to: URL(string: "https://other.example/x")!)
+        bridge.redirectedWhileLoading(to: URL(string: "https://other.example/x")!)
         guard case .error(let code)? = events.last else { Issue.record("expected an error, not the load timeout"); return }
         #expect(code == 500 && bridge.state == .ended && bridge.failureCause == .loadFailed)
+    }
+
+    @Test func aNewWindowWhileLoadingIsDroppedAndTheLoadGoesOn() {
+        let (bridge, events) = makeBridge()
+        bridge.load()
+        // window.open or target=_blank, from the page or one of its frames: what `onNewWindow` hands the bridge.
+        bridge.webView.onNewWindow?(URL(string: "https://popunder.example/x")!)
+        #expect(bridge.state == .loading && events.events.isEmpty && bridge.failureCause == nil, "not a load failure")
+        bridge.hide()
     }
 
     @Test func navigationsStoppedOnPurposeDoNotFailTheAd() {

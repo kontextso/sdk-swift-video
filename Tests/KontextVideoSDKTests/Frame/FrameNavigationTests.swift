@@ -17,7 +17,7 @@ struct FrameNavigationTests {
             ("https://server.kontext.so/frame/ad-1/v2", true, false, false, .allow, .cancel),
             ("https://server.kontext.so:443/next", true, false, false, .allow, .cancel),
             ("about:blank", true, false, false, .allow, .cancel),
-            ("https://brand.test/", true, false, false, .external, .external),
+            ("https://brand.test/", true, false, false, .failLoad, .external),
             ("https://server.kontext.so/frame/ad-1#endcard", true, false, false, .allow, .allow),
             ("https://server.kontext.so/frame/ad-1", true, true, false, .allow, .cancel),
             ("https://server.kontext.so/frame/ad-1#submitted", true, false, true, .allow, .cancel),

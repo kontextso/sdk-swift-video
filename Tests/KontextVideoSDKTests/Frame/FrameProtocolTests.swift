@@ -498,10 +498,10 @@ struct FrameProtocolTests {
         let (page, _) = makePage()
         let pageURL = URL(string: "https://server.kontext.so/frame/ad-1")!
         let decide = { (target: String, mainFrame: Bool) in page.frameProtocol.navigationDecision(to: URL(string: target)!, isMainFrame: mainFrame, current: pageURL) }
-        // Loading: its own origin (redirects) and about:blank go through; elsewhere is a click.
+        // Loading: its own origin (redirects) and about:blank go through; elsewhere the load was redirected away.
         #expect(decide("https://server.kontext.so/frame/ad-1/v2", true) == .allow)
         #expect(decide("about:blank", true) == .allow)
-        #expect(decide("https://brand.test/", true) == .external)
+        #expect(decide("https://brand.test/", true) == .failLoad)
         shown(page)
         // Ready: the document stays.
         #expect(decide("https://server.kontext.so/frame/ad-1#endcard", true) == .allow, "a fragment, within the document")

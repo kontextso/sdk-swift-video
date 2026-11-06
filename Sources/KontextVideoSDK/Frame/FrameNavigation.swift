@@ -3,7 +3,8 @@ import Foundation
 /// What a top-level navigation of the ad's page may do, and when a navigation out is a click.
 ///
 /// The decision. While the page loads: its own origin (redirects included) and
-/// `about:blank`; anything else is a click the page could not report. Once it is ready the document
+/// `about:blank`; anything else cannot be a click (nothing is shown, nobody touched it): the page's load was
+/// redirected to another origin, which fails the load at once (`failLoad`). Once it is ready the document
 /// stays: only a navigation within it (a fragment) goes through, and replacing it, even with a page of
 /// the same origin or a reload of itself, is refused, or the creative and its close control would vanish
 /// under an ad still shown. A navigation stays within the document, as browsers decide it, when the
@@ -15,16 +16,19 @@ import Foundation
 ///   target                          loading     loaded or shown
 ///   the page's origin, about:blank  allow       cancel (it would replace the creative)
 ///   the same URL with a fragment    allow       allow (within the document)
-///   anywhere else                   external    external (a click, after a touch)
+///   anywhere else                   failLoad    external (a click, after a touch)
 ///   a subframe, anything            allow       allow
 /// ```
+///
+/// A new window (`window.open`, `target=_blank`, from any frame) is not a navigation of the page: it is never decided
+/// here and never fails the load; the bridge takes it as a navigation out.
 ///
 /// A navigation out (`external`) is a click the page could not report: `click(to:...)` honours it only while
 /// the page is shown, to an allowed link, after a touch (`TouchGate`). `FrameProtocol` holds one and reads it in
 /// the frame's phase; the bridge's navigation delegate acts on the decision.
 struct FrameNavigation {
     enum Decision: Equatable {
-        case allow, cancel, external
+        case allow, cancel, external, failLoad
     }
 
     /// The page the bridge loaded: its origin is the only one that counts as the page's.
@@ -35,7 +39,7 @@ struct FrameNavigation {
                   current: URL?, phase: FramePhase) -> Decision {
         guard isMainFrame else { return .allow }
         let ours = isSameOrigin(target) || target.absoluteString == "about:blank"
-        if phase == .loading { return ours ? .allow : .external }
+        if phase == .loading { return ours ? .allow : .failLoad }
         if let current, !isReload, !isSubmission, target.fragment != nil, Self.withoutFragment(target) == Self.withoutFragment(current) { return .allow }
         return ours ? .cancel : .external
     }
