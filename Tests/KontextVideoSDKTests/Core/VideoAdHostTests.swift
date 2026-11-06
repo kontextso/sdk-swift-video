@@ -106,6 +106,65 @@ struct VideoAdHostTests {
         elsewhere.dismiss()
     }
 
+    /// The app's one slot taken by an ad shown in another view: an ad given to the slot fails to show.
+    private func takeTheAppsSlot(_ id: String) async throws -> VideoAd {
+        let elsewhere = try await loaded(Fixtures.ad(id: id))
+        let other = UIView(frame: CGRect(x: 0, y: 300, width: 390, height: 220))
+        window.add(other)
+        try elsewhere.show(in: other)
+        return elsewhere
+    }
+
+    @Test func anAdThatFailedIsNotTriedAgainOnLaterUpdates() async throws {
+        let elsewhere = try await takeTheAppsSlot("p-h-f1")
+        let slot = slot()
+        let ad = try await loaded(Fixtures.ad(id: "p-h-f2"))
+        slot.request(ad)
+        await drainMainQueue()
+        #expect(heard.failures.count == 1)
+        elsewhere.dismiss()   // it could show now, but the same ad again is not a new wish
+        for _ in 0..<3 {
+            slot.request(ad)
+            await drainMainQueue()
+        }
+        slot.set(ad)
+        slot.layoutIfNeeded()
+        #expect(heard.failures.count == 1 && !ad.wasShown && ad.delegate == nil, "one attempt, one onShowFailed")
+    }
+
+    @Test func nilAndThenTheSameAdTriesItAgain() async throws {
+        let elsewhere = try await takeTheAppsSlot("p-h-f3")
+        let slot = slot()
+        let ad = try await loaded(Fixtures.ad(id: "p-h-f4"))
+        slot.set(ad)
+        slot.set(ad)
+        #expect(heard.failures.count == 1)
+        slot.set(nil)
+        slot.set(ad)
+        #expect(heard.failures.count == 2, "tried again, failed again: the slot is still taken")
+        elsewhere.dismiss()
+        slot.set(nil)
+        slot.set(ad)
+        #expect(ad.wasShown && slot.ad === ad && heard.failures.count == 2)
+        slot.set(nil)
+    }
+
+    @Test func anotherAdAfterAFailureIsTried() async throws {
+        let elsewhere = try await takeTheAppsSlot("p-h-f5")
+        let slot = slot()
+        let failed = try await loaded(Fixtures.ad(id: "p-h-f6"))
+        let next = try await loaded(Fixtures.ad(id: "p-h-f7"))
+        slot.set(failed)
+        #expect(heard.failures.count == 1)
+        elsewhere.dismiss()
+        slot.set(next)
+        #expect(next.wasShown && slot.ad === next && heard.failures.count == 1)
+        slot.set(failed)
+        #expect(heard.ends == [.dismissed], "the next ad was dismissed")
+        #expect(failed.wasShown && slot.ad === failed && heard.failures.count == 1, "back to the failed ad: tried again")
+        slot.set(nil)
+    }
+
     @Test func anAdShownElsewhereIsLeftAlone() async throws {
         let ad = try await loaded(Fixtures.ad(id: "p-h-9"))
         let other = UIView(frame: CGRect(x: 0, y: 300, width: 390, height: 220))

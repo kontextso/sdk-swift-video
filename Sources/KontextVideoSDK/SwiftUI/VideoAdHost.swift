@@ -9,8 +9,10 @@ import UIKit
 ///
 /// The host is the ad's delegate: hear the ad through `onImpression`, `onClick` and `onEnd`, and set your
 /// state's ad back to `nil` in `onEnd`. `onShowFailed` means it could not be shown, for the reasons `show`
-/// throws (`anotherAdShowing`, `contentPaused`, …): nothing was shown, and `onEnd` does not follow. `insets`
-/// keep an overlay or pause ad clear of your own controls. Taps outside the ad go through to your player.
+/// throws (`anotherAdShowing`, `contentPaused`, …): nothing was shown, and `onEnd` does not follow. An ad is tried
+/// once: passing the same ad again on later updates does nothing, so `onShowFailed` cannot loop with your view's
+/// updates; to try it again, pass `nil` (or another ad) and then that ad. `insets` keep an overlay or pause ad
+/// clear of your own controls. Taps outside the ad go through to your player.
 ///
 /// `insets` are read when the ad shows: changing them while it is on screen does not move it. The host becomes
 /// the ad's delegate, replacing yours, and lets go of it after a failed show: listen through these closures.
@@ -77,6 +79,9 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
 
     /// The ad the slot was last given, until it ends or another replaces it.
     private(set) var ad: VideoAd?
+    /// The ad last passed to `set`, shown or not, failed or not: the same one again does nothing, so a failed show
+    /// is not tried again until the app passes something else. Weak: a failed ad is not kept alive to remember it.
+    private weak var requested: VideoAd?
     /// Given and not shown yet: it shows at the first moment the view is in a window with a size.
     private var isPending = false
     /// The ad SwiftUI's latest update asked for, applied after that update (`request`).
@@ -123,10 +128,12 @@ final class VideoAdSlotView: UIView, VideoAdDelegate {
         set(nil)
     }
 
-    /// Shows `ad` here, replacing the one shown; `nil` dismisses it. The same ad again does nothing; an ad shown
-    /// elsewhere, or already ended, is left alone.
+    /// Shows `ad` here, replacing the one shown; `nil` dismisses it. The same ad again does nothing, also after its
+    /// show failed: it is tried again only once something else (`nil` or another ad) was passed in between. An ad
+    /// shown elsewhere, or already ended, is left alone.
     func set(_ ad: VideoAd?) {
-        if ad === self.ad { return }
+        if ad === requested { return }
+        requested = ad
         let previous = self.ad
         self.ad = nil
         isPending = false
