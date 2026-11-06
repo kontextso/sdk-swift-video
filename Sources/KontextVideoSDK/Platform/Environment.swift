@@ -48,10 +48,12 @@ enum Environment {
     /// Opens a web link only in an installed app that claims it (a universal link); the completion says whether
     /// one did. Nothing opens otherwise.
     static var openUniversalLink: @MainActor (URL, @escaping @MainActor (Bool) -> Void) -> Void = defaultOpenUniversalLink
-    /// Presents a web link in the in-app browser over the top view controller of the window, and returns the
-    /// browser's controller, `nil` when none could present it; the closure runs with that controller at the
-    /// viewer's "Done".
-    static var presentInAppBrowser: @MainActor (URL, UIWindow?, @escaping @MainActor (UIViewController) -> Void) -> UIViewController? = defaultPresentInAppBrowser
+    /// Presents a web link in KontextKit's in-app browser over the top view controller of the window, and returns
+    /// the browser's controller, `nil` when none could present it; the closure runs once the browser has closed
+    /// and is off screen.
+    static var presentInAppBrowser: @MainActor (URL, UIWindow?, @escaping @MainActor () -> Void) -> UIViewController? = defaultPresentInAppBrowser
+    /// The in-app browser open over the app now, `nil` once it closed (at "Done", while UIKit still dismisses it).
+    static var openInAppBrowser: @MainActor () -> UIViewController? = defaultOpenInAppBrowser
     /// A programmer error: stops a debug build. Tests record it instead.
     static var assertionFailure: (String) -> Void = defaultAssertionFailure
     /// Where the IAB consent keys are read from.
@@ -101,6 +103,7 @@ enum Environment {
         openURL = defaultOpenURL
         openUniversalLink = defaultOpenUniversalLink
         presentInAppBrowser = defaultPresentInAppBrowser
+        openInAppBrowser = defaultOpenInAppBrowser
         asksBeforeMediaCapture = defaultAsksBeforeMediaCapture
         assertionFailure = defaultAssertionFailure
         consentDefaults = defaultConsentDefaults
@@ -216,9 +219,18 @@ enum Environment {
         }
     }
 
+    /// Over the top view controller of `window` only: with none, KontextKit is not left to pick another.
     private static func defaultPresentInAppBrowser(_ url: URL, in window: UIWindow?,
-                                                   onFinish: @escaping @MainActor (UIViewController) -> Void) -> UIViewController? {
-        InAppBrowser.present(url, in: window, onFinish: onFinish)
+                                                   onClose: @escaping @MainActor () -> Void) -> UIViewController? {
+        let manager = InAppBrowserManager.shared
+        guard let presenter = LinearAdViewController.topPresenter(in: window),
+              manager.present(url: url, from: presenter, onClose: { _ in onClose() }) else { return nil }
+        return manager.presentedController
+    }
+
+    private static func defaultOpenInAppBrowser() -> UIViewController? {
+        let manager = InAppBrowserManager.shared
+        return manager.isPresented ? manager.presentedController : nil
     }
 
     private static func defaultAsksBeforeMediaCapture() -> Bool {

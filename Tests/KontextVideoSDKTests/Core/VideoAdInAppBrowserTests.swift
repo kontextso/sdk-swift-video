@@ -16,26 +16,28 @@ struct VideoAdInAppBrowserTests {
     /// Keeps every `VideoAds` a test created alive for the test's duration: the ad holds its owner weakly.
     private let owners = Owners()
 
-    /// What the browser seam was asked, and the viewer's "Done" for the one it showed.
+    /// What the browser seams were asked, and the viewer's "Done" for the one they showed: closed at once, as
+    /// KontextKit's manager does; its close handler once it is off screen, which the runner never reports.
     @MainActor
     final class Browser {
         let controller = UIViewController()
         private(set) var urls: [URL] = []
-        private var finish: (@MainActor (UIViewController) -> Void)?
+        private var isOpen = false
 
-        /// Installs the seam; `present` puts the controller on screen where the runner can.
+        /// Installs the seams; `present` puts the controller on screen where the runner can.
         init(present: ((UIViewController) -> Void)? = nil) {
             let controller = controller
-            Environment.presentInAppBrowser = { [weak self] url, _, onFinish in
+            Environment.presentInAppBrowser = { [weak self] url, _, _ in
                 self?.urls.append(url)
-                self?.finish = onFinish
+                self?.isOpen = true
                 present?(controller)
                 return controller
             }
+            Environment.openInAppBrowser = { [weak self] in self?.isOpen == true ? controller : nil }
         }
 
         func tapDone() {
-            finish?(controller)
+            isOpen = false
         }
     }
 

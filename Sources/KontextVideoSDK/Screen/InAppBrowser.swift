@@ -1,7 +1,7 @@
-import SafariServices
 import UIKit
 
-/// The in-app browser one ad's click opened over the app: an `SFSafariViewController`, and whether it is still up.
+/// The in-app browser one ad's click opened over the app (KontextKit's `InAppBrowserManager`), and whether it is
+/// still open.
 ///
 /// Why: a web link opened in Safari sends the app to the background, and the ad freezes there; opened here, the app
 /// stays in front and the ad is only covered. Its own browser must not end it the way another screen of the app
@@ -14,9 +14,7 @@ import UIKit
 /// ```
 ///
 /// One per `VideoAd`, opened by `LinkOpener` for a `.web` link no app claimed; the screens ask `isOpen` and
-/// `controller`. The UIKit presentation is the `Environment.presentInAppBrowser` seam (`present`, here).
-/// Not KontextKit's `InAppBrowserManager`: it reports neither the controller nor the viewer's "Done", and closes
-/// the browser whenever a scene activates (a pull of Notification Center over the browser included).
+/// `controller`. The manager calls are the `Environment.presentInAppBrowser` and `openInAppBrowser` seams.
 @MainActor
 final class InAppBrowser {
     /// The window of the ad the browser opens over; the key window's is used without one.
@@ -25,55 +23,27 @@ final class InAppBrowser {
     /// runs, so no cover rule takes it for another screen. Weak: one taken away without "Done" (the app dismissing
     /// everything) is gone with it.
     private(set) weak var controller: UIViewController?
-    /// The viewer has not tapped "Done" on `controller` yet.
-    private var isUp = false
 
     init(window: @escaping () -> UIWindow?) {
         self.window = window
     }
 
-    /// The browser is up over the app: presented, no "Done" yet, and still held by UIKit.
-    var isOpen: Bool { isUp && controller != nil }
+    /// This ad's browser is the one open over the app: presented, and not closed since.
+    var isOpen: Bool {
+        guard let controller else { return false }
+        return Environment.openInAppBrowser() === controller
+    }
 
-    /// Presents `url` in the browser. `false` when nothing could present it now (no view controller on screen
-    /// can present, or one is mid-transition); the caller opens the link another way.
+    /// Presents `url` in the browser. `false` when it cannot appear now (nothing on screen can present it, or a
+    /// browser is already open or still leaving the screen); the caller opens the link another way.
     func open(_ url: URL) -> Bool {
-        let presented = Environment.presentInAppBrowser(url, window() ?? Environment.keyWindow()) { [weak self] finished in
-            guard let self, finished === controller else { return }
-            isUp = false
+        let presented = Environment.presentInAppBrowser(url, window() ?? Environment.keyWindow()) {
+            // Closed and off screen. The clocks and a linear video went on at "Done" already: `isOpen` is false
+            // from then on.
+            Logger.info("the in-app browser closed; the ad goes on")
         }
         guard let presented else { return false }
         controller = presented
-        isUp = true
         return true
-    }
-
-    /// The production presentation: an `SFSafariViewController` over the top view controller of `window`,
-    /// over full screen, so the ad's view stays in its window under it. `onFinish` runs at the viewer's "Done".
-    static func present(_ url: URL, in window: UIWindow?, onFinish: @escaping @MainActor (UIViewController) -> Void) -> UIViewController? {
-        guard let presenter = LinearAdViewController.topPresenter(in: window) else { return nil }
-        let browser = SFSafariViewController(url: url)
-        let delegate = FinishDelegate(onFinish: onFinish)
-        browser.delegate = delegate
-        // The controller holds its delegate weakly: the delegate lives as long as the browser.
-        objc_setAssociatedObject(browser, &FinishDelegate.key, delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        browser.modalPresentationStyle = .overFullScreen
-        presenter.present(browser, animated: true)
-        return browser
-    }
-
-    /// Hears the viewer's "Done".
-    private final class FinishDelegate: NSObject, @preconcurrency SFSafariViewControllerDelegate {
-        nonisolated(unsafe) static var key: UInt8 = 0
-        let onFinish: @MainActor (UIViewController) -> Void
-
-        init(onFinish: @escaping @MainActor (UIViewController) -> Void) {
-            self.onFinish = onFinish
-        }
-
-        @MainActor
-        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
-            onFinish(controller)
-        }
     }
 }

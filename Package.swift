@@ -10,8 +10,8 @@ let package = Package(
         .library(name: "KontextVideoTTSDK", targets: ["KontextVideoTTSDK"]),
     ],
     dependencies: [
-        // Pre-1.0 KontextKit: patches (0.4.x) are taken, a minor release may break and needs an SDK release.
-        .package(url: "https://github.com/kontextso/kontextkit-ios.git", .upToNextMinor(from: "0.4.0")),
+        // Pre-1.0 KontextKit: patches (0.5.x) are taken, a minor release may break and needs an SDK release.
+        .package(url: "https://github.com/kontextso/kontextkit-ios.git", .upToNextMinor(from: "0.5.0")),
     ],
     targets: [
         .target(

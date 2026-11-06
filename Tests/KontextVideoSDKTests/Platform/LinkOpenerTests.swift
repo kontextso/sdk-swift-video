@@ -76,6 +76,7 @@ struct LinkOpenerTests {
             calls.append("browser:\(url.absoluteString)")
             return browserAppears ? shown : nil
         }
+        Environment.openInAppBrowser = { browserAppears ? shown : nil }
         return { _ = shown; return calls }
     }
 
