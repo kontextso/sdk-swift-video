@@ -32,6 +32,13 @@ struct APIClientTests {
         #expect(request.body?["hello"] as? String == "there")
     }
 
+    @Test func aRouteThatAnswersNothingTakesAny2xxBody() async throws {
+        for body in ["OK", "<html>proxy</html>", "{\"unexpected\":1}", ""] {
+            server.on("/v2/error", StubServer.Response(status: 200, body: Data(body.utf8)))
+            let _: EmptyResponse = try await client.post("error", body: Body(hello: "x"))
+        }
+    }
+
     @Test func aSlowAnswerIsCutAtTheDeadlineNotOnlyWhenIdle() async {
         var slow = StubServer.Response.json(["ok": true])
         // The answer comes after 3 s, inside the 10 s idle timeout: only the 0.3 s deadline can end the request

@@ -65,7 +65,9 @@ struct APIClient: Sendable {
             let errors = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.errors ?? []
             throw APIError.http(status: status, errors: errors)
         }
-        if data.isEmpty, let empty = EmptyResponse() as? Response {
+        // A route that answers nothing ignores whatever body a 2xx has (`OK`, a proxy's page): the request arrived.
+        // Decoding it would fail and make the caller retry a delivered batch forever.
+        if let empty = EmptyResponse() as? Response {
             return empty
         }
         do {
@@ -151,7 +153,7 @@ extension APIClient {
 
 /// What a route with no body answers (`/debug`, a `204`). `post` is generic in what it returns and the
 /// caller names the type, so a route that returns nothing still needs a `Decodable` type to name;
-/// `post` returns one of these for an empty body without touching the decoder. The alternative, a
+/// `post` returns one of these for any 2xx, whatever its body, without touching the decoder. The alternative, a
 /// second `post` without a return value, would repeat the request building and the error mapping.
 struct EmptyResponse: Decodable {
     init() {}
