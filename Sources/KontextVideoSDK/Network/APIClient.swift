@@ -130,7 +130,7 @@ extension APIClient {
                 collector.start(task, continuation: continuation)
             }
         } onCancel: {
-            task.cancel()
+            collector.cancel(task)
         }
     }
 }
@@ -145,15 +145,35 @@ final class CappedResponse: RedirectLimit, URLSessionDataDelegate, @unchecked Se
     private var response: URLResponse?
     private var isTooLarge = false
     private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
+    /// Cancelled before `start`: an already-cancelled caller runs `onCancel` before the operation.
+    private var isCancelled = false
+    /// A completion that came before `start` registered its continuation, kept for `start` to deliver.
+    private var finished: Result<(Data, URLResponse), Error>?
 
     init(limit: Int, allowsDowngrade: Bool) {
         self.limit = limit
         super.init(allowsDowngrade: allowsDowngrade)
     }
 
+    /// Registers the waiter and starts the transfer; a cancellation or completion that came first answers at once,
+    /// so the caller never waits on a task that already ended.
     func start(_ task: URLSessionDataTask, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
-        stateLock.withLock { self.continuation = continuation }
-        task.resume()
+        let ready = stateLock.withLock { () -> Result<(Data, URLResponse), Error>? in
+            if isCancelled { return .failure(URLError(.cancelled)) }
+            if let finished { return finished }
+            self.continuation = continuation
+            return nil
+        }
+        if let ready {
+            continuation.resume(with: ready)
+        } else {
+            task.resume()
+        }
+    }
+
+    func cancel(_ task: URLSessionTask) {
+        stateLock.withLock { isCancelled = true }
+        task.cancel()
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
@@ -184,10 +204,18 @@ final class CappedResponse: RedirectLimit, URLSessionDataDelegate, @unchecked Se
         let (continuation, result) = stateLock.withLock { () -> (CheckedContinuation<(Data, URLResponse), Error>?, Result<(Data, URLResponse), Error>) in
             let continuation = self.continuation
             self.continuation = nil
-            if isTooLarge { return (continuation, .failure(URLError(.dataLengthExceedsMaximum))) }
-            if let error { return (continuation, .failure(error)) }
-            guard let response else { return (continuation, .failure(URLError(.badServerResponse))) }
-            return (continuation, .success((data, response)))
+            let result: Result<(Data, URLResponse), Error>
+            if isTooLarge {
+                result = .failure(URLError(.dataLengthExceedsMaximum))
+            } else if let error {
+                result = .failure(error)
+            } else if let response {
+                result = .success((data, response))
+            } else {
+                result = .failure(URLError(.badServerResponse))
+            }
+            if continuation == nil { finished = result }
+            return (continuation, result)
         }
         continuation?.resume(with: result)
     }

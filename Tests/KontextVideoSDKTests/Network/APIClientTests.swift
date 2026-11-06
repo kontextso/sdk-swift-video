@@ -231,6 +231,53 @@ struct APIClientTests {
         #expect(big?.cancelled == true && big?.delivered == 0, "a length past the limit stops at the head")
     }
 
+    /// The iOS 14 path in a caller already cancelled: `onCancel` runs before the waiter is registered, and the
+    /// load still ends, as cancelled, instead of waiting forever on a task that never starts.
+    @Test func theCappedLoadInACancelledTaskEnds() async throws {
+        server.on("/v2/ping", .json(["ok": true]))
+        let request = URLRequest(url: server.baseURL.appendingPathComponent("v2/ping"))
+        let outcome = Outcome()
+        Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                _ = try await APIClient.loadCapped(request, over: Environment.session, limit: 4_096)
+                outcome.error = nil
+            } catch {
+                outcome.error = error
+            }
+            outcome.isDone = true
+        }
+        #expect(await waitUntil(5) { outcome.isDone }, "the load ends")
+        #expect((outcome.error as? URLError)?.code == .cancelled, "\(String(describing: outcome.error))")
+        #expect(server.requests.isEmpty, "nothing left the device")
+    }
+
+    /// A completion the delegate sees before `start` registers its waiter is kept and delivered by `start`.
+    @Test func aCompletionBeforeTheWaiterIsDeliveredToIt() async throws {
+        let collector = CappedResponse(limit: 4_096, allowsDowngrade: false)
+        let session = URLSession(configuration: Environment.session.configuration, delegate: collector, delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: server.baseURL)
+        collector.urlSession(session, task: task, didCompleteWithError: URLError(.timedOut))
+        let outcome = Outcome()
+        Task { @MainActor in
+            do {
+                _ = try await withCheckedThrowingContinuation { collector.start(task, continuation: $0) }
+            } catch {
+                outcome.error = error
+            }
+            outcome.isDone = true
+        }
+        #expect(await waitUntil(5) { outcome.isDone }, "start answers at once")
+        #expect((outcome.error as? URLError)?.code == .timedOut, "\(String(describing: outcome.error))")
+    }
+
+    @MainActor
+    private final class Outcome {
+        var isDone = false
+        var error: Error?
+    }
+
     @Test func emptyBodyDecodesAsEmptyResponse() async throws {
         server.on("/v2/debug", .empty(204))
         let _: EmptyResponse = try await client.post("debug", body: Body(hello: "x"))
