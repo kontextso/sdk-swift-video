@@ -13,7 +13,7 @@ import AppTrackingTransparency
 ///    an ad shown, rejected or expired during them is not sent as held;
 /// 4. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
 /// 5. a failure is reported once here, and thrown as the request error every caller gets;
-/// 6. the answer: the kill switch switches the SDK off and drops every ad; each dropped ad is reported; the rest
+/// 6. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
 ///    goes to the owner, which follows it (`AdStore.plan`) and returns the no-fill reasons by format.
 @MainActor
 final class AdsFetcher {
@@ -91,6 +91,9 @@ final class AdsFetcher {
             let response: AdsResponse
             do {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
+                // The kill switch before anything asks for the owner: it switches the whole SDK off even when this
+                // `VideoAds` was destroyed or released as the answer came, or other videos would go on requesting.
+                if case .disabled(let reason) = response { KontextVideo.shared.disable(reason: reason) }
                 try Self.checkIdsAgainstHeld(response, held: current().store.ads)
             } catch {
                 // 5. Once per request, here in the request every caller shares, not once per waiting caller.
@@ -115,7 +118,7 @@ final class AdsFetcher {
     /// dropped, the ads it carries are never held.
     private static func receive(_ response: AdsResponse, requestId: String, owner: VideoAds) throws -> NoFills {
         if case .disabled(let reason) = response {
-            KontextVideo.shared.disable(reason: reason)
+            // The SDK is already switched off (the fetch did it before asking for its owner).
             // The reason is never seen: load() and show throw `.disabled` first.
             for ad in Array(owner.store.ads.values) { ad.invalidate(.destroyed) }
             throw VideoAdError.disabled(reason: reason)
