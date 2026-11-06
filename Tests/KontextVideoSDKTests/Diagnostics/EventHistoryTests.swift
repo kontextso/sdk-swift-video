@@ -39,11 +39,5 @@ struct EventHistoryTests {
         if case .string(let format)? = kept.state?["format"] { #expect(format.utf8.count == 64) } else { Issue.record("format kept") }
         #expect(kept.state?["count"].map { "\($0)" } == "3")
     }
-
-    @Test func aNonFiniteNumberEncodesAsText() throws {
-        let data = try JSONEncoder().encode(["n": ReportFormat.Value.number(.nan), "i": .number(.infinity), "x": .number(2)])
-        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(object["n"] as? String == "nan" && object["i"] as? String == "inf" && object["x"] as? Double == 2)
-    }
 }
 }

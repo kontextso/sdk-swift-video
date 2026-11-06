@@ -62,4 +62,75 @@ struct ReportQueueTests {
         let afterClear = queue.makeBatch(envelope: envelope)
         #expect(queue.isEmpty && queue.dropped == 0 && afterClear == nil)
     }
+
+    @Test func theOldestGoPastTheBufferedBytesAndAreCounted() {
+        var queue = ReportQueue()
+        let large = String(repeating: "b", count: 20_000)
+        let size = ReportQueue.size(of: report(large))
+        let fit = ReportQueue.maxBufferedBytes / size
+        for index in 0..<(fit + 2) { queue.add(report(large + "\(index % 10)")) }
+        #expect(queue.reports.count == fit && queue.dropped == 2, "\(queue.reports.count) kept of \(fit + 2)")
+        #expect(queue.reports.first?.detail?.hasSuffix("2") == true, "the oldest two went")
+    }
+
+    @Test func aReportOverTheBatchBudgetAloneIsNeverQueued() {
+        var queue = ReportQueue()
+        let tooLarge = report(String(repeating: "z", count: ReportQueue.maxBatchBytes))
+        #expect(ReportQueue.size(of: tooLarge) > ReportQueue.maxBatchBytes)
+        let queued = queue.add(tooLarge)
+        #expect(!queued && queue.isEmpty && queue.dropped == 1)
+        queue.add(report())
+        #expect(queue.reports.count == 1 && queue.dropped == 1, "the next one is kept, the count waits for a batch")
+    }
+
+    @Test func aReportThatFitsAloneButNotInItsEnvelopeIsDroppedAndCounted() throws {
+        var queue = ReportQueue()
+        // Exactly the batch budget alone: with the envelope around it, it can never leave.
+        let head = ReportQueue.size(of: report(""))
+        let exact = report(String(repeating: "e", count: ReportQueue.maxBatchBytes - head))
+        #expect(ReportQueue.size(of: exact) == ReportQueue.maxBatchBytes)
+        let queued = queue.add(exact)
+        #expect(queued)
+        let none = queue.makeBatch(envelope: envelope)
+        #expect(none == nil && queue.isEmpty && queue.dropped == 1, "nothing else waits: no batch, the count kept for the next")
+        queue.add(exact)
+        queue.add(report("after"))
+        let made = queue.makeBatch(envelope: envelope)
+        let batch = try #require(made)
+        let body = try #require(try JSONSerialization.jsonObject(with: batch.body) as? [String: Any])
+        #expect(batch.count == 1 && body["dropped"] as? Int == 2, "the next batch says both")
+        #expect(((body["errors"] as? [[String: Any]])?.first?["detail"] as? String) == "after")
+    }
+
+    @Test func aBatchFillsTheByteBudgetAndNoFurther() throws {
+        // Reports sized so that four of them, the envelope and three commas come as close to the budget as can be.
+        let empty = try #require(envelope([], 0)).count
+        let perReport = (ReportQueue.maxBatchBytes - empty - 3) / 4
+        let detail = String(repeating: "k", count: perReport - ReportQueue.size(of: report("")))
+        var queue = ReportQueue()
+        for _ in 0..<5 { queue.add(report(detail)) }
+        let made = queue.makeBatch(envelope: envelope)
+        let batch = try #require(made)
+        #expect(batch.count == 4 && batch.body.count == empty + 4 * perReport + 3, "\(batch.count) reports, \(batch.body.count) bytes")
+        #expect(batch.body.count <= ReportQueue.maxBatchBytes && ReportQueue.maxBatchBytes - batch.body.count < 4, "within 3 bytes of the budget")
+        #expect(queue.reports.count == 1)
+    }
+
+    @Test func batchesKeepTheOrderTheReportsCameIn() throws {
+        var queue = ReportQueue()
+        for index in 0..<(ReportQueue.maxBatch + 5) { queue.add(report("\(index)")) }
+        var details: [String] = []
+        while let batch = queue.makeBatch(envelope: envelope) {
+            let body = try #require(try JSONSerialization.jsonObject(with: batch.body) as? [String: Any])
+            details += (body["errors"] as? [[String: Any]] ?? []).compactMap { $0["detail"] as? String }
+        }
+        #expect(details == (0..<(ReportQueue.maxBatch + 5)).map(String.init))
+    }
+
+    @Test func anEnvelopeThatCannotBeEncodedMakesNoBatchAndKeepsTheReports() {
+        var queue = ReportQueue()
+        queue.add(report())
+        let none = queue.makeBatch { _, _ in nil }
+        #expect(none == nil && queue.reports.count == 1)
+    }
 }
