@@ -14,6 +14,12 @@ enum AdsResponse: Decodable, Sendable {
     /// still understood. (`NoFillReason.unknown` is the same for a no-fill.)
     static let unknownReason = "unknown"
 
+    /// A reason as the app gets it: absent, empty or blank is `unknownReason`, never an empty string.
+    static func reason(_ raw: String?) -> String {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return unknownReason }
+        return raw
+    }
+
     /// One per format. `ads` is a sequence, the first to be shown first; today a filled entry
     /// carries one. Strict on `format` and on `ads` being a list (they decide the answer), lenient on the
     /// reason. Each ad decodes on its own: one that does not, or whose own `format` is not the entry's, is
@@ -84,7 +90,7 @@ enum AdsResponse: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         guard try container.decode(Bool.self, forKey: .enabled) else {
-            self = .disabled(reason: (try? container.decodeIfPresent(String.self, forKey: .disabledReason)) ?? Self.unknownReason)
+            self = .disabled(reason: Self.reason(try? container.decodeIfPresent(String.self, forKey: .disabledReason)))
             return
         }
         let results = try container.decode([Entry].self, forKey: .formats).compactMap(\.result)
@@ -140,7 +146,7 @@ private struct Attempt<Wrapped: Decodable>: Decodable {
 
 /// Reading a no-fill reason from the wire: next to the answer that carries it.
 extension VideoAdError.NoFillReason {
-    /// From the wire; `nil` (left out or malformed) is `unknown`.
+    /// From the wire; `nil` (left out or malformed), empty or blank is `unknown`.
     init(_ raw: String?) {
         switch raw {
         case nil: self = .unknown
@@ -152,6 +158,7 @@ extension VideoAdError.NoFillReason {
         case "temporaryError": self = .temporaryError
         case "alreadyUsed": self = .alreadyUsed
         case "unknown": self = .unknown
+        case let raw? where raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty: self = .unknown
         case let raw?: self = .other(raw)
         }
     }

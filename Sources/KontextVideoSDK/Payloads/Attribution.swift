@@ -134,7 +134,9 @@ private extension KeyedDecodingContainer {
     func decodeStringCoercing(forKey key: Key) -> String? {
         if let string = try? decode(String.self, forKey: key) { return string.isEmpty ? nil : string }
         if let int = try? decode(Int.self, forKey: key) { return String(int) }
-        if let double = try? decode(Double.self, forKey: key) { return String(double) }
+        // A whole number sent as a float (`42.0`) is the id `42`; written as `String(double)` it would be "42.0" or
+        // "1e+20", which Apple refuses. A fraction is no id.
+        if let double = try? decode(Double.self, forKey: key) { return Int64(exactly: double).map(String.init) }
         return nil
     }
 

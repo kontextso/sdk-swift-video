@@ -152,8 +152,9 @@ struct AdPayload: Decodable, Sendable {
             height = try container.decodeNumber(Int.self, forKey: .height)
             isScalable = try container.decodeIfPresent(Bool.self, forKey: .isScalable) ?? true
             // Positive, and no larger than any screen could be: an absurd size would only produce absurd geometry.
-            guard (1...Self.maxSide).contains(width), (1...Self.maxSide).contains(height) else {
-                throw DecodingError.dataCorruptedError(forKey: .width, in: container, debugDescription: "a size must be positive and at most \(Self.maxSide) points")
+            // Each side at its own key, so the report names the field that failed.
+            for (side, key) in [(width, CodingKeys.width), (height, .height)] where !(1...Self.maxSide).contains(side) {
+                throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "a size must be positive and at most \(Self.maxSide) points")
             }
         }
 

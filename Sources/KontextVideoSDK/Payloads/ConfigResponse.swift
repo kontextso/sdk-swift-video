@@ -26,7 +26,7 @@ enum ConfigResponse: Decodable, Sendable {
             self = .enabled(reportDebug: (try? container.decodeIfPresent(Bool.self, forKey: .reportDebug)) ?? false,
                             reportErrors: (try? container.decodeIfPresent(Bool.self, forKey: .reportErrors)) ?? false)
         } else {
-            self = .disabled(reason: (try? container.decodeIfPresent(String.self, forKey: .disabledReason)) ?? AdsResponse.unknownReason)
+            self = .disabled(reason: AdsResponse.reason(try? container.decodeIfPresent(String.self, forKey: .disabledReason)))
         }
     }
 }

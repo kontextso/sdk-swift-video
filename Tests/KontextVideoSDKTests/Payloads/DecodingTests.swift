@@ -572,4 +572,37 @@ struct DecodingTests {
         #expect(response.errors.first?.code == "rateLimited")
         #expect(response.errors.first?.detail == nil)
     }
+
+    @Test func aSkanIdSentAsAWholeFloatIsTheIntegerAndAFractionIsNoId() throws {
+        for (raw, expected) in [(1_234_567_890.0, "1234567890"), (42, "42")] as [(Double, String)] {
+            var ad = Fixtures.ad()
+            var skan = Fixtures.skan()
+            skan["itunesItem"] = raw
+            ad["attribution"] = ["skan": skan]
+            #expect(try Fixtures.descriptor(ad).skan?.itunesItem == expected, "\(raw)")
+        }
+        var fraction = Fixtures.ad()
+        var skan = Fixtures.skan()
+        skan["itunesItem"] = 1.5
+        fraction["attribution"] = ["skan": skan]
+        #expect(try Fixtures.descriptor(fraction).skan == nil, "1.5 is no app id: no attribution")
+    }
+
+    @Test func aSizeOutOfRangeIsReportedAtItsOwnKey() throws {
+        for (size, key) in [(["width": 0, "height": 50], "width"), (["width": 320, "height": 0], "height")] {
+            do {
+                _ = try decode(AdPayload.Size.self, size)
+                Issue.record("expected a refusal for \(size)")
+            } catch DecodingError.dataCorrupted(let context) {
+                #expect(context.codingPath.last?.stringValue == key, "\(size)")
+            }
+        }
+    }
+
+    @Test func anEmptyReasonIsUnknown() throws {
+        #expect(AdsResponse.reason("") == AdsResponse.unknownReason && AdsResponse.reason("  ") == AdsResponse.unknownReason)
+        #expect(AdsResponse.reason(nil) == AdsResponse.unknownReason && AdsResponse.reason("publisherDisabled") == "publisherDisabled")
+        #expect(VideoAdError.NoFillReason("") == .unknown && VideoAdError.NoFillReason(" ") == .unknown)
+        #expect(VideoAdError.NoFillReason("custom") == .other("custom"))
+    }
 }
