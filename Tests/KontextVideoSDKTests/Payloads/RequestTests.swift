@@ -228,6 +228,25 @@ struct RequestTests {
         #expect(prompts == 2, "the shared task was cleared, a later request asks again")
     }
 
+    @Test func withoutTheInfoPlistReasonTheDialogIsNeverShown() async throws {
+        var prompts = 0
+        Environment.trackingAuthorizationStatus = { .notDetermined }
+        Environment.requestTrackingAuthorization = {
+            prompts += 1
+            return .authorized
+        }
+        let assertions = AssertionLog()
+        for missing in [nil, "", "  "] as [String?] {
+            Environment.trackingUsageDescription = { missing }
+            let info = try await TrackingInfo.current(requestAuthorization: true)
+            #expect(prompts == 0 && info.ifa == nil, "\(String(describing: missing)): iOS would terminate the app")
+        }
+        #expect(assertions.all.count == 1, "a debug build stops once: \(assertions.all)")
+        Environment.trackingUsageDescription = { "We show ads that fit you." }
+        _ = try await TrackingInfo.current(requestAuthorization: true)
+        #expect(prompts == 1, "with the reason, the dialog")
+    }
+
     @Test func anAppThatNeverAskedForTrackingIsWarnedOnceAtTheFirstRequest() async throws {
         Logger.level = .warning
         defer { Logger.level = .warning }

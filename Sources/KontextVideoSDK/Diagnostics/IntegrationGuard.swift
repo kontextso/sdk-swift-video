@@ -57,6 +57,27 @@ enum IntegrationGuard {
         }
     }
 
+    /// Said once per launch: the app asked the SDK for the ATT dialog without the Info.plist's reason.
+    private static var hasWarnedAboutTrackingUsageDescription = false
+
+    /// Whether the app's Info.plist has a non-empty `NSUserTrackingUsageDescription`, which the ATT dialog needs:
+    /// iOS terminates an app that requests tracking authorization without it. Missing with
+    /// `requestTrackingAuthorization: true`: a debug build stops (once), a release build logs and never shows the dialog.
+    static func hasTrackingUsageDescription() -> Bool {
+        if let reason = Environment.trackingUsageDescription(), !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        guard !hasWarnedAboutTrackingUsageDescription else { return false }
+        hasWarnedAboutTrackingUsageDescription = true
+        let message = "requestTrackingAuthorization: true needs NSUserTrackingUsageDescription in the app's Info.plist; the ATT dialog is not shown"
+        Environment.assertionFailure("KontextVideo.Configuration: \(message)")
+        Logger.error(message)
+        return false
+    }
+
+    /// Tests only: the once-per-launch warning can be given again.
+    static func resetForTesting() {
+        hasWarnedAboutTrackingUsageDescription = false
+    }
+
     /// The viewer the app set: an empty field is left out of the requests; an empty `id` is a programmer error.
     static func checkUser(_ user: KontextVideo.User?) {
         guard let empty = user?.emptyFields, !empty.isEmpty else { return }

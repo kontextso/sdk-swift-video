@@ -60,6 +60,9 @@ enum Environment {
     /// App Tracking Transparency: the status now, and the dialog. Tests answer without the OS.
     static var trackingAuthorizationStatus: @MainActor () -> ATTrackingManager.AuthorizationStatus = defaultTrackingAuthorizationStatus
     static var requestTrackingAuthorization: @MainActor () async -> ATTrackingManager.AuthorizationStatus = defaultRequestTrackingAuthorization
+    /// The app's `NSUserTrackingUsageDescription`: without one, the ATT dialog crashes the app (Apple's rule).
+    /// Tests give one; an xctest bundle has none.
+    static var trackingUsageDescription: @MainActor () -> String? = defaultTrackingUsageDescription
     /// The device's advertising identifier, all zeros unless ATT is authorized. Tests set a real one.
     static var advertisingIdentifier: @MainActor () -> UUID = defaultAdvertisingIdentifier
     /// The browser's user agent, `navigator.userAgent` of a WebView; KontextKit evaluates it in WebKit and
@@ -95,9 +98,11 @@ enum Environment {
         trackingAuthorizationStatus = defaultTrackingAuthorizationStatus
         advertisingIdentifier = defaultAdvertisingIdentifier
         requestTrackingAuthorization = defaultRequestTrackingAuthorization
+        trackingUsageDescription = defaultTrackingUsageDescription
         userAgent = defaultUserAgent
         UserAgent.resetForTesting()
         TrackingInfo.hasWarnedAboutUnaskedTracking = false
+        IntegrationGuard.resetForTesting()
         Logger.sink = nil
         skAdNetwork = defaultSKAdNetwork()
         storeProduct = defaultStoreProduct()
@@ -119,6 +124,10 @@ enum Environment {
 
     private static func defaultRequestTrackingAuthorization() async -> ATTrackingManager.AuthorizationStatus {
         await ATTrackingManager.requestTrackingAuthorization()
+    }
+
+    private static func defaultTrackingUsageDescription() -> String? {
+        Bundle.main.object(forInfoDictionaryKey: "NSUserTrackingUsageDescription") as? String
     }
 
     private static func defaultAdvertisingIdentifier() -> UUID { ASIdentifierManager.shared().advertisingIdentifier }

@@ -60,6 +60,10 @@ struct TrackingInfo: Sendable {
     @MainActor
     static func authorizeIfNeeded(requestAuthorization: Bool) async throws -> ATTrackingManager.AuthorizationStatus? {
         let status = Environment.trackingAuthorizationStatus()
+        if requestAuthorization, status == .notDetermined, !IntegrationGuard.hasTrackingUsageDescription() {
+            // Apple terminates an app that asks without the Info.plist's reason: no dialog, the IDFA is not sent.
+            return nil
+        }
         if requestAuthorization, status == .notDetermined {
             let task = authorization ?? Task {
                 defer { authorization = nil }

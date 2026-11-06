@@ -285,6 +285,8 @@ struct SDKHarness {
     static func reset() {
         KontextVideo.shared.resetForTesting()
         Environment.reset()
+        // An xctest bundle's Info.plist has no reason for the ATT dialog; an app that asks for it does.
+        Environment.trackingUsageDescription = { "Tests ask for tracking." }
         StubServer.uninstall()
         FrameBridge.loadTimeout = 10
         PlayerFallback.noted = []
