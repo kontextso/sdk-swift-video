@@ -4,7 +4,7 @@ import Combine
 /// The content player of one `VideoAds`: its playhead for requests and beacons, and its playing state for
 /// an overlay, which lives only while the content plays, and a pause ad, which lives only while it is paused. Fed by an `AVPlayer` (observed: `rate`, so a
 /// `pause()` is seen in the same turn; `currentItem`; the item's end and time jumps) or by a
-/// `ContentPlayer` (its publishers, or a read every `tickInterval` while an overlay or pause ad is on screen). Holds an
+/// `ContentPlayer` (its publishers, or a read every `tickInterval`, its item included, while an overlay or pause ad is on screen). Holds an
 /// `AVPlayer` weakly (the app owns it) and a `ContentPlayer` strongly (often a wrapper only the SDK holds);
 /// `stop()` drops every observer, subscription and timer, and the player. Every callback carries the binding
 /// it came from: one queued from a player tracked before is dropped.
@@ -111,10 +111,20 @@ final class ContentPlayback {
                 while !Task.isCancelled {
                     try? await Task.sleep(seconds: Self.tickInterval)
                     guard !Task.isCancelled, let self else { return }
-                    onChange?(.tick)
+                    tick()
                 }
             }
         }
+    }
+
+    /// One tick, or `contentChanged` when a custom player reports another item than this episode's: one without a
+    /// `contentChangedPublisher` (the TTSDK adapter) moves to the next episode unseen otherwise, under the overlay
+    /// or pause ad still on screen. An `AVPlayer`'s item is observed. Reading the item is app code: a `track` or
+    /// `destroy()` there wins, and nothing is delivered.
+    private func tick() {
+        let generation = self.generation
+        let change: Change = customPlayer != nil && playsAnotherEpisode ? .contentChanged : .tick
+        deliver(change, from: generation)
     }
 
     /// The start of both `track` calls: what to read, replacing whatever was tracked. Returns whether an

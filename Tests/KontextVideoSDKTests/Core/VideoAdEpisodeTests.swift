@@ -113,6 +113,34 @@ struct VideoAdEpisodeTests {
         overlay.dismiss()
     }
 
+    @Test func aCustomPlayerWithoutPublishersMovingToAnotherItemEndsTheAdOnScreen() async throws {
+        // No `contentChangedPublisher` (as the TTSDK adapter): the ticks compare the item.
+        let player = EpisodePlayer(item: "episode-1")
+        let ads = await makeAds("ep-custom-tick")
+        ads.track(player)
+        let overlay = try loadedAd(Fixtures.overlayAd(id: "o-ep-custom-tick"), of: ads)
+        let overlayDelegate = RecordingDelegate()
+        overlay.delegate = overlayDelegate
+        try overlay.show(in: view)
+        await sleepMs(100)
+        #expect(overlayDelegate.endReasons.isEmpty, "the same item: the overlay stays")
+        player.currentItem = "episode-2"
+        #expect(await waitUntil { overlayDelegate.endReasons == [.interrupted] }, "episode 2 plays under episode 1's overlay")
+
+        let paused = EpisodePlayer(item: "episode-1")
+        paused.isPlaying = false
+        let pauseAds = await makeAds("ep-custom-tick-pause")
+        pauseAds.track(paused)
+        let pause = try loadedAd(Fixtures.ad(id: "p-ep-custom-tick", position: "fullscreen", size: nil), of: pauseAds)
+        let pauseDelegate = RecordingDelegate()
+        pause.delegate = pauseDelegate
+        try pause.show(in: view)
+        await sleepMs(100)
+        #expect(pauseDelegate.endReasons.isEmpty)
+        paused.currentItem = "episode-2"
+        #expect(await waitUntil { pauseDelegate.endReasons == [.interrupted] }, "the paused player moved to another episode")
+    }
+
     /// A custom player that reports the episode it plays.
     final class EpisodePlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
