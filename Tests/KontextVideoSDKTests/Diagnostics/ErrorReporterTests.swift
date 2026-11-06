@@ -151,6 +151,19 @@ struct ErrorReporterTests {
         #expect(raw[0] == raw[1] && !raw[0].isEmpty, "byte for byte")
     }
 
+    @Test func aRefusedBatchResetsTheBackoff() async throws {
+        await enableReports()
+        ErrorReporter.retryDelay = 0.05
+        var calls = 0
+        harness.server.on("/v2/error") { _ in
+            calls += 1
+            return calls <= 2 ? .failure(.notConnectedToInternet) : .empty(400)
+        }
+        reporter.report(.skanFailed, stage: .attribution, detail: "start")
+        #expect(await waitUntil { calls == 3 })
+        #expect(await waitUntil { self.reporter.failures == 0 }, "the server answered: the next transient failure waits from the first backoff")
+    }
+
     @Test func aBatchJustUnderTheBudgetInReportsAloneIsSplitByItsWholeBody() async throws {
         // Reports of one shape and size, calibrated so that as many as fit in the budget by their own bytes
         // leave less room than any envelope takes: counting the reports alone would send an oversized body.

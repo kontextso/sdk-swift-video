@@ -67,7 +67,7 @@ final class ErrorReporter {
     private(set) var queue = ReportQueue()
     /// The batch that did not leave yet, retried as it is.
     private var pendingBatch: ReportQueue.Batch?
-    private var failures = 0
+    private(set) var failures = 0
     private var flushTask: Task<Void, Never>?
 
     private init() {}
@@ -171,6 +171,7 @@ final class ErrorReporter {
             // Refused for good (a malformed body, a refused token): a retry would be refused the same way.
             Logger.debug("error batch of \(batch.count) refused with \(status), dropped")
             pendingBatch = nil
+            failures = 0   // the server answered: the next batch starts from the first backoff
             return true
         } catch {
             // Reporting never affects the SDK. The same batch goes again later; newer reports wait behind it.
