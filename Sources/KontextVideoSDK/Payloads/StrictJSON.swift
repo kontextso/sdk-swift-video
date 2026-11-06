@@ -24,6 +24,10 @@ import Foundation
 /// `true | false | null | -?(0|[1-9][0-9]*)(.[0-9]+)?([eE][+-]?[0-9]+)?`: `TRUE`, `True`, `NaN`, `01`, `+1`,
 /// `.5` and unquoted words refuse the text.
 ///
+/// Why the control characters: JSON wants U+0000 to U+001F escaped inside a string (`\n`, `\u0000`), and the
+/// simulator's decoder (iOS 26) read answers with raw ones; the Kotlin SDK refuses them. A raw one, in a key or a
+/// value, refuses the text.
+///
 /// How: one pass over the bytes, no recursion. Brackets and quotes inside strings (text such as
 /// `"Watch [Episode 2]"`, escaped quotes included) are text, not structure. The structure itself (commas,
 /// colons, brackets that match) is left to the platform's parser after it.
@@ -39,7 +43,7 @@ enum StrictJSON {
     }
 
     /// Throws `DecodingError.dataCorrupted` for a text nested deeper than `maxNestingDepth`, with a bare token
-    /// JSON does not have, or with a key twice in one object.
+    /// JSON does not have, a raw control character in a string, or a key twice in one object.
     static func check(_ data: Data) throws {
         let bytes = [UInt8](data)
         var levels: [Level] = []
@@ -48,6 +52,9 @@ enum StrictJSON {
             switch bytes[index] {
             case UInt8(ascii: "\""):
                 let end = stringEnd(bytes, from: index)
+                if bytes[(index + 1)..<min(end, bytes.count)].contains(where: { $0 < 0x20 }) {
+                    throw refused("a raw control character in a string")
+                }
                 if let last = levels.indices.last, levels[last].expectsKey {
                     levels[last].expectsKey = false
                     let key = try self.key(bytes[index...min(end, bytes.count - 1)])

@@ -53,4 +53,19 @@ struct StrictJSONTests {
         let message = #"{"adId": "ad-1", "type": "ad.loaded", "type": "ad.close"}"#
         #expect(FrameMessage.parse(message, adId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
     }
+
+    /// A raw control character (U+0000 to U+001F) inside a string, key or value, is not JSON: answers and page
+    /// messages with one are refused, as on Android. Escaped (`\n`, `\u0000`) it is text.
+    @Test func aRawControlCharacterInAStringIsRefused() throws {
+        for text in ["{\"enabled\": false, \"disabledReason\": \"a\nb\"}", "{\"enabled\": false, \"disabled\tReason\": \"x\"}",
+                     "{\"enabled\": false, \"disabledReason\": \"a\u{0}b\"}"] {
+            #expect(throws: (any Error).self, "\(text.debugDescription)") { try APIClient.decode(ConfigResponse.self, from: Data(text.utf8)) }
+        }
+        guard case .disabled(let reason) = try APIClient.decode(ConfigResponse.self, from: Data(#"{"enabled": false, "disabledReason": "a\nb\u0000"}"#.utf8)) else {
+            Issue.record("expected disabled"); return
+        }
+        #expect(reason == "a\nb\u{0}", "escaped, it is text")
+        #expect(FrameMessage.parse("{\"adId\": \"ad-1\", \"type\": \"ad.close\", \"reason\": \"a\nb\"}", adId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
+        #expect(FrameMessage.parse(#"{"adId": "ad-1", "type": "ad.close", "reason": "a\nb"}"#, adId: "ad-1", playheadLimitMs: 1000)?.reason == "a\nb")
+    }
 }
