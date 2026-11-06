@@ -46,10 +46,20 @@ enum AdGeometry {
         size.isScalable ? minimumScale : 1
     }
 
-    /// The app's insets with a negative or non-finite side counted as zero.
+    /// The most an inset of the app's counts for: no screen is near it, and sums of such insets with the safe area
+    /// stay finite (`containerTooSmall`'s minimum is built from them).
+    static let maxInset: CGFloat = 10_000
+
+    /// The app's insets with a negative or non-finite side counted as zero, and a huge one as `maxInset`.
     static func cleaned(_ insets: UIEdgeInsets) -> UIEdgeInsets {
-        let side = { (value: CGFloat) in value.isFinite ? max(0, value) : 0 }
+        let side = { (value: CGFloat) in value.isFinite ? min(max(0, value), maxInset) : 0 }
         return UIEdgeInsets(top: side(insets.top), left: side(insets.left), bottom: side(insets.bottom), right: side(insets.right))
+    }
+
+    /// A length in whole points for a log line; one too large for an `Int` (a view 1e20 points wide) as it is,
+    /// where `Int(_:)` would trap.
+    static func points(_ value: CGFloat) -> String {
+        value.isFinite && abs(value) < 1e15 ? String(Int(value)) : "\(value)"
     }
 
     /// The safe area with the app's insets added on every side.

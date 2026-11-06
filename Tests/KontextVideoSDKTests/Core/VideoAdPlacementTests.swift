@@ -381,8 +381,24 @@ struct VideoAdPlacementTests {
             do {
                 try ad.show(in: player, insets: insets)
                 Issue.record("expected containerTooSmall for \(insets)")
-            } catch VideoAdError.containerTooSmall {}
+            } catch VideoAdError.containerTooSmall(let minimum) {
+                #expect(minimum.width.isFinite && minimum.height.isFinite, "a minimum the app can act on: \(minimum)")
+            }
         }
+        #expect(ad.isReady)
+    }
+
+    @Test func aHugeFiniteContainerNeverTraps() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o-in-h", format: "overlay", position: "bottom",
+                                                      size: ["width": 320, "height": 90, "scalable": false], duration: 6000))
+        Logger.level = .debug   // after initialize: the size and dimension logs are built
+        defer { Logger.level = .warning }
+        let player = UIView(frame: CGRect(x: 0, y: 0, width: 1e20, height: 10))   // far wider than an Int, too low
+        window.add(player)
+        do {
+            try ad.show(in: player)
+            Issue.record("expected containerTooSmall")
+        } catch VideoAdError.containerTooSmall {}
         #expect(ad.isReady)
     }
 

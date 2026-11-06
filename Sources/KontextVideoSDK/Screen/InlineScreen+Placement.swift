@@ -64,7 +64,7 @@ extension InlineScreen {
             ?? descriptor.sizes.max { fit($0) < fit($1) }
             ?? defaultSize
         chosenSize = size
-        if size != defaultSize { Logger.debug("ad \(ad.id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(Int(bounds.width))\u{00D7}\(Int(bounds.height)) view") }
+        if size != defaultSize { Logger.debug("ad \(ad.id.prefix(8)): size \(size.width)\u{00D7}\(size.height) chosen for a \(AdGeometry.points(bounds.width))\u{00D7}\(AdGeometry.points(bounds.height)) view") }
         guard let frame = AdGeometry.frame(of: size, at: descriptor.position, in: fullBounds, safeArea: safeArea) else {
             chosenSize = nil
             throw tooSmall(for: size, room: bounds, safeArea: safeArea)
@@ -78,7 +78,7 @@ extension InlineScreen {
         let smallest = AdGeometry.smallestScale(of: size)
         let minimum = CGSize(width: (CGFloat(size.width) * smallest).rounded(.up) + safeArea.left + safeArea.right,
                              height: (CGFloat(size.height) * smallest).rounded(.up) + safeArea.top + safeArea.bottom)
-        let view = room.map { "view \(Int($0.width))×\(Int($0.height)) is too small for" } ?? "the safe area and insets leave no room for"
+        let view = room.map { "view \(AdGeometry.points($0.width))×\(AdGeometry.points($0.height)) is too small for" } ?? "the safe area and insets leave no room for"
         Logger.warning("ad \(ad.id.prefix(8)): \(view) the ad's \(size.width)×\(size.height)\(size.isScalable ? " at 50 %" : ", which may not shrink"); the ad stays ready")
         return VideoAdError.containerTooSmall(minimum: minimum)
     }

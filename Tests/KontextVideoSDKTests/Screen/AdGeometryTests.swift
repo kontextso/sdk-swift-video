@@ -48,6 +48,10 @@ struct AdGeometryTests {
     @Test func theAppsInsetsAreCleanedAndAddedOnEverySide() {
         let cleaned = AdGeometry.cleaned(UIEdgeInsets(top: -5, left: .nan, bottom: 80, right: .infinity))
         #expect(cleaned == UIEdgeInsets(top: 0, left: 0, bottom: 80, right: 0), "negative and non-finite count as zero")
+        let huge = AdGeometry.cleaned(UIEdgeInsets(top: 1e20, left: .greatestFiniteMagnitude, bottom: 10_001, right: 10_000))
+        #expect(huge == UIEdgeInsets(top: 10_000, left: 10_000, bottom: 10_000, right: 10_000), "a huge side counts as maxInset")
+        #expect(AdGeometry.points(320.7) == "320" && AdGeometry.points(1e20) == "1e+20" && AdGeometry.points(.infinity) == "inf",
+                "a length too large for an Int is written as it is")
         let sum = AdGeometry.adding(UIEdgeInsets(top: 1, left: 2, bottom: 3, right: 4), to: UIEdgeInsets(top: 10, left: 20, bottom: 30, right: 40))
         #expect(sum == UIEdgeInsets(top: 11, left: 22, bottom: 33, right: 44))
     }
