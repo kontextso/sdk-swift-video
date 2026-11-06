@@ -55,6 +55,43 @@ struct VideoAdPlacementTests {
         #expect(KontextVideo.shared.adOnScreen == nil)
     }
 
+    /// A view in its window with nothing of it inside the window: refused before anything is reserved, as the
+    /// Kotlin SDK refuses a container with no part inside its window. Not spent: no beacon, the slot free, and the
+    /// same ad shows once the view is on screen.
+    @Test func showInAViewInItsWindowButWhollyOffScreenThrowsAndKeepsTheAd() async throws {
+        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-page"))
+        let delegate = RecordingDelegate()
+        ad.delegate = delegate
+        // A pager's neighbour page: laid out beside the visible one, in the window, outside its bounds.
+        let neighbour = UIView(frame: CGRect(x: 390, y: 0, width: 390, height: 300))
+        window.add(neighbour)
+        // A view scrolled away inside a clipping viewport.
+        let viewport = UIView(frame: CGRect(x: 0, y: 400, width: 390, height: 100))
+        viewport.clipsToBounds = true
+        window.add(viewport)
+        let scrolledAway = UIView(frame: CGRect(x: 0, y: 200, width: 390, height: 300))
+        viewport.addSubview(scrolledAway)
+        for (view, label) in [(neighbour, "a neighbour page"), (scrolledAway, "a view scrolled away")] {
+            do {
+                try ad.show(in: view)
+                Issue.record("\(label): expected cannotShowNow")
+            } catch VideoAdError.cannotShowNow {
+                #expect(ad.isReady && !ad.wasShown && !ad.hasEnded, "\(label): the ad stays ready")
+            } catch {
+                Issue.record("\(label): expected cannotShowNow, got \(error)")
+            }
+            #expect(KontextVideo.shared.adOnScreen == nil && view.subviews.isEmpty, "\(label): the slot stays free")
+        }
+        #expect(delegate.events.isEmpty, "no didEnd, no impression")
+        await beaconsSettled()
+        #expect(!harness.server.beacons.contains { $0.adId == "p-page" && $0.event != "loaded" }, "nothing fired by the attempts")
+        // The page swiped into view: the same ad shows.
+        neighbour.frame.origin.x = 0
+        try ad.show(in: neighbour)
+        #expect(ad.wasShown && !ad.hasEnded && KontextVideo.shared.adOnScreen === ad)
+        ad.dismiss()
+    }
+
     @Test func aPauseCardOutOfSightEndsAndFreesTheSlot() async throws {
         ViewabilityMeter.offScreenGrace = 0.2
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-away"))

@@ -59,7 +59,8 @@ public enum VideoAdError: Error, Sendable, Equatable {
     case containerTooSmall(minimum: CGSize)
     /// Nothing on screen can hold the ad. Thrown by `show`: for a linear ad the view controller given is
     /// already presenting or not on screen, or with `show()` there is no key window or its top controller
-    /// is mid-transition; for an overlay or pause ad the view is not in a window. In both, a view that is
+    /// is mid-transition; for an overlay or pause ad the view is not in a window, or no part of it is inside
+    /// its window (a pager's neighbour page, a view scrolled away). In both, a view that is
     /// hidden, transparent or without an area, or sits in a hidden or transparent ancestor or window, is not
     /// on screen; nor is anything while the app is not active or the window's scene is not in the foreground
     /// and active (the content in Picture in Picture only, the lock screen, background audio, Control Center

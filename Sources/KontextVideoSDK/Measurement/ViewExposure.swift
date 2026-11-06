@@ -47,7 +47,7 @@ enum ViewExposure {
     /// The share of `view` on screen now, as the meter measures it: 0 when nothing of it can be seen (outside
     /// the window, clipped away by an ancestor, hidden or transparent).
     static func visibleShare(of view: UIView) -> Double {
-        guard let window = view.window else { return 0 }
+        guard let window = window(of: view) else { return 0 }
         return exposure(of: view, in: window).share
     }
 

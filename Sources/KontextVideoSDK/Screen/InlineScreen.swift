@@ -30,11 +30,18 @@ final class InlineScreen: AdScreen {
     }
 
     /// The checks and the placement of an overlay or pause ad in `view`, before anything is reserved: the view must
-    /// be on screen and in front of the viewer, and the ad must fit it (`frame(in:safeArea:)`). Throws
+    /// be on screen (some of it inside its window) and in front of the viewer, and the ad must fit it (`frame(in:safeArea:)`). Throws
     /// `cannotShowNow` or `containerTooSmall`, with nothing fired; the ad stays ready.
     static func prepare(for ad: VideoAd, in view: UIView, insets: UIEdgeInsets) throws -> InlineScreen {
         guard ViewExposure.canBeSeen(view) else {
             Logger.warning("ad \(ad.id.prefix(8)): cannot show, the view is not on screen or is hidden")
+            throw VideoAdError.cannotShowNow
+        }
+        // In a window is not on screen: a pager's neighbour page, a view scrolled away. The impression would
+        // count for nobody: refused, the ad ready. A view partly on screen is accepted; nothing of the ad seen
+        // where it is placed then ends it at `attach`.
+        guard ViewExposure.visibleShare(of: view) > 0 else {
+            Logger.warning("ad \(ad.id.prefix(8)): cannot show, no part of the view is inside its window (a neighbour page, scrolled away); the ad stays ready")
             throw VideoAdError.cannotShowNow
         }
         guard ViewExposure.isInFront(view) else {

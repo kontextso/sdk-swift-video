@@ -267,7 +267,8 @@ public final class VideoAd {
     /// Throws when the show cannot begin, with nothing fired: `wrongShowMethod` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated` (`.contentChanged` too: show an episode's ads only in
     /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `cannotShowNow`
-    /// (the view is not in a window, has no area, or it, an ancestor or its window is hidden or transparent;
+    /// (the view is not in a window, no part of it is inside its window (a pager's neighbour page, a view
+    /// scrolled away), it has no area, or it, an ancestor or its window is hidden or transparent;
     /// or the app is not active or the view's window scene is not in the foreground and active: the content
     /// in Picture in Picture only, the lock screen, background audio, Control Center over the app),
     /// `containerTooSmall`, and `contentPaused` (an overlay over paused content); the ad stays ready in these
