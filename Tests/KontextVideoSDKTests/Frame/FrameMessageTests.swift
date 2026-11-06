@@ -25,6 +25,9 @@ struct FrameMessageTests {
             ("not json", false),
             ("[1, 2]", false),
             (42, false),
+            // An object's text within the string's budget, and over it.
+            (["adId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes / 2)], true),
+            (["adId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes + 1)], false),
         ]
         for (index, (raw, parses)) in cases.enumerated() {
             #expect((parse(raw) != nil) == parses, "case \(index)")

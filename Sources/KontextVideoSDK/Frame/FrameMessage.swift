@@ -8,6 +8,7 @@ import Foundation
 ///
 /// ```
 ///   raw ── a string over maxMessageBytes ─┐
+///       ── an object, its text over it ───┤
 ///       ── not JSON, not an object ───────┼─► nil: a broken envelope
 ///       ── another ad's id, no type ──────┘
 ///       ── otherwise ─────────────────────► FrameMessage(type, playheadMs, offset, url, …)
@@ -38,7 +39,7 @@ struct FrameMessage: Equatable {
 
     /// Reads `rawBody` (a JSON string, or an object as WebKit converted it) as a message of the page of ad `adId`,
     /// its playhead clamped to `playheadLimitMs`. `nil` for a broken envelope: a string over `maxMessageBytes`
-    /// (never parsed), not a JSON object, another ad's id, or no type.
+    /// (never parsed), an object whose text fields are over it, not a JSON object, another ad's id, or no type.
     static func parse(_ rawBody: Any, adId: String, playheadLimitMs: Int) -> FrameMessage? {
         guard let body = object(rawBody), body["adId"] as? String == adId, let type = body["type"] as? String else { return nil }
         // Clamped: a playhead past the end would fire every checkpoint at once.
@@ -65,9 +66,13 @@ struct FrameMessage: Equatable {
     }
 
     /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
-    /// as WebKit converted it. `nil` for anything else.
+    /// as WebKit converted it whose text fields together stay within the same budget (WebKit already built it;
+    /// what the SDK would read, keep and log out of it is what is bounded). `nil` for anything else.
     private static func object(_ rawBody: Any) -> [String: Any]? {
-        if let object = rawBody as? [String: Any] { return object }
+        if let object = rawBody as? [String: Any] {
+            let textBytes = object.values.reduce(0) { $0 + (($1 as? String)?.utf8.count ?? 0) }
+            return textBytes <= maxMessageBytes ? object : nil
+        }
         guard let text = rawBody as? String, text.utf8.count <= maxMessageBytes else { return nil }
         return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
     }
