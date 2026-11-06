@@ -16,15 +16,15 @@ struct FrameMessage: Equatable {
     /// `ad.loaded`, `ad.click`, `video.start`, …; never checked against the protocol's types here.
     let type: String
     /// Milliseconds into the ad video, a fraction rounded to the nearest (a page reads `currentTime * 1000`),
-    /// clamped to the limit given to `parse`; 0 when absent, not a number or not finite.
+    /// clamped to the limit given to `parse`; 0 when absent, not a number (a boolean is not one) or not finite.
     let playheadMs: Int
-    /// `video.progress`'s checkpoint as sent, a JSON number (a string is not one); `nil` otherwise.
+    /// `video.progress`'s checkpoint as sent, a JSON number (a string or a boolean is not one); `nil` otherwise.
     let offset: Double?
     /// A click's or an open's link, as sent.
     let url: String?
     /// A click's second link, when its first may not open.
     let fallbackUrl: String?
-    /// `ad.error`'s code as sent.
+    /// `ad.error`'s code as sent, a JSON number (a boolean is not one).
     let code: Double?
     /// Where a click landed (`creative`, `endCard`, a label of the page's own).
     let area: String?
@@ -42,19 +42,26 @@ struct FrameMessage: Equatable {
     static func parse(_ rawBody: Any, adId: String, playheadLimitMs: Int) -> FrameMessage? {
         guard let body = object(rawBody), body["adId"] as? String == adId, let type = body["type"] as? String else { return nil }
         // Clamped: a playhead past the end would fire every checkpoint at once.
-        let rawPlayhead = (body["playhead"] as? NSNumber)?.doubleValue ?? 0
+        let rawPlayhead = number(body["playhead"]) ?? 0
         let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), Double(playheadLimitMs)).rounded()) : 0
         return FrameMessage(
             type: type,
             playheadMs: playhead,
-            offset: (body["offset"] as? NSNumber)?.doubleValue,
+            offset: number(body["offset"]),
             url: body["url"] as? String,
             fallbackUrl: body["fallbackUrl"] as? String,
-            code: (body["code"] as? NSNumber)?.doubleValue,
+            code: number(body["code"]),
             area: body["area"] as? String,
             purpose: body["purpose"] as? String,
             reason: body["reason"] as? String
         )
+    }
+
+    /// A JSON number, or `nil`. `JSONSerialization` gives `true` and `false` as `NSNumber`s too; they are not
+    /// numbers (`{"code":true}` must not go out as error 1), as the Kotlin SDK reads them.
+    private static func number(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        return number.doubleValue
     }
 
     /// The message as an object: a JSON string that parses to one (at most `maxMessageBytes`), or an object
