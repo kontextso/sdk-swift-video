@@ -135,7 +135,7 @@ final class ErrorReporter {
     private func scheduleFlush(after delay: TimeInterval) {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(seconds: delay)
             guard let self, !Task.isCancelled else { return }
             let delivered = await flush()
             flushTask = nil

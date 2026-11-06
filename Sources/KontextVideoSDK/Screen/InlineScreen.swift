@@ -77,7 +77,7 @@ final class InlineScreen: AdScreen {
     private func armUnfit(_ host: InlineAdView) {
         host.onUnfit = { [weak self, weak host] in
             Task { @MainActor [weak self, weak host] in
-                try? await Task.sleep(nanoseconds: UInt64(max(0, Self.unfitGrace) * 1_000_000_000))
+                try? await Task.sleep(seconds: Self.unfitGrace)
                 guard let self, !ad.hasEnded else { return }
                 if let host, let player = host.superview, let frame = host.place?(host.bounds, player.safeAreaInsets) {
                     host.content.frame = frame

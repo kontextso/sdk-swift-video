@@ -128,7 +128,7 @@ final class OverlayRule: ContentRule {
     private func recheckContentAfterGrace() {
         contentRecheck?.cancel()
         contentRecheck = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.contentResumeGrace * 1_000_000_000))
+            try? await Task.sleep(seconds: Self.contentResumeGrace)
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
             guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.onScreenClock?.isSceneActive == true,

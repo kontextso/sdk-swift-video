@@ -28,7 +28,7 @@ enum LinearPresentation {
             let cap = Environment.now() + timeout * capFactor
             while isPending(), Environment.now() < cap {
                 if Environment.now() >= deadline, controller.viewIfLoaded?.window == nil { break }
-                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
+                try? await Task.sleep(seconds: step)
             }
             guard isPending() else { return }
             // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
@@ -57,7 +57,7 @@ enum LinearPresentation {
             let deadline = Environment.now() + timeout
             let cap = Environment.now() + timeout * capFactor
             repeat {
-                try? await Task.sleep(nanoseconds: UInt64(min(timeout, 0.25) * 1_000_000_000))
+                try? await Task.sleep(seconds: min(timeout, 0.25))
             } while Environment.now() < deadline || (controller.viewIfLoaded?.window != nil && Environment.now() < cap)
             guard isPending() else { return }
             completion(controller.viewIfLoaded?.window != nil)

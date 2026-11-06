@@ -136,7 +136,7 @@ final class OnScreenTimeClock {
         let left = max(0, duration - elapsed)
         let remaining = min(left, Self.longestWait)
         timer = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            try? await Task.sleep(seconds: remaining)
             guard let self, !Task.isCancelled, !isStopped, !hasElapsed else { return }
             // A capped wait is one stretch of a longer duration, not its end: wait again for the rest.
             if remaining < left {

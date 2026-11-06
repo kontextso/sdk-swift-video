@@ -89,7 +89,7 @@ final class DebugReporter {
     private func scheduleFlush() {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.interval * 1_000_000_000))
+            try? await Task.sleep(seconds: Self.interval)
             guard let self else { return }
             await flush()
             flushTask = nil

@@ -109,7 +109,7 @@ final class ContentPlayback {
             guard isTicking else { return }
             ticker = Task { [weak self] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: UInt64(Self.tickInterval * 1_000_000_000))
+                    try? await Task.sleep(seconds: Self.tickInterval)
                     guard !Task.isCancelled, let self else { return }
                     onChange?(.tick)
                 }

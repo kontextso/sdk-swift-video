@@ -38,7 +38,7 @@ func awaitShared<T: Sendable, Failure: Error>(_ task: Task<T, Failure>, timeout:
             waiter.continuation = continuation
             // Whichever comes first resumes the caller; the other finds it resumed and does nothing.
             let deadline = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                try? await Task.sleep(seconds: timeout)
                 waiter.resume(with: .success(nil))
             }
             Task { @MainActor in

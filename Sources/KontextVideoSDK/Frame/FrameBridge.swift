@@ -120,7 +120,7 @@ final class FrameBridge: NSObject {
             var waited: TimeInterval = 0
             var last = Environment.now()
             while waited < Self.loadTimeout {
-                try? await Task.sleep(nanoseconds: UInt64(step * 1_000_000_000))
+                try? await Task.sleep(seconds: step)
                 guard !Task.isCancelled else { return }
                 let now = Environment.now()
                 if Environment.isApplicationActive() {
