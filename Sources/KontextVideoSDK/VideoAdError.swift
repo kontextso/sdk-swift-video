@@ -40,9 +40,10 @@ public enum VideoAdError: Error, Sendable, Equatable {
     /// Another ad is on screen, from any `VideoAds`: at most one in the whole app. This ad is untouched
     /// and still ready: show it once the other one ended.
     case anotherAdShowing
-    /// The ad ended before it was shown: it expired, was rejected, or its creative died. `load()` and
-    /// `show` throw it from then on. Never with `.destroyed`: the ads of a destroyed `VideoAds`
-    /// throw `destroyed`, the one spelling.
+    /// The ad ended before it was shown: it expired, was rejected, or its creative died. `show` throws it from
+    /// then on, and so does `load()`, except for a dead creative, which `load()` throws as
+    /// `creativeFailed(code:)` (see `VideoAd.invalidationReason`). Never with `.destroyed`: the ads of a
+    /// destroyed `VideoAds` throw `destroyed`, the one spelling.
     case invalidated(VideoAd.InvalidationReason)
 
     /// `show` before `load()` finished: nothing is rendered yet. The ad stays as it was.
@@ -174,7 +175,7 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .containerTooSmall(let minimum):
             return "the view is too small for the ad; at least \(Self.points(minimum.width))×\(Self.points(minimum.height)) points are needed"
         case .cannotShowNow:
-            return "the ad cannot be shown now: the view or view controller is not on screen, or the app is not in front; the ad stays ready"
+            return "the ad cannot be shown now: the view or view controller is not on screen, or the app is not in front"
         case .wrongShowMethod:
             return "this call does not fit the ad's format (show(in:) for overlay and pause, show(from:) for linear)"
         }
