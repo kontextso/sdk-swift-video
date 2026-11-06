@@ -58,6 +58,12 @@ final class DebugReporter {
     /// Records an event; it leaves with the next batch. Every event is also one `debug` line in the
     /// device console, in the same shape, whether or not the server asked for it.
     func event(_ name: String, adId: String? = nil, level: Level? = nil, state: [String: ReportFormat.Value]? = nil) {
+        // Kept small from the start: the history and the buffer hold these for the app's life.
+        let adId = adId.map { ReportFormat.capped($0, to: ReportFormat.maxStoredLength) }
+        let state = state?.mapValues { value -> ReportFormat.Value in
+            if case .string(let text) = value { return .string(ReportFormat.capped(text, to: ReportFormat.maxStoredLength)) }
+            return value
+        }
         Logger.debug(Self.line(name, adId: adId, state: state))
         // One timestamp for both: the history entry and the debug event are the same moment.
         let createdAt = ReportFormat.timestamp()

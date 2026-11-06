@@ -1,3 +1,4 @@
+import Foundation
 @testable import KontextVideoSDK
 import Testing
 
@@ -28,6 +29,21 @@ struct EventHistoryTests {
         #expect(Set(first.state?.keys ?? [:].keys) == ["format", "held"], "an unlisted key stays on the device")
         if case .string(let format)? = first.state?["format"] { #expect(format.utf8.count == ReportFormat.maxFieldLength) }
         #expect(recent.last?.state == nil, "no listed key: no state")
+    }
+
+    @Test func aDebugEventKeepsItsStringsSmallFromTheStart() throws {
+        let huge = String(repeating: "i", count: 100_000)
+        DebugReporter.shared.event("ad.huge", adId: huge, state: ["format": .string(huge), "count": 3])
+        let kept = try #require(EventHistory.recentUncapped().last)
+        #expect(kept.adId?.utf8.count == ReportFormat.maxStoredLength, "a server's huge id is not kept whole")
+        if case .string(let format)? = kept.state?["format"] { #expect(format.utf8.count == ReportFormat.maxStoredLength) }
+        #expect(kept.state?["count"].map { "\($0)" } == "3")
+    }
+
+    @Test func aNonFiniteNumberEncodesAsText() throws {
+        let data = try JSONEncoder().encode(["n": ReportFormat.Value.number(.nan), "i": .number(.infinity), "x": .number(2)])
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["n"] as? String == "nan" && object["i"] as? String == "inf" && object["x"] as? Double == 2)
     }
 }
 }

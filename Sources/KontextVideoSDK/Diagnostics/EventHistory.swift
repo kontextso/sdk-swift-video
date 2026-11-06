@@ -25,6 +25,9 @@ enum EventHistory {
         if moments.count > historyLength { moments.removeFirst(moments.count - historyLength) }
     }
 
+    /// The events as kept, before an error report reduces them. Tests only, which the analyzer does not see.
+    static func recentUncapped() -> [Moment] { moments } // swiftlint:disable:this unused_declaration
+
     /// The recent events, reduced for an error report: listed state keys only, strings and ids capped at
     /// `ReportFormat.maxFieldLength` UTF-8 bytes.
     static func recent() -> [Moment] {
@@ -34,7 +37,7 @@ enum EventHistory {
                 return value
             }
             return Moment(createdAt: moment.createdAt, name: ReportFormat.capped(moment.name),
-                          adId: moment.adId.map(ReportFormat.capped), state: state?.isEmpty == true ? nil : state)
+                          adId: moment.adId.map { ReportFormat.capped($0) }, state: state?.isEmpty == true ? nil : state)
         }
     }
 

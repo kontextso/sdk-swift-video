@@ -1,7 +1,8 @@
 import Foundation
 
 /// How the SDK's reports write their fields, shared by `ErrorReporter` and `DebugReporter` so neither reaches into
-/// the other: a state value as JSON, the timestamp, and the cap on every string field of an error report.
+/// the other: a state value as JSON, the timestamp, the cap on every string field of an error report, and the cap
+/// on every string the reporters keep.
 enum ReportFormat {
     /// A string, a number or a boolean: a debug event's state, and an error report's history.
     enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
@@ -17,6 +18,9 @@ enum ReportFormat {
             var container = encoder.singleValueContainer()
             switch self {
             case .string(let value): try container.encode(value)
+            // JSON has no NaN or infinity, and the encoder throws on them: one such value must not cost the reports
+            // batched with it. Written as text (`"nan"`), as `description` reads it.
+            case .number(let value) where !value.isFinite: try container.encode(String(value))
             case .number(let value): try container.encode(value)
             case .bool(let value): try container.encode(value)
             }
@@ -35,14 +39,18 @@ enum ReportFormat {
     /// and values. Bytes, not characters: one character can carry any number of combining marks.
     static let maxFieldLength = 64
 
-    /// `text` cut to `maxFieldLength` UTF-8 bytes, at a Unicode scalar boundary so it stays valid text.
-    static func capped(_ text: String) -> String {
-        guard text.utf8.count > maxFieldLength else { return text }
+    /// UTF-8 bytes kept of every string a debug event or the history keeps (the ad id, a state value): ids are about
+    /// 36, and a server sending far longer ones must not grow the buffers the SDK holds for the app's life.
+    static let maxStoredLength = 256
+
+    /// `text` cut to `limit` UTF-8 bytes, at a Unicode scalar boundary so it stays valid text.
+    static func capped(_ text: String, to limit: Int = maxFieldLength) -> String {
+        guard text.utf8.count > limit else { return text }
         var scalars = String.UnicodeScalarView()
         var bytes = 0
         for scalar in text.unicodeScalars {
             let size = String(scalar).utf8.count
-            guard bytes + size <= maxFieldLength else { break }
+            guard bytes + size <= limit else { break }
             scalars.append(scalar)
             bytes += size
         }

@@ -118,7 +118,7 @@ struct ErrorReport: Encodable, Sendable {
         detail: String? = nil,
         recovery: Recovery? = nil
     ) -> ErrorReport {
-        let cap = { (text: String?) in text.map(ReportFormat.capped) }
+        let cap = { (text: String?) in text.map { ReportFormat.capped($0) } }
         return ErrorReport(
             id: UUID().uuidString.lowercased(),
             createdAt: ReportFormat.timestamp(),
