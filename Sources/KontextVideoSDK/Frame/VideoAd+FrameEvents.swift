@@ -52,7 +52,7 @@ extension VideoAd {
             // How a page's close and skip end an ad, and why a linear ad's close can be a skip:
             //
             //   what the viewer does (linear ad)        message        result
-            //   taps Skip, after the skip offset        ad.skip        `skip` beacon, .skipped
+            //   taps Skip, after the skip offset        video.skip     `skip` beacon, .skipped
             //   taps Close before the video finished    ad.close       `skip` beacon, .skipped
             //   closes the end card after the video     ad.close       `close` beacon, .closed
             //   nothing: the video ended, no end card   ad.close       .completed, no `close` (nobody closed anything)

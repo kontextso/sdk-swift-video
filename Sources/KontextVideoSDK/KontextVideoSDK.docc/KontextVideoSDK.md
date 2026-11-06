@@ -98,6 +98,12 @@ no user id or email. The package ships a privacy manifest.
 - ``VideoAdDelegate``
 - ``ContentPlayer``
 
+### SwiftUI
+
+- ``VideoAdHost``
+
 ### Errors
 
 - ``VideoAdError``
+- ``VideoAdError/NoFillReason``
+- ``VideoAdError/RequestFailure``

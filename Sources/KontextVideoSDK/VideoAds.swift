@@ -232,8 +232,10 @@ public final class VideoAds {
     ///
     /// Show an episode's ads only in that episode, as with an `AVPlayer`: the same object tracked by another
     /// `VideoAds` is let go of here, and this one's overlay and pause ads then throw
-    /// `invalidated(.contentChanged)` at `show`. The SDK cannot see a custom player's item, so a wrapper reused
-    /// across episodes is not checked for that: track it from each episode's `VideoAds` as it starts.
+    /// `invalidated(.contentChanged)` at `show`. A wrapper reused across episodes is checked by its
+    /// `currentItem` (the episode's id, or anything that tells episodes apart): once it differs from the one at
+    /// `track` (or, with none then, the first one it reported), they throw too. Without `currentItem` the SDK
+    /// cannot tell: track it from each episode's `VideoAds` as it starts.
     public func track(_ player: some ContentPlayer) {
         guard !isDestroyed else { return }
         playback.track(player)

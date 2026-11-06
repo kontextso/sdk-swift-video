@@ -15,6 +15,8 @@ extension VideoAds {
     /// `invalidated(.contentChanged)` at `show` once it differs from the one at `track`. In a feed, track each
     /// page's engine with that page's `VideoAds` when the page becomes current. An object that is not a
     /// `TTVideoEngine` (it lacks those properties) is followed as never playing, with an error on the console.
+    /// `currentItem` is held until `destroy()`: capture the episode's id, not the object that owns these ads
+    /// (`{ [id = episode.id] in id }`), or the two keep each other alive.
     public func track(ttVideoEngine engine: NSObject, currentItem: (@MainActor () -> AnyHashable?)? = nil) {
         // destroy() is terminal, and the adapter is shared: a destroyed VideoAds must not change the episode another
         // VideoAds tracking the same engine reads.

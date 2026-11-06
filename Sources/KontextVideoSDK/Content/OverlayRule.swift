@@ -36,13 +36,14 @@ final class OverlayRule: ContentRule {
     var wallClockDuration: TimeInterval? { ad.isTrackingContent ? nil : ad.duration }
 
     /// The overlay is on screen: its `duration`, if any, counts from the playhead now, and starts again from
-    /// the playhead whenever its scene comes back: video played while it could not be seen counts nothing.
+    /// the playhead whenever counting resumes (its scene came back, or it came back into sight): video played while
+    /// it could not be seen counts nothing.
     /// A pause while the scene was away is checked again once it is back. Shown with no player tracked, it says
     /// so: its duration then is time on screen, which an app that calls `track(_:)` after `show` may not expect.
     func started(onScreenClock clock: OnScreenTimeClock) {
         // Installed whatever is tracked now: a player tracked after `show` can still freeze the overlay with a pause
         // in the background, and only this check ends that freeze once the scene is back.
-        clock.onActivate = { [weak self] in
+        clock.onResume = { [weak self] in
             guard let self, ad.isTrackingContent, let playback = ad.contentPlayback else { return }
             contentClock?.resync(to: playback.playhead)
             if wasContentPausedWhileInactive { recheckContentAfterGrace() }

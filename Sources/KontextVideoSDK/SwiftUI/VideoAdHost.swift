@@ -12,8 +12,11 @@ import UIKit
 /// throws (`anotherAdShowing`, `contentPaused`, …): nothing was shown, and `onEnd` does not follow. `insets`
 /// keep an overlay or pause ad clear of your own controls. Taps outside the ad go through to your player.
 ///
-/// Keep the `VideoAds` on your model (`@StateObject`), not in the view struct, and destroy it when the viewer
-/// leaves the episode.
+/// `insets` are read when the ad shows: changing them while it is on screen does not move it. The host becomes
+/// the ad's delegate, replacing yours, and lets go of it after a failed show: listen through these closures.
+/// Keep the `VideoAds` on your model object (an `ObservableObject` you hold with `@StateObject`), not in the view
+/// struct, and destroy it when the viewer leaves the episode. The callbacks keep the names SwiftUI uses for its
+/// own (`onAppear`, `onSubmit`); the Kotlin SDK's Compose host names them `onClicked`, `onEnded`.
 @MainActor
 public struct VideoAdHost: UIViewRepresentable {
     let ad: VideoAd?
@@ -23,6 +26,9 @@ public struct VideoAdHost: UIViewRepresentable {
     let onClick: ((VideoAd, VideoAd.Click) -> Void)?
     let onEnd: ((VideoAd, VideoAd.EndReason) -> Void)?
 
+    /// A host for `ad` (`nil` shows nothing), placed where an overlay or pause ad goes. Every callback runs on the
+    /// main actor, `onEnd` exactly once per ad shown; `onShowFailed` instead of any other for an ad that could not
+    /// be shown.
     public init(
         ad: VideoAd?,
         insets: UIEdgeInsets = .zero,

@@ -26,8 +26,10 @@ public protocol ContentPlayer: AnyObject {
     /// Optional: emits at each seek (the position jumped): an overlay's count of seconds of video goes on
     /// from the new position. Without it a seek is told from the position alone, so a small one can count.
     var seekPublisher: AnyPublisher<Void, Never>? { get }
-    /// Optional: emits when the player moves to another item, or plays this one to its end: an overlay over
-    /// it ends as `.interrupted`. Without it the SDK learns only from `isPlaying`.
+    /// Optional: emits when the player moves to another item (another episode, a looper's next loop): an overlay
+    /// or pause ad over it ends as `.interrupted`. Not at the end of an item: `isPlaying` turning false tells
+    /// that, as it does for an `AVPlayer`, and a pause ad over ended content stays. Without it the SDK learns
+    /// only from `isPlaying` and `currentItem`.
     var contentChangedPublisher: AnyPublisher<Void, Never>? { get }
     /// Optional: a value that stands for the episode playing (an id, a URL), compared with `==`; give a new one
     /// for each loop of a looped episode. An overlay or pause ad of a `VideoAds` throws

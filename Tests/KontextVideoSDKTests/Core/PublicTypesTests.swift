@@ -24,8 +24,8 @@ struct PublicTypesTests {
             (.invalidated(.expired), "the ad ended before it was shown (expired)"),
             (.notLoaded, "the ad is not loaded yet; call load() first"),
             (.containerTooSmall(minimum: CGSize(width: 150, height: 150)), "the view is too small for the ad; at least 150×150 points are needed"),
-            (.cannotShowNow, "no view controller can present the ad now"),
-            (.wrongShowMethod, "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear)"),
+            (.cannotShowNow, "the ad cannot be shown now: the view or view controller is not on screen, or the app is not in front; the ad stays ready"),
+            (.wrongShowMethod, "this call does not fit the ad's format (show(in:) for overlay and pause, show(from:) for linear)"),
         ]
         for (error, expected) in cases {
             #expect(error.description == expected)

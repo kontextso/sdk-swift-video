@@ -64,9 +64,10 @@ final class OnScreenTimeClock {
         self.isSeen = isSeen
         update()
     }
-    /// Called when an active stretch begins after the clock started: the scene came back. An overlay that
-    /// counts seconds of video starts its count again from there.
-    var onActivate: (() -> Void)?
+    /// Called whenever counting resumes after the clock started: the scene came back, or the ad came back into
+    /// sight (the meter's seen flip). An overlay that counts seconds of video starts its count again from there,
+    /// so time unseen counts nothing.
+    var onResume: (() -> Void)?
 
     /// Seconds on screen while the app was active, the current stretch included.
     var elapsed: TimeInterval {
@@ -128,7 +129,7 @@ final class OnScreenTimeClock {
         guard !isStopped, since == nil else { return }
         since = ProcessInfo.processInfo.systemUptime
         startTimer()
-        onActivate?()
+        onResume?()
     }
 
     private func startTimer() {

@@ -136,13 +136,14 @@ final class FrameBridge: NSObject {
     }
 
     /// WebKit loads a video's data only for a WebView that is in a window, so while the page loads the
-    /// WebView sits in the key window, invisible and inert, at the size the ad will have. Removed on show
-    /// (the ad's own view takes it) and on end.
+    /// WebView sits in the key window, invisible and inert, at the window's size, and hidden from VoiceOver.
+    /// Removed on show (the ad's own view takes it) and on end.
     private func parkOffscreen() {
         guard webView.window == nil, let window = Environment.parkingWindow() else { return }
         webView.frame = CGRect(x: 0, y: 0, width: window.bounds.width, height: window.bounds.height)
         webView.alpha = 0
         webView.isUserInteractionEnabled = false
+        webView.accessibilityElementsHidden = true   // invisible to the eye, and to VoiceOver too
         window.insertSubview(webView, at: 0)
         isParked = true
     }
@@ -155,6 +156,7 @@ final class FrameBridge: NSObject {
         webView.removeFromSuperview()
         webView.alpha = 1
         webView.isUserInteractionEnabled = true
+        webView.accessibilityElementsHidden = false
     }
 
     /// The WebView, visible and interactive, for the caller to place where the ad goes.

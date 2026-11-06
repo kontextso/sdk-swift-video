@@ -57,8 +57,18 @@ try ad.show(in: playerView)   // show(from:) for a linear ad
 ads.destroy()
 ```
 
+In SwiftUI, `VideoAdHost` shows the ad you set over your player and reports through closures:
+
+```swift
+VideoPlayerView(player: player)
+    .overlay {
+        VideoAdHost(ad: model.ad, onEnd: { _, _ in model.ad = nil })
+    }
+```
+
 Each episode's ads show only in that episode; at most one ad is on screen in the whole app. The guide covers
-the three formats, the delegate, consent and App Tracking Transparency, and custom players.
+the three formats, the delegate, consent and App Tracking Transparency, and custom players. For a TTSDK
+player, see [KontextVideoTTSDK](Sources/KontextVideoTTSDK/README.md).
 
 ## Good to know
 

@@ -63,8 +63,8 @@ final class ContentPlayback {
 
     /// Whether the tracked content is no longer this `VideoAds`'s episode: another `VideoAds` took its player,
     /// or the `AVPlayer` moved to another item than this episode's. An overlay or pause ad shown now would be
-    /// counted for this episode over another one. Without a player, or for a custom player's item, nothing
-    /// can tell: `false`.
+    /// counted for this episode over another one. A custom player is checked by its `currentItem`; one that
+    /// reports none, or no player, cannot tell: `false`.
     var playsAnotherEpisode: Bool {
         if hasLostPlayer { return true }
         if let customPlayer {

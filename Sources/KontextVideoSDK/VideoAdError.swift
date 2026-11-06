@@ -66,7 +66,7 @@ public enum VideoAdError: Error, Sendable, Equatable {
     /// again later, or pass the right view or controller. Delivered through `didFail` when `show` was
     /// accepted but UIKit never presented the linear ad; the ad is over then.
     case cannotShowNow
-    /// The call does not fit the format: `show()` on an overlay or pause ad, `show(in:)` on a linear ad. A
+    /// The call does not fit the format: `show(from:)` on an overlay or pause ad, `show(in:)` on a linear ad. A
     /// programmer error: a debug build already stopped on an assertion at the call. The ad stays as it was.
     case wrongShowMethod
 }
@@ -174,9 +174,9 @@ extension VideoAdError: CustomStringConvertible, LocalizedError {
         case .containerTooSmall(let minimum):
             return "the view is too small for the ad; at least \(Self.points(minimum.width))×\(Self.points(minimum.height)) points are needed"
         case .cannotShowNow:
-            return "no view controller can present the ad now"
+            return "the ad cannot be shown now: the view or view controller is not on screen, or the app is not in front; the ad stays ready"
         case .wrongShowMethod:
-            return "this call does not fit the ad's format (show(in:) for overlay and pause, show() for linear)"
+            return "this call does not fit the ad's format (show(in:) for overlay and pause, show(from:) for linear)"
         }
     }
 

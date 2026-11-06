@@ -16,8 +16,6 @@ final class PauseRule: ContentRule {
         self.ad = ad
     }
 
-    /// This pause ad follows the content: its `VideoAds` tracks a player, alive or gone.
-
     var refusesShow: Bool { false }
 
     var checksEpisode: Bool { true }

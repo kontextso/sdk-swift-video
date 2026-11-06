@@ -7,7 +7,7 @@ instead of `AVPlayer`. One call replaces a hand-written `ContentPlayer` wrapper:
 import KontextVideoTTSDK
 
 ads.track(ttVideoEngine: engine)                         // the page's engine
-ads.track(ttVideoEngine: engine) { episode.id }          // and the episode it plays, for the content check
+ads.track(ttVideoEngine: engine) { [id = episode.id] in id }   // and the episode it plays, for the content check
 ```
 
 - **No TTSDK dependency.** TTSDK ships as a CocoaPod, which a Swift package cannot depend on. The adapter reads
@@ -17,7 +17,8 @@ ads.track(ttVideoEngine: engine) { episode.id }          // and the episode it p
   four times a second while an overlay or pause ad is on screen, and at every `show`.
 - **Playing** is TTSDK's playback state: paused or stopped is not playing; buffering is.
 - **Which episode:** pass `currentItem` (the vid, the URL). An overlay or pause ad of this `VideoAds` then throws
-  `invalidated(.contentChanged)` at `show` once it differs from the one at `track`.
+  `invalidated(.contentChanged)` at `show` once it differs from the one at `track`. The closure is held until
+  `destroy()`: capture the episode's id, not the object that owns these ads, or the two keep each other alive.
 - **Feeds:** track each page's engine with that page's `VideoAds` when the page becomes current.
 - An object that is not a `TTVideoEngine` is followed as never playing, with an error on the console.
 

@@ -84,7 +84,8 @@ public final class VideoAd {
         isLoaded && !wasShown && invalidationReason == nil && !isExpired && KontextVideo.shared.disabledReason == nil
     }
 
-    /// Why the ad ended before it was shown, once it did; `load()` and `show` throw it.
+    /// Why the ad ended before it was shown, once it did. `load()` and `show` then throw `invalidated(reason)`,
+    /// except `destroyed` for `.destroyed`, and, from `load()`, `creativeFailed(code:)` for `.creativeFailed`.
     public var invalidationReason: InvalidationReason? {
         state.invalidationReason
     }
@@ -346,7 +347,9 @@ public final class VideoAd {
     /// controller). Otherwise `show` was accepted: the ad is being presented, or, if code of yours that UIKit
     /// ran during the call ended it, `didEnd` already arrived (`hasEnded == true`). Only the SDK dismisses it:
     /// the video completing, a skip, a close, an error, or an
-    /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad.
+    /// interruption, each ending in one `didEnd`. From here until `didEnd` the SDK retains the ad. Do not present
+    /// your own screens over a linear ad (from `didClick` or `didRecordImpression`): it is dismissed from its
+    /// presenter, and UIKit takes everything presented over it along; present them from `didEnd`.
     ///
     /// A show of this same ad made by your own code that this call ran counts as this call's: it returns normally.
     public func show(from viewController: UIViewController? = nil) throws {

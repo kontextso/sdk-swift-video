@@ -32,8 +32,9 @@ public protocol VideoAdDelegate: AnyObject {
     /// says where the viewer tapped. Once per tap.
     func videoAd(_ ad: VideoAd, didClick click: VideoAd.Click)
     /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
-    /// linear ad (`cannotShowNow`). `didEnd(.failed)` follows once the ad is cleaned up (for a
-    /// linear ad, after its dismissal).
+    /// linear ad (`cannotShowNow`: within 2 s of `show`, or 10 s when the controller reached a window
+    /// without UIKit's confirmation). `didEnd(.failed)` follows once the ad is cleaned up (for a linear ad,
+    /// after its dismissal).
     func videoAd(_ ad: VideoAd, didFail error: VideoAdError)
     /// The ad's time on screen is over. Exactly once per successful `show`.
     func videoAd(_ ad: VideoAd, didEnd reason: VideoAd.EndReason)
