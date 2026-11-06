@@ -5,8 +5,9 @@ import UIKit
 
 /// The full-screen player. The content plays in `playback.playerView`. Overlay and pause ads go into
 /// `playback.adArea`, a transparent view over the whole screen, on top of everything: an overlay or a pause
-/// card is shown with a bottom inset as tall as the episode's title, so it never covers it, while a
-/// full-screen pause ad covers the title and the back button too. The SDK presents a linear ad over the screen.
+/// card is shown with a bottom inset as tall as the episode's title, so it never covers it, and a top inset
+/// below the back button; a full-screen pause ad covers the title and the back button too.
+/// The SDK presents a linear ad over the screen.
 struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var playback: Playback
@@ -51,7 +52,11 @@ struct PlayerScreen: View {
                 .ignoresSafeArea()
         }
         .onPreferenceChange(TitleHeight.self) { height in
-            Task { @MainActor in playback.adInsets = UIEdgeInsets(top: 0, left: 0, bottom: height + 12, right: 0) }
+            // An ad at the top stays below the back button (16 pt padding, a 36 pt button, then a gap: 16 pt for a
+            // pause card, 24 pt for an overlay strip); an overlay at the bottom keeps 20 pt above the title. A
+            // full-screen pause ad ignores the insets and covers the button.
+            let top: CGFloat = playback.video.format == .overlay ? 76 : 68
+            Task { @MainActor in playback.adInsets = UIEdgeInsets(top: top, left: 0, bottom: height + 20, right: 0) }
         }
         .background(.black)
         .contentShape(Rectangle())
