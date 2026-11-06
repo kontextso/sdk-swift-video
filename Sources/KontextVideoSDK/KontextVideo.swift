@@ -149,6 +149,7 @@ public final class KontextVideo {
     func disable(reason: String) {
         guard sdkState.moveTo(.disabled(reason: reason)) else { return }
         Logger.warning("Disabled by the server: \(reason)")
+        VideoAds.sdkWasDisabled()
     }
 
     /// After a failed `/config`, every ads request tries it again first; a load is already an explicit

@@ -640,6 +640,21 @@ struct VideoAdsTests {
         }
     }
 
+    @Test func aKillSwitchFromAnotherVideoEndsThisVideosLoadAtOnce() async throws {
+        let ads = await makeAds()
+        let other = harness.player.ads(for: .init(id: "other-video", language: "en"))
+        harness.serve(Fixtures.ad(id: "dead-p16c"))   // a page that never reports ad.loaded
+        let ad = try await ads.format(.pause)
+        let load = Task { await error { try await ad.load() } }
+        await sleepMs(100)
+        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        _ = await error { try await other.format(.linear) }   // another video's answer switches the SDK off
+        let failure = await load.value
+        guard case .disabled(let reason)? = failure else { Issue.record("expected disabled, got \(String(describing: failure))"); return }
+        #expect(reason == "publisherDisabled")
+        #expect(ad.invalidationReason == .destroyed, "ended without waiting for its page")
+    }
+
     @Test func switchedOffDuringTheATTDialogNothingLeaves() async {
         let gate = DialogGate()
         Environment.trackingAuthorizationStatus = { .notDetermined }

@@ -118,9 +118,9 @@ final class AdsFetcher {
     /// dropped, the ads it carries are never held.
     private static func receive(_ response: AdsResponse, requestId: String, owner: VideoAds) throws -> NoFills {
         if case .disabled(let reason) = response {
-            // The SDK is already switched off (the fetch did it before asking for its owner).
-            // The reason is never seen: load() and show throw `.disabled` first.
-            for ad in Array(owner.store.ads.values) { ad.invalidate(.destroyed) }
+            // The SDK is already switched off (the fetch did it before asking for its owner), and switching it off
+            // ended every unshown ad of every `VideoAds`; their reason is never seen: load() and show throw
+            // `.disabled` first.
             throw VideoAdError.disabled(reason: reason)
         }
         try owner.checkStillUsable()

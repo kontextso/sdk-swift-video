@@ -29,6 +29,18 @@ public final class VideoAds {
     private(set) var store = AdStore()
     /// One ads request at a time, shared by every `format(_:)` meanwhile. Set once, at the end of `init`.
     private var fetcher: AdsFetcher?
+    /// Every `VideoAds` alive, held weakly: the kill switch reaches the ads of all of them.
+    private static let live = NSHashTable<VideoAds>.weakObjects()
+
+    /// The SDK was switched off: every unshown ad of every `VideoAds` ends now, without a notice (the server
+    /// knows), so a load in flight throws `disabled` at once instead of waiting for its page. An ad on screen
+    /// plays on.
+    static func sdkWasDisabled() {
+        for owner in live.allObjects {
+            for ad in Array(owner.store.ads.values) { ad.invalidate(.destroyed) }
+        }
+    }
+
     /// The system's memory warning. `nonisolated(unsafe)` only so `deinit`, which is not on the main actor,
     /// may read it for the teardown.
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
@@ -43,6 +55,7 @@ public final class VideoAds {
     public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
         self.content = content
         self.labels = labels
+        Self.live.add(self)
         IntegrationGuard.requireInitialized("VideoAds(content:)")
         IntegrationGuard.checkContent(content, sessionId: sessionId)
         // An expired ad is otherwise dropped only at the next call; under memory pressure its renderer (the
