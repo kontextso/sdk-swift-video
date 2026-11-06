@@ -116,16 +116,27 @@ struct FrameBridgeTests {
         FrameBridge.loadTimeout = 2.6
         // A page that loads and never reports ready (`dead-`): only the timeout can end it.
         FramePageServer().install()
+        // The clock stands still but for the steps below: the ticks count only those, however late they run.
+        let frozen = Environment.now()
+        Environment.now = { frozen }
         let (bridge, events) = makeBridge(url: URL(string: "\(Fixtures.frameOrigin)/frame/dead-2")!)
         bridge.load()
-        await sleepMs(900)
+        await sleepMs(100)   // the timeout's task starts on the main actor, at the frozen time
+        advanceClock(by: 0.9)
+        await sleepMs(400)
         // Suspended between two ticks that both find the app active; it comes back with the activation notice.
         advanceClock(by: 600)
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-        await sleepMs(600)
-        // 1.5 s of active time: counting the gap as a late tick (2 s) would have passed the 2.6 s.
+        await sleepMs(400)
+        advanceClock(by: 0.6)
+        await sleepMs(400)
+        // At most 1.5 s of active time: counting the gap as a late tick (2 s) would have passed the 2.6 s.
         #expect(bridge.state == .loading, "the suspension counts nothing: \(events.events)")
-        #expect(await waitUntil(5) { bridge.failureCause == .loadTimeout }, "the active time still runs out")
+        // The clock runs again from here: the active time still runs out.
+        let resumed = Environment.now()
+        let start = Date()
+        Environment.now = { resumed + Date().timeIntervalSince(start) }
+        #expect(await waitUntil(10) { bridge.failureCause == .loadTimeout }, "the active time still runs out")
     }
 
     @Test func loadedBeforeTheTimeoutCancelsIt() async {
