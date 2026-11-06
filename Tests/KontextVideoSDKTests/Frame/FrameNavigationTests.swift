@@ -47,9 +47,10 @@ struct FrameNavigationTests {
         #expect(FrameNavigation.defaultPort(for: "wss") == 0 && FrameNavigation.defaultPort(for: nil) == 0)
     }
 
-    @Test func schemesThatAreNoPageFailTheLoadAndAreNoClickOnceShown() {
-        for target in ["javascript:alert(1)", "data:text/html,<p>x</p>", "file:///etc/hosts", "myapp://open"] {
-            let url = URL(string: target)!
+    @Test func schemesThatAreNoPageFailTheLoadAndAreNoClickOnceShown() throws {
+        // Plain characters only: iOS 15's URL(string:) refuses `<` and `>`.
+        for target in ["javascript:alert(1)", "data:text/html,x", "file:///etc/hosts", "myapp://open"] {
+            let url = try #require(URL(string: target), "\(target)")
             #expect(navigation.decision(to: url, isMainFrame: true, current: Self.page, phase: .loading) == .failLoad, "\(target) while loading")
             #expect(navigation.decision(to: url, isMainFrame: true, current: Self.page, phase: .shown) == .external, "\(target) once shown")
         }
