@@ -42,14 +42,18 @@ extension VideoAdError.RequestFailure {
         }
     }
 
-    /// A transport failure: an answer that arrived broken is `badResponse`, a timeout `timedOut`, and
-    /// every other way of not getting through `offline`.
+    /// A transport failure: an answer that arrived broken, or a server URL no connection can reach (App Transport
+    /// Security, a malformed URL), is `badResponse`, a timeout `timedOut`, and every other way of not getting
+    /// through `offline`.
     init(_ code: URLError.Code) {
         switch code {
         case .timedOut:
             self = .timedOut
         case .badServerResponse, .cannotParseResponse, .cannotDecodeRawData, .cannotDecodeContentData,
-             .dataLengthExceedsMaximum, .zeroByteResource:
+             .dataLengthExceedsMaximum, .zeroByteResource,
+             // The server URL itself is wrong (not https under App Transport Security, malformed): no network
+             // will fix it, so it must not read as a flaky connection.
+             .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL:
             self = .badResponse
         default:
             self = .offline

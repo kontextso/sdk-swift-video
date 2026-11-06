@@ -48,11 +48,12 @@ struct PublicTypesTests {
         let offline: [URLError.Code] = [
             .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
             .internationalRoamingOff, .dataNotAllowed, .callIsActive, .secureConnectionFailed, .serverCertificateUntrusted,
-            .appTransportSecurityRequiresSecureConnection, .cancelled, .unknown,
+            .cancelled, .unknown,
         ]
+        // A server URL no connection can reach (App Transport Security, malformed) is no flaky network either.
         let badResponse: [URLError.Code] = [
             .badServerResponse, .cannotParseResponse, .cannotDecodeRawData, .cannotDecodeContentData,
-            .dataLengthExceedsMaximum, .zeroByteResource,
+            .dataLengthExceedsMaximum, .zeroByteResource, .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL,
         ]
         let cases = offline.map { ($0, VideoAdError.RequestFailure.offline) } + badResponse.map { ($0, .badResponse) } + [(.timedOut, .timedOut)]
         for (code, reason) in cases {
