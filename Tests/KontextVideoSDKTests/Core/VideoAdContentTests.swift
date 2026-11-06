@@ -715,6 +715,14 @@ struct VideoAdContentTests {
         var currentTime: TimeInterval = 1
         var isPlaying = true
         var onRead: (() -> Void)?
+        /// Runs at the next read of `currentItem`, once.
+        var onItemRead: (() -> Void)?
+        var currentItem: AnyHashable? {
+            let hook = onItemRead
+            onItemRead = nil
+            hook?()
+            return "episode"
+        }
         var onSubscribe: (() -> Void)?
         var onCancel: (() -> Void)?
         var subscriptions = 0
@@ -759,6 +767,23 @@ struct VideoAdContentTests {
         middle.onRead = { [weak ads] in ads?.track(last) }
         ads.track(middle)
         #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0)
+    }
+
+    @Test func aTrackOrDestroyWhileTheItemIsReadWins() async {
+        _ = await harness.initialize()
+        let ads = VideoAds(content: .init(id: "ep-setup4", language: "en"))
+        defer { ads.destroy() }
+        let middle = SetupHookPlayer()
+        let last = SetupHookPlayer()
+        last.currentTime = 99
+        middle.onItemRead = { [weak ads] in ads?.track(last) }
+        ads.track(middle)
+        #expect(ads.playback.playhead == 99 && last.subscriptions == 1 && middle.subscriptions == 0, "the inner track won")
+        let other = VideoAds(content: .init(id: "ep-setup5", language: "en"))
+        let gone = SetupHookPlayer()
+        gone.onItemRead = { [weak other] in other?.destroy() }
+        other.track(gone)
+        #expect(other.isDestroyed && !other.playback.isTracking && gone.subscriptions == 0, "the destroy won")
     }
 
     @Test func aDestroyInTheOldSubscriptionsCancellationLeavesNothingTracked() async {

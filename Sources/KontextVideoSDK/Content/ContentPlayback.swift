@@ -186,9 +186,13 @@ final class ContentPlayback {
     func track(_ player: some ContentPlayer) {
         guard let wasOverlayShown = bind(time: { [weak player] in player?.currentTime }, playing: { [weak player] in player?.isPlaying },
                                          rate: { [weak player] in player?.playbackSpeed }) else { return }
-        customPlayer = player
-        customEpisodeItem = player.currentItem
+        // The binding's own generation, taken before the item is read: `currentItem` is app code, and a `destroy()`
+        // or another `track` there wins, so this binding stops instead of adopting what that code left.
         let generation = self.generation
+        let item = player.currentItem
+        guard generation == self.generation else { return }
+        customPlayer = player
+        customEpisodeItem = item
         // Reading the publishers and subscribing are app code: a `destroy()` or another `track` there wins, and
         // this binding's subscriptions are dropped instead of stored. A seek and another item are what an
         // `AVPlayer`'s time jump and item change are.
