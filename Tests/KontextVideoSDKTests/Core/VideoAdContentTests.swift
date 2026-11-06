@@ -649,6 +649,20 @@ struct VideoAdContentTests {
         #expect(delegate.endReasons == [.interrupted])
     }
 
+    @Test func aPlayerTrackedAfterShowStillEndsAFrozenOverlayAfterTheGrace() async throws {
+        VideoAd.contentResumeGrace = 0.05
+        defer { VideoAd.contentResumeGrace = 1 }
+        let (ad, delegate, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-late")) { _ in }   // nothing tracked at show
+        try ad.show(in: view)
+        ads.track(harness.player)
+        try setSceneActive(false)
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playingChanged(isPlaying: false))
+        #expect(delegate.endReasons.isEmpty, "frozen in the background")
+        try setSceneActive(true)
+        #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "still paused after the grace: \(delegate.events)")
+    }
+
     @Test func anOverlayStillPausedAfterTheGraceOnReturnEndsAsInterrupted() async throws {
         VideoAd.contentResumeGrace = 0.3
         defer { VideoAd.contentResumeGrace = 1 }

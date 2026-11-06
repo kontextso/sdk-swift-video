@@ -40,16 +40,18 @@ final class OverlayRule: ContentRule {
     /// A pause while the scene was away is checked again once it is back. Shown with no player tracked, it says
     /// so: its duration then is time on screen, which an app that calls `track(_:)` after `show` may not expect.
     func started(onScreenClock clock: OnScreenTimeClock) {
+        // Installed whatever is tracked now: a player tracked after `show` can still freeze the overlay with a pause
+        // in the background, and only this check ends that freeze once the scene is back.
+        clock.onActivate = { [weak self] in
+            guard let self, ad.isTrackingContent, let playback = ad.contentPlayback else { return }
+            contentClock?.resync(to: playback.playhead)
+            if wasContentPausedWhileInactive { recheckContentAfterGrace() }
+        }
         guard ad.isTrackingContent, let playback = ad.contentPlayback else {
             Logger.warning("overlay \(ad.id.prefix(8)) shown before track(): its duration counts on-screen time, not video time")
             return
         }
         if let duration = ad.duration { contentClock = ContentTimeClock(duration: duration, at: playback.playhead) }
-        clock.onActivate = { [weak self] in
-            guard let self, let playback = ad.contentPlayback else { return }
-            contentClock?.resync(to: playback.playhead)
-            if wasContentPausedWhileInactive { recheckContentAfterGrace() }
-        }
     }
 
     /// An overlay cares from the moment `show` reserved it: a pause while its view is being attached ends it
