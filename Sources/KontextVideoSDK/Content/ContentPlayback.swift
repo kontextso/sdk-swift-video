@@ -172,9 +172,14 @@ final class ContentPlayback {
         observations = [
             player.observe(\.rate, options: [.new]) { [weak self] _, change in
                 let playback = self
-                let isPlaying = change.newValue.map { $0 != 0 }
-                // A rate alone never restarts an ended item: play() after the end plays nothing. A seek does (`jumped`).
-                Self.onMain { playback?.deliver(.playingChanged(isPlaying: isPlaying), from: generation) }
+                let rate = change.newValue
+                // A rate alone never restarts an ended item: play() after the end plays nothing, and is delivered as
+                // not playing, as `isPlaying` reads it. A seek does restart it (`jumped`).
+                Self.onMain {
+                    guard let playback else { return }
+                    let isPlaying = rate.map { $0 != 0 && !playback.hasItemEnded }
+                    playback.deliver(.playingChanged(isPlaying: isPlaying), from: generation)
+                }
             },
             player.observe(\.currentItem) { [weak self] _, _ in
                 let playback = self

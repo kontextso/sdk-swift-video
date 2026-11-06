@@ -587,6 +587,23 @@ struct VideoAdContentTests {
         next.dismiss()
     }
 
+    @Test func aPlayWithoutASeekAfterTheItemEndedDoesNotEndAPauseAd() async throws {
+        ContentPlayback.tickInterval = 30   // the rate notifications alone
+        let player = try await playingPlayer()
+        defer { player.pause() }
+        let (pause, delegate, ads) = try await makeAd(Fixtures.ad(id: "p-c-ended", position: "fullscreen", size: nil)) { $0.track(player) }
+        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: player.currentTime().seconds + 0.2, preferredTimescale: 600)
+        try #require(await waitUntil { !ads.playback.isPlaying })
+        #expect(player.rate != 0, "actionAtItemEnd .none keeps the rate")
+        try pause.show(in: view)
+        // The viewer pauses and plays again; the item is still past its end, so nothing plays.
+        player.pause()
+        player.play()
+        await sleepMs(100)
+        #expect(delegate.endReasons.isEmpty, "an ended item does not resume under the pause ad")
+        pause.dismiss()
+    }
+
     @Test func videoPlayedWhileTheSceneWasInactiveCountsNothingOnReturn() async throws {
         ContentPlayback.tickInterval = 30   // no tick runs while the app is suspended
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-scene", duration: 1000))
