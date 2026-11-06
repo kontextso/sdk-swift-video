@@ -3,7 +3,8 @@ import Foundation
 import Testing
 
 /// `StrictJSON.check`: a key twice in one object refuses the whole text, escapes read, at any depth; equal keys in
-/// different objects are fine. The platform's parser would keep one of the two silently.
+/// different objects are fine. The platform's parser would keep one of the two silently. Also the nesting limit,
+/// with strings read as the decoder reads them: brackets in text are never nesting, whatever the escapes.
 @Suite
 struct StrictJSONTests {
     private func refuses(_ text: String) -> Bool {
@@ -67,5 +68,64 @@ struct StrictJSONTests {
         #expect(reason == "a\nb\u{0}", "escaped, it is text")
         #expect(FrameMessage.parse("{\"adId\": \"ad-1\", \"type\": \"ad.close\", \"reason\": \"a\nb\"}", adId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
         #expect(FrameMessage.parse(#"{"adId": "ad-1", "type": "ad.close", "reason": "a\nb"}"#, adId: "ad-1", playheadLimitMs: 1000)?.reason == "a\nb")
+    }
+
+    // MARK: Nesting
+
+    struct Reply: Decodable { let b: [Int] }
+
+    private let deep = String(repeating: "[", count: StrictJSON.maxNestingDepth * 2)
+
+    @Test func theNestingLimitForArraysAndObjects() {
+        let limit = StrictJSON.maxNestingDepth
+        let arrays = { (depth: Int) in String(repeating: "[", count: depth) + String(repeating: "]", count: depth) }
+        let objects = { (depth: Int) in String(repeating: #"{"k":"#, count: depth - 1) + "{}" + String(repeating: "}", count: depth - 1) }
+        let mixed = { (depth: Int) in String(repeating: #"[{"k":"#, count: depth / 2) + "1" + String(repeating: "}]", count: depth / 2) }
+        for (name, make) in [("arrays", arrays), ("objects", objects), ("mixed", mixed)] {
+            #expect(!refuses(make(limit)), "\(name) at the limit")
+            #expect(refuses(make(limit + 2)), "\(name) past it")
+        }
+        #expect(refuses(arrays(limit + 1)), "one level past it")
+        #expect(refuses(String(repeating: "[", count: limit + 1)), "an unclosed text past the limit too")
+        let siblings = "[" + Array(repeating: arrays(limit - 1), count: 3).joined(separator: ",") + "]"
+        #expect(!refuses(siblings), "siblings are not depth")
+        #expect(!refuses(String(repeating: "[1],", count: 10_000) + "[1]"), "a long flat text")
+    }
+
+    @Test func aKeyWithABrokenEscapeIsRefused() {
+        for text in [#"{"a\x": 1}"#, #"{"\u12": 1}"#, #"{"\uZZZZ": 1}"#] {
+            #expect(refuses(text), "\(text)")
+        }
+        #expect(!refuses(#"{"a\\x": 1, "a\\\\x": 2}"#), "an escaped backslash is a character: two keys")
+    }
+
+    @Test func textThatIsNoJSONValueIsRefusedOrLeftToTheParser() {
+        for text in ["NaN", "undefined", "'k'", "{k: 1}", #"{"a": 1}x"#] {
+            #expect(refuses(text), "\(text)")
+        }
+        #expect(!refuses(""), "empty: no token to refuse; the parser after it refuses it")
+        #expect(!refuses(" \n\t "))
+    }
+
+    @Test func bracketsInTextAreNotNestingWhateverTheEscapes() throws {
+        // An escaped quote, an escaped backslash then an escaped quote, a bracket written as a code.
+        for text in [#""sfs\"\#(deep)""#, #""a\\\"\#(deep)""#, #""\u005B\#(deep)""#] {
+            let data = Data(#"{"a": \#(text), "b": [1]}"#.utf8)
+            #expect(try APIClient.decode(Reply.self, from: data).b == [1], "\(text.prefix(12))")
+        }
+    }
+
+    @Test func anEscapedBackslashThenAQuoteEndsTheString() {
+        // `C:\\` ends the string, so the brackets after it are nesting, and one level too many.
+        let nesting = String(repeating: "[", count: StrictJSON.maxNestingDepth) + String(repeating: "]", count: StrictJSON.maxNestingDepth)
+        let data = Data(#"{"p": "C:\\", "x": \#(nesting)}"#.utf8)
+        do {
+            _ = try APIClient.decode([String: [Int]].self, from: data)
+            Issue.record("decoded an answer nested deeper than the limit")
+        } catch let DecodingError.dataCorrupted(context) {
+            #expect(context.debugDescription.contains("nested deeper than"), "refused by the SDK's own check")
+        } catch {
+            Issue.record("unexpected \(error)")
+        }
     }
 }
