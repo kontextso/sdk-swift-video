@@ -19,7 +19,10 @@ struct CloseOutcomeTests {
             (.resume, false, false, "close", .resumed),
             (.complete, false, false, nil, .completed),
             (.close, false, true, "close", .closed),
+            (.resume, false, true, "close", .resumed),
+            (.complete, false, true, nil, .completed),
         ]
+        #expect(rows.count == 12, "every reason × linear × completed")
         for (reason, isLinear, isCompleted, beacon, endReason) in rows {
             let outcome = reason.outcome(isLinear: isLinear, isCompleted: isCompleted)
             #expect(outcome.beacon == beacon && outcome.endReason == endReason, "\(reason), linear \(isLinear), completed \(isCompleted)")

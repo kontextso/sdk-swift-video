@@ -48,6 +48,25 @@ struct AdStoreTests {
         broken["id"] = nil
         let allDropped: [String: Any] = ["format": "pause", "ads": [broken]]
         #expect(pauseSteps(try response(pause: allDropped), held: "X") == ["drop", "noFill:unknown"], "X + every ad malformed")
+        #expect(pauseSteps(try response(pause: allDropped), held: nil) == ["noFill:unknown"], "none + neither an ad nor a reason")
+    }
+
+    @Test func aHeldAdReServedIsKeptEvenIfItsIdIsListedAsSpent() throws {
+        // The held id is checked before the spent ones: an ad still held was never used, whatever the set says.
+        #expect(pauseSteps(try response(pause: ad("X")), held: "X", spent: ["X"]) == ["keep"])
+        #expect(pauseSteps(try response(pause: Fixtures.noFillEntry("noAdMatch")), held: "X", spent: ["X"]) == ["drop", "noFill:noAdMatch"])
+    }
+
+    @Test func anAnswerWithNoFormatsLeavesEveryFormatAsItIs() throws {
+        let answer = try JSONDecoder().decode(AdsResponse.self, from: Data(#"{"enabled": true, "formats": []}"#.utf8))
+        let steps = AdStore.plan(answer, held: [.overlay: "O1"], spent: ["P9"]).map { step -> String in
+            switch step {
+            case .keep(let format): "keep:\(format)"
+            case .leftOut(let format): "leftOut:\(format)"
+            default: "other"
+            }
+        }
+        #expect(steps == AdFormat.allCases.map { $0 == .overlay ? "keep:overlay" : "leftOut:\($0)" }, "\(steps)")
     }
 
     @Test func everyFormatIsPlannedOnItsOwnInFormatOrder() throws {
