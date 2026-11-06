@@ -2,7 +2,9 @@ import Foundation
 
 /// Sends beacons: a GET of a tracking URL, once, with no retries, fire and forget. Only the status is read, never
 /// the body. Which beacons fire and when is `Tracker`'s; this only delivers a finished URL. Redirects are followed
-/// as `URLSession` does, at most `RedirectLimit.maxRedirects`. The Kotlin SDK's `BeaconClient` is the same.
+/// as `URLSession` does, at most `RedirectLimit.maxRedirects`. One deadline bounds a beacon's whole exchange, redirects
+/// included: the session's `timeoutIntervalForResource` (`Environment.makeSession`, 10 s); the request's
+/// `timeoutInterval` is idle time only. The Kotlin SDK's `BeaconClient` is the same.
 @MainActor
 enum BeaconClient {
     /// GETs `url` through `session` (the SDK's, `Environment.session`); `label` names it in the log

@@ -29,6 +29,15 @@ struct RedirectLimitTests {
                 "beacons: tracking chains go through plain servers")
     }
 
+    @MainActor
+    @Test func aBeaconHasOneDeadlineForItsWholeExchange() {
+        // `timeoutIntervalForResource` bounds the whole task, redirects included; the request's own timeout is idle
+        // time only. The beacon session takes the SDK session's configuration, deadline and all.
+        let beacons = BeaconTransport.session(over: Environment.makeSession(deadline: 0.5))
+        #expect(beacons.configuration.timeoutIntervalForResource == 0.5)
+        #expect(BeaconTransport.session(over: Environment.makeSession()).configuration.timeoutIntervalForResource == APIClient.defaultTimeout)
+    }
+
     @Test func aDowngradeIsFollowedOnlyWhereAllowedAndOtherSchemesNever() {
         let https = URL(string: "https://a.test/x")
         let http = URL(string: "http://b.test/y")
