@@ -68,8 +68,13 @@ final class ContentPlayback {
     var playsAnotherEpisode: Bool {
         if hasLostPlayer { return true }
         if let customPlayer {
-            // App code: the item is read now, and the first one seen is this episode.
-            guard let item = customPlayer.currentItem else { return false }
+            // App code: the item is read now, and the first one seen is this episode. A `track` inside the read
+            // made a new binding, whose own item is its episode: this read must not overwrite it, and the
+            // player just tracked plays that episode.
+            let generation = self.generation
+            let read = customPlayer.currentItem
+            guard generation == self.generation else { return hasLostPlayer }
+            guard let item = read else { return false }
             if customEpisodeItem == nil { customEpisodeItem = item }
             return item != customEpisodeItem
         }

@@ -141,6 +141,41 @@ struct VideoAdEpisodeTests {
         #expect(await waitUntil { pauseDelegate.endReasons == [.interrupted] }, "the paused player moved to another episode")
     }
 
+    /// A custom player whose `currentItem` getter (app code) tracks another player once, at the read `trackAt`.
+    final class TrackingGetterPlayer: ContentPlayer {
+        var currentTime: TimeInterval = 0
+        var isPlaying = true
+        var reads = 0
+        var trackAt = 1
+        var item: AnyHashable? = "ep-a"
+        var onTrack: () -> Void = {}
+        var currentItem: AnyHashable? {
+            reads += 1
+            if reads == trackAt { onTrack() }
+            return reads < trackAt ? nil : item
+        }
+    }
+
+    @Test func aTrackInsideTheFirstItemReadKeepsTheNewBindingsItem() async throws {
+        let second = EpisodePlayer(item: "ep-b")
+        for trackAt in [1, 2] {
+            // 1: the read in `track`; 2: the first item adopted later, at `show`, after none at `track`.
+            let ads = await makeAds("ep-nested-\(trackAt)")
+            let first = TrackingGetterPlayer()
+            first.trackAt = trackAt
+            first.onTrack = { ads.track(second) }
+            ads.track(first)
+            let overlay = try loadedAd(Fixtures.overlayAd(id: "o-ep-nested-\(trackAt)"), of: ads)
+            try overlay.show(in: view)
+            #expect(overlay.wasShown, "\(trackAt): B's own item is this episode's")
+            overlay.dismiss()
+            second.currentItem = "ep-other"
+            let other = try loadedAd(Fixtures.overlayAd(id: "o-ep-nested-other-\(trackAt)"), of: ads)
+            expectContentChanged(other, "\(trackAt): B's episode is ep-b, not A's item")
+            second.currentItem = "ep-b"
+        }
+    }
+
     /// A custom player that reports the episode it plays.
     final class EpisodePlayer: ContentPlayer {
         var currentTime: TimeInterval = 0
