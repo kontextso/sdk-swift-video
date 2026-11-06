@@ -1,5 +1,8 @@
 import Foundation
 
+// What `KontextVideo.initialize(with:)` takes (`KontextVideo.Configuration`): the token, the server, the ATT and
+// log options. A plain value; `IntegrationGuard.checkConfiguration` refuses an unusable one at `initialize`.
+
 extension KontextVideo {
     /// The options a publisher sets when initialising the SDK. They do not change during a run; what the
     /// viewer is and consented to can change later and lives on `KontextVideo.shared` (`user`,

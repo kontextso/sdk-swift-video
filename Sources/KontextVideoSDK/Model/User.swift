@@ -1,3 +1,6 @@
+// The viewer as the app describes them (`KontextVideo.User`): a public value only. How it goes on the wire, and
+// what a COPPA request leaves out, is `Payloads/AppInputs.swift`; `IntegrationGuard.checkUser` says what is empty.
+
 extension KontextVideo {
     /// What the publisher knows about the viewer. Every field is optional. No demographics: OpenRTB 2.6
     /// and AdCOM deprecated `user.yob` and `user.gender`; `keywords` (OpenRTB `kwarray`) and the identity

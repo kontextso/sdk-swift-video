@@ -1,3 +1,6 @@
+// The consent the app passes (`KontextVideo.Regulatory`): a public value only. The CMP's IAB keys win per field
+// when usable (`Device/Privacy.swift`), and `Payloads/AppInputs.swift` writes the result on the wire.
+
 extension KontextVideo {
     /// Privacy and consent signals sent with every ads request.
     ///

@@ -1,5 +1,8 @@
 import Foundation
 
+// The episode an app's `VideoAds` is for (`KontextVideo.Content`): a public value only. `Payloads/AppInputs.swift`
+// writes it on the wire (a NaN duration left out), and `IntegrationGuard.checkContent` checks it at `VideoAds(content:)`.
+
 extension KontextVideo {
     /// The publisher's video the ads are for, "content" in ad-industry terms (VAST
     /// `[CONTENTPLAYHEAD]`). Everything beyond `id` and `language` is contextual signal: send what you have.

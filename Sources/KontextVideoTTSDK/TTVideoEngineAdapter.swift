@@ -3,6 +3,11 @@ import Foundation
 import KontextVideoSDK
 import os
 
+// The KontextVideoTTSDK product: `VideoAds.track(ttVideoEngine:currentItem:)` and the adapter that reads a TTSDK
+// engine as a `ContentPlayer`, through the Objective-C properties TTSDK declares (TTSDK is a CocoaPod, which a Swift
+// package cannot depend on). One adapter per engine, shared by every `VideoAds` that tracks it; `ContentPlayback`
+// reads it like any custom player.
+
 extension VideoAds {
     /// Follows a TTSDK `TTVideoEngine`: `ads.track(ttVideoEngine: engine)`. TTSDK ships as a CocoaPod, which a
     /// Swift package cannot depend on, so the SDK reads the engine by its Objective-C properties
