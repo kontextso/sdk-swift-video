@@ -74,7 +74,7 @@ struct FrameProtocolTableTests {
             ("video.unmute", [:], ["ignore", "ignore", "deliver", "ignore"]),
             ("video.progress", ["offset": 1000], ["ignore", "ignore", "deliver", "ignore"]),
             ("video.complete", [:], ["ignore", "ignore", "deliver", "ignore"]),
-            ("video.buffering", [:], ["ignore", "ignore", "ignore", "ignore"]),
+            ("video.buffering", [:], ["drop", "drop", "drop", "ignore"]),   // an unknown video.* type, dropped with a line
             ("ad.error", ["code": 405], ["end", "end", "end", "ignore"]),
             ("ad.whatever", [:], ["drop", "drop", "drop", "ignore"]),
         ]
@@ -169,6 +169,12 @@ struct FrameProtocolTableTests {
         #expect(holds12)
         let holds13 = violation(progress.accept(message("ad.whatever"), from: main, now: 0)) == nil
         #expect(holds13, "an unknown type is no violation")
+        for state in [Stage.loading, .loaded, .shown] {
+            var unknownVideo = self.core(state)
+            guard case .drop(_, _, nil) = unknownVideo.accept(message("video.foo"), from: main, now: 0) else {
+                Issue.record("video.foo in \(state): dropped with a line, no violation"); continue
+            }
+        }
     }
 
     // MARK: Playhead and order

@@ -25,9 +25,9 @@ import Foundation
 ///   video.skip        ignore      ignore      endThenDeliver           ignore
 ///   video.start       ignore      ignore      deliver                  ignore
 ///   other video.*     ignore      ignore      deliver after start      ignore
-///   video.<unknown>   ignore      ignore      ignore                   ignore
+///   video.mute/unmute ignore      ignore      deliver (also before start)  ignore
 ///   ad.error          endThenDeliver (code: the page's, else 400/500 before show, 405 after)   ignore
-///   unknown type      drop        drop        drop                     ignore
+///   unknown type      drop        drop        drop                     ignore   (video.<unknown> too)
 /// ```
 ///
 /// A message from another frame or origin is dropped; a malformed envelope (`FrameMessage.parse` gives `nil`), a
@@ -157,6 +157,11 @@ struct FrameProtocol {
 
     /// A `video.*` message: on screen only; everything but the start, mute and unmute after `video.start`.
     private mutating func acceptVideo(_ type: String, _ message: FrameMessage, playhead: Int) -> Step {
+        // A `video.` type the protocol does not have is an unknown message, dropped with a line, as any other.
+        let name = String(type.dropFirst("video.".count))
+        guard ["complete", "progress"].contains(name) || FrameEvent.VideoEvent(rawValue: name) != nil else {
+            return .drop(log: "unknown message \(type) dropped")
+        }
         guard state == .shown else { return .ignore }
         switch type {
         case "video.complete":
@@ -171,7 +176,7 @@ struct FrameProtocol {
             }
             return .deliver(.progress(offset: min(Int(raw.rounded()), playheadLimitMs), playhead: playhead))
         default:
-            guard let event = FrameEvent.VideoEvent(rawValue: String(type.dropFirst("video.".count))) else { return .ignore }
+            guard let event = FrameEvent.VideoEvent(rawValue: name) else { return .drop(log: "unknown message \(type) dropped") }
             // `video.start` opens the video; mute and unmute are the viewer's and may come while it still loads;
             // the rest need the start before them.
             switch event {
