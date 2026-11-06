@@ -62,7 +62,8 @@ struct APIClient: Sendable {
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            let errors = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.errors ?? []
+            // Through the same depth guard as a success: an error body nested 100 000 deep must not crash either.
+            let errors = (try? Self.decode(ErrorResponse.self, from: data))?.errors ?? []
             throw APIError.http(status: status, errors: errors)
         }
         // A route that answers nothing ignores whatever body a 2xx has (`OK`, a proxy's page): the request arrived.

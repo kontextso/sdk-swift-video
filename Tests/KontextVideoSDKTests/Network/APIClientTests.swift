@@ -39,6 +39,21 @@ struct APIClientTests {
         }
     }
 
+    @Test func aDeeplyNestedErrorBodyGivesTheStatusAlone() async {
+        // Before iOS 17 the platform's decoder recurses without a limit: this body would overflow the stack.
+        let body = "{\"errors\":" + String(repeating: "[", count: 100_000)
+        server.on("/v2/ping", StubServer.Response(status: 500, body: Data(body.utf8)))
+        do {
+            let _: Reply = try await client.post("ping", body: Body(hello: "x"))
+            Issue.record("expected the status")
+        } catch let error as APIError {
+            guard case .http(let status, let errors) = error else { Issue.record("expected http, got \(error)"); return }
+            #expect(status == 500 && errors.isEmpty)
+        } catch {
+            Issue.record("unexpected \(error)")
+        }
+    }
+
     @Test func aSlowAnswerIsCutAtTheDeadlineNotOnlyWhenIdle() async {
         var slow = StubServer.Response.json(["ok": true])
         // The answer comes after 3 s, inside the 10 s idle timeout: only the 0.3 s deadline can end the request
