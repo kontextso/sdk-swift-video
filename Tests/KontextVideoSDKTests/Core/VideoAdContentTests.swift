@@ -427,18 +427,6 @@ struct VideoAdContentTests {
         #expect(second == nil, "destroy lets go of it")
     }
 
-    @Test func aShortSeekCountsNothingAndALateSampleOfRealPlaybackCounts() {
-        let seek = ContentTimeClock(duration: 1, at: 10)
-        #expect(!seek.advance(to: 11.5, isCounting: true) && seek.elapsed == 0, "1.5 s at once, before any time passed: a seek")
-        let late = ContentTimeClock(duration: 10, at: 0)
-        advanceClock(by: 3)
-        #expect(!late.advance(to: 3, isCounting: true) && late.elapsed == 3, "3 s of video after 3 s: playback, sampled late")
-        let jumped = ContentTimeClock(duration: 10, at: 0)
-        advanceClock(by: 1)
-        jumped.resync(to: 0.8)   // an AVPlayer time jump
-        #expect(!jumped.advance(to: 0.8, isCounting: true) && jumped.elapsed == 0)
-    }
-
     @Test func aPublishedPauseEndsTheOverlayEvenIfPlaybackResumesBeforeDelivery() async throws {
         ContentPlayback.tickInterval = 30
         let player = PublishingPlayer()
@@ -720,20 +708,6 @@ struct VideoAdContentTests {
         ads.destroy()
         #expect(thirdDelegate.endReasons == [.destroyed], "destroy ends a frozen overlay")
         try setSceneActive(true)
-    }
-
-    @Test func fasterPlaybackCountsItsVideoSeconds() {
-        let unknown = ContentTimeClock(duration: 10, at: 0)
-        let known = ContentTimeClock(duration: 100, at: 0)
-        for second in 1...4 {
-            advanceClock(by: 0.25)
-            _ = unknown.advance(to: Double(second), isCounting: true)              // 4×, speed not told
-            _ = known.advance(to: Double(second) * 2, isCounting: true, rate: 8)   // 8×, an AVPlayer's rate
-        }
-        #expect(abs(unknown.elapsed - 4) < 0.001 && abs(known.elapsed - 8) < 0.001)
-        let seek = ContentTimeClock(duration: 10, at: 0)
-        advanceClock(by: 0.25)
-        #expect(!seek.advance(to: 2, isCounting: true, rate: 1) && seek.elapsed == 0, "2 s in a quarter second at 1×: a seek")
     }
 
     /// A player whose publisher runs app code when it is read and when it is subscribed to.

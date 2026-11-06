@@ -21,7 +21,7 @@ public protocol ContentPlayer: AnyObject {
     var isPlayingPublisher: AnyPublisher<Bool, Never>? { get }
     /// Optional: the playback speed (1 is normal), when the player knows it. An overlay's `duration` counts
     /// seconds of video, and the speed tells fast playback from a seek. `nil` (the default) allows up to
-    /// about 4×.
+    /// about 4×; a value that is not finite reads as `nil`.
     var playbackSpeed: Double? { get }
     /// Optional: emits at each seek (the position jumped): an overlay's count of seconds of video goes on
     /// from the new position. Without it a seek is told from the position alone, so a small one can count.

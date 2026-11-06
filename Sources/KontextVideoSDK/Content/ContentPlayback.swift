@@ -90,8 +90,8 @@ final class ContentPlayback {
         return readPlaying?() ?? false
     }
 
-    /// The playback speed, when the player tells it.
-    var rate: Double? { readRate?() }
+    /// The playback speed, when the player tells it; a value that is not finite reads as unknown.
+    var rate: Double? { readRate?().flatMap { $0.isFinite ? $0 : nil } }
 
     /// Content time in seconds, read now, or 0. Clamped to ten years: a broken player (NaN, infinity, a huge
     /// number) must not crash the app when a request converts it to `Int`.

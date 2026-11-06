@@ -41,7 +41,9 @@ final class ContentTimeClock {
             let real = now - lastMovedAt
             last = playhead
             lastMovedAt = now
-            let speed = rate.map { max(abs($0) * Self.rateMargin, 1) } ?? Self.maxRate
+            // A speed that is not finite (a broken custom player's NaN or infinity) is unknown: NaN would count
+            // nothing, ever, and infinity every seek.
+            let speed = rate.flatMap { $0.isFinite ? max(abs($0) * Self.rateMargin, 1) : nil } ?? Self.maxRate
             if isCounting, step > 0, step <= real * speed + Self.slack { elapsed += step }
         }
         return elapsed >= duration
