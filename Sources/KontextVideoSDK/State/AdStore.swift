@@ -41,13 +41,13 @@ struct AdStore {
     var ads: [AdFormat: VideoAd] = [:]
     /// Ids that left: shown, rejected, expired, failed, destroyed. An answer that brings one back is ignored for its
     /// format: the request listed the ad before the app used it.
-    var spentIds: Set<String> = []
+    var spentIDs: Set<String> = []
     /// The ad of this `VideoAds` on screen. `ScreenSlot` retains it too.
     var showing: VideoAd?
 
     /// The steps `response` takes, for every format, from what is held now.
     func plan(_ response: AdsResponse) -> [Step] {
-        Self.plan(response, held: ads.mapValues(\.id), spent: spentIds)
+        Self.plan(response, held: ads.mapValues(\.id), spent: spentIDs)
     }
 
     /// The same over plain values: `held` the id held per format, `spent` the ids that left.

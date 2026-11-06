@@ -89,7 +89,7 @@ struct TrackerTests {
         }
         #expect(beacons.filter { $0.event == "start" }.count == 1, "start is once")
         let second = ids["click"]?.last ?? ""
-        let through = tracker.clickThrough(URL(string: "https://ads.test/redirect?fid=%5BKONTEXT_FIREID%5D&q=%5Bkept%5D")!, fireId: second)
+        let through = tracker.clickThrough(URL(string: "https://ads.test/redirect?fid=%5BKONTEXT_FIREID%5D&q=%5Bkept%5D")!, fireID: second)
         #expect(through.query == "fid=\(second)&q=%5Bkept%5D", "the click-through carries its click's fire id; a bracket that is no macro survives")
     }
 

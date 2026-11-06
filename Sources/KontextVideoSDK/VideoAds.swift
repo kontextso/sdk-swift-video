@@ -127,7 +127,7 @@ public final class VideoAds {
     }
 
     /// The ids of the valid unshown ads, by format, for the request; expired ones leave silently first.
-    func validHeldIds() -> [String] {
+    func validHeldIDs() -> [String] {
         for ad in Array(store.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
         return AdFormat.allCases.compactMap { store.ads[$0]?.id }
     }
@@ -247,7 +247,7 @@ public final class VideoAds {
     /// An ad ended before `show`, or was shown: it leaves its format, and its id is never accepted again.
     func adDidLeave(_ ad: VideoAd) {
         if store.ads[ad.format] === ad { store.ads[ad.format] = nil }
-        store.spentIds.insert(ad.id)
+        store.spentIDs.insert(ad.id)
     }
 
     /// Shown: the ad leaves its format, so the next request does not list it.
@@ -295,11 +295,11 @@ public final class VideoAds {
         let store = self.store
         let observer = memoryWarningObserver
         let playback = self.playback
-        let contentId = content.id
+        let contentID = content.id
         let teardown: @MainActor () -> Void = {
             fetcher?.cancel()
             if !store.ads.isEmpty {
-                Logger.warning("VideoAds for video \(contentId) was released while holding \(store.ads.count) ad(s); they were ended as destroyed. Keep the VideoAds alive while you use its ads.")
+                Logger.warning("VideoAds for video \(contentID) was released while holding \(store.ads.count) ad(s); they were ended as destroyed. Keep the VideoAds alive while you use its ads.")
             }
             VideoAds.endAll(Array(store.ads.values), showing: store.showing)
             observer.map(NotificationCenter.default.removeObserver)

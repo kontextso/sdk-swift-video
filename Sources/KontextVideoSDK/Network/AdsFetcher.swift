@@ -79,7 +79,7 @@ final class AdsFetcher {
             // held, or the server would re-serve it and the format answer no-fill.
             let body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
                                                  content: content, labels: labels, player: .make(playhead: current().playhead), sessionId: sessionId,
-                                                 held: current().validHeldIds())
+                                                 held: current().validHeldIDs())
             let held = body.held
             // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
             try current().checkStillUsable()

@@ -28,10 +28,10 @@ struct TrackingMacrosTests {
         var reads = 0
         let read = { () -> TimeInterval in reads += 1; return 1.5 }
         let plain = TrackingMacros.substitute("https://t.test/?u=[UNKNOWN]", contentPlayhead: read, adPlayheadMs: 0, errorCode: nil,
-                                              fireId: "f", viewDurationMs: nil, notUsed: nil)
+                                              fireID: "f", viewDurationMs: nil, notUsed: nil)
         #expect(reads == 0 && plain == "https://t.test/?u=%5BUNKNOWN%5D", "an unknown macro stays, encoded")
         let both = TrackingMacros.substitute("https://t.test/?m=[MEDIAPLAYHEAD]&c=[CONTENTPLAYHEAD]&f=[KONTEXT_FIREID]", contentPlayhead: read,
-                                             adPlayheadMs: 0, errorCode: nil, fireId: "f", viewDurationMs: nil, notUsed: nil)
+                                             adPlayheadMs: 0, errorCode: nil, fireID: "f", viewDurationMs: nil, notUsed: nil)
         #expect(reads == 1, "its two names are one read")
         #expect(both == "https://t.test/?m=00%3A00%3A01.500&c=00%3A00%3A01.500&f=f")
     }
@@ -39,7 +39,7 @@ struct TrackingMacrosTests {
     @Test func aWinningPriceThatIsNotAPriceIsLeftEmpty() {
         let price = { (value: Double) in
             TrackingMacros.substitute("https://t.test/?p=[KONTEXT_WINNINGPRICE]", contentPlayhead: { 0 }, adPlayheadMs: 0, errorCode: nil,
-                                      fireId: "f", viewDurationMs: nil, notUsed: .outbid(winningPrice: value, winner: nil))
+                                      fireID: "f", viewDurationMs: nil, notUsed: .outbid(winningPrice: value, winner: nil))
         }
         for nonsense in [Double.nan, .infinity, -.infinity, -1] {
             #expect(price(nonsense) == "https://t.test/?p=", "\(nonsense)")
@@ -49,7 +49,7 @@ struct TrackingMacrosTests {
 
     @Test func anIPv6HostKeepsItsBracketsAndStillParses() {
         let template = "https://[2001:db8::1]:8080/t?e=[KONTEXT_FIREID]&u=[UNKNOWN]#[x]"
-        let filled = TrackingMacros.substitute(template, contentPlayhead: { 0 }, adPlayheadMs: 0, errorCode: nil, fireId: "f",
+        let filled = TrackingMacros.substitute(template, contentPlayhead: { 0 }, adPlayheadMs: 0, errorCode: nil, fireID: "f",
                                                viewDurationMs: nil, notUsed: nil)
         #expect(filled == "https://[2001:db8::1]:8080/t?e=f&u=%5BUNKNOWN%5D#%5Bx%5D")
         #expect(URL(string: filled)?.host == "2001:db8::1" && URL(string: filled)?.port == 8080)

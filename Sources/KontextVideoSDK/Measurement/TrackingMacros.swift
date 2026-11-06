@@ -10,7 +10,7 @@ enum TrackingMacros {
     /// `template` with every macro the SDK knows filled in. `contentPlayhead` is read once, and only when the
     /// URL asks for it: its two names are one moment.
     static func substitute(_ template: String, contentPlayhead: () -> TimeInterval, adPlayheadMs: Int, errorCode: Int?,
-                           fireId: String, viewDurationMs: Int?, notUsed: Tracker.NotUsed?) -> String {
+                           fireID: String, viewDurationMs: Int?, notUsed: Tracker.NotUsed?) -> String {
         // A macro may arrive with its brackets encoded, one or both (a click-through parsed into a `URL`):
         // normalized first, so detection and substitution see the same string. The end re-encodes whatever
         // is left, so a bracket that was never a macro comes out as it went in.
@@ -23,7 +23,7 @@ enum TrackingMacros {
             .replacingOccurrences(of: "[CONTENTPLAYHEAD]", with: content)
             .replacingOccurrences(of: "[ADPLAYHEAD]", with: encode(playhead(seconds: TimeInterval(adPlayheadMs) / 1000)))
             .replacingOccurrences(of: "[ERRORCODE]", with: errorCode.map(String.init) ?? "")
-            .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireId)
+            .replacingOccurrences(of: "[KONTEXT_FIREID]", with: fireID)
             .replacingOccurrences(of: "[KONTEXT_VIEWDURATION]", with: viewDurationMs.map(String.init) ?? "")
             .replacingOccurrences(of: "[KONTEXT_REASON]", with: notUsed?.reason ?? "")
             // A price that is not a price (NaN, infinite, negative) from the app's `reject` is left empty, not sent as `nan`.

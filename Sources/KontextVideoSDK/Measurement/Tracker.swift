@@ -108,20 +108,20 @@ final class Tracker {
     func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil, notUsed: NotUsed? = nil) -> String {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
         // (adId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
-        let fireId = UUID().uuidString.lowercased()
+        let fireID = UUID().uuidString.lowercased()
         let candidates = event == "progress" && offset != nil ? progressByOffset[offset ?? 0] ?? [] : indicesByEvent[event] ?? []
         for index in candidates where !fired.contains(index) {
             let entry = entries[index]
             guard entry.part == part else { continue }
             if let offset, entry.offset != offset { continue }
             if !Self.repeatable.contains(event) { fired.insert(index) }
-            guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
+            guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireID: fireID, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
                 Logger.warning("ad \(adId.prefix(8)): \(event) beacon has an invalid URL")
                 continue
             }
             send(url, event: event, part: part)
         }
-        return fireId
+        return fireID
     }
 
     /// Whether the ad has any entry named `event` for `part`.
@@ -150,13 +150,13 @@ final class Tracker {
 
     /// The click-through with the beacon macros substituted, `[KONTEXT_FIREID]` with the click's own fire id:
     /// a redirect URL and the `click` beacon then arrive as one occurrence.
-    func clickThrough(_ url: URL, fireId: String) -> URL {
-        URL(string: substitute(url.absoluteString, errorCode: nil, fireId: fireId, viewDurationMs: nil, notUsed: nil)) ?? url
+    func clickThrough(_ url: URL, fireID: String) -> URL {
+        URL(string: substitute(url.absoluteString, errorCode: nil, fireID: fireID, viewDurationMs: nil, notUsed: nil)) ?? url
     }
 
-    private func substitute(_ template: String, errorCode: Int?, fireId: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
+    private func substitute(_ template: String, errorCode: Int?, fireID: String, viewDurationMs: Int?, notUsed: NotUsed?) -> String {
         TrackingMacros.substitute(template, contentPlayhead: { frozenContentPlayhead ?? contentPlayhead() }, adPlayheadMs: adPlayhead,
-                                  errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)
+                                  errorCode: errorCode, fireID: fireID, viewDurationMs: viewDurationMs, notUsed: notUsed)
     }
 }
 
