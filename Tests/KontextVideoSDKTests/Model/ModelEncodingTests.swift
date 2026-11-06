@@ -181,4 +181,12 @@ struct ModelEncodingTests {
         #expect(json["name"] as? String == "sdk-swift-video")
         #expect(json["version"] as? String == SDKInfo.version)
     }
+
+    @Test func aContentWithANaNDurationEqualsItself() {
+        let content = KontextVideo.Content(id: "a", language: "en", duration: .nan)
+        #expect(content == content)
+        #expect(Set([content, content]).count == 1)
+        #expect(content == KontextVideo.Content(id: "a", language: "en"), "NaN is sent as no duration, and compares as one")
+        #expect(KontextVideo.Content(id: "a", language: "en", duration: 2) != KontextVideo.Content(id: "a", language: "en", duration: 3))
+    }
 }

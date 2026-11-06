@@ -90,5 +90,23 @@ extension KontextVideo {
             self.genre = genre
             self.series = series
         }
+
+        /// Equal when every field is, `duration` compared as it is sent (`durationMs`): a NaN duration, which
+        /// `AVPlayerItem.duration.seconds` gives before the item is ready, would otherwise make a content unequal to
+        /// itself and break `Set` and dictionary keys.
+        public static func == (lhs: Content, rhs: Content) -> Bool {
+            lhs.id == rhs.id && lhs.language == rhs.language && lhs.mediaRating == rhs.mediaRating && lhs.url == rhs.url
+                && lhs.title == rhs.title && lhs.categories == rhs.categories && lhs.description == rhs.description
+                && lhs.durationMs == rhs.durationMs && lhs.episodeNumber == rhs.episodeNumber && lhs.keywords == rhs.keywords
+                && lhs.genre == rhs.genre && lhs.series == rhs.series
+        }
+
+        public func hash(into hasher: inout Hasher) {
+            hasher.combine(id)
+            hasher.combine(language)
+            hasher.combine(durationMs)
+            hasher.combine(episodeNumber)
+            hasher.combine(series)
+        }
     }
 }
