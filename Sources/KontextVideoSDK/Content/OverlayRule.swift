@@ -99,9 +99,11 @@ final class OverlayRule: ContentRule {
     }
 
     /// An overlay shown right after `player.play()` finds the slot free of a pause ad, and one whose own
-    /// view was attached over content that paused meanwhile ends.
+    /// view was attached over content that paused meanwhile ends. With the viewer away it only freezes, as
+    /// on Android: another ad's show then finds the slot taken.
     func endIfContentStopped() {
         guard ad.wasShown, !ad.hasEnded, ad.isTrackingContent, ad.contentPlayback?.isPlaying == false else { return }
+        if isViewerAway, freezesOnPause() { return }
         Logger.info("ad \(ad.id.prefix(8)): the content paused; the overlay ends")
         ad.end(.interrupted)
     }

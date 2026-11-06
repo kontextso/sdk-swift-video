@@ -180,6 +180,29 @@ struct VideoAdInAppBrowserTests {
         ad.dismiss()
     }
 
+    /// Another ad's show (a pause ad, say) while the content is paused under the overlay's browser keeps the frozen
+    /// overlay and is refused, as on Android; after Done, the content playing again lets the overlay go on.
+    @Test func anotherAdsShowUnderTheBrowserKeepsTheFrozenOverlay() async throws {
+        VideoAd.contentResumeGrace = 0.1
+        defer { VideoAd.contentResumeGrace = 1 }
+        let browser = Browser()
+        let (ad, delegate) = try await makeAd(Fixtures.overlayAd(id: "o-browser-other", duration: 5000), tracksContent: true)
+        let (pauseAd, _) = try await makeAd(Fixtures.ad(id: "p-browser-other"))
+        try ad.show(in: harness.player.view)
+        click(ad)
+        harness.player.isPlaying = false
+        ad.contentDidChange(.playingChanged(isPlaying: false))
+        #expect(throws: VideoAdError.anotherAdShowing) { try pauseAd.show(in: harness.player.view) }
+        #expect(!ad.hasEnded && ad.wasContentPausedWhileInactive, "the overlay stays, frozen")
+        #expect(KontextVideo.shared.adOnScreen === ad)
+        browser.tapDone()
+        harness.player.isPlaying = true
+        ad.contentDidChange(.tick)
+        await sleepMs(250)   // past the grace
+        #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "it goes on")
+        ad.dismiss()
+    }
+
     @Test func aClickInTheBrowserFiresClickOnceAndTellsTheDelegateOnce() async throws {
         let browser = Browser()
         let (ad, delegate) = try await makeAd(Fixtures.ad(id: "p-browser-once"))
