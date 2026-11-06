@@ -37,9 +37,31 @@ struct LinearViewControllerTests {
         defer { window.tearDown() }
         let presenter = LandscapeOnly()
         window.window.rootViewController = presenter
-        presenter.present(controller, animated: false)
+        LinearPresentation.present(controller, from: presenter, adId: "orientation", timeout: 1, isPending: { false },
+                                   onPresented: {}, onFailed: {})
         #expect(await waitUntil { controller.presentingViewController === presenter })
         #expect(controller.supportedInterfaceOrientations == .landscape)
+    }
+
+    /// A presenter that lets the controller it presents decide, as apps do so full-screen media can rotate.
+    final class ForwardingPresenter: UIViewController {
+        override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+            presentedViewController?.supportedInterfaceOrientations ?? .landscape
+        }
+    }
+
+    @Test func aPresenterThatAsksThePresentedControllerDoesNotLoop() async throws {
+        let (controller, _) = makeController()
+        let window = TestWindow()
+        defer { window.tearDown() }
+        let presenter = ForwardingPresenter()
+        window.window.rootViewController = presenter
+        LinearPresentation.present(controller, from: presenter, adId: "orientation", timeout: 1, isPending: { false },
+                                   onPresented: {}, onFailed: {})
+        #expect(await waitUntil { controller.presentingViewController === presenter })
+        // Asking the presenter now would ask the ad again, without end: the mask is the one taken at presentation.
+        #expect(controller.supportedInterfaceOrientations == .landscape)
+        #expect(presenter.supportedInterfaceOrientations == .landscape)
     }
 
     @Test func aCoveredViewIsNotAnInterruption() {

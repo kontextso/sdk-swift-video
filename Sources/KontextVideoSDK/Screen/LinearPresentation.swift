@@ -38,6 +38,8 @@ enum LinearPresentation {
     static func present(_ controller: LinearAdViewController, from presenter: UIViewController, adId: String, timeout: TimeInterval,
                         isPending: @escaping @MainActor () -> Bool, onPresented: @escaping @MainActor () -> Void,
                         onFailed: @escaping @MainActor () -> Void) {
+        // Asked now, while the presenter presents nothing it could forward the question to.
+        controller.presenterOrientations = presenter.supportedInterfaceOrientations
         presenter.present(controller, animated: true) {
             onPresented()
         }

@@ -39,11 +39,13 @@ final class LinearAdViewController: UIViewController {
         view.addSubview(webView)
     }
 
-    /// The presenter's orientations: a full-screen ad over a landscape-only player stays landscape, and one over a
-    /// portrait-locked app does not rotate it. Before it is presented, any.
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        presentingViewController?.supportedInterfaceOrientations ?? .all
-    }
+    /// The presenter's orientations, taken when it presents the ad (`LinearPresentation.present`): a full-screen ad
+    /// over a landscape-only player stays landscape, and one over a portrait-locked app does not rotate it. Taken
+    /// then, not asked for later: a presenter that forwards the question to the controller it presents, as apps do
+    /// so full-screen media can rotate, would ask the ad back without end. Before it is presented, any.
+    var presenterOrientations: UIInterfaceOrientationMask = .all
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { presenterOrientations }
 
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
