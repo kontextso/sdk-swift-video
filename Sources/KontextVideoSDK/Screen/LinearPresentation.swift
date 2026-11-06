@@ -9,6 +9,27 @@ enum LinearPresentation {
     /// no word: the cap after which a presentation is taken as done, or a dismissal as stuck.
     static let capFactor: Double = 5
 
+    /// What the ad does once UIKit confirmed its presentation.
+    enum AfterPresented: Equatable {
+        /// Still reserved: the creative reached the screen.
+        case reachScreen
+        /// Ended while UIKit was still presenting: UIKit drops a dismissal asked for mid-presentation, so it is
+        /// asked again now.
+        case dismissAgain
+        /// Already ended, or the dismissal is under way: nothing.
+        case nothing
+    }
+
+    /// The decision after the presentation, over plain values: the ad's phase and whether the controller is
+    /// already being dismissed.
+    static func afterPresented(phase: AdLifecycle.Phase?, isBeingDismissed: Bool) -> AfterPresented {
+        switch phase {
+        case .reserved?: return .reachScreen
+        case .ending?: return isBeingDismissed ? .nothing : .dismissAgain
+        default: return .nothing
+        }
+    }
+
     /// Presents `controller` from `presenter`. `onPresented` runs when UIKit confirms it, or when the watchdog
     /// finds the controller on screen without that confirmation; `onFailed` when it never got there. The
     /// watchdog stops once `isPending` turns false (the ad ended, or was presented). After `timeout`, a

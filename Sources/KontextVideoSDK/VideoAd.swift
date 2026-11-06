@@ -374,8 +374,11 @@ public final class VideoAd {
         screen.present(from: presenter) { [weak self] in
             self?.state.phase == .reserved
         } onPresented: { [weak self] controller in
-            guard case .ending? = self?.state.phase else { return self?.reachedScreen() ?? () } // ended mid-animation: UIKit dropped that dismiss
-            if controller?.isBeingDismissed == false { controller?.presentingViewController?.dismiss(animated: true) }
+            switch LinearPresentation.afterPresented(phase: self?.state.phase, isBeingDismissed: controller?.isBeingDismissed ?? false) {
+            case .reachScreen: self?.reachedScreen()
+            case .dismissAgain: controller?.presentingViewController?.dismiss(animated: true)
+            case .nothing: break
+            }
         } onFailed: { [weak self] in
             guard let self else { return }
             ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
