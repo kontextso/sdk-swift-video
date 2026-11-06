@@ -192,6 +192,35 @@ struct VideoAdHostTests {
         #expect(await waitUntil { self.heard.ends == [.destroyed] }, "the end is still heard after the host left")
     }
 
+    @Test func theImpressionAndAClickReachTheAppsHandlers() async throws {
+        let slot = slot()
+        var impressions: [String] = []
+        var clicks: [VideoAd.Click] = []
+        slot.onImpression = { impressions.append($0.id) }
+        slot.onClick = { _, click in clicks.append(click) }
+        Environment.openURL = { _, completion in completion(true) }
+        let ad = try await loaded(Fixtures.ad(id: "p-h-click"))
+        slot.set(ad)
+        #expect(await waitUntil { impressions == ["p-h-click"] }, "an image ad's impression at show")
+        ad.bridge.noteTouch()
+        ad.bridge.receive(["adId": ad.id, "type": "ad.click", "url": "https://brand.test", "area": "endCard"], from: sender)
+        #expect(clicks == [VideoAd.Click(area: .endCard)])
+        slot.onClick = nil
+        ad.bridge.noteTouch()
+        ad.bridge.receive(["adId": ad.id, "type": "ad.click", "url": "https://brand.test"], from: sender)
+        #expect(clicks.count == 1 && ad.wasShown && !ad.hasEnded, "no handler: the click is still the ad's, nothing breaks")
+    }
+
+    @Test func dismantlingThroughSwiftUIsHookDismissesTheAd() async throws {
+        let slot = slot()
+        let ad = try await loaded(Fixtures.ad(id: "p-h-dismantle"))
+        slot.set(ad)
+        VideoAdHost.dismantleUIView(slot, coordinator: ())
+        #expect(slot.isDismantled && slot.ad == nil && KontextVideo.shared.adOnScreen == nil)
+        #expect(await waitUntil { self.heard.ends == [.dismissed] }, "the end after SwiftUI's update")
+        VideoAdHost.dismantleUIView(UIView(), coordinator: ())   // a view that is no slot: nothing to do
+    }
+
     @Test func tapsOutsideTheAdGoThroughToThePlayer() {
         let slot = slot()
         #expect(slot.hitTest(CGPoint(x: 10, y: 10), with: nil) == nil)

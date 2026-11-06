@@ -83,8 +83,13 @@ struct KontextVideoTests {
     @Test func secondInitializeIsIgnoredButStillCallsBack() async {
         _ = await harness.initialize()
         var reported: [KontextVideo.State] = []
-        sdk.initialize(with: KontextVideo.Configuration(publisherToken: "other", adServerURL: harness.server.baseURL)) { reported.append($0) }
+        var onMain: [Bool] = []
+        sdk.initialize(with: KontextVideo.Configuration(publisherToken: "other", adServerURL: harness.server.baseURL)) {
+            reported.append($0)
+            onMain.append(Thread.isMainThread)
+        }
         #expect(await waitUntil { !reported.isEmpty })
+        #expect(onMain == [true], "the ignored call's completion on the main thread too")
         #expect(sdk.configuration?.publisherToken == "test-dev", "the first configuration stays")
         #expect(reported == [.enabled], "the ignored call still hears, with the first call's state")
         #expect(harness.server.requests(to: "/v2/config").count == 1)
@@ -176,8 +181,10 @@ struct KontextVideoTests {
             sdk.resetForTesting()
             harness.server.on("/v2/config", response)
             var reported: [KontextVideo.State] = []
-            sdk.initialize(with: harness.configuration) { reported.append($0) }
+            var onMain: [Bool] = []
+            sdk.initialize(with: harness.configuration) { reported.append($0); onMain.append(Thread.isMainThread) }
             #expect(await waitUntil { !reported.isEmpty })
+            #expect(onMain == [true], "on the main thread, as documented: \(expected)")
             // A failed /config is retried by the next request; the retry belongs to that request, not to initialize.
             _ = try await sdk.waitUntilEnabled()
             await sleepMs(50)

@@ -41,6 +41,41 @@ struct TTVideoEngineAdapterTests {
         #expect(adapter.playbackSpeed == nil)
     }
 
+    @Test func aTimeThatIsNoNumberIsZeroAndAnyStateButPlayingIsNotPlaying() {
+        let engine = FakeEngine()
+        let adapter = TTVideoEngineAdapter(engine: engine)
+        for (time, expected) in [(Double.nan, 0.0), (-0.0, 0), (-.infinity, 0), (0, 0), (86_400.25, 86_400.25)] {
+            engine.currentPlaybackTime = time
+            #expect(adapter.currentTime == expected, "\(time)")
+        }
+        for (state, playing) in [(0, false), (1, true), (2, false), (3, false), (-1, false), (Int.max, false)] {
+            engine.playbackState = state
+            #expect(adapter.isPlaying == playing, "state \(state)")
+        }
+        engine.playbackSpeed = 0
+        #expect(adapter.playbackSpeed == 0, "a paused speed is read as given; what it means is ContentPlayback's")
+    }
+
+    /// An engine as an older TTSDK declares it: time and state, no speed.
+    final class EngineWithoutSpeed: NSObject {
+        @objc dynamic var currentPlaybackTime: TimeInterval = 3
+        @objc dynamic var playbackState: Int = 1
+    }
+
+    /// An object with a time but no playback state.
+    final class TimeOnly: NSObject {
+        @objc dynamic var currentPlaybackTime: TimeInterval = 3
+    }
+
+    @Test func aMissingSpeedIsUnknownAndAMissingStateMakesTheObjectUnreadable() {
+        let olderEngine = EngineWithoutSpeed(), timeOnlyObject = TimeOnly()   // held: the adapter holds its engine weakly
+        let older = TTVideoEngineAdapter(engine: olderEngine)
+        #expect(older.currentTime == 3 && older.isPlaying && older.playbackSpeed == nil)
+        let timeOnly = TTVideoEngineAdapter(engine: timeOnlyObject)
+        #expect(timeOnly.currentTime == 0 && !timeOnly.isPlaying, "both properties or nothing is read")
+        withExtendedLifetime((olderEngine, timeOnlyObject)) {}
+    }
+
     @Test func theEngineIsHeldWeakly() {
         var engine: FakeEngine? = FakeEngine()
         let adapter = TTVideoEngineAdapter(engine: engine!)
