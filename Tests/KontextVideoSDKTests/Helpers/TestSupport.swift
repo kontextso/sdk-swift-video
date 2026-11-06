@@ -279,6 +279,17 @@ struct SDKHarness {
         }
     }
 
+    /// The beacons the server received, by name (`event(part)` for a part).
+    func beaconNames() -> [String] {
+        server.beacons.map { beacon in beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event }
+    }
+
+    /// Waits until a beacon named `name` arrived: beacons are fire-and-forget, so a positive check waits for its
+    /// condition instead of sleeping a fixed time a slow runner may overrun.
+    func beaconArrives(_ name: String) async -> Bool {
+        await waitUntil { self.beaconNames().contains(name) }
+    }
+
     /// The `/video/ads` requests the SDK sent, in order.
     var adsRequests: [StubServer.Recorded] { server.requests(to: "/v2/video/ads") }
 

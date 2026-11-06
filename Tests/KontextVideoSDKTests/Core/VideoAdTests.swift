@@ -308,7 +308,7 @@ struct VideoAdTests {
         #expect(delegate.endReasons.isEmpty, "no clock runs")
         ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
-        #expect(await beacons().contains("overlayViewDuration"))
+        #expect(await harness.beaconArrives("overlayViewDuration"))
     }
 
     @Test func aPauseAdHasNoDurationAndStaysUntilDismissed() async throws {
@@ -550,7 +550,7 @@ struct VideoAdTests {
         #expect(ad.invalidationReason == .creativeFailed(code: 502))
         #expect(ad.isReady == false)
         #expect(delegate.events.isEmpty, "nothing is delivered before show")
-        #expect(await beacons().contains("error"))
+        #expect(await harness.beaconArrives("error"))
     }
 
     // MARK: Video

@@ -134,7 +134,7 @@ struct VideoAdSKAdNetworkTests {
         await sleepMs(60)
         #expect(skanCalls == ["init s7"], "nothing to end when Apple refused the impression")
         #expect(delegate.events == ["impression", "end:dismissed"])
-        #expect(await beacons().contains("impression"))
+        #expect(await harness.beaconArrives("impression"))
     }
 
     @Test func aFailedEndStillReleasesTheImpressionBeforeTheNextAd() async throws {
@@ -267,7 +267,7 @@ struct VideoAdSKAdNetworkTests {
         send(ad, "ad.click", ["url": "https://apps.apple.com/app/id1521454264"])
         #expect(await waitUntil { harness.storeProduct.presented.count == 1 })
         #expect(harness.storeProduct.presented.first?.itunesItem == "s8")
-        #expect(await beacons().contains("click"), "the click beacon fires as for any click")
+        #expect(await harness.beaconArrives("click"), "the click beacon fires as for any click")
         #expect(opened.isEmpty, "the sheet replaces the URL")
         #expect(delegate.clicks.count == 1 && !ad.hasEnded)
     }

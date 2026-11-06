@@ -58,7 +58,8 @@ struct OnScreenTimeClockTests {
 
     @Test func aStoppedClockNeverReportsAndKeepsItsTime() async {
         var elapsed = 0
-        let clock = OnScreenTimeClock(duration: 0.05, adId: "clock-2") { elapsed += 1 }
+        // A duration no runner's delay reaches: a 50 ms one could run out during a 20 ms sleep on a busy runner.
+        let clock = OnScreenTimeClock(duration: 60, adId: "clock-2") { elapsed += 1 }
         clock.start(in: nil)
         await sleepMs(20)
         let counted = clock.stop()

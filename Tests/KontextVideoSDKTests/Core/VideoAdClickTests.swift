@@ -80,7 +80,7 @@ struct VideoAdClickTests {
         send(ad, "ad.click", ["url": "https://brand.test/offer", "area": "cta"])
         #expect(delegate.clicks == [VideoAd.Click(area: .other("cta"))], "where the viewer tapped; the URL is the SDK's to open")
         #expect(opened.map(\.absoluteString) == ["https://brand.test/offer"])
-        #expect(await beacons().contains("click"))
+        #expect(await harness.beaconArrives("click"))
         #expect(ad.hasEnded == false, "a click does not end the ad")
     }
 
@@ -116,7 +116,7 @@ struct VideoAdClickTests {
         try ad.show(in: harness.player.view)
         ad.bridge.noteTouch()
         send(ad, "ad.click", ["url": "https://brand.test", "area": "endCard"])
-        #expect(await beacons().contains("click"), "every accepted click is counted")
+        #expect(await harness.beaconArrives("click"), "every accepted click is counted")
     }
 }
 }
