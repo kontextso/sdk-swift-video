@@ -24,12 +24,23 @@ final class Tracker {
 
     private let adId: String
     private let entries: [AdPayload.TrackingEvent]
+    /// The entries' indices by event, in the answer's order: a beacon looks at its own entries only. An answer may
+    /// carry thousands of progress checkpoints, and a catch-up over all of them must not rescan every entry per
+    /// checkpoint on the main thread.
+    private let indicesByEvent: [String: [Int]]
+    /// The progress entries' indices by offset, and those offsets ascending.
+    private let progressByOffset: [Int: [Int]]
+    private let progressOffsets: [Int]
     private var fired: Set<Int> = []
     private let session: URLSession
 
     init(adId: String, entries: [AdPayload.TrackingEvent]) {
         self.adId = adId
         self.entries = entries
+        indicesByEvent = Dictionary(grouping: entries.indices, by: { entries[$0].event })
+        let progress = entries.indices.filter { entries[$0].event == "progress" && entries[$0].offset != nil }
+        progressByOffset = Dictionary(grouping: progress, by: { entries[$0].offset ?? 0 })
+        progressOffsets = progressByOffset.keys.sorted()
         session = Environment.session
         readsContentPlayhead = entries.contains { TrackingMacros.asksForContentPlayhead($0.url) }
     }
@@ -98,8 +109,10 @@ final class Tracker {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
         // (adId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
         let fireId = UUID().uuidString.lowercased()
-        for (index, entry) in entries.enumerated() where !fired.contains(index) {
-            guard entry.event == event, entry.part == part else { continue }
+        let candidates = event == "progress" && offset != nil ? progressByOffset[offset ?? 0] ?? [] : indicesByEvent[event] ?? []
+        for index in candidates where !fired.contains(index) {
+            let entry = entries[index]
+            guard entry.part == part else { continue }
             if let offset, entry.offset != offset { continue }
             if !Self.repeatable.contains(event) { fired.insert(index) }
             guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireId: fireId, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
@@ -126,14 +139,11 @@ final class Tracker {
     /// playhead, as VAST players do, so a checkpoint the page skipped (a stall, a seek) or rounded differently
     /// still fires.
     func fireProgress(upTo playheadMs: Int) {
-        // Each checkpoint not fired yet, once, in order: a fired one is skipped instead of scanned again, and
-        // entries sharing an offset fire as one occurrence with one fire id.
-        let due = Set(entries.indices.compactMap { index -> Int? in
-            let entry = entries[index]
-            guard entry.event == "progress", !fired.contains(index), let offset = entry.offset, offset <= playheadMs else { return nil }
-            return offset
-        })
-        for offset in due.sorted() {
+        // Each checkpoint not fired yet, once, in order: entries sharing an offset fire as one occurrence with one
+        // fire id. A checkpoint whose entries all fired is skipped without a fire id spent on it.
+        for offset in progressOffsets {
+            guard offset <= playheadMs else { break }
+            guard progressByOffset[offset]?.contains(where: { !fired.contains($0) }) == true else { continue }
             fire("progress", offset: offset)
         }
     }
