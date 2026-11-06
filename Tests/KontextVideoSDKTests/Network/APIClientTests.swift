@@ -205,6 +205,32 @@ struct APIClientTests {
         }
     }
 
+    /// The iOS 14 path, run here on any version: a data delegate that stops the transfer past the limit.
+    @Test func theCappedLoadStopsAnAnswerPastTheLimitWhileItArrives() async throws {
+        let limit = 4_096
+        var request = URLRequest(url: server.baseURL.appendingPathComponent("v2/ping"))
+        request.httpMethod = "POST"
+        server.on("/v2/ping", StubServer.Response(status: 200, body: padded(to: limit)))
+        let (data, response) = try await APIClient.loadCapped(request, over: Environment.session, limit: limit)
+        #expect(data == padded(to: limit) && (response as? HTTPURLResponse)?.statusCode == 200, "exactly at the limit is read")
+        let size = 6 * 1024 * 1024
+        for (path, chunked) in [("/v2/big", false), ("/v2/chunked", true)] {
+            server.on(path, .streamed(size, chunked: chunked))
+            var oversized = request
+            oversized.url = server.baseURL.appendingPathComponent(String(path.dropFirst()))
+            do {
+                _ = try await APIClient.loadCapped(oversized, over: Environment.session, limit: limit)
+                Issue.record("expected a throw for \(path)")
+            } catch let error as URLError {
+                #expect(error.code == .dataLengthExceedsMaximum, "\(path)")
+            }
+        }
+        // The chunked answer is refused by the body's count, whatever the stub still pushes before it sees the cancel.
+        #expect(await waitUntil(StubServer.streamGrace * 3) { self.server.streams.contains { $0.path == "/v2/big" } })
+        let big = server.streams.first { $0.path == "/v2/big" }
+        #expect(big?.cancelled == true && big?.delivered == 0, "a length past the limit stops at the head")
+    }
+
     @Test func emptyBodyDecodesAsEmptyResponse() async throws {
         server.on("/v2/debug", .empty(204))
         let _: EmptyResponse = try await client.post("debug", body: Body(hello: "x"))

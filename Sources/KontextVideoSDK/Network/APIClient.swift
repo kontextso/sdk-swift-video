@@ -124,14 +124,12 @@ struct APIClient: Sendable {
 
 extension APIClient {
     /// The answer, cut at `maxResponseBytes`: a longer one fails as `dataLengthExceedsMaximum`, a transport
-    /// error. Streamed where the OS can (iOS 15), so nothing past the limit is held; on iOS 14 the body is
-    /// read whole and refused afterwards, as `URLSession` has no streaming `async` call there.
+    /// error, and nothing past the limit is held. Streamed where the OS can (iOS 15); on iOS 14 through a data
+    /// delegate (`loadCapped`), as `URLSession` has no streaming `async` call there.
     private func load(_ request: URLRequest) async throws -> (Data, URLResponse) {
         let limit = responseLimit
         guard #available(iOS 15.0, *) else {
-            let (data, response) = try await session.data(for: request)
-            guard data.count <= limit else { throw URLError(.dataLengthExceedsMaximum) }
-            return (data, response)
+            return try await Self.loadCapped(request, over: session, limit: limit)
         }
         let (bytes, response) = try await session.bytes(for: request)
         // Stopping the task ends the transfer; the bytes already received are dropped with it.
@@ -149,6 +147,84 @@ extension APIClient {
             data.append(byte)
         }
         return (data, response)
+    }
+}
+
+extension APIClient {
+    /// The answer through a data delegate that stops the transfer as soon as it passes `limit` (`CappedResponse`): a
+    /// completion-handler task would hold the whole body before calling back, hundreds of megabytes from a broken
+    /// server. A session of its own for the request, with `session`'s configuration and redirect rules; the API
+    /// sends a few requests per video, so its connection is not worth sharing. The iOS 14 path, callable on any.
+    static func loadCapped(_ request: URLRequest, over session: URLSession, limit: Int) async throws -> (Data, URLResponse) {
+        let collector = CappedResponse(limit: limit, allowsDowngrade: (session.delegate as? RedirectLimit)?.allowsDowngrade ?? false)
+        let capped = URLSession(configuration: session.configuration, delegate: collector, delegateQueue: nil)
+        defer { capped.finishTasksAndInvalidate() }
+        let task = capped.dataTask(with: request)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                collector.start(task, continuation: continuation)
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+}
+
+/// One API answer collected up to a limit: the transfer is cancelled at a head that announces more, or once the body
+/// passes it, and the request fails as `dataLengthExceedsMaximum`. Redirects as every SDK session (`RedirectLimit`).
+final class CappedResponse: RedirectLimit, URLSessionDataDelegate, @unchecked Sendable {
+    // `@unchecked Sendable`: its state is only touched under `stateLock`; URLSession calls it on its own queue.
+    private let limit: Int
+    private let stateLock = NSLock()
+    private var data = Data()
+    private var response: URLResponse?
+    private var isTooLarge = false
+    private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
+
+    init(limit: Int, allowsDowngrade: Bool) {
+        self.limit = limit
+        super.init(allowsDowngrade: allowsDowngrade)
+    }
+
+    func start(_ task: URLSessionDataTask, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
+        stateLock.withLock { self.continuation = continuation }
+        task.resume()
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        let fits = response.expectedContentLength <= Int64(limit)
+        stateLock.withLock {
+            self.response = response
+            isTooLarge = !fits
+        }
+        completionHandler(fits ? .allow : .cancel)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let isOver = stateLock.withLock { () -> Bool in
+            guard !isTooLarge, self.data.count + data.count <= limit else {
+                isTooLarge = true
+                self.data = Data()
+                return true
+            }
+            self.data.append(data)
+            return false
+        }
+        if isOver { dataTask.cancel() }
+    }
+
+    override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        super.urlSession(session, task: task, didCompleteWithError: error)
+        let (continuation, result) = stateLock.withLock { () -> (CheckedContinuation<(Data, URLResponse), Error>?, Result<(Data, URLResponse), Error>) in
+            let continuation = self.continuation
+            self.continuation = nil
+            if isTooLarge { return (continuation, .failure(URLError(.dataLengthExceedsMaximum))) }
+            if let error { return (continuation, .failure(error)) }
+            guard let response else { return (continuation, .failure(URLError(.badServerResponse))) }
+            return (continuation, .success((data, response)))
+        }
+        continuation?.resume(with: result)
     }
 }
 
