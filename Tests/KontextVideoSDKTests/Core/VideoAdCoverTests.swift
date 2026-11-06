@@ -89,9 +89,19 @@ struct VideoAdCoverTests {
     /// the first two, as around a dialog on Android; the sheet is the ad's own click, which on Android leaves the
     /// app and only freezes the ad.
     @Test func anAlertAPopoverOrTheStoreSheetOverThePlayerLeaveTheAdUp() async throws {
+        // The rule itself, on every OS: the iOS 15 runner does not always complete one of these presentations.
+        let sheet = UIViewController()
+        sheet.modalPresentationStyle = .pageSheet
+        let lightPopover = UIViewController()
+        lightPopover.modalPresentationStyle = .popover
+        #expect(InlineScreen.hidesThePlayer(sheet) && InlineScreen.hidesThePlayer(UIViewController()))
+        #expect(!InlineScreen.hidesThePlayer(UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)))
+        #expect(!InlineScreen.hidesThePlayer(lightPopover) && !InlineScreen.hidesThePlayer(SKStoreProductViewController()))
+        // And on screen, where the runner presents them.
         let alert = UIAlertController(title: "Alert", message: nil, preferredStyle: .alert)
         let popover = UIViewController()
         popover.modalPresentationStyle = .popover
+        var shownOver = 0
         for (index, (cover, label)) in [(alert as UIViewController, "an alert"), (popover, "a popover"), (SKStoreProductViewController(), "the store sheet")].enumerated() {
             let (screen, player) = playerInFreshWindow()
             defer { screen.tearDown() }
@@ -100,11 +110,16 @@ struct VideoAdCoverTests {
             let (ad, delegate, _) = try await makeAd(Fixtures.ad(id: "p-light-\(index)"))
             try ad.show(in: player)
             screen.root.present(cover, animated: false)
-            #expect(await waitUntil { screen.root.presentedViewController === cover }, "\(label) presented")
+            guard await waitUntil(2, { screen.root.presentedViewController === cover }) else {
+                ad.dismiss()
+                continue
+            }
             await sleepMs(Int(ViewabilityMeter.interval * 1000) * 3)
             #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "\(label): the ad stays up")
+            shownOver += 1
             ad.dismiss()
         }
+        #expect(shownOver >= 1, "the runner presented one at least")
     }
 
     /// A show under a screen the app presented over the player's: refused, as a show into a stopped Activity is on

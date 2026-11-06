@@ -166,7 +166,7 @@ final class InlineScreen: AdScreen {
         return nil
     }
 
-    private static func hidesThePlayer(_ presented: UIViewController) -> Bool {
+    static func hidesThePlayer(_ presented: UIViewController) -> Bool {
         Environment.covers(presented) && presented.modalPresentationStyle != .popover && !(presented is SKStoreProductViewController)
     }
 
