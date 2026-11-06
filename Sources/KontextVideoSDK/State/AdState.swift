@@ -58,8 +58,10 @@ struct AdState: Equatable {
         return true
     }
 
-    /// Records whether the ad video plays now (`video.start` and `resume` on, `pause` and `complete` off).
-    mutating func markVideoPlaying(_ isPlaying: Bool) { isVideoPlaying = isPlaying }
+    /// Records whether the ad video plays now (`video.start` and `resume` on, `pause` and `complete` off). Once
+    /// completed it stays off: a later `video.resume` or `video.start` (a replay on the end card) is not the video
+    /// the viewability clock counts, which would make a video never seen through `viewable` on its end card.
+    mutating func markVideoPlaying(_ isPlaying: Bool) { isVideoPlaying = isPlaying && !isCompleted }
 
     /// Records what broke, for the `didFail` before `didEnd(.failed)`. The first failure stays.
     mutating func markFailed(_ error: VideoAdError) {

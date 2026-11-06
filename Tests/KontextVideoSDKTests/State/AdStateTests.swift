@@ -107,6 +107,16 @@ struct AdStateTests {
         #expect(state.phase == .reserved)
     }
 
+    @Test func aCompletedVideoNeverPlaysAgain() {
+        var state = AdState()
+        state.markVideoPlaying(true)
+        #expect(state.isVideoPlaying)
+        state.markCompleted()
+        state.markVideoPlaying(false)
+        state.markVideoPlaying(true)   // a video.resume or a second video.start on the end card
+        #expect(!state.isVideoPlaying, "after complete, the viewability clock of the video stays off")
+    }
+
     @Test func theFailureIsReadBackAndTheFirstStays() {
         var state = reached(.onScreen)
         state.markFailed(.creativeFailed(code: 1))
