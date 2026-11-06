@@ -48,9 +48,18 @@ struct InlineViewportTests {
         defer { ad.dismiss() }
         let view = try #require(adFrame(in: harness.player.view))
         #expect(view.minY >= safeArea.top, "placed inside the safe area")
+        let expected = "\(Int(view.width)) \(Int(view.height)) 0px 0px"
         // At once, as the page's own `ad.show` handler would read it.
-        let shown = try await ad.bridge.webView.evaluateJavaScript(Self.probe) as? String
-        #expect(shown == "\(Int(view.width)) \(Int(view.height)) 0px 0px", "the view \(view)")
+        var shown = try await ad.bridge.webView.evaluateJavaScript(Self.probe) as? String
+        if #unavailable(iOS 17) {
+            // Older WebKit applies a view's new frame to the page asynchronously, so give it up to 1 s there.
+            let deadline = Date().addingTimeInterval(1)
+            while shown != expected, Date() < deadline {
+                try await Task.sleep(nanoseconds: 50_000_000)
+                shown = try await ad.bridge.webView.evaluateJavaScript(Self.probe) as? String
+            }
+        }
+        #expect(shown == expected, "the view \(view)")
     }
 }
 }
