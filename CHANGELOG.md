@@ -2,8 +2,6 @@
 
 ## 0.2.0
 
-In progress.
-
 ### Breaking
 * `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `ContentPlayer` protocol (`currentTime`, `isPlaying`, and optional `isPlayingPublisher`, `playbackSpeed`, `seekPublisher`, `contentChangedPublisher` and `currentItem`, the episode it plays, so an episode's ads are shown only in that episode). The SDK reads the playhead from it as before, and now also follows its playback. It holds an `AVPlayer` weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
 * An overlay lives only while the content plays, when a player is tracked:
@@ -51,6 +49,8 @@ In progress.
 * Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device facts sent as ad inputs (Other Data Types) are declared apart from error and debug reports (Other Diagnostic Data); device ids, ad data and diagnostics are linked (the install id joins them). Nothing is declared as tracking: no Kontext server uses the data for tracking yet. Publishers' App Store privacy labels should be checked against it.
 
 ### Fixed
+* An app that pauses its player in `didClick` while an overlay's link opens (the in-app browser appears a moment later) freezes the overlay, as the Kotlin SDK does; before, the pause came with the viewer still in front and ended it `.interrupted`.
+* An overlay or pause ad's page reads its own view's size from `show` on, with no safe-area insets; before, a full-screen pause ad's page could lay out for the whole window on its first show.
 * A linear ad ended while UIKit was still animating it onto the screen (a `destroy()`, a released `VideoAds`, a creative error right after `show(from:)`) is dismissed once that animation finishes; before, UIKit dropped the dismissal and a black full-screen controller stayed with no way to close it.
 * An overlay or pause ad whose own box is wholly off screen where it is placed (a feed scrolled so the player's middle shows, not its top card) ends `.interrupted` at `show`, with no impression.
 * A pause ad on screen ends `.interrupted` when another `VideoAds` takes its player (the next page of a feed that shares one player) or the player moves to another item; it no longer holds the app's slot over content it is not for.

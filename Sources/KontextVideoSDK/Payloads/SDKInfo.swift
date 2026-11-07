@@ -4,7 +4,7 @@ struct SDKInfo: Encodable, Sendable {
     static let name = "sdk-swift-video"
     /// The one place the version is written: sent with every request, exposed as `KontextVideo.version`, and
     /// what CI compares a release tag against (it reads this line, so keep its shape); see RELEASING.md.
-    static let version = "0.1.0"
+    static let version = "0.2.0"
 
     private enum CodingKeys: String, CodingKey {
         case name, version
