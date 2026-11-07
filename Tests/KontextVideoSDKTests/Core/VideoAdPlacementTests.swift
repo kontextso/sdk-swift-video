@@ -302,9 +302,11 @@ struct VideoAdPlacementTests {
         await sleepMs(Int(InlineScreen.unfitGrace * 1000) + 300)
         #expect(!ad.hasEnded && delegate.endReasons.isEmpty, "back to a fitting size within the grace: \(delegate.events)")
         #expect(adFrame(in: player) == placed)
-        // A second misfit is watched for the same way: staying too small ends it.
+        // A second misfit is watched for the same way: staying too small ends it, once the grace is over.
         player.frame.size = CGSize(width: 100, height: 20)
         player.layoutIfNeeded()
+        await sleepMs(Int(InlineScreen.unfitGrace * 1000) - 200)   // late in the grace (a wall-clock sleep: room for a slow runner)
+        #expect(!ad.hasEnded, "still on, late in the grace")
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "still too small after the grace: \(delegate.events)")
     }
 
