@@ -271,7 +271,8 @@ public final class VideoAd {
     // MARK: Showing
 
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
-    /// video area, not the screen), at the ad's `position` and `size`; a full-screen pause ad fills it.
+    /// video area, not the screen), where the server placed it, at the size its creative was built for; a
+    /// full-screen pause ad fills it.
     /// Throws when the show cannot begin, with nothing fired: `wrongShowMethod` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated` (`.contentChanged` too: show an episode's ads only in
     /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `cannotShowNow`

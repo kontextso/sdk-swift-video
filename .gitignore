@@ -65,3 +65,6 @@ fastlane/test_output
 .claude/settings.local.json
 .claude/worktrees/
 
+
+# Private notes
+NOTES.md

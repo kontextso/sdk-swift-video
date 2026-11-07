@@ -44,7 +44,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
         do {
             try overlayAd?.show(in: view, insets: UIEdgeInsets(top: 0, left: 0, bottom: 80, right: 0))
         } catch {
-            try? overlayAd?.reject()
+            overlayAd?.reject()
         }
     }
 
@@ -53,7 +53,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
     }
 
     func leave() {
-        try? overlayAd?.dismiss()
+        overlayAd?.dismiss()
         ads?.destroy()
     }
 

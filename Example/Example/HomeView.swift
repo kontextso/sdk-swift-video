@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Four videos, one per situation. Tapping one opens the full-screen player.
+/// Five videos, one per situation. Tapping one opens the full-screen player.
 struct HomeView: View {
     @State private var selected: Video?
 

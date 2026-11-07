@@ -45,8 +45,8 @@ swiftlint analyze --strict --compiler-log-path xcodebuild.log
 
 Check the exit status of `xcodebuild` itself, not of a `grep` piped after it: a red test run must not pass for
 green. CI builds with Xcode 16.4 (iOS 18 SDK), which can warn where a newer local Xcode does not. The example (`Example/`, XcodeGen) talks to
-the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: four videos (two pause, one
-overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when the viewer pauses. See
+the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: five videos (two overlay, one
+linear, two pause); the overlay and linear ads show 3 s in, a pause ad when the viewer pauses. See
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Architecture
@@ -57,7 +57,7 @@ overlay, one linear); the overlay and linear ads show 3 s in, a pause ad when th
   ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Platform/AwaitShared.swift`).
 - `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
-  renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show()` for
+  renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show(from:)` for
   linear; `dismiss()`; the page's events mapped to beacons and the delegate; `end(_:)` is the only terminal path.
 - Format differences live in two places, not in `if format` branches: `Content/ContentRule.swift` (how an ad
   follows the content: `OverlayRule`, `PauseRule`, `NoContentRule`) and `Screen/AdScreen.swift` (where it is
