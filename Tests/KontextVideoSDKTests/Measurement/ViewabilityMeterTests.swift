@@ -340,6 +340,9 @@ struct ViewabilityMeterTests {
         clock.now = 1001.25
         meter.tick()
         #expect(seen == [true, false] && offScreen == 0, "unseen, within the grace")
+        clock.now = 1001.499
+        meter.tick()
+        #expect(offScreen == 0, "just before the grace ends")
         clock.now = 1001.5
         meter.tick()
         #expect(offScreen == 1, "a second out of sight")
