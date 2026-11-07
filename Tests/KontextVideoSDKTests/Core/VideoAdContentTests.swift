@@ -698,7 +698,7 @@ struct VideoAdContentTests {
     }
 
     @Test func anOverlayStillPausedAfterTheGraceOnReturnEndsAsInterrupted() async throws {
-        VideoAd.contentResumeGrace = 0.3
+        VideoAd.contentResumeGrace = 0.5
         defer { VideoAd.contentResumeGrace = 1 }
         let (ad, delegate, _) = try await makeAd(Fixtures.overlayAd(id: "o-c-bg-off"))
         try ad.show(in: view)
@@ -710,6 +710,9 @@ struct VideoAdContentTests {
         ad.contentDidChange(.tick)
         ad.contentDidChange(.playingChanged(isPlaying: false))
         #expect(delegate.endReasons.isEmpty)
+        await sleepMs(300)   // well into the grace (a wall-clock timer: room left for a slow runner)
+        ad.contentDidChange(.tick)
+        #expect(delegate.endReasons.isEmpty, "the pause still holds late in the grace")
         #expect(await waitUntil { delegate.endReasons == [.interrupted] }, "still paused after the grace")
         #expect(view.subviews.isEmpty && KontextVideo.shared.adOnScreen == nil)
     }
