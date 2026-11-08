@@ -75,10 +75,10 @@ pnpm install && pnpm dev
 xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
-The home screen lists four videos: an inline and a full-screen pause ad, an overlay and a linear ad. Opening one plays a bundled clip full screen, prepares that
+The home screen lists five videos: a bottom and a top overlay, a linear ad, an inline and a full-screen pause ad. Opening one plays a bundled clip full screen, prepares that
 format's ad (`format` then `load`). 3 s in, a linear ad shows over the screen or an overlay inside the player; a
 pause ad waits until the viewer taps to pause, a tap resumes, and the next pause gets its own ad. Leaving the screen
-calls `destroy()`. The whole integration is `Example/PlayerScreen.swift`.
+calls `destroy()`. The whole integration is `Example/Example/PlayerScreen.swift`.
 
 What to read afterwards:
 
@@ -245,7 +245,7 @@ From `Package.swift` and the CI above:
   `swift-tools-version` is 5.9 (Swift 5 language mode, so an app in Swift 5 or 6 mode can use it), but no job
   builds with Xcode 15, so it is not promised.
 - Swift Package Manager (no CocoaPods), resolving `https://github.com/kontextso/sdk-swift-video.git` and
-  `https://github.com/kontextso/kontextkit-ios.git` (pinned exact by the SDK).
+  `https://github.com/kontextso/kontextkit-ios.git` (up to the next minor, as the SDK resolves it).
 
 ## Cross-SDK consistency
 

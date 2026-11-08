@@ -74,7 +74,7 @@ struct VideoAdUnstartedTests {
     @Test func aVideoAdDismissedBeforeItsFirstFrameFiresClose() async throws {
         let (ad, delegate, _) = try await makeAd(videoPause("u2"))
         try ad.show(in: harness.player.view)
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed], "the reason stays the app's")
         let fired = await events("u2")
         #expect(fired.filter { $0 == "close" }.count == 1)
@@ -106,7 +106,7 @@ struct VideoAdUnstartedTests {
         let (ad, delegate, _) = try await makeAd(videoPause("u5"))
         try ad.show(in: harness.player.view)
         send(ad, "video.start", ["playhead": 0])
-        try ad.dismiss()
+        ad.dismiss()
         #expect(delegate.endReasons == [.dismissed])
         let fired = await events("u5")
         #expect(fired.contains("impression") && !fired.contains("close"))

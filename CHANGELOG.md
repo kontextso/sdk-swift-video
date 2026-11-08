@@ -2,8 +2,6 @@
 
 ## 0.2.0
 
-In progress.
-
 ### Breaking
 * `VideoAds.track(_:)` replaces `trackPlayhead(of:)` and `playheadProvider`. Pass an `AVPlayer`, or any player conformed to the new `ContentPlayer` protocol (`currentTime`, `isPlaying`, and optional `isPlayingPublisher`, `playbackSpeed`, `seekPublisher`, `contentChangedPublisher` and `currentItem`, the episode it plays, so an episode's ads are shown only in that episode). The SDK reads the playhead from it as before, and now also follows its playback. It holds an `AVPlayer` weakly, and `destroy()` or releasing the `VideoAds` drops every observer.
 * An overlay lives only while the content plays, when a player is tracked:
@@ -30,7 +28,7 @@ In progress.
 * `VideoAdHost`, a SwiftUI view: set its `ad` to show a loaded ad (an overlay or pause ad where it is placed, a linear ad full screen), `nil` to dismiss it; `onEnd`, `onImpression`, `onClick`, `onShowFailed` replace the delegate.
 * `KontextVideoTTSDK`, an optional product: `ads.track(ttVideoEngine:)` follows a TTSDK `TTVideoEngine`, read through its Objective-C properties, with no TTSDK dependency.
 * `show(in:insets:)`: insets that keep an overlay or a pause card clear of your own controls, added to the view's safe area (`bottom: 80` puts a bottom strip 80 points above it). Kept through resizes and rotations, counted in `containerTooSmall`'s minimum; a full-screen pause ad ignores them. `show(in:)` is unchanged. Insets that leave no width or height throw `containerTooSmall` (or end a shown ad as `.interrupted` on a resize), however large.
-* `VideoAds(content:labels:)`: key-values that say where the ads play, such as the viewer's stage in the series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every ads request of that `VideoAds` carries them (`labels`), fixed for its life; the server's configuration decides what they change, such as which formats it offers. They are a free format, sent as given: use the names and values Kontext gives you. The example app shows four situations this way, a full-screen pause ad among them.
+* `VideoAds(content:labels:)`: key-values that say where the ads play, such as the viewer's stage in the series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every ads request of that `VideoAds` carries them (`labels`), fixed for its life; the server's configuration decides what they change, such as which formats it offers. They are a free format, sent as given: use the names and values Kontext gives you. The example app shows five situations this way, a full-screen pause ad among them.
 * Error reports: when the server turns them on in `/config` (`reportErrors`), the SDK sends its faults (a failed request, a creative or frame page that broke, a presentation UIKit refused, an integration mistake) to `/v2/error`, as codes and ids, never personal data. New `VideoAds.lastRequestID`: quote it to Kontext when an ad or a no-fill looks wrong.
 * `KontextVideo.shared.state` is public and read-only: readable at any time, for example to hide your ad UI once the server switched the SDK off.
 * Public initializers for `VideoAd.Price` and `VideoAd.Click`, for your own tests.
@@ -51,6 +49,8 @@ In progress.
 * Privacy manifest: declares the system boot time API (35F9.1, for the on-screen clock and load times), video views (Product Interaction), coarse location and performance data; device facts sent as ad inputs (Other Data Types) are declared apart from error and debug reports (Other Diagnostic Data); device ids, ad data and diagnostics are linked (the install id joins them). Nothing is declared as tracking: no Kontext server uses the data for tracking yet. Publishers' App Store privacy labels should be checked against it.
 
 ### Fixed
+* An app that pauses its player in `didClick` while an overlay's link opens (the in-app browser appears a moment later) freezes the overlay, as the Kotlin SDK does; before, the pause came with the viewer still in front and ended it `.interrupted`.
+* An overlay or pause ad's page reads its own view's size from `show` on, with no safe-area insets; before, a full-screen pause ad's page could lay out for the whole window on its first show.
 * A linear ad ended while UIKit was still animating it onto the screen (a `destroy()`, a released `VideoAds`, a creative error right after `show(from:)`) is dismissed once that animation finishes; before, UIKit dropped the dismissal and a black full-screen controller stayed with no way to close it.
 * An overlay or pause ad whose own box is wholly off screen where it is placed (a feed scrolled so the player's middle shows, not its top card) ends `.interrupted` at `show`, with no impression.
 * A pause ad on screen ends `.interrupted` when another `VideoAds` takes its player (the next page of a feed that shares one player) or the player moves to another item; it no longer holds the app's slot over content it is not for.
