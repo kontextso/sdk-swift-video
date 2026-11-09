@@ -321,8 +321,9 @@ public final class VideoAd {
     /// `didEnd`), and the player is read. Every check after it sees what that code left. Returns whether the
     /// content refuses this ad: an overlay over paused content.
     private func runAppCodeBeforeShow() -> Bool {
-        // An ad already shown leaves the ad on screen alone; `show` throws `alreadyShown` right after.
-        if !wasShown { KontextVideo.shared.adOnScreen?.contentRule.endIfContentStopped() }
+        // An ad already shown leaves the ad on screen alone; `show` throws `alreadyShown` right after. The ad on
+        // screen is held for its check: the rule reads the app's player, whose code may destroy the ads.
+        if !wasShown, let onScreen = KontextVideo.shared.adOnScreen { onScreen.contentRule.endIfContentStopped() }
         return contentRule.refusesShow
     }
 

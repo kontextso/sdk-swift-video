@@ -150,6 +150,9 @@ final class OverlayRule: ContentRule {
             try? await Task.sleep(seconds: Self.contentResumeGrace)
             guard let self, !Task.isCancelled else { return }
             contentRecheck = nil
+            // Held strongly here: `isPlaying` below reads the app's player, which may destroy the ads and, with
+            // the app's last reference gone, release the ad while this task still names it.
+            let ad = self.ad
             guard ad.isTrackingContent, !ad.hasEnded, wasContentPausedWhileInactive, ad.onScreenClock?.isSceneActive == true,
                   !ad.inAppBrowser.isOpen, !ad.isOpeningLink, let playback = ad.contentPlayback else { return }
             wasContentPausedWhileInactive = false

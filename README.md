@@ -22,7 +22,7 @@ In Xcode: File → Add Package Dependencies, then `https://github.com/kontextso/
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.2.1")),
+    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.2.2")),
 ],
 targets: [
     .target(name: "YourApp", dependencies: [.product(name: "KontextVideoSDK", package: "sdk-swift-video")]),

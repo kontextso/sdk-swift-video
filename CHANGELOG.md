@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+### Fixed
+* An ad is held while the SDK runs the app's code on its behalf: the player's playing state and playhead read on a player change, before another ad's show, and when an overlay frozen by a pause is rechecked after the viewer returns, and the container's safe area read when a resized view is refitted. An app whose player or view destroys the ads from one of those reads, holding no other reference to the ad, could leave the SDK reading a released ad.
+
 ## 0.2.1
 ### Changed
 * The session id is a UUID v7 (`UUIDv7.generate()` of KontextKit 0.6.0), so sessions sort by when they began.
