@@ -62,7 +62,16 @@ git push --delete origin 0.1.0 && git tag -d 0.1.0
 # fix SDKInfo.version, commit, then tag and push as above
 ```
 
-## 5. Verify
+## 5. Publish the GitHub release
+
+The tag alone is what SPM needs, but the repository's Releases page is where integrators look for the notes.
+Create the release from the tag, with the changelog section as its body:
+
+```bash
+gh release create 0.1.0 --title 0.1.0 --notes-file <(awk '/^## 0.1.0$/{f=1;next} /^## /{f=0} f' CHANGELOG.md)
+```
+
+## 6. Verify
 
 1. The tag push also runs the **Release consumer** workflow: `Extras/ReleaseCheck` resolves
    `.package(url: "https://github.com/kontextso/sdk-swift-video.git", exact: "0.1.0")` from GitHub and builds
