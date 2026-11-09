@@ -1,9 +1,23 @@
 import Foundation
 
 /// How the SDK's reports write their fields, shared by `ErrorReporter` and `DebugReporter` so neither reaches into
-/// the other: a state value as JSON, the timestamp, the cap on every string field the reporters keep.
+/// the other: a property value as JSON, the timestamp, the cap on the string fields the reporters keep, the OS as
+/// both envelopes carry it.
 enum ReportFormat {
-    /// A string, a number or a boolean: a debug event's state, and an error report's history.
+    /// The `os` object of a batch: the name as the server knows it, and the version.
+    struct OS: Encodable, Sendable {
+        let name: String
+        let version: String
+    }
+
+    /// The device's OS for a batch's envelope.
+    @MainActor
+    static func os() -> OS {
+        let info = OSInfo.current()
+        return OS(name: info.name.rawValue, version: info.version)
+    }
+
+    /// A string, a number or a boolean: a debug event's properties, and so an error report's history.
     enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
         case string(String)
         case number(Double)
@@ -34,8 +48,8 @@ enum ReportFormat {
         }
     }
 
-    /// UTF-8 bytes kept of every string field: ids, `detail`, the underlying error's domain, history names
-    /// and values, a debug event's name, ad id and state values. Bytes, not characters: one character can carry
+    /// UTF-8 bytes kept of a report's string fields: ids, `detail`, the cause's domain, a debug event's name, bid
+    /// id and property values; not a console line forwarded as `log`. Bytes, not characters: one character can carry
     /// any number of combining marks. Ids are about 36; a server sending far longer ones must not grow the buffers
     /// the SDK holds for the app's life.
     static let maxFieldLength = 64
@@ -56,8 +70,8 @@ enum ReportFormat {
 
     /// `2026-10-21T18:00:00.482Z`: device time, ISO 8601 with milliseconds in UTC, as Kontext's APIs write
     /// wall-clock time.
-    static func timestamp() -> String {
-        formatter.string(from: Date())
+    static func timestamp(_ date: Date = Date()) -> String {
+        formatter.string(from: date)
     }
 
     /// `ISO8601DateFormatter.string(from:)` is documented thread-safe.

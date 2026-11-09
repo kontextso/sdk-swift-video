@@ -20,10 +20,23 @@ struct DecodingTests {
         for (body, expected) in cases {
             let response = try decode(ConfigResponse.self, body)
             let read = switch response {
-            case .enabled(let reportDebug, _): "enabled reportDebug=\(reportDebug)"
+            case .enabled(let reporting): "enabled reportDebug=\(reporting.reportDebug)"
             case .disabled(let reason): "disabled \(reason)"
             }
             #expect(read == expected, "\(body)")
+        }
+    }
+
+    @Test func configBatchIntervalsAreMillisecondsAndAnythingUnusableIsTheDefault() throws {
+        let cases: [(value: Any?, expected: TimeInterval)] = [
+            (nil, ConfigResponse.defaultBatchInterval), (0, 0), (250, 0.25), (60_000, 60), (-5, ConfigResponse.defaultBatchInterval),
+            ("100", ConfigResponse.defaultBatchInterval), (NSNull(), ConfigResponse.defaultBatchInterval),
+        ]
+        for (value, expected) in cases {
+            var body: [String: Any] = ["enabled": true]
+            if let value { body["errorBatchInterval"] = value; body["debugBatchInterval"] = value }
+            guard case .enabled(let reporting) = try decode(ConfigResponse.self, body) else { Issue.record("expected enabled"); continue }
+            #expect(reporting.errorBatchInterval == expected && reporting.debugBatchInterval == expected, "\(String(describing: value))")
         }
     }
 
@@ -487,13 +500,13 @@ struct DecodingTests {
             #expect(throws: DecodingError.self, "\(body)") { try decode(ConfigResponse.self, body) }
         }
         for reportDebug in [NSNull(), "yes", 1] as [Any] {
-            guard case .enabled(let flag, let errors) = try decode(ConfigResponse.self, ["enabled": true, "reportDebug": reportDebug, "reportErrors": reportDebug]) else { Issue.record("expected enabled"); continue }
-            #expect(flag == false && errors == false, "a malformed reportDebug or reportErrors is off: \(reportDebug)")
+            guard case .enabled(let reporting) = try decode(ConfigResponse.self, ["enabled": true, "reportDebug": reportDebug, "reportErrors": reportDebug]) else { Issue.record("expected enabled"); continue }
+            #expect(reporting.reportDebug == false && reporting.reportErrors == false, "a malformed reportDebug or reportErrors is off: \(reportDebug)")
         }
-        guard case .enabled(_, let missing) = try decode(ConfigResponse.self, ["enabled": true]) else { Issue.record("expected enabled"); return }
-        #expect(missing == false, "reportErrors left out is off")
-        guard case .enabled(_, let on) = try decode(ConfigResponse.self, ["enabled": true, "reportErrors": true]) else { Issue.record("expected enabled"); return }
-        #expect(on)
+        guard case .enabled(let missing) = try decode(ConfigResponse.self, ["enabled": true]) else { Issue.record("expected enabled"); return }
+        #expect(missing.reportErrors == false, "reportErrors left out is off")
+        guard case .enabled(let on) = try decode(ConfigResponse.self, ["enabled": true, "reportErrors": true]) else { Issue.record("expected enabled"); return }
+        #expect(on.reportErrors)
         for reason in [NSNull(), 42] as [Any] {
             guard case .disabled(let text) = try decode(ConfigResponse.self, ["enabled": false, "disabledReason": reason]) else { Issue.record("expected disabled"); continue }
             #expect(text == "unknown", "\(reason)")

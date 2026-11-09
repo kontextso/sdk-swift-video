@@ -1,17 +1,17 @@
 import Foundation
 
 /// The error reports waiting to be sent, and the batches made from them; no tasks, no sending. At most
-/// `maxBuffered` reports and `maxBufferedBytes` wait: past either the oldest go, counted in `dropped`, which the
-/// next batch says. A batch takes the oldest reports, at most `maxBatch`, whose whole body stays within
-/// `maxBatchBytes`; a report that does not fit even alone is dropped and counted.
+/// `maxBuffered` reports and `maxBufferedBytes` wait: past either the oldest go. A batch takes the oldest
+/// reports, at most `maxBatch`, whose whole body stays within `maxBatchBytes`; a report that does not fit even
+/// alone goes.
 struct ReportQueue {
-    /// One batch, retried byte for byte until it leaves or the server refuses it: the server dedupes by `batchId`.
+    /// One batch, retried byte for byte until it leaves or the server refuses it; the server counts a retry again.
     struct Batch {
         let count: Int
         let body: Data
     }
 
-    /// Reports kept while they cannot leave; beyond this the oldest go, counted in `dropped`.
+    /// Reports kept while they cannot leave; beyond this the oldest go.
     static let maxBuffered = 200
     /// Reports in one request.
     static let maxBatch = 50
@@ -25,8 +25,6 @@ struct ReportQueue {
     /// The encoded size of each waiting report, in `reports`' order, and their sum.
     private var sizes: [Int] = []
     private var bufferedBytes = 0
-    /// Reports dropped for room and not yet sent in a batch.
-    private(set) var dropped = 0
 
     var isEmpty: Bool { reports.isEmpty }
 
@@ -35,42 +33,38 @@ struct ReportQueue {
         (try? JSONEncoder().encode(report).count) ?? 0
     }
 
-    /// Queues `report`; one over `maxBatchBytes` alone is dropped and counted. Says whether it was queued.
+    /// Queues `report`; one over `maxBatchBytes` alone goes instead. Says whether it was queued.
     @discardableResult
     mutating func add(_ report: ErrorReport) -> Bool {
         let size = Self.size(of: report)
-        // Every field is capped, so this cannot happen; if it ever does, the report goes rather than the budgets.
-        guard size <= Self.maxBatchBytes else {
-            dropped += 1
-            return false
-        }
+        // Ids and codes are capped; the history's console lines are not, so a report can in theory outgrow a
+        // batch. Then the report goes rather than the budgets.
+        guard size <= Self.maxBatchBytes else { return false }
         reports.append(report)
         sizes.append(size)
         bufferedBytes += size
         while reports.count > Self.maxBuffered || (bufferedBytes > Self.maxBufferedBytes && reports.count > 1) {
+            Logger.debug("oldest error report dropped: \(reports.count) waiting, \(bufferedBytes) bytes")
             remove(1)
-            dropped += 1
         }
         return true
     }
 
-    /// Everything goes, the count of dropped ones too.
+    /// Everything goes.
     mutating func clear() {
         reports.removeAll()
         sizes.removeAll()
         bufferedBytes = 0
-        dropped = 0
     }
 
     /// The oldest waiting reports as one finished request body: up to `maxBatch` of them, and as many as fit in
     /// `maxBatchBytes` with the envelope and the separators, the size of the whole body being what is limited.
-    /// `envelope` encodes a request of the given reports and dropped count. The rest wait for the next batch. A
-    /// report that cannot fit even alone is dropped and counted. `nil` when nothing is left to send; a batch made
-    /// says the dropped count, which starts again from 0.
-    mutating func makeBatch(envelope: (_ reports: [ErrorReport], _ dropped: Int) -> Data?) -> Batch? {
+    /// `envelope` encodes a request of the given reports. The rest wait for the next batch. A report that cannot
+    /// fit even alone goes. `nil` when nothing is left to send.
+    mutating func makeBatch(envelope: (_ reports: [ErrorReport]) -> Data?) -> Batch? {
         while !reports.isEmpty {
             // `"errors":[]` holds the reports, one byte between each two: the size is known before encoding.
-            guard let empty = envelope([], dropped)?.count else { return nil }
+            guard let empty = envelope([])?.count else { return nil }
             var count = 0
             var bytes = empty
             while count < min(reports.count, Self.maxBatch), bytes + sizes[count] + (count > 0 ? 1 : 0) <= Self.maxBatchBytes {
@@ -80,22 +74,19 @@ struct ReportQueue {
             if count == 0 {
                 Logger.debug("error report of \(sizes[0]) bytes dropped, it cannot fit a batch")
                 remove(1)
-                dropped += 1
                 continue
             }
             // Checked on the encoded body itself: the arithmetic above is the plan, the body is what leaves.
-            var body = envelope(Array(reports.prefix(count)), dropped)
+            var body = envelope(Array(reports.prefix(count)))
             while count > 1, (body?.count ?? 0) > Self.maxBatchBytes {
                 count -= 1
-                body = envelope(Array(reports.prefix(count)), dropped)
+                body = envelope(Array(reports.prefix(count)))
             }
             guard let body, body.count <= Self.maxBatchBytes else {
                 remove(1)
-                dropped += 1
                 continue
             }
             remove(count)
-            dropped = 0
             return Batch(count: count, body: body)
         }
         return nil

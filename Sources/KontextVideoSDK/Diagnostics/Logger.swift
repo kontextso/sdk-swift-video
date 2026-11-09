@@ -1,10 +1,12 @@
 import Foundation
 import os
 
-/// Writes the SDK's messages to the device console, up to the level set in `Configuration.logLevel`.
+/// Writes the SDK's messages to the device console, up to the level set in `Configuration.logLevel`, and, while
+/// `/config` asks for the debug log, hands every message of every level to `DebugReporter` as the event `log`.
 /// Every message is logged as public, so the console shows it unredacted: callers pass ids, events and
 /// codes and URLs as they are, unredacted on purpose: the log is for development, read with the development
-/// token's test ads, and the ad URLs are Kontext's own. A message is built only when its level is on.
+/// token's test ads, and the ad URLs are Kontext's own. A message is built only when the console or the
+/// reporter takes it.
 enum Logger {
     private static let output = os.Logger(subsystem: "so.kontext.video", category: "KontextVideoSDK")
     private static let lock = NSLock()
@@ -42,10 +44,20 @@ enum Logger {
         log(.debug, message)
     }
 
+    /// A line for the console only, never forwarded: `DebugReporter`'s own lines, which would otherwise make
+    /// events of themselves.
+    static func console(_ messageLevel: KontextVideo.Configuration.LogLevel, _ message: @autoclosure () -> String) {
+        log(messageLevel, message, forward: false)
+    }
+
     /// The level is checked first; the message is built after, and outside the lock.
-    private static func log(_ messageLevel: KontextVideo.Configuration.LogLevel, _ build: () -> String) {
-        guard messageLevel <= level else { return }
+    private static func log(_ messageLevel: KontextVideo.Configuration.LogLevel, _ build: () -> String, forward: Bool = true) {
+        let forwards = forward && DebugReporter.forwardsConsole
+        let shows = messageLevel <= level
+        guard shows || forwards else { return }
         let message = build()
+        if forwards { DebugReporter.forward(messageLevel, message) }
+        guard shows else { return }
         sink?(messageLevel, message)
         switch messageLevel {
         case .none: break

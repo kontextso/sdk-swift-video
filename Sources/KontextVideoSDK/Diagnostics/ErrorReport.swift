@@ -1,22 +1,23 @@
 import Foundation
 
-/// One error report: its vocabulary (what failed, where, what the SDK did) and its fields, each string capped,
-/// with the recent events of `EventHistory`. Sent by `ErrorReporter`, queued by `ReportQueue`.
+/// One error report: what failed and the ids it concerns, each string capped, with the recent events of
+/// `EventHistory`. Sent by `ErrorReporter`, queued by `ReportQueue`.
 struct ErrorReport: Encodable, Sendable {
     let id: String
-    let createdAt: String
+    /// Device time, ISO 8601 with milliseconds in UTC, as Kontext's APIs write wall-clock time.
+    let occurredAt: String
     let code: String
-    let stage: Stage
+    /// The ads or `/config` request that failed, by the id the SDK gave it.
     let requestId: String?
     let sessionId: String?
-    let adId: String?
+    /// The ad the fault is about, by the id the server gave the bid.
+    let bidId: String?
     let vastCode: Int?
     let httpStatus: Int?
-    let underlying: Underlying?
+    let cause: Cause?
     /// A short machine word that narrows the code down: the SKAdNetwork step, `network`, the missing field.
     let detail: String?
-    let recovery: Recovery?
-    let history: [EventHistory.Moment]
+    let history: [DebugReporter.Event]
 
     /// What failed. Stable: the server groups by it.
     enum Code: String, Sendable {
@@ -37,27 +38,8 @@ struct ErrorReport: Encodable, Sendable {
         case badContent = "integration.bad_content"
     }
 
-    /// Where in the SDK it failed.
-    enum Stage: String, Encodable, Sendable {
-        case config, request, load, presentation, playback, attribution, integration
-    }
-
-    /// What the SDK did about it. A closed list, so the server can count by it.
-    enum Recovery: String, Encodable, Sendable {
-        /// A failed request left the held, valid ads in place; `format()` returns them.
-        case heldAdsKept = "held_ads_kept"
-        /// Nothing to show.
-        case noAd = "no_ad"
-        /// The ad was on screen and ended with `didEnd(.failed)`.
-        case adEndedFailed = "ad_ended_failed"
-        /// The ad failed before `show`; `load()` or `show` throws.
-        case adDroppedBeforeShow = "ad_dropped_before_show"
-        /// UIKit never finished; `didEnd` was delivered anyway.
-        case didEndDelivered = "did_end_delivered"
-    }
-
-    /// A system error as a domain and a code only; its text can carry anything.
-    struct Underlying: Encodable, Equatable, Sendable {
+    /// The system error behind a fault, as a domain and a code only; its text can carry anything.
+    struct Cause: Encodable, Equatable, Sendable {
         let domain: String
         let code: Int
 
@@ -79,26 +61,26 @@ struct ErrorReport: Encodable, Sendable {
     /// app hears.
     struct FailedRequest: Sendable {
         let httpStatus: Int?
-        let underlying: Underlying?
+        let cause: Cause?
         let detail: String?
 
         init(_ error: Error) {
             switch error as? APIError {
             case .http(let status, _)?:
                 httpStatus = status
-                underlying = nil
+                cause = nil
                 detail = nil
             case .transport(let urlError)?:
                 httpStatus = nil
-                underlying = Underlying(urlError)
+                cause = Cause(urlError)
                 detail = "network"
             case .decoding(let decoding)?:
                 httpStatus = nil
-                underlying = Underlying(decoding)
+                cause = Cause(decoding)
                 detail = nil
             case nil:
                 httpStatus = nil
-                underlying = Underlying(error)
+                cause = Cause(error)
                 detail = nil
             }
         }
@@ -108,30 +90,26 @@ struct ErrorReport: Encodable, Sendable {
     @MainActor
     static func make(
         _ code: Code,
-        stage: Stage,
         requestId: String? = nil,
         sessionId: String? = nil,
-        adId: String? = nil,
+        bidId: String? = nil,
         vastCode: Int? = nil,
         httpStatus: Int? = nil,
-        underlying: Underlying? = nil,
-        detail: String? = nil,
-        recovery: Recovery? = nil
+        cause: Cause? = nil,
+        detail: String? = nil
     ) -> ErrorReport {
         let cap = { (text: String?) in text.map { ReportFormat.capped($0) } }
         return ErrorReport(
             id: UUID().uuidString.lowercased(),
-            createdAt: ReportFormat.timestamp(),
+            occurredAt: ReportFormat.timestamp(),
             code: code.rawValue,
-            stage: stage,
             requestId: cap(requestId),
             sessionId: cap(sessionId),
-            adId: cap(adId),
+            bidId: cap(bidId),
             vastCode: vastCode,
             httpStatus: httpStatus,
-            underlying: underlying,
+            cause: cause,
             detail: cap(detail),
-            recovery: recovery,
             history: EventHistory.recent()
         )
     }

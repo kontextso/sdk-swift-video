@@ -22,7 +22,7 @@ struct SdkStatesTests {
     }
 
     private func report(_ detail: String = "x") {
-        errors.report(.creativeFailed, stage: .load, detail: detail)
+        errors.report(.creativeFailed, detail: detail)
     }
 
     private func errorReports() -> [[String: Any]] {

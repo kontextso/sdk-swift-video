@@ -85,7 +85,7 @@ final class AdsFetcher {
             try current().checkStillUsable()
             try current().requestWasSent(body.requestId)
             Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
-            DebugReporter.shared.event("ads.request", state: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
+            DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
 
             // 4. The POST, and the ids against what is held.
             let response: AdsResponse
@@ -102,9 +102,8 @@ final class AdsFetcher {
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
                 let failure = ErrorReport.FailedRequest(error)
                 let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
-                let recovery: ErrorReport.Recovery = try current().holdsAds ? .heldAdsKept : .noAd
-                ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, stage: .request, requestId: body.requestId,
-                                            sessionId: sessionId, failure: failure, recovery: recovery)
+                ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, requestId: body.requestId,
+                                            sessionId: sessionId, failure: failure)
                 throw VideoAdError.request(VideoAdError.RequestFailure(error))
             }
             // 6. The answer.
@@ -150,8 +149,8 @@ final class AdsFetcher {
         for result in results {
             for path in result.dropped {
                 Logger.error("\(result.format) for \(owner.content.id): an ad of request \(requestId) is malformed at \(path); dropped")
-                ErrorReporter.shared.report(.adsDecodeFailed, stage: .request, requestId: requestId, sessionId: owner.sessionId,
-                                            detail: "\(result.format.rawValue):\(path)", recovery: result.ads.isEmpty ? .noAd : nil)
+                ErrorReporter.shared.report(.adsDecodeFailed, requestId: requestId, sessionId: owner.sessionId,
+                                            detail: "\(result.format.rawValue):\(path)")
             }
         }
     }

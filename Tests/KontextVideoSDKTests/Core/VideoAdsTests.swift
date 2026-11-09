@@ -65,7 +65,7 @@ struct VideoAdsTests {
         let report = try #require(reports().first)
         #expect(reports().count == 1, "once per request, not per caller")
         #expect(report["code"] as? String == "ads.decode_failed" && report["detail"] as? String == "linear:price.currency")
-        #expect(report["requestId"] as? String == ads.lastRequestID && report["recovery"] as? String == "no_ad")
+        #expect(report["requestId"] as? String == ads.lastRequestID)
     }
 
     @Test func anAnswerWithOneAdIdUnderTwoFormatsIsMalformedAndTheHeldAdComesBack() async throws {

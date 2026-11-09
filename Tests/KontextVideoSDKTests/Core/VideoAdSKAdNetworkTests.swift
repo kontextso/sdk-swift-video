@@ -193,8 +193,8 @@ struct VideoAdSKAdNetworkTests {
                 .filter { $0["name"] as? String == "ad.skanFailed" }
         }
         #expect(await waitUntil { failures().count == 3 })
-        #expect(failures().compactMap { ($0["state"] as? [String: Any])?["step"] as? String } == ["start", "end", "dispose"], "each failure once, with its step")
-        #expect(failures().compactMap { $0["adId"] as? String } == ["s16a", "s16a", "s16a"], "and the ad it belongs to")
+        #expect(failures().compactMap { ($0["properties"] as? [String: Any])?["step"] as? String } == ["start", "end", "dispose"], "each failure once, with its step")
+        #expect(failures().compactMap { $0["bidId"] as? String } == ["s16a", "s16a", "s16a"], "and the ad it belongs to")
         second.dismiss()
     }
 

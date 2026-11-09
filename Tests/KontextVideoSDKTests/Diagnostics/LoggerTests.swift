@@ -9,6 +9,9 @@ extension SerialSuites {
 @Suite
 @MainActor
 struct LoggerTests {
+    /// Forwarding to `DebugReporter` builds messages the console would not: off here, so the level alone decides.
+    init() { DebugReporter.shared.resetForTesting() }
+
     @Test func aDisabledLevelNeverBuildsItsMessage() {
         let previous = Logger.level
         defer { Logger.level = previous }

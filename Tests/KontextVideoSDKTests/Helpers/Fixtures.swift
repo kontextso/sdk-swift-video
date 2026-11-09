@@ -122,8 +122,10 @@ enum Fixtures {
         ["format": ad["format"] as? String ?? "pause", "ads": [ad]]
     }
 
-    static func initEnabled(reportDebug: Bool = false, reportErrors: Bool? = nil) -> [String: Any] {
-        var body: [String: Any] = ["enabled": true, "reportDebug": reportDebug]
+    /// `/config` enabled. The batch intervals are short so the tests' reports and events leave at once; a test
+    /// of the intervals themselves passes its own.
+    static func initEnabled(reportDebug: Bool = false, reportErrors: Bool? = nil, errorBatchInterval: Int = 10, debugBatchInterval: Int = 50) -> [String: Any] {
+        var body: [String: Any] = ["enabled": true, "reportDebug": reportDebug, "errorBatchInterval": errorBatchInterval, "debugBatchInterval": debugBatchInterval]
         if let reportErrors { body["reportErrors"] = reportErrors }
         return body
     }

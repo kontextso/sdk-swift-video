@@ -193,10 +193,12 @@ public final class KontextVideo {
             sdkState.moveTo(.failed)
         case .answered(let response):
             switch response {
-            case .enabled(let reportDebug, let reportErrors):
-                recordDebugReporting(reportDebug)
-                recordErrorReporting(reportErrors)
-                DebugReporter.shared.event("config.response", state: ["enabled": true])
+            case .enabled(let reporting):
+                ErrorReporter.shared.interval = reporting.errorBatchInterval
+                DebugReporter.shared.interval = reporting.debugBatchInterval
+                recordDebugReporting(reporting.reportDebug)
+                recordErrorReporting(reporting.reportErrors)
+                DebugReporter.shared.event("config.response", properties: ["enabled": true])
                 sdkState.moveTo(.enabled)
                 Logger.info("Enabled")
                 // The browser user agent every ads request carries, evaluated in a WebView once per process.

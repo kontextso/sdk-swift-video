@@ -55,7 +55,7 @@ final class FrameBridge: NSObject {
     /// Set as the bridge fails, before the `.error` event goes out.
     private(set) var failureCause: FailureCause?
     /// The system error behind a page that could not load, as a domain and a code.
-    private(set) var failureUnderlying: ErrorReport.Underlying?
+    private(set) var failureUnderlying: ErrorReport.Cause?
     var onEvent: ((FrameEvent) -> Void)?
 
     private var loadTimeoutTask: Task<Void, Never>?
@@ -253,7 +253,7 @@ final class FrameBridge: NSObject {
                 Logger.debug("frame \(adId.prefix(8)): \(log)")
             }
             if let violation {
-                ErrorReporter.shared.report(.protocolViolation, stage: state == .shown ? .playback : .load, adId: adId, detail: violation)
+                ErrorReporter.shared.report(.protocolViolation, bidId: adId, detail: violation)
             }
         case .loaded:
             Logger.debug("frame \(adId.prefix(8)): ← ad.loaded")
@@ -278,7 +278,7 @@ final class FrameBridge: NSObject {
 
     /// Terminal with an error; after the end nothing is reported any more. `underlying`: the system error behind a
     /// page that could not load. Internal for the navigation delegate (`FrameBridge+WKNavigationDelegate`).
-    func fail(_ event: FrameEvent, cause: FailureCause, underlying: ErrorReport.Underlying? = nil) {
+    func fail(_ event: FrameEvent, cause: FailureCause, underlying: ErrorReport.Cause? = nil) {
         guard state != .ended else { return }
         failureCause = cause
         if let underlying { failureUnderlying = underlying }

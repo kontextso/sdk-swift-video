@@ -21,7 +21,7 @@ struct CorpusTests {
     func configAnswer(_ corpusCase: CorpusCase) throws {
         try corpusCase.check { data in
             switch try APIClient.decode(ConfigResponse.self, from: data) {
-            case .enabled(let reportDebug, let reportErrors): return ["result": "enabled", "reportDebug": reportDebug, "reportErrors": reportErrors]
+            case .enabled(let reporting): return ["result": "enabled", "reportDebug": reporting.reportDebug, "reportErrors": reporting.reportErrors]
             case .disabled(let reason): return ["result": "disabled", "disabledReason": reason]
             }
         }
