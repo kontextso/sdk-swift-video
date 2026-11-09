@@ -25,7 +25,9 @@ final class TestPlayer: ContentPlayer {
 
     func ads(for content: KontextVideo.Content) -> VideoAds {
         let ads = VideoAds(content: content)
-        ads.usePlayhead { [unowned self] in playhead }
+        // Weak: a test's `VideoAds` outlives its player by a turn of the main queue (`Owners` releases them
+        // there), and a beacon or rule reading the playhead in that turn must find 0, not a dead player.
+        ads.usePlayhead { [weak self] in self?.playhead ?? 0 }
         return ads
     }
 }
