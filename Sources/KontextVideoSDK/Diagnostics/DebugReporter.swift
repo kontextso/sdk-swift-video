@@ -125,7 +125,7 @@ final class DebugReporter {
     /// `text` with the query cut from every URL in it, whatever its scheme or case, `//` or not (a deep link such as
     /// `app:offer?x`): a filled macro can carry the IFA.
     static func withoutQueryStrings(_ text: String) -> String {
-        text.replacingOccurrences(of: #"(?i)\b([a-z][a-z0-9+.-]*:(?://)?[^\s?#]+)\?[^\s]*"#, with: "$1", options: .regularExpression)
+        text.replacingOccurrences(of: #"(?i)\b([a-z][a-z0-9+.-]*:(?://)?[^\s?#]*)\?[^\s]*"#, with: "$1", options: .regularExpression)
     }
 
     /// One event kept: in the history every error report carries, and, while `/config` asks for the debug log,

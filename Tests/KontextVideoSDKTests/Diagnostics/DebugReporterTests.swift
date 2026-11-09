@@ -217,10 +217,10 @@ struct DebugReporterTests {
     @Test func aLineLoggedOffTheMainThreadIsForwardedToo() async {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        DispatchQueue.global().async { Logger.warning("canary-background HTTPS://Ads.Test/F?ifa=secret kontext-test://frames/x?q=1 brandapp:offer?ifa=secret done") }
+        DispatchQueue.global().async { Logger.warning("canary-background HTTPS://Ads.Test/F?ifa=secret kontext-test://frames/x?q=1 brandapp:offer?ifa=secret brandapp:?ifa=secret done") }
         #expect(await waitUntil { self.logEvents().contains { ($0["message"] as? String)?.hasPrefix("canary-background") == true } })
         let line = logEvents().first { ($0["message"] as? String)?.hasPrefix("canary-background") == true }
-        #expect(line?["message"] as? String == "canary-background HTTPS://Ads.Test/F kontext-test://frames/x brandapp:offer done", "every scheme, any case, with or without //")
+        #expect(line?["message"] as? String == "canary-background HTTPS://Ads.Test/F kontext-test://frames/x brandapp:offer brandapp: done", "every scheme, any case, with or without //")
     }
 
     @Test func anIntervalOfZeroSendsEachEventAsItHappens() async {
