@@ -7,33 +7,28 @@ import Foundation
 /// Off until `/config` says `reportErrors: true`; a missing field, `enabled: false` or a failed launch keep it
 /// off. Before `/config` answers, reports wait in memory and leave once it turns them on, or are dropped. Every
 /// fault is eligible; delivery is bounded and best effort:
-/// - at most `ReportQueue.maxBuffered` reports wait; beyond that the oldest go, and the next batch says how many;
-/// - one batch at a time, at most `ReportQueue.maxBatch` reports; a batch that fails is retried unchanged (same
-///   `batchId`, same `dropped`), after a backoff from `retryDelay` doubling to `maxRetryDelay`, with jitter;
+/// - at most `ReportQueue.maxBuffered` reports wait; beyond that the oldest go;
+/// - one batch at a time, at most `ReportQueue.maxBatch` reports, after the `interval` `/config` set; a batch
+///   that fails is retried unchanged, after a backoff from `retryDelay` doubling to `maxRetryDelay`, with jitter,
+///   and the server counts a retry again;
 /// - the server can stop a running client at once: `410` ends reporting for this launch, any other `4xx`
 ///   but `429` drops that batch without a retry;
 /// - nothing is stored on disk.
-/// Each report carries codes and ids, never free text from a system error, and never the IFA, the IDFV, the
-/// user id, the email, consent strings, request or response bodies, or URLs.
+/// A report's own fields carry codes and ids, never free text from a system error, and never the IFA, the IDFV,
+/// the user id, the email, consent strings, request or response bodies, or URLs with their query. Its history is
+/// the recent debug events, console lines included, as `DebugReporter` keeps them.
 ///
 /// The shell only: the mode, the scheduling, the retry delay, sending and the server's answers. A report itself is
 /// `ErrorReport`, the waiting ones and their batches `ReportQueue`.
 @MainActor
 final class ErrorReporter {
     private struct Request: Encodable {
-        struct OS: Encodable {
-            let name: String
-            let version: String
-        }
-
-        let batchId: String
         let publisherToken: String
         let installId: String
         // Read by the synthesized encoder only. swiftlint:disable:next unused_declaration
         let sdk = SDKInfo()
         let app: AppInfo
-        let os: OS
-        let dropped: Int
+        let os: ReportFormat.OS
         let errors: [ErrorReport]
     }
 
@@ -44,8 +39,8 @@ final class ErrorReporter {
 
     static let shared = ErrorReporter()
 
-    /// The wait before a batch leaves. A constant in spirit; a variable so the tests can shrink it.
-    static var interval: TimeInterval = 0.1
+    /// The wait before a batch leaves, as `/config` set it (`errorBatchInterval`); 0 waits for nothing but a request in flight.
+    var interval: TimeInterval = ConfigResponse.defaultBatchInterval
     /// The first wait after a batch that did not leave; it doubles on every failure, up to `maxRetryDelay`.
     static var retryDelay: TimeInterval = 30
     static var maxRetryDelay: TimeInterval = 300
@@ -76,7 +71,7 @@ final class ErrorReporter {
     /// for this launch.
     func reportingChanged() {
         switch mode {
-        case .on: if !queue.isEmpty { scheduleFlush(after: Self.interval) }
+        case .on: if !queue.isEmpty { scheduleFlush(after: interval) }
         case .off: dropAll()
         case .pending: break
         }
@@ -86,31 +81,28 @@ final class ErrorReporter {
     /// report is complete here, before any delegate call can end or release the ad it is about.
     func report(
         _ code: ErrorReport.Code,
-        stage: ErrorReport.Stage,
         requestId: String? = nil,
         sessionId: String? = nil,
-        adId: String? = nil,
+        bidId: String? = nil,
         vastCode: Int? = nil,
         httpStatus: Int? = nil,
-        underlying: ErrorReport.Underlying? = nil,
-        detail: String? = nil,
-        recovery: ErrorReport.Recovery? = nil
+        cause: ErrorReport.Cause? = nil,
+        detail: String? = nil
     ) {
         guard mode != .off else { return }
-        let report = ErrorReport.make(code, stage: stage, requestId: requestId, sessionId: sessionId, adId: adId, vastCode: vastCode,
-                                      httpStatus: httpStatus, underlying: underlying, detail: detail, recovery: recovery)
-        Logger.debug("error report \(code.rawValue)\(adId.map { " ad=\($0.prefix(8))" } ?? "")")
+        let report = ErrorReport.make(code, requestId: requestId, sessionId: sessionId, bidId: bidId, vastCode: vastCode,
+                                      httpStatus: httpStatus, cause: cause, detail: detail)
+        Logger.debug("error report \(code.rawValue)\(bidId.map { " ad=\($0.prefix(8))" } ?? "")")
         guard queue.add(report) else {
             Logger.debug("error report \(code.rawValue) of \(ReportQueue.size(of: report)) bytes dropped, over the batch budget")
             return
         }
-        if mode == .on { scheduleFlush(after: Self.interval) }
+        if mode == .on { scheduleFlush(after: interval) }
     }
 
     /// A failed ads or `/config` request.
-    func report(_ code: ErrorReport.Code, stage: ErrorReport.Stage, requestId: String, sessionId: String? = nil, failure: ErrorReport.FailedRequest, recovery: ErrorReport.Recovery? = nil) {
-        report(code, stage: stage, requestId: requestId, sessionId: sessionId, httpStatus: failure.httpStatus,
-               underlying: failure.underlying, detail: failure.detail, recovery: recovery)
+    func report(_ code: ErrorReport.Code, requestId: String, sessionId: String? = nil, failure: ErrorReport.FailedRequest) {
+        report(code, requestId: requestId, sessionId: sessionId, httpStatus: failure.httpStatus, cause: failure.cause, detail: failure.detail)
     }
 
     /// Back to the state before any `/config`. Tests only: the shared instance is process-wide.
@@ -121,6 +113,7 @@ final class ErrorReporter {
         queue.clear()
         pendingBatch = nil
         failures = 0
+        interval = ConfigResponse.defaultBatchInterval
     }
 
     /// Drops everything waiting: reports are off for this launch.
@@ -135,12 +128,12 @@ final class ErrorReporter {
     private func scheduleFlush(after delay: TimeInterval) {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
-            try? await Task.sleep(seconds: delay)
+            if delay > 0 { try? await Task.sleep(seconds: delay) }
             guard let self, !Task.isCancelled else { return }
             let delivered = await flush()
             flushTask = nil
             guard mode == .on, pendingBatch != nil || !queue.isEmpty else { return }
-            scheduleFlush(after: delivered ? Self.interval : nextRetryDelay())
+            scheduleFlush(after: delivered ? interval : nextRetryDelay())
         }
     }
 
@@ -181,14 +174,12 @@ final class ErrorReporter {
         }
     }
 
-    /// The next batch from the queue, its body this launch's request: a new `batchId`, the app, the OS, the
-    /// dropped count. `nil` when nothing is left to send.
+    /// The next batch from the queue, its body this launch's request: the app and the OS around the reports.
+    /// `nil` when nothing is left to send.
     private func nextBatch(token: String) -> ReportQueue.Batch? {
-        let id = UUID().uuidString.lowercased()
-        let os = OSInfo.current()
-        return queue.makeBatch { reports, dropped in
-            try? APIClient.encode(Request(batchId: id, publisherToken: token, installId: KontextVideo.installId, app: .current(),
-                                          os: Request.OS(name: os.name.rawValue, version: os.version), dropped: dropped, errors: reports))
+        let os = ReportFormat.os()
+        return queue.makeBatch { reports in
+            try? APIClient.encode(Request(publisherToken: token, installId: KontextVideo.installId, app: .current(), os: os, errors: reports))
         }
     }
 }

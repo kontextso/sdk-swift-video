@@ -23,9 +23,8 @@ extension VideoAd {
     }
 }
 
-/// The reports waiting and the dropped count, now in the reporter's queue: the names the tests read.
+/// The reports waiting, now in the reporter's queue: the name the tests read.
 @MainActor
 extension ErrorReporter {
     var buffer: [ErrorReport] { queue.reports }
-    var dropped: Int { queue.dropped }
 }

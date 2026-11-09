@@ -25,7 +25,7 @@ enum IntegrationGuard {
         Environment.assertionFailure("KontextVideo: call initialize(with:) before \(call)")
         Logger.error("\(call) called before initialize(with:); no ads will load")
         // Kept in memory: it leaves if the app initializes later and `/config` turns the reports on.
-        ErrorReporter.shared.report(.notInitialized, stage: .integration, detail: call)
+        ErrorReporter.shared.report(.notInitialized, detail: call)
         return false
     }
 
@@ -36,9 +36,9 @@ enum IntegrationGuard {
         guard !problems.isEmpty else { return }
         Environment.assertionFailure("KontextVideo.Configuration: \(problems.joined(separator: ", "))")
         Logger.error("configuration: \(problems.joined(separator: ", ")); no ads will load")
-        if configuration.publisherToken.isEmpty { ErrorReporter.shared.report(.emptyToken, stage: .integration) }
+        if configuration.publisherToken.isEmpty { ErrorReporter.shared.report(.emptyToken) }
         if problems.contains(where: { $0.hasPrefix("adServerURL") }) {
-            ErrorReporter.shared.report(.badServerURL, stage: .integration)
+            ErrorReporter.shared.report(.badServerURL)
         }
     }
 
@@ -50,7 +50,7 @@ enum IntegrationGuard {
         if !missing.isEmpty {
             Environment.assertionFailure("KontextVideo.Content: \(missing.joined(separator: ", "))")
             Logger.error("content \(content.id): \(missing.joined(separator: ", ")); the server will refuse its requests")
-            ErrorReporter.shared.report(.badContent, stage: .integration, sessionId: sessionId, detail: missing.joined(separator: ","))
+            ErrorReporter.shared.report(.badContent, sessionId: sessionId, detail: missing.joined(separator: ","))
         }
         if !content.leftOut.isEmpty {
             Logger.warning("content \(content.id): \(content.leftOut.joined(separator: ", "))")

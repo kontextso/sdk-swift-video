@@ -251,7 +251,7 @@ public final class VideoAd {
                 try await awaitLoaded()
             } catch VideoAdError.creativeFailed(let code) {
                 invalidate(.creativeFailed(code: code))
-                DebugReporter.shared.event("ad.loadFailed", adId: id, level: .warning, state: ["code": .number(Double(code))])
+                DebugReporter.shared.event("ad.loadFailed", sessionId: owner?.sessionId, bidId: id, level: .warning, properties: ["code": .number(Double(code))])
                 throw VideoAdError.creativeFailed(code: code)
             } catch {
                 // The ad ended meanwhile: say why in the order the app expects (destroyed, disabled, rejected, ...).
@@ -262,7 +262,7 @@ public final class VideoAd {
             try checkLoadable()
             let durationMs = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
             Logger.info("\(format) ad \(id.prefix(8)): ready in \(durationMs) ms")
-            DebugReporter.shared.event("ad.loaded", adId: id, state: ["durationMs": .number(Double(durationMs))])
+            DebugReporter.shared.event("ad.loaded", sessionId: owner?.sessionId, bidId: id, properties: ["durationMs": .number(Double(durationMs))])
         }
         loading = task
         return task
@@ -398,8 +398,7 @@ public final class VideoAd {
             }
         } onFailed: { [weak self] in
             guard let self else { return }
-            ErrorReporter.shared.report(.presentationFailed, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                        recovery: .adEndedFailed)
+            ErrorReporter.shared.report(.presentationFailed, sessionId: owner?.sessionId, bidId: id)
             fail(.cannotShowNow)
         }
     }
@@ -504,7 +503,7 @@ public final class VideoAd {
             guard state.moveTo(.onScreen) else { return }
             bridge.show(size: (screen as? InlineScreen)?.chosenSize)
             Logger.info("ad \(id.prefix(8)): shown")
-            DebugReporter.shared.event("ad.shown", adId: id, state: ["format": .string(format.rawValue)])
+            DebugReporter.shared.event("ad.shown", sessionId: owner?.sessionId, bidId: id, properties: ["format": .string(format.rawValue)])
             startMeter()
             // Apple counts display, not the VAST impression: an app-install ad is registered as it appears.
             skAdNetwork?.start()
@@ -668,7 +667,7 @@ public final class VideoAd {
             tracker.fire("overlayViewDuration", viewDurationMs: Int((activeTime * 1000).rounded()))
         }
         Logger.info("ad \(id.prefix(8)): ended (\(reason))")
-        DebugReporter.shared.event("ad.ended", adId: id, state: ["reason": .string("\(reason)")])
+        DebugReporter.shared.event("ad.ended", sessionId: owner?.sessionId, bidId: id, properties: ["reason": .string("\(reason)")])
         if !dismissing { finish(reason) }
     }
 
@@ -685,9 +684,8 @@ public final class VideoAd {
     /// and the log says so.
     private func reportDismissalTimedOut() {
         Logger.error("ad \(id.prefix(8)): the linear ad's dismissal did not finish in \(Int(LinearScreen.dismissalTimeout * LinearPresentation.capFactor)) s; didEnd delivered anyway")
-        DebugReporter.shared.event("ad.dismissalTimedOut", adId: id, level: .warning)
-        ErrorReporter.shared.report(.dismissalTimedOut, stage: .presentation, sessionId: owner?.sessionId, adId: id,
-                                    recovery: .didEndDelivered)
+        DebugReporter.shared.event("ad.dismissalTimedOut", sessionId: owner?.sessionId, bidId: id, level: .warning)
+        ErrorReporter.shared.report(.dismissalTimedOut, sessionId: owner?.sessionId, bidId: id)
     }
 
     // MARK: The page's events
@@ -713,7 +711,7 @@ public final class VideoAd {
     func invalidate(_ reason: InvalidationReason) {
         guard state.moveTo(.invalidated(reason)) else { return }
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
-        DebugReporter.shared.event("ad.invalidated", adId: id, state: reason.reportState)
+        DebugReporter.shared.event("ad.invalidated", sessionId: owner?.sessionId, bidId: id, properties: reason.reportProperties)
         loadedBridge?.hide()
         loadedBridge = nil
         if let continuation = loadContinuation {

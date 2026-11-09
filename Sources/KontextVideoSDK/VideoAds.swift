@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import KontextKit
 import UIKit
 
 /// The ads of one video (one episode). Creating it sends nothing; every request comes from `format(_:)`.
@@ -20,8 +21,9 @@ public final class VideoAds {
     /// The content player set by `track(_:)`: the playhead, and the playing state an overlay follows.
     let playback = ContentPlayback()
 
-    /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session.
-    let sessionId = UUID().uuidString.lowercased()
+    /// One per `VideoAds`, sent with every request: the server keeps the bids it gave out per session. A UUID v7,
+    /// so sessions sort by when they began.
+    let sessionId = UUIDv7.generate()
     /// The id of the latest ads request this object sent, `nil` before the first. Quote it to Kontext when an
     /// ad or a no-fill looks wrong: the server finds the request by it.
     public private(set) var lastRequestID: String?
@@ -136,11 +138,6 @@ public final class VideoAds {
         return AdFormat.allCases.compactMap { store.ads[$0]?.id }
     }
 
-    /// Whether a valid unshown ad is held: what a failed request leaves the app with (an expired one is not).
-    var holdsAds: Bool {
-        store.ads.values.contains { !$0.descriptor.isExpired }
-    }
-
     /// The request left with this id: the one `lastRequestID` names.
     func requestWasSent(_ requestId: String) {
         lastRequestID = requestId
@@ -181,7 +178,7 @@ public final class VideoAds {
                 noFill[format] = .alreadyUsed
             case .replace(let format, let ad):
                 Logger.info("\(format) for \(content.id): ad \(ad.id.prefix(8)), \(ad.price.value) \(ad.price.currency) cpm")
-                DebugReporter.shared.event("ads.response", adId: ad.id, state: ["format": .string(format.rawValue), "filled": true])
+                DebugReporter.shared.event("ads.response", sessionId: sessionId, bidId: ad.id, properties: ["format": .string(format.rawValue), "filled": true])
                 store.ads[format] = VideoAd(descriptor: AdDescriptor(payload: ad, receivedAt: Environment.now()), owner: self)
             }
         }
@@ -199,7 +196,7 @@ public final class VideoAds {
         // A reason this SDK does not know is the server's free text: "other" leaves the device, the text does not.
         let knownReason: String
         if case .other = reason { knownReason = "other" } else { knownReason = reason.description }
-        DebugReporter.shared.event("ads.response", state: ["format": .string(format.rawValue), "filled": false, "reason": .string(knownReason)])
+        DebugReporter.shared.event("ads.response", sessionId: sessionId, properties: ["format": .string(format.rawValue), "filled": false, "reason": .string(knownReason)])
     }
 
     private func notEnabledMessage(_ format: AdFormat, reason: VideoAdError.NoFillReason) -> String {

@@ -9,14 +9,12 @@ extension SerialSuites {
 @MainActor
 struct DebugReporterTests {
     private let harness = SDKHarness()
-
-    init() {
-        DebugReporter.interval = 0.05
-    }
+    private let SESSION_ID = "0192f1a2-7b3c-7d4e-8f50-6172839aabbc"
+    private let BID_ID = "0192f1a2-7b3c-7d4e-8f50-6172839aabbd"
 
     @Test func nothingIsSentWhileDisabled() async {
         _ = await harness.initialize()
-        DebugReporter.shared.event("ads.request", state: ["format": "pause"])
+        DebugReporter.shared.event("ads.request", properties: ["format": "pause"])
         await sleepMs(150)
         #expect(harness.server.requests(to: "/v2/debug").isEmpty)
     }
@@ -24,27 +22,28 @@ struct DebugReporterTests {
     @Test func enabledByInitEventsAreBatchedWithTheBodyShape() async throws {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        DebugReporter.shared.event("ads.request", state: ["format": "pause", "playhead": 1200, "filled": true])
-        DebugReporter.shared.event("ad.loaded", adId: "ad-1", level: .warning, state: ["durationMs": 842])
+        DebugReporter.shared.event("ads.request", properties: ["format": "pause", "playhead": 1200, "filled": true])
+        DebugReporter.shared.event("ad.loaded", sessionId: SESSION_ID, bidId: BID_ID, level: .warning, properties: ["durationMs": 842])
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").count >= 1 })
         let body = try #require(harness.server.requests(to: "/v2/debug").last?.body)
         #expect(body["publisherToken"] as? String == "test-dev")
         #expect(body["installId"] as? String == KontextVideo.installId)
         #expect((body["sdk"] as? [String: Any])?["name"] as? String == "sdk-swift-video")
+        #expect((body["app"] as? [String: Any])?["version"] is String && (body["os"] as? [String: Any])?["version"] is String, "the envelope an error batch has: app and OS, each with its version")
         let events = try #require(body["events"] as? [[String: Any]])
         let names = events.map { $0["name"] as? String }
         #expect(names.contains("config.response"))
         #expect(names.contains("ads.request") && names.contains("ad.loaded"))
         let request = try #require(events.first { $0["name"] as? String == "ads.request" })
-        let createdAt = try #require(request["createdAt"] as? String)
-        #expect(createdAt.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#, options: .regularExpression) != nil, "ISO 8601 with milliseconds, UTC: \(createdAt)")
-        #expect(request["adId"] == nil)
-        let state = request["state"] as? [String: Any]
-        #expect(state?["format"] as? String == "pause")
-        #expect(state?["playhead"] as? Double == 1200)
-        #expect(state?["filled"] as? Bool == true)
+        let occurredAt = try #require(request["occurredAt"] as? String)
+        #expect(occurredAt.range(of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#, options: .regularExpression) != nil, "ISO 8601 with milliseconds, UTC: \(occurredAt)")
+        #expect(request["bidId"] == nil && request["sessionId"] == nil)
+        let properties = request["properties"] as? [String: Any]
+        #expect(properties?["format"] as? String == "pause")
+        #expect(properties?["playhead"] as? Double == 1200)
+        #expect(properties?["filled"] as? Bool == true)
         let loaded = try #require(events.first { $0["name"] as? String == "ad.loaded" })
-        #expect(loaded["adId"] as? String == "ad-1")
+        #expect(loaded["bidId"] as? String == BID_ID && loaded["sessionId"] as? String == SESSION_ID)
         #expect(loaded["level"] as? String == "warning")
     }
 
@@ -52,7 +51,7 @@ struct DebugReporterTests {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
         for i in 0..<20 {
-            DebugReporter.shared.event("tick", state: ["i": .number(Double(i))])
+            DebugReporter.shared.event("tick", properties: ["i": .number(Double(i))])
         }
         // The SDK's own startup events may go out in a batch of their own, at any moment on a slow runner;
         // what matters is that the twenty ticks travel together.
@@ -128,7 +127,7 @@ struct DebugReporterTests {
         // next test (the reporter is shared). A request takes its answer when it arrives.
         harness.server.on("/v2/debug", .empty())
         for i in 0..<5 {
-            DebugReporter.shared.event("later", state: ["i": .number(Double(i))])
+            DebugReporter.shared.event("later", properties: ["i": .number(Double(i))])
         }
         #expect(batches(named: "later").isEmpty, "no second request while the first is answered")
         #expect(await waitUntil(10) { !self.batches(named: "later").isEmpty })
@@ -155,20 +154,20 @@ struct DebugReporterTests {
         DebugReporter.shared.event("fill")   // opens a batch that will fail; the rest pile up behind it
         await sleepMs(20)
         for i in 0..<(DebugReporter.maxBuffered + 10) {
-            DebugReporter.shared.event("tick", state: ["i": .number(Double(i))])
+            DebugReporter.shared.event("tick", properties: ["i": .number(Double(i))])
         }
         harness.server.on("/v2/debug", .empty())
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/debug").contains { ($0.body?["events"] as? [[String: Any]])?.count == DebugReporter.maxBuffered } })
         let batch = harness.server.requests(to: "/v2/debug").last?.body?["events"] as? [[String: Any]]
-        #expect((batch?.first?["state"] as? [String: Any])?["i"] as? Double == 10, "the oldest ten were dropped")
+        #expect((batch?.first?["properties"] as? [String: Any])?["i"] as? Double == 10, "the oldest ten were dropped")
     }
 
     @Test func aNumberBeyondIntFormatsWithoutATrap() {
-        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(1e30)]) == "n a=1e+30")
-        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(.infinity)]) == "n a=inf")
-        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(.nan)]) == "n a=nan")
-        #expect(DebugReporter.line("n", adId: nil, state: ["a": .number(42), "b": .number(1.5)]) == "n a=42 b=1.5")
-        DebugReporter.shared.event("n", state: ["a": .number(.infinity)])   // the console line is formatted whether or not reporting is on
+        #expect(DebugReporter.line("n", bidId: nil, properties: ["a": .number(1e30)]) == "n a=1e+30")
+        #expect(DebugReporter.line("n", bidId: nil, properties: ["a": .number(.infinity)]) == "n a=inf")
+        #expect(DebugReporter.line("n", bidId: nil, properties: ["a": .number(.nan)]) == "n a=nan")
+        #expect(DebugReporter.line("n", bidId: nil, properties: ["a": .number(42), "b": .number(1.5)]) == "n a=42 b=1.5")
+        DebugReporter.shared.event("n", properties: ["a": .number(.infinity)])   // the console line is formatted whether or not reporting is on
     }
 
     @Test func theLoadFlowReportsItsEvents() async throws {
@@ -191,8 +190,55 @@ struct DebugReporterTests {
     }
 
     @Test func anEventReadsAsOneConsoleLine() {
-        #expect(DebugReporter.line("ad.loaded", adId: "f1a2b3c4-5d6e", state: ["durationMs": 842, "format": "pause", "filled": true]) == "ad.loaded ad=f1a2b3c4 durationMs=842 filled=true format=pause")
-        #expect(DebugReporter.line("config.response", adId: nil, state: nil) == "config.response")
+        #expect(DebugReporter.line("ad.loaded", bidId: "f1a2b3c4-5d6e", properties: ["durationMs": 842, "format": "pause", "filled": true]) == "ad.loaded ad=f1a2b3c4 durationMs=842 filled=true format=pause")
+        #expect(DebugReporter.line("config.response", bidId: nil, properties: nil) == "config.response")
+    }
+
+    @Test func consoleLinesAreForwardedAsLogEventsWhileDebugIsOnOnly() async throws {
+        _ = await harness.initialize()   // reportDebug left out: off
+        Logger.warning("canary-off https://ads.test/f?ifa=secret")
+        await sleepMs(150)
+        #expect(harness.server.requests(to: "/v2/debug").isEmpty, "nothing leaves while off")
+        KontextVideo.shared.resetForTesting()
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        _ = await harness.initialize()
+        Logger.level = .none   // the console shows nothing; the server still gets every line
+        Logger.warning("canary-on https://ads.test/f?ifa=secret&x=1 answered 410")
+        Logger.debug("canary-debug")
+        #expect(await waitUntil { self.logEvents().contains { $0["message"] as? String == "canary-debug" } })
+        let line = try #require(logEvents().first { ($0["message"] as? String)?.hasPrefix("canary-on") == true })
+        #expect(line["message"] as? String == "canary-on https://ads.test/f answered 410", "the URL without its query")
+        #expect(line["level"] as? String == "warning")
+        #expect(!allNames().contains("canary-on"), "a line is an event called log")
+        let text = try #require(String(bytes: try JSONSerialization.data(withJSONObject: harness.server.requests(to: "/v2/debug").map { $0.body ?? [:] }), encoding: .utf8))
+        #expect(!text.contains("secret"), "the query never leaves")
+    }
+
+    @Test func aLineLoggedOffTheMainThreadIsForwardedToo() async {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
+        _ = await harness.initialize()
+        DispatchQueue.global().async { Logger.warning("canary-background HTTPS://Ads.Test/F?ifa=secret kontext-test://frames/x?q=1 brandapp:offer?ifa=secret brandapp:?ifa=secret done") }
+        #expect(await waitUntil { self.logEvents().contains { ($0["message"] as? String)?.hasPrefix("canary-background") == true } })
+        let line = logEvents().first { ($0["message"] as? String)?.hasPrefix("canary-background") == true }
+        #expect(line?["message"] as? String == "canary-background HTTPS://Ads.Test/F kontext-test://frames/x brandapp:offer brandapp: done", "every scheme, any case, with or without //")
+    }
+
+    @Test func anIntervalOfZeroSendsEachEventAsItHappens() async {
+        harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true, debugBatchInterval: 0)))
+        _ = await harness.initialize()
+        #expect(DebugReporter.shared.interval == 0)
+        DebugReporter.shared.event("alone-a")
+        #expect(await waitUntil { !self.batches(named: "alone-a").isEmpty })
+        DebugReporter.shared.event("alone-b")
+        #expect(await waitUntil { !self.batches(named: "alone-b").isEmpty })
+        #expect(batches(named: "alone-a").first?.contains { $0["name"] as? String == "alone-b" } == false, "each left on its own")
+    }
+
+    /// Every `log` event the server got, as its level and properties flattened: `message` and `level`.
+    private func logEvents() -> [[String: Any]] {
+        harness.server.requests(to: "/v2/debug").flatMap { ($0.body?["events"] as? [[String: Any]]) ?? [] }
+            .filter { $0["name"] as? String == "log" }
+            .map { event in (event["properties"] as? [String: Any] ?? [:]).merging(["level": event["level"] ?? ""]) { $1 } }
     }
 
     private func allNames() -> [String] {

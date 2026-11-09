@@ -46,7 +46,7 @@ struct ErrorReporterTests {
     @Test func reportsAreOffWhenConfigLeavesThemOutOrDisablesTheSDK() async {
         _ = await harness.initialize()
         #expect(reporter.mode == .off, "reportErrors left out is off")
-        reporter.report(.skanFailed, stage: .attribution, detail: "start")
+        reporter.report(.skanFailed, detail: "start")
         #expect(reporter.buffer.isEmpty)
         sdkReset()
         harness.server.on("/v2/config", .json(Fixtures.disabled("publisherDisabled")))
@@ -66,9 +66,9 @@ struct ErrorReporterTests {
         _ = try await ads.format(.pause)   // retries /config, which turns the reports on
         #expect(await waitUntil { !self.reports("config.failed").isEmpty })
         let report = try #require(reports("config.failed").first)
-        #expect(report["stage"] as? String == "config" && report["detail"] as? String == "network")
-        #expect((report["underlying"] as? [String: Any])?["domain"] as? String == NSURLErrorDomain)
-        #expect((report["underlying"] as? [String: Any])?["code"] as? Int == URLError.timedOut.rawValue)
+        #expect(report["detail"] as? String == "network")
+        #expect((report["cause"] as? [String: Any])?["domain"] as? String == NSURLErrorDomain)
+        #expect((report["cause"] as? [String: Any])?["code"] as? Int == URLError.timedOut.rawValue)
         #expect((report["requestId"] as? String)?.isEmpty == false)
     }
 
@@ -91,14 +91,15 @@ struct ErrorReporterTests {
         let failures = reports("ads.request_failed")
         #expect(failures.count == 1, "one request, one report, however many callers waited")
         let report = try #require(failures.first)
-        #expect(report["httpStatus"] as? Int == 500 && report["stage"] as? String == "request")
+        #expect(report["httpStatus"] as? Int == 500)
         #expect(report["requestId"] as? String == ads.lastRequestID && ads.lastRequestID != nil, "the id the app can quote")
-        #expect(report["sessionId"] as? String == ads.sessionId && report["recovery"] as? String == "no_ad")
+        #expect(report["sessionId"] as? String == ads.sessionId)
         let history = (report["history"] as? [[String: Any]])?.compactMap { $0["name"] as? String } ?? []
         #expect(history.contains("ads.request"), "what happened just before: \(history)")
         let moment = try #require((report["history"] as? [[String: Any]])?.first { $0["name"] as? String == "ads.request" })
-        let createdAt = try #require(moment["createdAt"] as? String)
-        #expect(createdAt.hasSuffix("Z") && createdAt.contains("T") && createdAt.contains("."), "ISO 8601 with milliseconds in UTC: \(createdAt)")
+        let occurredAt = try #require(moment["occurredAt"] as? String)
+        #expect(occurredAt.hasSuffix("Z") && occurredAt.contains("T") && occurredAt.contains("."), "ISO 8601 with milliseconds in UTC: \(occurredAt)")
+        #expect(moment["sessionId"] as? String == ads.sessionId, "a history entry is a debug event, session and all")
         #expect(moment["at"] == nil, "a date, not seconds before the error")
     }
 
@@ -126,7 +127,7 @@ struct ErrorReporterTests {
         #expect(body["publisherToken"] as? String == "test-dev" && body["installId"] as? String == KontextVideo.installId)
         #expect((body["sdk"] as? [String: Any])?["name"] as? String == SDKInfo.name)
         #expect((body["app"] as? [String: Any])?["bundleId"] != nil && (body["os"] as? [String: Any])?["name"] != nil)
-        #expect((body["batchId"] as? String)?.isEmpty == false && body["dropped"] as? Int == 0)
+        #expect(body["batchId"] == nil && body["dropped"] == nil, "nothing the server ignores")
     }
 
     // MARK: Delivery
@@ -139,12 +140,11 @@ struct ErrorReporterTests {
             calls += 1
             return calls == 1 ? .failure(.notConnectedToInternet) : .empty()
         }
-        reporter.report(.skanFailed, stage: .attribution, adId: "ad-1", detail: "start")
+        reporter.report(.skanFailed, bidId: "ad-1", detail: "start")
         // Two round trips and a backoff: a loaded CI runner resumes tasks seconds late.
         #expect(await waitUntil { calls == 2 })
         let bodies = harness.server.requests(to: "/v2/error").compactMap(\.body)
         #expect(bodies.count == 2)
-        #expect(bodies[0]["batchId"] as? String == bodies[1]["batchId"] as? String, "the same batch, so the server counts it once")
         let ids = bodies.map { (($0["errors"] as? [[String: Any]])?.first?["id"] as? String) ?? "" }
         #expect(ids[0] == ids[1] && !ids[0].isEmpty, "the same report, as it was")
         let raw = harness.server.requests(to: "/v2/error").map(\.rawBody)
@@ -159,7 +159,7 @@ struct ErrorReporterTests {
             calls += 1
             return calls <= 2 ? .failure(.notConnectedToInternet) : .empty(400)
         }
-        reporter.report(.skanFailed, stage: .attribution, detail: "start")
+        reporter.report(.skanFailed, detail: "start")
         #expect(await waitUntil { calls == 3 })
         #expect(await waitUntil { self.reporter.failures == 0 }, "the server answered: the next transient failure waits from the first backoff")
     }
@@ -169,12 +169,12 @@ struct ErrorReporterTests {
         // leave less room than any envelope takes: counting the reports alone would send an oversized body.
         let field = String(repeating: "f", count: ReportFormat.maxFieldLength)
         EventHistory.clear()
-        for _ in 0..<5 { DebugReporter.shared.event(field, adId: field) }
+        for _ in 0..<5 { DebugReporter.shared.event(field, bidId: field) }
         var shape: (detail: String, size: Int, count: Int)?
         for length in 1...ReportFormat.maxFieldLength {
             reporter.resetForTesting()
             let detail = String(repeating: "d", count: length)
-            reporter.report(.skanFailed, stage: .attribution, requestId: field, sessionId: field, adId: field, detail: detail)
+            reporter.report(.skanFailed, requestId: field, sessionId: field, bidId: field, detail: detail)
             let size = try JSONEncoder().encode(try #require(reporter.buffer.first)).count
             let count = ReportQueue.maxBatchBytes / size
             if count <= ReportQueue.maxBatch, ReportQueue.maxBatchBytes - count * size < 200 {
@@ -185,42 +185,40 @@ struct ErrorReporterTests {
         let (detail, size, count) = try #require(shape, "a calibration exists")
         reporter.resetForTesting()
         for _ in 0..<count {
-            reporter.report(.skanFailed, stage: .attribution, requestId: field, sessionId: field, adId: field, detail: detail)
+            reporter.report(.skanFailed, requestId: field, sessionId: field, bidId: field, detail: detail)
         }
         await enableReports()
         #expect(await waitUntil { self.reports().count == count }, "every report leaves, the overflow in the next batch")
         let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
         #expect(sizes.count == 2 && sizes.allSatisfy { $0 <= ReportQueue.maxBatchBytes },
                 "\(count) reports of \(size) bytes: two bodies, each within \(ReportQueue.maxBatchBytes): \(sizes)")
-        #expect(reporter.dropped == 0)
     }
 
     @Test func a410StopsReportingForTheLaunchAndOther4xxDropTheBatch() async {
         await enableReports()
         harness.server.on("/v2/error", .empty(400))
-        reporter.report(.skanFailed, stage: .attribution, detail: "start")
+        reporter.report(.skanFailed, detail: "start")
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/error").count == 1 })
         await sleepMs(50)
         #expect(harness.server.requests(to: "/v2/error").count == 1 && reporter.mode == .on, "a refused batch is not retried")
         harness.server.on("/v2/error", .empty(410))
-        reporter.report(.skanFailed, stage: .attribution, detail: "end")
+        reporter.report(.skanFailed, detail: "end")
         #expect(await waitUntil { self.harness.server.requests(to: "/v2/error").count == 2 })
         #expect(await waitUntil { self.reporter.mode == .off }, "410: off for this launch")
-        reporter.report(.skanFailed, stage: .attribution, detail: "dispose")
+        reporter.report(.skanFailed, detail: "dispose")
         await sleepMs(50)
         #expect(harness.server.requests(to: "/v2/error").count == 2 && reporter.buffer.isEmpty)
     }
 
-    @Test func reportsBeyondTheBufferAreDroppedAndCountedOnce() async {
+    @Test func reportsBeyondTheBufferAreDropped() async {
         for index in 0..<(ReportQueue.maxBuffered + 5) {
-            reporter.report(.skanFailed, stage: .attribution, adId: "ad-\(index)")
+            reporter.report(.skanFailed, bidId: "ad-\(index)")
         }
-        #expect(reporter.buffer.count == ReportQueue.maxBuffered && reporter.dropped == 5, "waiting for /config, the oldest go")
+        #expect(reporter.buffer.count == ReportQueue.maxBuffered, "waiting for /config, the oldest go")
         await enableReports()
         #expect(await waitUntil { self.reports().count == ReportQueue.maxBuffered })
         let batches = harness.server.requests(to: "/v2/error").compactMap(\.body)
         #expect(batches.allSatisfy { (($0["errors"] as? [Any])?.count ?? 0) <= ReportQueue.maxBatch }, "at most maxBatch reports per batch")
-        #expect(batches.compactMap { $0["dropped"] as? Int }.reduce(0, +) == 5, "the dropped count goes once")
     }
 
     // MARK: The ad's faults
@@ -235,12 +233,12 @@ struct ErrorReporterTests {
         pageError.bridge.receive(["adId": pageError.id, "type": "ad.error", "code": 405], from: sender)
         #expect(await waitUntil { self.reports().count == 2 })
         let process = try #require(reports("frame.process_terminated").first)
-        #expect(process["vastCode"] as? Int == 405 && process["stage"] as? String == "playback" && process["recovery"] as? String == "ad_ended_failed")
-        #expect(process["adId"] as? String == "o-er-t" && process["sessionId"] as? String == ads.sessionId)
+        #expect(process["vastCode"] as? Int == 405)
+        #expect(process["bidId"] as? String == "o-er-t" && process["sessionId"] as? String == ads.sessionId)
         let creative = try #require(reports("ad.creative_failed").first)
-        #expect(creative["stage"] as? String == "load" && creative["recovery"] as? String == "ad_dropped_before_show", "failed while waiting to be shown")
+        #expect(creative["bidId"] as? String == "p-er-e", "failed while waiting to be shown")
         // The history names the reason as both SDKs write it, the code as a key of its own.
-        let invalidated = EventHistory.recent().last { $0.name == "ad.invalidated" && $0.adId == "p-er-e" }?.state
+        let invalidated = EventHistory.recent().last { $0.name == "ad.invalidated" && $0.bidId == "p-er-e" }?.properties
         #expect(invalidated?["reason"]?.description == "creativeFailed" && invalidated?["code"]?.description == "405", "\(String(describing: invalidated))")
     }
 
@@ -268,7 +266,7 @@ struct ErrorReporterTests {
         let ad = try loadedAd(Fixtures.linearAd(id: "v-er-p"), in: ads)
         try ad.show(from: window.root)
         #expect(await waitUntil { !self.reports("ad.presentation_failed").isEmpty })
-        #expect(reports("ad.presentation_failed").first?["recovery"] as? String == "ad_ended_failed")
+        #expect(reports("ad.presentation_failed").first?["bidId"] as? String == "v-er-p")
     }
 
     @Test func aFailedSKAdNetworkStepCarriesTheStepAndTheErrorCodeOnly() async throws {
@@ -281,8 +279,8 @@ struct ErrorReporterTests {
         impression.start()
         #expect(await waitUntil { !self.reports("skan.failed").isEmpty })
         let report = try #require(reports("skan.failed").first)
-        #expect(report["detail"] as? String == "start" && report["stage"] as? String == "attribution")
-        #expect((report["underlying"] as? [String: Any])?["domain"] is String)
+        #expect(report["detail"] as? String == "start")
+        #expect((report["cause"] as? [String: Any])?["domain"] is String)
         let raw = String(bytes: try #require(harness.server.requests(to: "/v2/error").first).rawBody, encoding: .utf8) ?? ""
         #expect(!raw.contains("user-secret-2"), "never the error's text")
     }
@@ -295,12 +293,12 @@ struct ErrorReporterTests {
         let free = "contact secret@example.com at https://evil.test/x"
         harness.server.on("/v2/video/ads", .json(Fixtures.noFill(free)))
         _ = try? await ads.format(.pause)
-        reporter.report(.skanFailed, stage: .attribution, detail: "start")   // any fault after it carries the history
+        reporter.report(.skanFailed, detail: "start")   // any fault after it carries the history
         #expect(await waitUntil { !self.reports("skan.failed").isEmpty })
         let raw = String(bytes: try #require(harness.server.requests(to: "/v2/error").last).rawBody, encoding: .utf8) ?? ""
         #expect(!raw.contains("secret@example.com") && !raw.contains("evil.test"), "the server's free text stays on the device")
         let history = (reports("skan.failed").first?["history"] as? [[String: Any]]) ?? []
-        let reasons = history.compactMap { ($0["state"] as? [String: Any])?["reason"] as? String }
+        let reasons = history.compactMap { ($0["properties"] as? [String: Any])?["reason"] as? String }
         #expect(reasons.contains("other"), "an unknown reason is \"other\": \(reasons)")
     }
 
@@ -308,11 +306,11 @@ struct ErrorReporterTests {
         await enableReports()
         let long = String(repeating: "a", count: 10_000)
         for index in 0..<60 {
-            reporter.report(.skanFailed, stage: .attribution, requestId: long, sessionId: long, adId: "\(index)" + long, detail: long)
+            reporter.report(.skanFailed, requestId: long, sessionId: long, bidId: "\(index)" + long, detail: long)
         }
         #expect(await waitUntil { self.reports().count == 60 })
         #expect(reports().allSatisfy { report in
-            ["requestId", "sessionId", "adId", "detail"].allSatisfy { ((report[$0] as? String)?.count ?? 0) <= ReportFormat.maxFieldLength }
+            ["requestId", "sessionId", "bidId", "detail"].allSatisfy { ((report[$0] as? String)?.count ?? 0) <= ReportFormat.maxFieldLength }
         }, "every string capped")
         let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
         #expect(sizes.allSatisfy { $0 <= ReportQueue.maxBatchBytes }, "each whole request within the budget, envelope included: \(sizes)")
@@ -324,16 +322,16 @@ struct ErrorReporterTests {
         #expect(ReportFormat.capped(heavy).utf8.count <= ReportFormat.maxFieldLength)
         #expect(ReportFormat.capped("short") == "short")
         await enableReports()
-        DebugReporter.shared.event("ad.shown", adId: heavy, state: ["format": .string(heavy)])
+        DebugReporter.shared.event("ad.shown", bidId: heavy, properties: ["format": .string(heavy)])
         for _ in 0..<20 {
-            reporter.report(.skanFailed, stage: .attribution, requestId: heavy, sessionId: heavy, adId: heavy, detail: heavy)
+            reporter.report(.skanFailed, requestId: heavy, sessionId: heavy, bidId: heavy, detail: heavy)
         }
         #expect(await waitUntil { self.reports().count == 20 })
         let report = try #require(reports().first)
-        #expect(["requestId", "sessionId", "adId", "detail"].allSatisfy { ((report[$0] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength })
+        #expect(["requestId", "sessionId", "bidId", "detail"].allSatisfy { ((report[$0] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength })
         let moment = (report["history"] as? [[String: Any]])?.first { $0["name"] as? String == "ad.shown" }
-        #expect(((moment?["adId"] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength)
-        #expect((((moment?["state"] as? [String: Any])?["format"] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength)
+        #expect(((moment?["bidId"] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength)
+        #expect((((moment?["properties"] as? [String: Any])?["format"] as? String)?.utf8.count ?? 0) <= ReportFormat.maxFieldLength)
         let sizes = harness.server.requests(to: "/v2/error").map(\.rawBody.count)
         #expect(sizes.allSatisfy { $0 <= ReportQueue.maxBatchBytes }, "within the batch budget: \(sizes)")
     }
@@ -346,7 +344,7 @@ struct ErrorReporterTests {
         #expect(reporter.buffer.first?.requestId == sent.first)
     }
 
-    @Test func anExpiredHeldAdIsNotCountedAsKept() async throws {
+    @Test func anAdExpiringDuringAFailedRequestIsNoFallback() async throws {
         await enableReports()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         harness.serve(Fixtures.ad(id: "img-er-x", expires: 30_000))
@@ -361,8 +359,7 @@ struct ErrorReporterTests {
         advanceClock(by: 31)   // the held ad expires while the request is out
         gate.open()
         #expect(await call.value == nil, "no valid ad to fall back to")
-        #expect(await waitUntil { !self.reports("ads.request_failed").isEmpty })
-        #expect(reports("ads.request_failed").first?["recovery"] as? String == "no_ad")
+        #expect(await waitUntil { !self.reports("ads.request_failed").isEmpty }, "and the failure is reported")
     }
 
     @Test func aPageThatCannotLoadCarriesTheSystemErrorsDomainAndCode() async throws {
@@ -372,8 +369,8 @@ struct ErrorReporterTests {
         ad.bridge.load()
         ad.bridge.webView(ad.bridge.webView, didFailProvisionalNavigation: nil, withError: URLError(.cannotFindHost))
         #expect(await waitUntil { !self.reports("frame.load_failed").isEmpty })
-        let underlying = reports("frame.load_failed").first?["underlying"] as? [String: Any]
-        #expect(underlying?["domain"] as? String == NSURLErrorDomain && underlying?["code"] as? Int == URLError.cannotFindHost.rawValue)
+        let cause = reports("frame.load_failed").first?["cause"] as? [String: Any]
+        #expect(cause?["domain"] as? String == NSURLErrorDomain && cause?["code"] as? Int == URLError.cannotFindHost.rawValue)
     }
 
     private func response(_ status: Int) -> HTTPURLResponse {
@@ -401,8 +398,8 @@ struct ErrorReporterTests {
             #expect(ad.invalidationReason == .creativeFailed(code: 500))
         }
         #expect(await waitUntil { self.reports("frame.load_failed").count == 2 })
-        let underlying = reports("frame.load_failed").compactMap { $0["underlying"] as? [String: Any] }
-        #expect(underlying.map { $0["domain"] as? String } == ["http", "http"] && underlying.map { $0["code"] as? Int } == [404, 410])
+        let causes = reports("frame.load_failed").compactMap { $0["cause"] as? [String: Any] }
+        #expect(causes.map { $0["domain"] as? String } == ["http", "http"] && causes.map { $0["code"] as? Int } == [404, 410])
         #expect(reports("frame.load_failed").allSatisfy { $0["vastCode"] as? Int == 500 } && reports("ad.load_timeout").isEmpty)
         // A success status still renders.
         let ok = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "dead-st200")), owner: ads)

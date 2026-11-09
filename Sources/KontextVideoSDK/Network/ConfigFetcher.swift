@@ -28,7 +28,7 @@ enum ConfigFetcher {
         } catch {
             guard !Task.isCancelled else { return .cancelled }
             Logger.error("/config failed, no ads until it succeeds: \(error)")
-            ErrorReporter.shared.report(.configFailed, stage: .config, requestId: request.requestId, failure: ErrorReport.FailedRequest(error))
+            ErrorReporter.shared.report(.configFailed, requestId: request.requestId, failure: ErrorReport.FailedRequest(error))
             return .failed
         }
     }

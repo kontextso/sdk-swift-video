@@ -48,7 +48,7 @@ extension FrameBridge: WKNavigationDelegate {
     func responseDecision(_ response: URLResponse, isMainFrame: Bool, canShowMIMEType: Bool) -> WKNavigationResponsePolicy {
         if isMainFrame, state == .loading, let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
             Logger.warning("frame \(adId.prefix(8)): page answered \(status)")
-            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Underlying(httpStatus: status))
+            fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Cause(httpStatus: status))
             return .cancel
         }
         return canShowMIMEType ? .allow : .cancel
@@ -86,7 +86,7 @@ extension FrameBridge: WKNavigationDelegate {
     private func loadFailed(_ error: Error) {
         guard state == .loading, !Self.isInterruption(error) else { return }
         Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
-        fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Underlying(error))
+        fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Cause(error))
     }
 
     /// `NSURLErrorCancelled`, and WebKit's "frame load interrupted by policy change" (102) after a `.cancel` decision.
