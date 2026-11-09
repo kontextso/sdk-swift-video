@@ -70,7 +70,11 @@ public final class VideoAds {
         }
         // The ad on screen hears of the player: an overlay ends when the content stops, and counts its seconds;
         // a pause ad ends when the content plays again.
-        playback.onChange = { [weak self] change in self?.store.showing?.contentRule.contentDidChange(change) }
+        playback.onChange = { [weak self] change in
+            // Held for the call: the rule reads the app's player, whose code may destroy the ads and release this ad.
+            guard let ad = self?.store.showing else { return }
+            ad.contentRule.contentDidChange(change)
+        }
         playback.isFollowerShown = { [weak self] in
             guard let ad = self?.store.showing else { return false }
             return ad.format != .linear && !ad.hasEnded

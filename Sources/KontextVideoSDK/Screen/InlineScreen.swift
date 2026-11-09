@@ -94,7 +94,10 @@ final class InlineScreen: AdScreen {
         host.onUnfit = { [weak self, weak host] in
             Task { @MainActor [weak self, weak host] in
                 try? await Task.sleep(seconds: Self.unfitGrace)
-                guard let self, !ad.hasEnded else { return }
+                guard let self else { return }
+                // Held for the rest: the container's `safeAreaInsets` is the app's code, which may destroy the ads.
+                let ad = self.ad
+                guard !ad.hasEnded else { return }
                 if let host, let player = host.superview, let frame = host.place?(host.bounds, player.safeAreaInsets) {
                     host.content.frame = frame
                     armUnfit(host)
