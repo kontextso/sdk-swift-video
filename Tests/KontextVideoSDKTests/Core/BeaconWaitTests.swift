@@ -66,7 +66,13 @@ struct BeaconWaitTests {
         ad.reject()
         harness.serve(Fixtures.ad(id: "img-pb4"))
         #expect(try await ads.format(.pause).id == "img-pb4", "requested anyway once the cap passed")
-        #expect(ads.pendingBeacons.inFlight == 1, "the beacon is still out")
+        #expect(ads.pendingBeacons.inFlight == 0, "the beacon still out is no longer awaited")
+        PendingBeacons.maxWait = 60
+        harness.serve(Fixtures.ad(id: "img-pb4b"))
+        let started = Date()
+        _ = try? await ads.format(.overlay)
+        #expect(Date().timeIntervalSince(started) < 30, "the next request does not wait for it again")
+        #expect(harness.adsRequests.count == 3)
     }
 
     @Test func destroyDuringTheWaitEndsItAtOnce() async throws {

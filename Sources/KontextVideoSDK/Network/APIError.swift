@@ -28,16 +28,16 @@ enum APIError: Error, CustomStringConvertible {
 
 /// Reading what a request threw as the public `RequestFailure`: next to the errors it reads.
 extension VideoAdError.RequestFailure {
-    /// The case's name without its status, for a debug event's `kind`: `offline`, `timedOut`, `server`,
+    /// The case's name without its status, for a debug event's `failure`: `offline`, `timedOut`, `server`,
     /// `badResponse`, `missingUser`.
-    var kind: String {
+    var reportName: String {
         if case .server = self { return "server" }
         return description
     }
 
-    /// A debug event's properties for this failure: `kind`, and `httpStatus` for a server error.
+    /// A debug event's properties for this failure: `failure`, and `httpStatus` for a server error.
     var reportProperties: [String: ReportFormat.Value] {
-        var properties: [String: ReportFormat.Value] = ["kind": .string(kind)]
+        var properties: [String: ReportFormat.Value] = ["failure": .string(reportName)]
         if case .server(let status) = self { properties["httpStatus"] = .number(Double(status)) }
         return properties
     }

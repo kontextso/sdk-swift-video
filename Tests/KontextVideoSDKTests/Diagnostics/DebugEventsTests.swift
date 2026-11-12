@@ -51,16 +51,16 @@ struct DebugEventsTests {
         _ = await error { try await ads.format(.linear) }
         let server = try #require(events("ads.requestFailed").last)
         #expect(server.level == .warning && server.sessionId == ads.sessionId)
-        #expect(server.properties == ["kind": .string("server"), "httpStatus": .number(503)])
+        #expect(server.properties == ["failure": .string("server"), "httpStatus": .number(503)])
 
         harness.server.on("/v2/video/ads", .failure(.notConnectedToInternet))
         _ = await error { try await ads.format(.linear) }
-        #expect(events("ads.requestFailed").last?.properties == ["kind": .string("offline")])
+        #expect(events("ads.requestFailed").last?.properties == ["failure": .string("offline")])
 
         _ = AssertionLog()
         KontextVideo.shared.user = nil
         _ = await error { try await ads.format(.linear) }
-        #expect(events("ads.requestFailed").last?.properties == ["kind": .string("missingUser")])
+        #expect(events("ads.requestFailed").last?.properties == ["failure": .string("missingUser")])
     }
 
     @Test func aFailedConfigIsADebugEvent() async throws {
@@ -68,7 +68,7 @@ struct DebugEventsTests {
         #expect(await harness.initialize() == .failed)
         let failed = try #require(events("config.failed").last)
         #expect(failed.level == .warning)
-        #expect(failed.properties == ["kind": .string("server"), "httpStatus": .number(500)])
+        #expect(failed.properties == ["failure": .string("server"), "httpStatus": .number(500)])
     }
 
     @Test func notUsedExpiredClickedAndErrorAreDebugEvents() async throws {
@@ -83,6 +83,9 @@ struct DebugEventsTests {
         advanceClock(by: 3601)
         overlay.reject()
         #expect(events("ad.expired").map(\.bidId) == ["img-dbg3"], "an expired ad says so once")
+        #expect(events("ad.expired").first?.properties == ["format": .string("overlay")])
+        let names = EventHistory.recent().map(\.name)
+        #expect(names.lastIndex(of: "ad.expired").map { names[$0 + 1] } == "ad.invalidated", "just before ad.invalidated")
         #expect(events("ad.notUsed").count == 1, "no notice for an expired ad")
 
         harness.serve(Fixtures.ad(id: "img-dbg4"))

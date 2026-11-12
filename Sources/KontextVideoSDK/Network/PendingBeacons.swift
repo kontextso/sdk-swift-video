@@ -23,46 +23,55 @@ final class PendingBeacons {
     /// The beacons whose outcome the server needs before the next request.
     static let awaited: Set<String> = ["notUsed", "error"]
 
-    /// The beacons in flight.
-    private(set) var inFlight = 0
+    /// The beacons in flight and still awaited.
+    private var awaitedIDs: Set<UUID> = []
+    var inFlight: Int { awaitedIDs.count }
     /// Each request waiting, and the timer that ends its wait.
-    private var waiters: [UUID: (continuation: CheckedContinuation<Void, Never>, deadline: Task<Void, Never>)] = [:]
+    private var waiters: [UUID: (continuation: CheckedContinuation<Bool, Never>, deadline: Task<Void, Never>)] = [:]
 
     /// One beacon leaves; the closure returned says it ended, from any thread, once.
     func begin() -> @Sendable () -> Void {
-        inFlight += 1
-        return { Task { @MainActor in self.end() } }
+        let id = UUID()
+        awaitedIDs.insert(id)
+        return { Task { @MainActor in self.end(id) } }
     }
 
-    private func end() {
-        inFlight -= 1
-        guard inFlight == 0 else { return }
-        for id in Array(waiters.keys) { resume(id) }
+    private func end(_ id: UUID) {
+        guard awaitedIDs.remove(id) != nil, awaitedIDs.isEmpty else { return }
+        for id in Array(waiters.keys) { resume(id, settled: true) }
     }
 
     /// Returns once no beacon is in flight, after `timeout` seconds, or when the calling task is cancelled,
-    /// whichever comes first; `true` when none is left in flight.
+    /// whichever comes first; `true` when none is left in flight. A beacon still out when the time is up is not
+    /// awaited again: the next request does not wait for a route that already made one wait in vain.
     @discardableResult
     func settled(within timeout: TimeInterval) async -> Bool {
         guard inFlight > 0 else { return true }
         let id = UUID()
-        await withTaskCancellationHandler {
+        return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 let deadline = Task { @MainActor in
                     try? await Task.sleep(seconds: timeout)
-                    self.resume(id)
+                    guard !Task.isCancelled else { return }
+                    self.giveUp(id)
                 }
                 waiters[id] = (continuation, deadline)
             }
         } onCancel: {
-            Task { @MainActor in self.resume(id) }
+            Task { @MainActor in self.resume(id, settled: false) }
         }
-        return inFlight == 0
     }
 
-    private func resume(_ id: UUID) {
+    /// The time is up: the beacons still out are no longer awaited, by this request or a later one.
+    private func giveUp(_ id: UUID) {
+        let settled = awaitedIDs.isEmpty
+        awaitedIDs.removeAll()
+        resume(id, settled: settled)
+    }
+
+    private func resume(_ id: UUID, settled: Bool) {
         guard let waiter = waiters.removeValue(forKey: id) else { return }
         waiter.deadline.cancel()
-        waiter.continuation.resume()
+        waiter.continuation.resume(returning: settled)
     }
 }

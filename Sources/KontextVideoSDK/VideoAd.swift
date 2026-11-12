@@ -716,8 +716,10 @@ public final class VideoAd {
     func invalidate(_ reason: InvalidationReason) {
         guard state.moveTo(.invalidated(reason)) else { return }
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
+        if reason == .expired {
+            DebugReporter.shared.event("ad.expired", sessionId: owner?.sessionId, bidId: id, properties: ["format": .string(format.rawValue)])
+        }
         DebugReporter.shared.event("ad.invalidated", sessionId: owner?.sessionId, bidId: id, properties: reason.reportProperties)
-        if reason == .expired { DebugReporter.shared.event("ad.expired", sessionId: owner?.sessionId, bidId: id) }
         loadedBridge?.hide()
         loadedBridge = nil
         if let continuation = loadContinuation {

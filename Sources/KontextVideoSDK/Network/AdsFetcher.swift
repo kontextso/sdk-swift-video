@@ -91,7 +91,7 @@ final class AdsFetcher {
             // 4. The outcomes this `VideoAds` just sent (a reject's `notUsed`, a creative's `error`) reach the server first,
             // or it may re-serve the rejected bid; at most `PendingBeacons.maxWait`.
             if !(await pendingBeacons.settled(within: PendingBeacons.maxWait)) {
-                Logger.debug("\(content.id): \(pendingBeacons.inFlight) beacon(s) still in flight after \(PendingBeacons.maxWait) s; requesting anyway")
+                Logger.debug("\(content.id): outcome beacons still in flight after \(PendingBeacons.maxWait) s; requesting anyway, no longer awaited")
             }
             // Another video's response may have switched the SDK off during the dialog, the build or the wait: nothing leaves.
             try current().checkStillUsable()
