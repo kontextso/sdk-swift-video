@@ -25,7 +25,7 @@ extension FrameBridge: WKNavigationDelegate {
         case .allow:
             decisionHandler(.allow)
         case .cancel:
-            Logger.warning("frame \(adId.prefix(8)): the page tried to replace itself after it was ready; refused")
+            Logger.warning("frame \(bidId.prefix(8)): the page tried to replace itself after it was ready; refused")
             decisionHandler(.cancel)
         case .external:
             decisionHandler(.cancel)
@@ -47,7 +47,7 @@ extension FrameBridge: WKNavigationDelegate {
     /// error page. No downloads: only what the WebView can render itself.
     func responseDecision(_ response: URLResponse, isMainFrame: Bool, canShowMIMEType: Bool) -> WKNavigationResponsePolicy {
         if isMainFrame, state == .loading, let status = (response as? HTTPURLResponse)?.statusCode, status >= 400 {
-            Logger.warning("frame \(adId.prefix(8)): page answered \(status)")
+            Logger.warning("frame \(bidId.prefix(8)): page answered \(status)")
             fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Cause(httpStatus: status))
             return .cancel
         }
@@ -67,7 +67,7 @@ extension FrameBridge: WKNavigationDelegate {
 
     private func pageReplaced() {
         guard state == .loaded || state == .shown else { return }
-        Logger.warning("frame \(adId.prefix(8)): the page replaced itself after it was ready; the ad ends")
+        Logger.warning("frame \(bidId.prefix(8)): the page replaced itself after it was ready; the ad ends")
         webView.stopLoading()
         fail(.error(code: frameProtocol.failureCode), cause: .page)
     }
@@ -85,7 +85,7 @@ extension FrameBridge: WKNavigationDelegate {
     /// stopped on purpose (a refused or external link, one replaced by the next) is not a failure.
     private func loadFailed(_ error: Error) {
         guard state == .loading, !Self.isInterruption(error) else { return }
-        Logger.warning("frame \(adId.prefix(8)): page failed to load, \(error.localizedDescription)")
+        Logger.warning("frame \(bidId.prefix(8)): page failed to load, \(error.localizedDescription)")
         fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed, underlying: ErrorReport.Cause(error))
     }
 
@@ -97,7 +97,7 @@ extension FrameBridge: WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        Logger.warning("frame \(adId.prefix(8)): web content process terminated")
+        Logger.warning("frame \(bidId.prefix(8)): web content process terminated")
         // 405 is a failure while playing; an ad loaded but never shown gets the load error, like any other.
         fail(.error(code: frameProtocol.failureCode), cause: .processTerminated)
     }

@@ -115,8 +115,8 @@ extension VideoAdError {
 }
 
 extension VideoAdError {
-    /// Why an ads request failed, in four outcomes an app can act on. Unlike a no-fill, the server's answer
-    /// for the moment is unknown: asking again later may fill.
+    /// Why an ads request failed, in outcomes an app can act on. Unlike a no-fill, the server's answer
+    /// for the moment is unknown: asking again later may fill (after setting the user, for `missingUser`).
     public enum RequestFailure: Sendable, Equatable, CustomStringConvertible {
         /// The request did not get through: no connection, the connection lost, the server's name or
         /// address unreachable, a secure connection that failed (often a captive portal). Ask again once
@@ -133,14 +133,19 @@ extension VideoAdError {
         /// under two formats, for example), cut off or over the size limit. Asking again soon is unlikely
         /// to help; quote `VideoAds.lastRequestID` to Kontext.
         case badResponse
+        /// Nothing was sent: no `KontextVideo.shared.user` is set (or its `id` is empty or over 256 characters), and
+        /// the server requires the viewer's id. A programmer error: a debug build already stopped on an assertion.
+        /// Thrown even when a valid ad is held for the format. Set the user, then ask again.
+        case missingUser
 
-        /// The case's name, for logs: `offline`, `timedOut`, `server(503)`, `badResponse`.
+        /// The case's name, for logs: `offline`, `timedOut`, `server(503)`, `badResponse`, `missingUser`.
         public var description: String {
             switch self {
             case .offline: return "offline"
             case .timedOut: return "timedOut"
             case .server(let status): return "server(\(status))"
             case .badResponse: return "badResponse"
+            case .missingUser: return "missingUser"
             }
         }
     }

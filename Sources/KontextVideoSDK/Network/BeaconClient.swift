@@ -1,6 +1,7 @@
 import Foundation
 
-/// Sends beacons: a GET of a tracking URL, once, with no retries, fire and forget. Only the status is read, never
+/// Sends beacons: a GET of a tracking URL, once, with no retries, fire and forget (only an outcome beacon is
+/// followed to its end, for `PendingBeacons`). Only the status is read, never
 /// the body. Which beacons fire and when is `Tracker`'s; this only delivers a finished URL. Redirects are followed
 /// as `URLSession` does, at most `RedirectLimit.maxRedirects`. One deadline bounds a beacon's whole exchange, redirects
 /// included: the session's `timeoutIntervalForResource` (`Environment.makeSession`, 10 s); the request's
@@ -8,14 +9,16 @@ import Foundation
 @MainActor
 enum BeaconClient {
     /// GETs `url` through `session` (the SDK's, `Environment.session`); `label` names it in the log
-    /// (`ad f1a2b3c4: impression`).
-    static func send(_ url: URL, label: String, over session: URLSession = Environment.session) {
+    /// (`ad f1a2b3c4: impression`). `onDone` runs once the exchange ended, answered or failed, on any thread: what
+    /// `PendingBeacons` counts.
+    static func send(_ url: URL, label: String, over session: URLSession = Environment.session, onDone: (@Sendable () -> Void)? = nil) {
         var request = URLRequest(url: url)
         request.timeoutInterval = 10
         request.cachePolicy = .reloadIgnoringLocalCacheData
         Logger.debug("\(label) beacon")
         let task = BeaconTransport.session(over: session).dataTask(with: request)
         task.taskDescription = "\(label) beacon"
+        if let onDone { BeaconTransport.whenDone(task, onDone) }
         task.resume()
     }
 }
@@ -50,8 +53,19 @@ final class BeaconTransport: RedirectLimit, URLSessionDataDelegate, @unchecked S
         completionHandler(.cancel)
     }
 
+    /// What runs when a task ended, by task: set before it resumes, taken once at its end. From any thread.
+    nonisolated(unsafe) private static var whenDone: [ObjectIdentifier: @Sendable () -> Void] = [:]
+    private static let whenDoneLock = NSLock()
+
+    /// `work` runs once `task` ended, whatever it ended with.
+    static func whenDone(_ task: URLSessionTask, _ work: @escaping @Sendable () -> Void) {
+        whenDoneLock.withLock { whenDone[ObjectIdentifier(task)] = work }
+    }
+
     override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         super.urlSession(session, task: task, didCompleteWithError: error)
+        // Every task ends here, our own cancellation after the head included.
+        Self.whenDoneLock.withLock { Self.whenDone.removeValue(forKey: ObjectIdentifier(task)) }?()
         guard let error else { return }
         let nsError = error as NSError
         // Our own cancellation after the response head, not a failure.

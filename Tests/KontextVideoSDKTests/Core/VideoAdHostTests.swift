@@ -27,7 +27,7 @@ struct VideoAdHostTests {
         heard.owners.append(owner)
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: owner)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return ad
     }
 
@@ -262,11 +262,11 @@ struct VideoAdHostTests {
         slot.set(ad)
         #expect(await waitUntil { impressions == ["p-h-click"] }, "an image ad's impression at show")
         ad.bridge.noteTouch()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.click", "url": "https://brand.test", "area": "endCard"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.click", "url": "https://brand.test", "area": "endCard"], from: sender)
         #expect(clicks == [VideoAd.Click(area: .endCard)])
         slot.onClick = nil
         ad.bridge.noteTouch()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.click", "url": "https://brand.test"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.click", "url": "https://brand.test"], from: sender)
         #expect(clicks.count == 1 && ad.wasShown && !ad.hasEnded, "no handler: the click is still the ad's, nothing breaks")
     }
 

@@ -51,10 +51,10 @@ linear, two pause); the overlay and linear ads show 3 s in, a pause ad when the 
 
 ## Architecture
 
-- `KontextVideo.shared`: initialize (`/config`), `user`, `regulatory`, `variantID`, the one ad on screen; the shell
+- `KontextVideo.shared`: initialize (`/config`), `user` (required before an ads request), `regulatory`, the one ad on screen; the shell
   that moves `SdkState`.
-- `VideoAds`: one per video. `format(_:)` asks the server for all formats with the `VideoAds`'s `sessionId` and the
-  ids of the unshown bids it holds (`held`); the server owns the bid state and re-serves held bids until they
+- `VideoAds`: one per video, with its `section` and `variantId`. `format(_:)` asks the server for all formats with the
+  `VideoAds`'s `sessionId`; the server owns the bid state and re-serves a session's unshown bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Platform/AwaitShared.swift`).
 - `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
   renders it, `reject()` drops it with the `notUsed` beacon; `show(in:)` for overlay and pause, `show(from:)` for
@@ -81,11 +81,12 @@ linear, two pause); the overlay and linear ads show 3 s in, a pause ad when the 
   error body, the app's inputs as sent, and Apple attribution; `Model/AdDescriptor` the ad as the SDK keeps it. `State/` is the state of the SDK and of each ad, and their
   legal moves: `SdkLifecycle` and `AdLifecycle` the rules (the phases and the legal moves between them, stateless),
   `SdkState` the SDK's facts (its phase, the public `KontextVideo.State`; the configuration; what `/config` said of
-  error and debug reports, which the reporters ask; the app's `user`, `regulatory` and `variantID`), `AdState` every fact of an ad's life: the phase and the milestones
+  error and debug reports, which the reporters ask; the app's `user` and `regulatory`), `AdState` every fact of an ad's life: the phase and the milestones
   (loaded, impression, completed, on screen, the failure, whether the video plays); every public flag of `VideoAd` reads it;
   `AdStore` what one `VideoAds` holds (an ad per format, the spent ids, the ad on screen) and the plan an answer makes of
   it (`plan(_:)`, steps over plain ids that `VideoAds` carries out). `Network/` talks to the server: `APIClient`,
-  `BeaconClient`, `AdsFetcher` (one ads request at a time per `VideoAds`: the waits, the body, the POST, the failure
+  `BeaconClient`, `PendingBeacons` (a `VideoAds`'s `notUsed` and `error` beacons in flight, which its next request waits
+  for, 2 s at most), `AdsFetcher` (one ads request at a time per `VideoAds`: the waits, the body, the POST, the failure
   and dropped-ad reports, the kill switch), `ConfigFetcher` (its twin for `/config`: one attempt and its failure
   report). `Diagnostics/IntegrationGuard` holds the checks of the app's integration (initialized, the configuration,
   the content, the user): each stops a debug build, logs and reports. `Device/` what the SDK reads, `Platform/Environment.swift` the

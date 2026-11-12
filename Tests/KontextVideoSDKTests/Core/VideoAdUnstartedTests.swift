@@ -35,14 +35,14 @@ struct VideoAdUnstartedTests {
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
-        var body: [String: Any] = ["adId": ad.id, "type": type]
+        var body: [String: Any] = ["bidId": ad.id, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         ad.bridge.receive(body, from: sender)
     }
 
     /// A full-screen video pause ad: a video creative shown inline.
     private func videoPause(_ id: String) -> [String: Any] {
-        Fixtures.ad(id: id, creative: "video", position: "fullscreen", size: nil)
+        Fixtures.pauseFullscreenAd(id: id, creative: "video")
     }
 
     /// `show(from:)` plus what UIKit's presentation completion does; the runner never completes a transition.
@@ -53,10 +53,10 @@ struct VideoAdUnstartedTests {
         ad.reachedScreen()
     }
 
-    /// The events the server received for `adId`, after the beacons in flight arrived.
-    private func events(_ adId: String) async -> [String] {
+    /// The events the server received for `bidId`, after the beacons in flight arrived.
+    private func events(_ bidId: String) async -> [String] {
         await beaconsSettled()
-        return harness.server.beacons.filter { $0.adId == adId }.map { $0.event }
+        return harness.server.beacons.filter { $0.bidId == bidId }.map { $0.event }
     }
 
     @Test func aVideoThatCannotStartFailsWithTheErrorBeaconAndNoClose() async throws {
@@ -67,7 +67,7 @@ struct VideoAdUnstartedTests {
         #expect(delegate.events.suffix(2) == ["fail", "end:failed"])
         let fired = await events("u1")
         #expect(fired.contains("error"))
-        #expect(harness.server.beacons.first { $0.adId == "u1" && $0.event == "error" }?.query["code"] == "405")
+        #expect(harness.server.beacons.first { $0.bidId == "u1" && $0.event == "error" }?.query["code"] == "405")
         #expect(!fired.contains("close") && !fired.contains("impression"), "error is the outcome; a close would be a second one")
     }
 

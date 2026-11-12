@@ -37,7 +37,7 @@ struct VideoAdEpisodeTests {
     private func loadedAd(_ payload: [String: Any], of ads: VideoAds) throws -> VideoAd {
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return ad
     }
 
@@ -127,7 +127,7 @@ struct VideoAdEpisodeTests {
         paused.isPlaying = false
         let pauseAds = await makeAds("ep-custom-tick-pause")
         pauseAds.track(paused)
-        let pause = try loadedAd(Fixtures.ad(id: "p-ep-custom-tick", position: "fullscreen", size: nil), of: pauseAds)
+        let pause = try loadedAd(Fixtures.pauseFullscreenAd(id: "p-ep-custom-tick"), of: pauseAds)
         let pauseDelegate = RecordingDelegate()
         pause.delegate = pauseDelegate
         try pause.show(in: view)

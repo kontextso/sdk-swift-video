@@ -43,22 +43,22 @@ struct VideoAdEndBeaconTests {
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
-        var body: [String: Any] = ["adId": ad.id, "type": type]
+        var body: [String: Any] = ["bidId": ad.id, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         ad.bridge.receive(body, from: sender)
     }
 
-    /// The events the server received for `adId`, once `last` arrived and the beacons still in flight did.
-    private func events(_ adId: String, after last: String) async -> [String] {
-        _ = await waitUntil { harness.server.beacons.contains { $0.adId == adId && $0.event == last } }
+    /// The events the server received for `bidId`, once `last` arrived and the beacons still in flight did.
+    private func events(_ bidId: String, after last: String) async -> [String] {
+        _ = await waitUntil { harness.server.beacons.contains { $0.bidId == bidId && $0.event == last } }
         await beaconsSettled()
-        return harness.server.beacons.filter { $0.adId == adId }.map { $0.event }
+        return harness.server.beacons.filter { $0.bidId == bidId }.map { $0.event }
     }
 
     @Test func aVideoAdEndedBeforeItsFirstFrame() async throws {
         for reason in Self.reasons {
             let id = "ev-\(reason)"
-            let (ad, delegate) = try await makeAd(Fixtures.ad(id: id, creative: "video", position: "fullscreen", size: nil))
+            let (ad, delegate) = try await makeAd(Fixtures.pauseFullscreenAd(id: id, creative: "video"))
             try ad.show(in: harness.player.view)
             ad.end(reason)
             #expect(delegate.endReasons == [reason])

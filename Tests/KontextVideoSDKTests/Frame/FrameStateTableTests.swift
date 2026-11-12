@@ -83,13 +83,13 @@ struct FrameStateTableTests {
         case .loading:
             break
         case .loaded:
-            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.receive(["bidId": "ad-1", "type": "ad.loaded"], from: main)
         case .shown:
-            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.receive(["bidId": "ad-1", "type": "ad.loaded"], from: main)
             page.show(size: nil)
-            page.receive(["adId": "ad-1", "type": "video.start"], from: main)
+            page.receive(["bidId": "ad-1", "type": "video.start"], from: main)
         case .ended:
-            page.receive(["adId": "ad-1", "type": "ad.loaded"], from: main)
+            page.receive(["bidId": "ad-1", "type": "ad.loaded"], from: main)
             page.show(size: nil)
             page.hide()
         }
@@ -100,7 +100,7 @@ struct FrameStateTableTests {
     private func outcome(of type: String, _ body: [String: Any], in stage: Stage, on page: any FramePage) -> Outcome {
         let events = setUp(page, in: stage)
         let before = page.state
-        var message: [String: Any] = ["adId": "ad-1", "type": type]
+        var message: [String: Any] = ["bidId": "ad-1", "type": type]
         body.forEach { message[$0.key] = $0.value }
         page.noteTouch()
         page.receive(message, from: main)
@@ -130,7 +130,7 @@ struct FrameStateTableTests {
         for (type, stage) in cells {
             let column = Stage.allCases.firstIndex(of: stage)!
             let body = Self.messages.first { $0.type == type }!.body
-            let bridge = FrameBridge(adId: "ad-1", url: URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: true)
+            let bridge = FrameBridge(bidId: "ad-1", url: URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: true)
             #expect(outcome(of: type, body, in: stage, on: bridge) == Self.expected[type]?[column], "\(type) in \(stage)")
         }
     }

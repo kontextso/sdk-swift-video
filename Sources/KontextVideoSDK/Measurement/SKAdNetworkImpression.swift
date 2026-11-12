@@ -13,7 +13,7 @@ import KontextKit
 @MainActor
 final class SKAdNetworkImpression {
     let skan: Skan
-    private let adId: String
+    private let bidId: String
     /// `start()` ran; nothing is called twice.
     private var isStarted = false
     private var hasEnded = false
@@ -27,9 +27,9 @@ final class SKAdNetworkImpression {
     /// one, whatever replaces `Environment.skAdNetwork` meanwhile.
     private let manager: any SKAdNetworkManaging
 
-    init(skan: Skan, adId: String) {
+    init(skan: Skan, bidId: String) {
         self.skan = skan
-        self.adId = adId
+        self.bidId = bidId
         manager = Environment.skAdNetwork
     }
 
@@ -46,7 +46,7 @@ final class SKAdNetworkImpression {
                 // sees; the end already queued behind this releases it.
                 guard !hasEnded else { return }
                 try await manager.startImpression()
-                Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression started")
+                Logger.info("ad \(bidId.prefix(8)): SKAdNetwork impression started")
             } catch {
                 report("start", error)
             }
@@ -62,7 +62,7 @@ final class SKAdNetworkImpression {
             isRegistered = false
             do {
                 try await manager.endImpression()
-                Logger.info("ad \(adId.prefix(8)): SKAdNetwork impression ended")
+                Logger.info("ad \(bidId.prefix(8)): SKAdNetwork impression ended")
             } catch {
                 report("end", error)
             }
@@ -82,7 +82,7 @@ final class SKAdNetworkImpression {
         guard skan.hasFidelity1 else { return false }
         do {
             let presented = try await Environment.storeProduct.present(skan)
-            if !presented { Logger.warning("ad \(adId.prefix(8)): the App Store sheet was not presented") }
+            if !presented { Logger.warning("ad \(bidId.prefix(8)): the App Store sheet was not presented") }
             return presented
         } catch {
             report("store", error)
@@ -102,11 +102,11 @@ final class SKAdNetworkImpression {
     /// domain and code only, since its text can carry anything (the console line itself is forwarded while `/config`
     /// asks for the debug log).
     private func report(_ step: String, _ error: Error) {
-        Logger.warning("ad \(adId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
+        Logger.warning("ad \(bidId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
         let cause = ErrorReport.Cause(error)
-        DebugReporter.shared.event("ad.skanFailed", bidId: adId, level: .warning,
+        DebugReporter.shared.event("ad.skanFailed", bidId: bidId, level: .warning,
                                    properties: ["step": .string(step), "domain": .string(cause.domain), "code": .number(Double(cause.code))])
-        ErrorReporter.shared.report(.skanFailed, bidId: adId, cause: cause, detail: step)
+        ErrorReporter.shared.report(.skanFailed, bidId: bidId, cause: cause, detail: step)
     }
 }
 

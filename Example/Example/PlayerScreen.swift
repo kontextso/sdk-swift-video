@@ -98,7 +98,7 @@ final class Playback: ObservableObject {
         playerView.playerLayer.videoGravity = .resizeAspectFill
         // Creating it sends nothing; the request goes out in prepare(). The SDK reads the playhead from the
         // player, and follows its playback: an overlay lives only while the content plays.
-        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), labels: video.labels)
+        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), section: video.section)
         ads.track(player)
     }
 
@@ -164,18 +164,18 @@ final class Playback: ObservableObject {
         switch video.format {
         case .linear: showLinear()
         case .overlay: showInPlayer()      // ends by itself after its duration
-        case .pause: break                 // the viewer pauses; nothing happens on its own
+        case .pause, .pauseFullscreen: break   // the viewer pauses; nothing happens on its own
         }
     }
 
     private func pause() {
         player.pause()
         isPaused = true
-        if video.format == .pause { showInPlayer() }
+        if video.isPause { showInPlayer() }
     }
 
     private func resume() {
-        if video.format == .pause {
+        if video.isPause {
             ad?.dismiss()
             Task { await prepare() }       // the next pause gets its own ad
         }
@@ -226,8 +226,8 @@ extension Playback: VideoAdDelegate {
         switch ad.format {
         case .linear:
             player.play()                  // the content paused for the ad; every other way it ends lands here
-        case .pause:
-            if reason == .resumed { resume() }   // the viewer tapped Resume on the ad itself
+        case .pause, .pauseFullscreen:
+            if reason == .resumed { resume() }   // the viewer tapped Resume on the full-screen ad itself
         case .overlay:
             break
         }

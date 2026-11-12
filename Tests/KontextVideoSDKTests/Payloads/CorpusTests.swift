@@ -28,7 +28,8 @@ struct CorpusTests {
     }
 
     /// The answer as `VideoAds` takes it: each format's first ad, its no-fill reason (`apply`), or nothing,
-    /// and the error report's detail for each dropped ad (`reportDroppedAds`).
+    /// and the error report's detail for each dropped ad (`reportDroppedAds`). Every format the SDK knows,
+    /// `pauseFullscreen` included; a case compares only the formats its `expect` names.
     private static func outcome(of response: AdsResponse) -> [String: Any] {
         guard case .formats(let results) = response else {
             guard case .disabled(let reason) = response else { return [:] }
@@ -53,6 +54,8 @@ struct CorpusTests {
                 facts["durationMillis"] = duration ?? NSNull()
             case .pause(_, let sizes):
                 facts["sizesCount"] = sizes.count
+            case .pauseFullscreen:
+                break
             case .linear(let duration, let skipOffset):
                 facts["durationMillis"] = duration
                 facts["skipOffsetMillis"] = skipOffset ?? NSNull()

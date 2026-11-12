@@ -13,10 +13,20 @@ public final class VideoAds {
     public let content: KontextVideo.Content
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
-    /// The labels given at creation, exactly as given: what every request carries. A free format on purpose:
-    /// Kontext defines them per publisher and the server ignores the ones it does not use, so the SDK sends what
-    /// the app gives, with no checks (any key, any value, any number).
-    let labels: [String: String]
+    /// Where in the app the player is, as given at creation; every request carries it.
+    public let section: String?
+    /// The A/B variant, as given at creation; every request carries it.
+    public let variantId: String?
+
+    /// The longest `section` or `variantId` the server takes, in characters as it counts them (UTF-16 code units).
+    static let maxPlacementLength = 128
+
+    /// `value` as a request sends it: `nil` when it is empty or longer than `maxPlacementLength`, which the server
+    /// would refuse (`IntegrationGuard.checkPlacement` says so at creation).
+    static func sendable(_ value: String?) -> String? {
+        guard let value, !value.isEmpty, value.utf16.count <= maxPlacementLength else { return nil }
+        return value
+    }
 
     /// The content player set by `track(_:)`: the playhead, and the playing state an overlay follows.
     let playback = ContentPlayback()
@@ -29,6 +39,8 @@ public final class VideoAds {
     public private(set) var lastRequestID: String?
     /// The unshown ads, the spent ids and the ad on screen.
     private(set) var store = AdStore()
+    /// Its ads' `notUsed` and `error` beacons in flight: the next request waits for them, briefly.
+    let pendingBeacons = PendingBeacons()
     /// One ads request at a time, shared by every `format(_:)` meanwhile. Set once, at the end of `init`.
     private var fetcher: AdsFetcher?
     /// Every `VideoAds` alive, held weakly: the kill switch reaches the ads of all of them.
@@ -48,18 +60,22 @@ public final class VideoAds {
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
 
     /// Needs `initialize(with:)` to have been called; `/config` itself may still be in flight, requests
-    /// wait for it. `labels`: key-values that say where these ads play, such as the viewer's stage in the
-    /// series or the player's layout (`["stage": "first_episode", "layout": "fullscreen"]`). Every request
-    /// of this object carries them, and the server's configuration decides what they change, such as which
-    /// formats it offers; they are fixed for the object's life. They are sent as given: use the names and values
-    /// Kontext gives you.
-    /// They describe where the ads play, never the viewer: no personal data.
-    public init(content: KontextVideo.Content, labels: [String: String] = [:]) {
+    /// wait for it. Both strings are fixed for the object's life, and every request of it carries them; each is
+    /// one non-empty string of at most 128 characters (a debug build stops on anything else, a release build
+    /// leaves it out).
+    ///
+    /// - `section`: where in the app the player is, in the name agreed with Kontext (`"feed"`, `"episode"`).
+    ///   The server's configuration picks the placements, and so the formats, that answer for it; `nil` is
+    ///   the publisher's default. It describes where the ads play, never the viewer: no personal data.
+    /// - `variantId`: the A/B variant these ads are for, agreed with Kontext; `nil` for none.
+    public init(content: KontextVideo.Content, section: String? = nil, variantId: String? = nil) {
         self.content = content
-        self.labels = labels
+        self.section = section
+        self.variantId = variantId
         Self.live.add(self)
         IntegrationGuard.requireInitialized("VideoAds(content:)")
         IntegrationGuard.checkContent(content, sessionId: sessionId)
+        IntegrationGuard.checkPlacement(section: section, variantId: variantId)
         // An expired ad is otherwise dropped only at the next call; under memory pressure its renderer (the
         // WebView) is released at once. WebKit decides when its processes exit. Valid ads stay loaded: `show`
         // must stay instant.
@@ -94,12 +110,12 @@ public final class VideoAds {
     // MARK: Getting an ad
 
     /// The ad for one format: `try await ads.format(.pause)`, then its `price` and other facts, then
-    /// `load()` or `reject()`. Every call asks the server for all formats and lists the unshown ads it holds
-    /// (`held`); the server returns those unchanged until they expire, so the same ad (loaded or not) comes
-    /// back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
+    /// `load()` or `reject()`. Every call asks the server for all formats, and the answer carries those configured for the `section`; the server re-serves
+    /// an ad it gave this `VideoAds` unchanged until it is shown, rejected or expired, so the same ad (loaded or
+    /// not) comes back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
     /// request runs share it (`async let` for several formats at once). A failed request returns the held
     /// ad when it is still valid. Throws `noFill(reason:)`, `request(_:)` (nothing valid held; its
-    /// `RequestFailure` says why), `destroyed`, `disabled(reason:)`, `notInitialized`,
+    /// `RequestFailure` says why; `missingUser` without `KontextVideo.shared.user`, thrown even with a valid ad held), `destroyed`, `disabled(reason:)`, `notInitialized`,
     /// `initializationFailed`, or `CancellationError` when the calling task is cancelled (the request
     /// itself continues).
     public func format(_ format: AdFormat) async throws -> VideoAd {
@@ -112,6 +128,8 @@ public final class VideoAds {
         } catch VideoAdError.request(let failure) {
             // Destroyed or switched off between the failure and this caller's turn: no held ad comes back.
             try checkStillUsable()
+            // No user is the app's mistake, not the network's: it must show, held ad or not.
+            if failure == .missingUser { throw VideoAdError.request(failure) }
             if let held = validHeld(format) {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held
@@ -134,12 +152,6 @@ public final class VideoAds {
         guard held.descriptor.isExpired else { return held }
         held.invalidate(.expired)
         return nil
-    }
-
-    /// The ids of the valid unshown ads, by format, for the request; expired ones leave silently first.
-    func validHeldIDs() -> [String] {
-        for ad in Array(store.ads.values) where ad.descriptor.isExpired { ad.invalidate(.expired) }
-        return AdFormat.allCases.compactMap { store.ads[$0]?.id }
     }
 
     /// The request left with this id: the one `lastRequestID` names.
@@ -337,7 +349,7 @@ extension VideoAds {
             }
             ad.tracker.withContentPlayhead {
                 ad.invalidate(.destroyed)
-                ad.tracker.fire("notUsed", notUsed: .destroyed)
+                ad.fireNotUsed(.destroyed)
             }
         }
         showing?.end(.destroyed)

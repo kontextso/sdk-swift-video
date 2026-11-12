@@ -64,6 +64,15 @@ extension VideoAd {
             /// A label of the page's own (`cta`, `logo`, ...), passed through unchanged.
             case other(String)
 
+            /// The area in a debug event: `creative`, `endCard`, or the page's own label.
+            var reportName: String {
+                switch self {
+                case .creative: return "creative"
+                case .endCard: return "endCard"
+                case .other(let label): return label
+                }
+            }
+
             /// From the page's `area`: absent is the creative.
             init(_ raw: String?) {
                 switch raw {
@@ -96,7 +105,7 @@ extension VideoAd {
         /// The viewer tapped the ad's close control: an overlay's or pause card's ✕ (a pause ad's ✕ leaves
         /// the content paused; Resume is `.resumed`), or a linear ad's end card ✕ after the video completed.
         case closed
-        /// The viewer tapped Resume on a full-screen pause ad.
+        /// The viewer tapped Resume on a `pauseFullscreen` ad.
         case resumed
         /// The ad broke after `show` returned: the creative failed or stalled, or UIKit never presented a
         /// linear ad; `didFail` came first.

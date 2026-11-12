@@ -63,8 +63,8 @@ struct VideoAdLoadingTests {
         let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
         let loading = Task { try await ad.load() }
         #expect(await waitUntil { ad.loadedBridge?.state == .loading })
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
-        ad.bridge.receive(["adId": ad.id, "type": "ad.error", "code": 405], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.error", "code": 405], from: sender)
         for failure in [await error { try await loading.value }, await error { try await ad.load() }] {
             guard case .creativeFailed(let code)? = failure else { Issue.record("expected creativeFailed, got \(String(describing: failure))"); continue }
             #expect(code == 405)
@@ -86,7 +86,7 @@ struct VideoAdLoadingTests {
         let (ad, ads) = try await make(Fixtures.ad(id: "img-1", moreSizes: [["width": 200, "height": 200, "scalable": true, "maintainAspectRatio": true]]))
         #expect(ad.id == "img-1")
         #expect(ad.format == .pause)
-        #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
+        #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD"))
         #expect(ad.descriptor.position == .top)
         #expect(ad.descriptor.size == VideoAd.Size(width: 300, height: 300))
         #expect(ad.descriptor.sizes.count == 2)
@@ -178,7 +178,6 @@ struct VideoAdLoadingTests {
         #expect(ad.invalidationReason == .creativeFailed(code: 502))
         harness.serve(Fixtures.ad(id: "img-8"))
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a failed ad is not held")
     }
 
     @Test func aCreativeThatNeverLoadsThrowsTheGeneralCode() async throws {
@@ -288,7 +287,6 @@ struct VideoAdLoadingTests {
         guard case .invalidated(.rejected) = failure else { Issue.record("expected invalidated(.rejected), got \(String(describing: failure))"); return }
         harness.serve(Fixtures.ad(id: "img-16"))
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a rejected ad is not held")
     }
 
     @Test func rejectOutbidCarriesTheWinningPriceAndTheWinner() async throws {

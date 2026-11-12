@@ -7,13 +7,13 @@ import AppTrackingTransparency
 /// and only between its waits, so releasing the owner mid-request reaches its `deinit`, which cancels it.
 ///
 /// `fetch()` runs, once per request:
-/// 1. wait for `/config` (switched off or failed: no request);
+/// 1. no user set: `missingUser`, nothing sent; then wait for `/config` (switched off or failed: no request);
 /// 2. the ATT dialog, when the publisher left it to the SDK, before the first request;
-/// 3. the body (`AdsRequest`), with the held ids and the playhead read after every wait (the user agent's too), so
-///    an ad shown, rejected or expired during them is not sent as held;
-/// 4. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
-/// 5. a failure is reported once here, and thrown as the request error every caller gets;
-/// 6. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
+/// 3. the outcome beacons this `VideoAds` sent and still waits on (`PendingBeacons`), at most 2 s;
+/// 4. the body (`AdsRequest`), with the user, the consent and the playhead read after every wait (the user agent's too);
+/// 5. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
+/// 6. a failure is reported once here, and thrown as the request error every caller gets;
+/// 7. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
 ///    goes to the owner, which follows it (`AdStore.plan`) and returns the no-fill reasons by format.
 @MainActor
 final class AdsFetcher {
@@ -41,7 +41,9 @@ final class AdsFetcher {
     private func start() -> Task<NoFills, Error> {
         guard let owner else { return Task { throw VideoAdError.destroyed } }
         let content = owner.content
-        let labels = owner.labels
+        let section = owner.section
+        let variantId = owner.variantId
+        let pendingBeacons = owner.pendingBeacons
         let sessionId = owner.sessionId
         let task = Task { [weak self, weak owner] () throws -> NoFills in
             defer { self?.request = nil }
@@ -50,7 +52,8 @@ final class AdsFetcher {
                 guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
                 return owner
             }
-            // 1. `/config`.
+            // 1. The user, then `/config`. Without the viewer's id the server refuses every request: nothing is sent.
+            guard IntegrationGuard.requireUser(KontextVideo.shared.user) != nil else { throw Self.failed(.missingUser, sessionId: sessionId) }
             let isEnabled: Bool
             do {
                 isEnabled = try await KontextVideo.shared.waitUntilEnabled()
@@ -74,20 +77,32 @@ final class AdsFetcher {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
-            // 3. What is held, and the playhead, are read after every wait (`/config`, the ATT dialog, the device
-            // facts with the user agent, inside `make`): an ad shown, rejected or expired during them is not sent as
-            // held, or the server would re-serve it and the format answer no-fill.
-            let body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
-                                                 content: content, labels: labels, player: .make(playhead: current().playhead), sessionId: sessionId,
-                                                 held: current().validHeldIDs())
-            let held = body.held
-            // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
+            // 3. The outcomes this `VideoAds` just sent (a reject's `notUsed`, a creative's `error`) reach the server first,
+            // or it may re-serve the rejected bid; at most `PendingBeacons.maxWait`. Before the body: what the app changes
+            // meanwhile (the user, the consent) is what the request sends.
+            if !(await pendingBeacons.settled(within: PendingBeacons.maxWait)) {
+                Logger.debug("\(content.id): outcome beacons still in flight after \(PendingBeacons.maxWait) s; requesting anyway")
+            }
+            // 4. The user, the consent and the playhead, read after every wait (`/config`, the ATT dialog, the beacons, the
+            // device facts with the user agent inside `make`).
+            let body: AdsRequest
+            do {
+                body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
+                                                 content: content, section: section, variantId: variantId,
+                                                 player: .make(playhead: current().playhead), sessionId: sessionId)
+            } catch VideoAdError.request(let failure) {
+                // The user was cleared during the waits: nothing is sent.
+                throw Self.failed(failure, sessionId: sessionId)
+            }
+            // Another video's response may have switched the SDK off during the dialog, the build or the wait: nothing leaves.
             try current().checkStillUsable()
             try current().requestWasSent(body.requestId)
-            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
-            DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
+            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms")
+            var properties: [String: ReportFormat.Value] = ["playhead": .number(Double(body.player.playhead))]
+            if let section = body.section { properties["section"] = .string(section) }
+            DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: properties)
 
-            // 4. The POST, and the ids against what is held.
+            // 5. The POST, and the ids against what is held.
             let response: AdsResponse
             do {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
@@ -97,20 +112,26 @@ final class AdsFetcher {
                 if case .disabled(let reason) = response { KontextVideo.shared.disable(reason: reason) }
                 try Self.checkIdsAgainstHeld(response, held: current().store.ads)
             } catch {
-                // 5. Once per request, here in the request every caller shares, not once per waiting caller.
+                // 6. Once per request, here in the request every caller shares, not once per waiting caller.
                 try current().checkStillUsable()
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
                 let failure = ErrorReport.FailedRequest(error)
                 let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
                 ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, requestId: body.requestId,
                                             sessionId: sessionId, failure: failure)
-                throw VideoAdError.request(VideoAdError.RequestFailure(error))
+                throw Self.failed(VideoAdError.RequestFailure(error), sessionId: sessionId)
             }
-            // 6. The answer.
+            // 7. The answer.
             return try Self.receive(response, requestId: body.requestId, owner: current())
         }
         request = task
         return task
+    }
+
+    /// A request that failed, as its debug event (`ads.requestFailed`) and the error every caller gets.
+    private static func failed(_ failure: VideoAdError.RequestFailure, sessionId: String) -> VideoAdError {
+        DebugReporter.shared.event("ads.requestFailed", sessionId: sessionId, level: .warning, properties: failure.reportProperties)
+        return .request(failure)
     }
 
     /// The answer, for a `VideoAds` still in use. The kill switch in it switches the whole SDK off and drops every

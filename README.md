@@ -1,6 +1,6 @@
 # Kontext Swift Video SDK
 
-Overlay, pause and linear video ads for short-drama and other video-first iOS apps. The SDK asks the Kontext
+Overlay, pause, full-screen pause and linear video ads for short-drama and other video-first iOS apps. The SDK asks the Kontext
 ad server for ads for the episode the viewer watches, renders the creative before its moment, shows it in your
 player or full screen, fires every beacon itself, and tells you what happens on screen through a delegate.
 
@@ -22,7 +22,7 @@ In Xcode: File → Add Package Dependencies, then `https://github.com/kontextso/
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.2.2")),
+    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.3.0")),
 ],
 targets: [
     .target(name: "YourApp", dependencies: [.product(name: "KontextVideoSDK", package: "sdk-swift-video")]),
@@ -39,9 +39,11 @@ import KontextVideoSDK
 
 // Once, at app launch.
 KontextVideo.shared.initialize(with: .init(publisherToken: "yourapp-dev"))
+// The viewer, before the first ads request: a guest id until they sign in, then the account id.
+KontextVideo.shared.user = .init(id: viewerId)
 
-// One VideoAds per episode, tracking the player it plays in.
-let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"))
+// One VideoAds per episode, tracking the player it plays in; the section names where in the app it plays.
+let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), section: "episode")
 ads.track(player)
 
 // Before the moment: get the ad and render it, so show is instant.
@@ -51,7 +53,7 @@ ad.delegate = self   // a VideoAdDelegate: the impression, clicks, and exactly o
 
 // At the moment.
 player.pause()
-try ad.show(in: playerView)   // show(from:) for a linear ad
+try ad.show(in: playerView)   // also for .pauseFullscreen; show(from:) for a linear ad
 
 // When the viewer leaves the episode.
 ads.destroy()
@@ -67,7 +69,7 @@ VideoPlayerView(player: player)
 ```
 
 Each episode's ads show only in that episode; at most one ad is on screen in the whole app. The guide covers
-the three formats, the delegate, consent and App Tracking Transparency, and custom players. For a TTSDK
+the four formats, the delegate, consent and App Tracking Transparency, and custom players. For a TTSDK
 player, see [KontextVideoTTSDK](Sources/KontextVideoTTSDK/README.md).
 
 ## Good to know

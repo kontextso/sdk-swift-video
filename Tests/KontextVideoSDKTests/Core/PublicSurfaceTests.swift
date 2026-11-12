@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct PublicSurfaceTests {
     @Test func anAppCanMakeThePricesAndClicksItsOwnTestsNeed() {
-        let price = VideoAd.Price(value: 2.5, currency: "USD", precision: .estimated)
-        #expect(price.value >= 2 && price.currency == "USD" && price.precision == .estimated)
+        let price = VideoAd.Price(value: 2.5, currency: "USD")
+        #expect(price.value >= 2 && price.currency == "USD")
         #expect(VideoAd.Click(area: .endCard).area == .endCard)
     }
 
@@ -26,6 +26,7 @@ struct PublicSurfaceTests {
             case .timedOut: return "later"
             case .server(let status): return "later (\(status))"
             case .badResponse: return "report"
+            case .missingUser: return "set KontextVideo.shared.user"
             }
         }
         let error: Error = VideoAdError.request(.server(status: 503))
