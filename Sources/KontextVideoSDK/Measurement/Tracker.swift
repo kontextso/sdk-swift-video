@@ -36,9 +36,11 @@ final class Tracker {
     /// beacons, but a video that never started passed no checkpoint.
     private var hasVideoStarted = false
     private let session: URLSession
+    /// The owner's outcome beacons in flight, which its next ads request waits for; set by the ad.
+    var pending: PendingBeacons?
 
-    init(adId: String, entries: [AdPayload.TrackingEvent]) {
-        self.adId = adId
+    init(bidId: String, entries: [AdPayload.TrackingEvent]) {
+        self.bidId = bidId
         self.entries = entries
         indicesByEvent = Dictionary(grouping: entries.indices, by: { entries[$0].event })
         let progress = entries.indices.filter { entries[$0].event == "progress" && entries[$0].offset != nil }
@@ -135,7 +137,8 @@ final class Tracker {
 
     private func send(_ url: URL, event: String, part: String?) {
         let label = part.map { "\(event) (\($0))" } ?? event
-        BeaconClient.send(url, label: "ad \(adId.prefix(8)): \(label)", over: session)
+        let onDone = PendingBeacons.awaited.contains(event) ? pending?.begin() : nil
+        BeaconClient.send(url, label: "ad \(bidId.prefix(8)): \(label)", over: session, onDone: onDone)
     }
 
     /// Fires every `progress` entry the ad video has passed (`offset` at or below `playheadMs`) and not fired

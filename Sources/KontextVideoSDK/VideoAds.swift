@@ -39,6 +39,8 @@ public final class VideoAds {
     public private(set) var lastRequestID: String?
     /// The unshown ads, the spent ids and the ad on screen.
     private(set) var store = AdStore()
+    /// Its ads' `notUsed` and `error` beacons in flight: the next request waits for them, briefly.
+    let pendingBeacons = PendingBeacons()
     /// One ads request at a time, shared by every `format(_:)` meanwhile. Set once, at the end of `init`.
     private var fetcher: AdsFetcher?
     /// Every `VideoAds` alive, held weakly: the kill switch reaches the ads of all of them.

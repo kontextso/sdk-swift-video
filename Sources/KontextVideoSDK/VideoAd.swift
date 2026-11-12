@@ -169,9 +169,10 @@ public final class VideoAd {
     init(descriptor: AdDescriptor, owner: VideoAds) {
         self.descriptor = descriptor
         self.owner = owner
-        tracker = Tracker(adId: descriptor.id, entries: descriptor.tracking)
+        tracker = Tracker(bidId: descriptor.id, entries: descriptor.tracking)
         tracker.contentPlayhead = { [weak owner] in owner?.playhead ?? 0 }
-        skAdNetwork = descriptor.skan.map { SKAdNetworkImpression(skan: $0, adId: descriptor.id) }
+        tracker.pending = owner.pendingBeacons
+        skAdNetwork = descriptor.skan.map { SKAdNetworkImpression(skan: $0, bidId: descriptor.id) }
     }
 
     // MARK: Loading and rejecting

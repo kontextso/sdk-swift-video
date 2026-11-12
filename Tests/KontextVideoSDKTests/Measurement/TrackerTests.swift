@@ -55,6 +55,29 @@ struct TrackerTests {
         #expect(await waitUntil { lines.all.contains { $0.contains("impression beacon answered 500") } })
     }
 
+    @Test func onlyTheOutcomeBeaconsAreCountedUntilTheyEndAnsweredOrFailed() async throws {
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var held = StubServer.Response.empty()
+        held.gate = gate
+        server.on("/events/ad-1/notUsed", held)
+        server.on("/events/ad-1/error", .failure(.cannotConnectToHost))
+        let tracker = try makeTracker()
+        let pending = PendingBeacons()
+        tracker.pending = pending
+        tracker.fire("impression")
+        tracker.fire("click")
+        #expect(pending.inFlight == 0, "nothing the server needs before the next request")
+        tracker.fire("error", errorCode: 405)
+        tracker.fire("notUsed", notUsed: .notUsed)
+        #expect(pending.inFlight == 2)
+        #expect(await waitUntil { pending.inFlight == 1 }, "a failed beacon ended too")
+        #expect(await pending.settled(within: 0.05) == false, "the notUsed is still out: the cap ends the wait")
+        gate.open()
+        #expect(await pending.settled(within: 10), "answered: nothing in flight")
+        #expect(pending.inFlight == 0)
+    }
+
     /// Log lines collected from URLSession's queue.
     final class Lines: @unchecked Sendable {
         private let lock = NSLock()

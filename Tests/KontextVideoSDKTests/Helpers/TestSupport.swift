@@ -367,6 +367,7 @@ struct SDKHarness {
         ErrorReporter.retryDelay = 30
         ErrorReporter.maxRetryDelay = 300
         SKAdNetworkImpression.queue = nil
+        PendingBeacons.maxWait = 2
     }
 }
 

@@ -7,13 +7,13 @@ import AppTrackingTransparency
 /// and only between its waits, so releasing the owner mid-request reaches its `deinit`, which cancels it.
 ///
 /// `fetch()` runs, once per request:
-/// 1. wait for `/config` (switched off or failed: no request);
+/// 1. no user set: `missingUser`, nothing sent; then wait for `/config` (switched off or failed: no request);
 /// 2. the ATT dialog, when the publisher left it to the SDK, before the first request;
-/// 3. the body (`AdsRequest`), with the held ids and the playhead read after every wait (the user agent's too), so
-///    an ad shown, rejected or expired during them is not sent as held;
-/// 4. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
-/// 5. a failure is reported once here, and thrown as the request error every caller gets;
-/// 6. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
+/// 3. the body (`AdsRequest`), with the user and the playhead read after every wait (the user agent's too);
+/// 4. the outcome beacons this `VideoAds` sent and still waits on (`PendingBeacons`), at most 2 s;
+/// 5. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
+/// 6. a failure is reported once here, and thrown as the request error every caller gets;
+/// 7. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
 ///    goes to the owner, which follows it (`AdStore.plan`) and returns the no-fill reasons by format.
 @MainActor
 final class AdsFetcher {
@@ -41,7 +41,9 @@ final class AdsFetcher {
     private func start() -> Task<NoFills, Error> {
         guard let owner else { return Task { throw VideoAdError.destroyed } }
         let content = owner.content
-        let labels = owner.labels
+        let section = owner.section
+        let variantId = owner.variantId
+        let pendingBeacons = owner.pendingBeacons
         let sessionId = owner.sessionId
         let task = Task { [weak self, weak owner] () throws -> NoFills in
             defer { self?.request = nil }
