@@ -42,8 +42,8 @@ final class PendingBeacons {
     }
 
     /// Returns once no beacon is in flight, after `timeout` seconds, or when the calling task is cancelled,
-    /// whichever comes first; `true` when none is left in flight. A beacon still out when the time is up is not
-    /// awaited again: the next request does not wait for a route that already made one wait in vain.
+    /// whichever comes first; `true` when none is left in flight. A beacon still out when the time is up stays
+    /// awaited: the next request waits for it again, for at most `timeout` too.
     @discardableResult
     func settled(within timeout: TimeInterval) async -> Bool {
         guard inFlight > 0 else { return true }
@@ -53,20 +53,13 @@ final class PendingBeacons {
                 let deadline = Task { @MainActor in
                     try? await Task.sleep(seconds: timeout)
                     guard !Task.isCancelled else { return }
-                    self.giveUp(id)
+                    self.resume(id, settled: self.awaitedIDs.isEmpty)
                 }
                 waiters[id] = (continuation, deadline)
             }
         } onCancel: {
             Task { @MainActor in self.resume(id, settled: false) }
         }
-    }
-
-    /// The time is up: the beacons still out are no longer awaited, by this request or a later one.
-    private func giveUp(_ id: UUID) {
-        let settled = awaitedIDs.isEmpty
-        awaitedIDs.removeAll()
-        resume(id, settled: settled)
     }
 
     private func resume(_ id: UUID, settled: Bool) {

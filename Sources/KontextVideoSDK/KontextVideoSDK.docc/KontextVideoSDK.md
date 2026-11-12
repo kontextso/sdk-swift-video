@@ -23,7 +23,7 @@ Requirements: iOS 14 or later, Swift 5.9, Swift Package Manager. The integration
 ## Getting started
 
 Initialize the SDK at app launch with your publisher token, and set the viewer before the first ads request,
-a guest id until they sign in, then the account id (without a user, ``VideoAds/format(_:)`` throws
+a guest id until they sign in, then the account id, at most 256 characters (without a user, ``VideoAds/format(_:)`` throws
 ``VideoAdError/RequestFailure/missingUser`` and sends nothing):
 
 ```swift
@@ -59,8 +59,8 @@ Call ``VideoAds/destroy()`` when the viewer leaves the episode.
 
 ## Formats
 
-``AdFormat`` names the four formats. Every request asks for all of them that the section offers;
-``VideoAds/format(_:)`` returns one.
+``AdFormat`` names the four formats. Every request asks for all of them; the answer carries the formats the
+publisher configured for the ``VideoAds/section``, and ``VideoAds/format(_:)`` returns one.
 
 - ``AdFormat/overlay``: a strip across the player while the content plays. Show it with
   ``VideoAd/show(in:insets:)``; it ends after its ``VideoAd/duration`` of video, or when the content stops.

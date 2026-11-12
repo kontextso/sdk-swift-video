@@ -7,8 +7,9 @@ extension KontextVideo {
     /// `user.yob` and `user.gender`; `keywords` (OpenRTB `kwarray`) and the identity fields are what buyers still read.
     public struct User: Sendable, Equatable, Hashable {
         /// The publisher's own unique identifier of the viewer: the account id once they signed in, or a guest
-        /// id the app keeps for the install before that. Required and non-empty: an empty id is a programmer
-        /// error, which stops a debug build, and no ads request is sent with it. Sent for a child too (COPPA):
+        /// id the app keeps for the install before that. Required: non-empty and at most 256 characters, as the
+        /// server takes it. Anything else is a programmer error, which stops a debug build, and no ads request is
+        /// sent with it (`request(.missingUser)`). Sent for a child too (COPPA):
         /// the server keeps it from buyers.
         public let id: String
         /// Plain email address, when the viewer's consent allows it. Sent as given; the SDK neither

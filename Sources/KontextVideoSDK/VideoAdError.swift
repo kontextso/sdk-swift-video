@@ -133,9 +133,9 @@ extension VideoAdError {
         /// under two formats, for example), cut off or over the size limit. Asking again soon is unlikely
         /// to help; quote `VideoAds.lastRequestID` to Kontext.
         case badResponse
-        /// Nothing was sent: no `KontextVideo.shared.user` is set (or its `id` is empty), and the server requires
-        /// the viewer's id. A programmer error: a debug build already stopped on an assertion. Set the user, then
-        /// ask again.
+        /// Nothing was sent: no `KontextVideo.shared.user` is set (or its `id` is empty or over 256 characters), and
+        /// the server requires the viewer's id. A programmer error: a debug build already stopped on an assertion.
+        /// Thrown even when a valid ad is held for the format. Set the user, then ask again.
         case missingUser
 
         /// The case's name, for logs: `offline`, `timedOut`, `server(503)`, `badResponse`, `missingUser`.

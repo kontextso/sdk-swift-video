@@ -131,11 +131,14 @@ struct RequestTests {
 
     @Test func withoutAUserNoRequestIsBuilt() async throws {
         let assertions = AssertionLog()
-        for user in [nil, KontextVideo.User(id: "")] {
+        for user in [nil, KontextVideo.User(id: ""), KontextVideo.User(id: String(repeating: "u", count: 257))] {
             KontextVideo.shared.user = user
             await #expect(throws: VideoAdError.request(.missingUser)) { try await bareRequest() }
         }
         #expect(assertions.all.contains { $0.contains("KontextVideo.shared.user") }, "a debug build stops: \(assertions.all)")
+        #expect(assertions.all.contains("KontextVideo.User: id is longer than 256 characters"), "already when it is set")
+        KontextVideo.shared.user = KontextVideo.User(id: String(repeating: "u", count: 256))
+        #expect((try await bareRequest()["user"] as? [String: Any])?["id"] as? String == String(repeating: "u", count: 256), "256 fit")
     }
 
     @Test func aSectionOrVariantTheServerWouldRefuseIsLeftOut() async throws {

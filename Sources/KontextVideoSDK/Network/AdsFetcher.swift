@@ -9,8 +9,8 @@ import AppTrackingTransparency
 /// `fetch()` runs, once per request:
 /// 1. no user set: `missingUser`, nothing sent; then wait for `/config` (switched off or failed: no request);
 /// 2. the ATT dialog, when the publisher left it to the SDK, before the first request;
-/// 3. the body (`AdsRequest`), with the user and the playhead read after every wait (the user agent's too);
-/// 4. the outcome beacons this `VideoAds` sent and still waits on (`PendingBeacons`), at most 2 s;
+/// 3. the outcome beacons this `VideoAds` sent and still waits on (`PendingBeacons`), at most 2 s;
+/// 4. the body (`AdsRequest`), with the user, the consent and the playhead read after every wait (the user agent's too);
 /// 5. the POST; an answer that brings, under one format, the id of an ad held under another is malformed;
 /// 6. a failure is reported once here, and thrown as the request error every caller gets;
 /// 7. the answer: the kill switch switches the SDK off, even for an owner gone meanwhile, and drops every ad; each dropped ad is reported; the rest
@@ -77,21 +77,22 @@ final class AdsFetcher {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
-            // 3. The playhead, read after every wait (`/config`, the ATT dialog, the device facts with the user agent,
-            // inside `make`).
+            // 3. The outcomes this `VideoAds` just sent (a reject's `notUsed`, a creative's `error`) reach the server first,
+            // or it may re-serve the rejected bid; at most `PendingBeacons.maxWait`. Before the body: what the app changes
+            // meanwhile (the user, the consent) is what the request sends.
+            if !(await pendingBeacons.settled(within: PendingBeacons.maxWait)) {
+                Logger.debug("\(content.id): outcome beacons still in flight after \(PendingBeacons.maxWait) s; requesting anyway")
+            }
+            // 4. The user, the consent and the playhead, read after every wait (`/config`, the ATT dialog, the beacons, the
+            // device facts with the user agent inside `make`).
             let body: AdsRequest
             do {
                 body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
                                                  content: content, section: section, variantId: variantId,
                                                  player: .make(playhead: current().playhead), sessionId: sessionId)
             } catch VideoAdError.request(let failure) {
-                // The user was cleared during the waits.
+                // The user was cleared during the waits: nothing is sent.
                 throw Self.failed(failure, sessionId: sessionId)
-            }
-            // 4. The outcomes this `VideoAds` just sent (a reject's `notUsed`, a creative's `error`) reach the server first,
-            // or it may re-serve the rejected bid; at most `PendingBeacons.maxWait`.
-            if !(await pendingBeacons.settled(within: PendingBeacons.maxWait)) {
-                Logger.debug("\(content.id): outcome beacons still in flight after \(PendingBeacons.maxWait) s; requesting anyway, no longer awaited")
             }
             // Another video's response may have switched the SDK off during the dialog, the build or the wait: nothing leaves.
             try current().checkStillUsable()

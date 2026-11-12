@@ -110,12 +110,12 @@ public final class VideoAds {
     // MARK: Getting an ad
 
     /// The ad for one format: `try await ads.format(.pause)`, then its `price` and other facts, then
-    /// `load()` or `reject()`. Every call asks the server for all formats of the `section`; the server re-serves
+    /// `load()` or `reject()`. Every call asks the server for all formats, and the answer carries those configured for the `section`; the server re-serves
     /// an ad it gave this `VideoAds` unchanged until it is shown, rejected or expired, so the same ad (loaded or
     /// not) comes back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
     /// request runs share it (`async let` for several formats at once). A failed request returns the held
     /// ad when it is still valid. Throws `noFill(reason:)`, `request(_:)` (nothing valid held; its
-    /// `RequestFailure` says why, `missingUser` without `KontextVideo.shared.user`), `destroyed`, `disabled(reason:)`, `notInitialized`,
+    /// `RequestFailure` says why; `missingUser` without `KontextVideo.shared.user`, thrown even with a valid ad held), `destroyed`, `disabled(reason:)`, `notInitialized`,
     /// `initializationFailed`, or `CancellationError` when the calling task is cancelled (the request
     /// itself continues).
     public func format(_ format: AdFormat) async throws -> VideoAd {
@@ -128,6 +128,8 @@ public final class VideoAds {
         } catch VideoAdError.request(let failure) {
             // Destroyed or switched off between the failure and this caller's turn: no held ad comes back.
             try checkStillUsable()
+            // No user is the app's mistake, not the network's: it must show, held ad or not.
+            if failure == .missingUser { throw VideoAdError.request(failure) }
             if let held = validHeld(format) {
                 Logger.info("\(format) for \(content.id): request failed, returning the held ad \(held.id.prefix(8))")
                 return held

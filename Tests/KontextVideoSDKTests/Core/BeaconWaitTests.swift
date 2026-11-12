@@ -66,13 +66,53 @@ struct BeaconWaitTests {
         ad.reject()
         harness.serve(Fixtures.ad(id: "img-pb4"))
         #expect(try await ads.format(.pause).id == "img-pb4", "requested anyway once the cap passed")
-        #expect(ads.pendingBeacons.inFlight == 0, "the beacon still out is no longer awaited")
-        PendingBeacons.maxWait = 60
-        harness.serve(Fixtures.ad(id: "img-pb4b"))
-        let started = Date()
+        #expect(ads.pendingBeacons.inFlight == 1, "the beacon still out stays awaited")
         _ = try? await ads.format(.overlay)
-        #expect(Date().timeIntervalSince(started) < 30, "the next request does not wait for it again")
-        #expect(harness.adsRequests.count == 3)
+        #expect(harness.adsRequests.count == 3, "the next request waits for it again, the cap at most, and goes")
+        gate.open()
+        #expect(await waitUntil { ads.pendingBeacons.inFlight == 0 }, "answered at last")
+    }
+
+    @Test func whatTheAppChangesDuringTheWaitIsWhatTheRequestSends() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-pb6"))
+        let ad = try await ads.format(.pause)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var held = StubServer.Response.empty()
+        held.gate = gate
+        harness.server.on("/events/img-pb6/notUsed", held)
+        KontextVideo.shared.user = KontextVideo.User(id: "before", email: "a@b.test")
+        ad.reject()
+        let next = Task { try await ads.format(.pause) }
+        #expect(await waitUntil { self.harness.server.beacons.contains { $0.event == "notUsed" } })
+        KontextVideo.shared.user = KontextVideo.User(id: "after", email: "a@b.test")
+        KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: true)
+        gate.open()
+        _ = try? await next.value
+        let user = try #require(harness.adsRequests.last?.body?["user"] as? [String: Any])
+        #expect(user["id"] as? String == "after" && user["email"] == nil, "read after the wait: the new user, as a child")
+        KontextVideo.shared.regulatory = nil
+    }
+
+    @Test func aUserClearedDuringTheWaitStopsTheRequest() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-pb7"))
+        let ad = try await ads.format(.pause)
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var held = StubServer.Response.empty()
+        held.gate = gate
+        harness.server.on("/events/img-pb7/notUsed", held)
+        ad.reject()
+        let assertions = AssertionLog()
+        let next = Task { try await ads.format(.pause) }
+        #expect(await waitUntil { self.harness.server.beacons.contains { $0.event == "notUsed" } })
+        KontextVideo.shared.user = nil
+        gate.open()
+        #expect(await error { try await next.value } == .request(.missingUser))
+        #expect(harness.adsRequests.count == 1, "nothing sent")
+        #expect(assertions.all.count == 1)
     }
 
     @Test func destroyDuringTheWaitEndsItAtOnce() async throws {

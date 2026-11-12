@@ -152,6 +152,12 @@ extension KontextVideo.User {
         KontextVideo.User(id: id, keywords: keywords)
     }
 
+    /// The longest `id` the server takes, in characters as it counts them (UTF-16 code units).
+    static let maxIdLength = 256
+
+    /// Whether `id` is one the server takes: non-empty, at most `maxIdLength`. Without it no request is sent.
+    var hasUsableId: Bool { !id.isEmpty && id.utf16.count <= Self.maxIdLength }
+
     /// Fields set to an empty string: an empty `id` stops every request and is an assertion; an empty email or
     /// hash is left out.
     var emptyFields: [String] {

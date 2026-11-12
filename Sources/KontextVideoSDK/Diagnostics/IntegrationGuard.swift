@@ -82,18 +82,22 @@ enum IntegrationGuard {
     /// The viewer the app set: an empty email or hash is left out of the requests; an empty `id` is a programmer
     /// error, and no request leaves with it.
     static func checkUser(_ user: KontextVideo.User?) {
+        if let user, user.id.utf16.count > KontextVideo.User.maxIdLength {
+            Environment.assertionFailure("KontextVideo.User: id is longer than \(KontextVideo.User.maxIdLength) characters")
+            Logger.warning("user: id longer than \(KontextVideo.User.maxIdLength) characters, no ads request is sent")
+        }
         guard let empty = user?.emptyFields, !empty.isEmpty else { return }
         if empty.contains("id") { Environment.assertionFailure("KontextVideo.User: id is empty") }
         Logger.warning("user: \(empty.joined(separator: ", ")) empty, \(empty.contains("id") ? "no ads request is sent" : "left out of the requests")")
     }
 
     /// Guards an ads request: the server requires the viewer's id (`KontextVideo.shared.user`). Returns the user
-    /// when it has one; without it (or with an empty id) a debug build stops here, a release build logs, and the
+    /// when it has a usable one; without it (or with an id empty or over 256 characters) a debug build stops here, a release build logs, and the
     /// caller fails the request with `missingUser`, sending nothing.
     static func requireUser(_ user: KontextVideo.User?) -> KontextVideo.User? {
-        if let user, !user.id.isEmpty { return user }
+        if let user, user.hasUsableId { return user }
         Environment.assertionFailure("KontextVideo: set KontextVideo.shared.user before requesting ads; the server requires the viewer's id")
-        Logger.error("no user set (KontextVideo.shared.user, a non-empty id): the ads request is not sent")
+        Logger.error("no user set (KontextVideo.shared.user, an id of 1 to 256 characters): the ads request is not sent")
         return nil
     }
 

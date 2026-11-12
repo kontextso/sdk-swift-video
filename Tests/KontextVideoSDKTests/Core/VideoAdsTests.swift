@@ -280,6 +280,20 @@ struct VideoAdsTests {
         #expect((harness.adsRequests.first?.body?["user"] as? [String: Any])?["id"] as? String == "u-later")
     }
 
+    @Test func missingUserIsThrownEvenWithAValidAdHeld() async throws {
+        let ads = await makeAds()
+        harness.serve(Fixtures.ad(id: "img-nu3"))
+        let held = try await ads.format(.pause)
+        let assertions = AssertionLog()
+        KontextVideo.shared.user = nil
+        #expect(await error { try await ads.format(.pause) } == .request(.missingUser), "an integration error, not hidden by the held ad")
+        #expect(held.invalidationReason == nil, "the held ad stays")
+        #expect(assertions.all.count == 1)
+        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        KontextVideo.shared.user = KontextVideo.User(id: "back")
+        #expect(try await ads.format(.pause) === held, "a network failure still returns it")
+    }
+
     @Test func aUserClearedWhileTheRequestWaitsStopsIt() async throws {
         let ads = await makeAds()
         let assertions = AssertionLog()
