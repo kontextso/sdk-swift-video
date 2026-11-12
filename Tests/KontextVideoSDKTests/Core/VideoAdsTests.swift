@@ -38,8 +38,8 @@ struct VideoAdsTests {
 
     /// The `notUsed` beacons that arrived. Expecting some: waits for that many (they travel through
     /// URLSession); then, as for none, until no beacon is still on its way (`beaconsSettled`), however slow.
-    private func notUsedBeacons(expecting count: Int = 0) async -> [(adId: String, reason: String?)] {
-        let arrived = { self.harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.adId, $0.query["reason"]) } }
+    private func notUsedBeacons(expecting count: Int = 0) async -> [(bidId: String, reason: String?)] {
+        let arrived = { self.harness.server.beacons.filter { $0.event == "notUsed" }.map { ($0.bidId, $0.query["reason"]) } }
         if count > 0 { _ = await waitUntil { arrived().count >= count } }
         await beaconsSettled()
         return arrived()
@@ -824,7 +824,7 @@ struct VideoAdsTests {
             #expect(reason == .alreadyUsed, "a spent id is never accepted again")
         }
         #expect(try await linear.value.id == "vid-l20", "other formats get their bids normally")
-        #expect(await notUsedBeacons(expecting: 1).map(\.adId) == ["img-p20"], "one notice, from the reject")
+        #expect(await notUsedBeacons(expecting: 1).map(\.bidId) == ["img-p20"], "one notice, from the reject")
     }
 
     @Test func aBidShownWhileARequestRunsIsIgnoredWhenTheResponseReServesIt() async throws {
@@ -894,7 +894,7 @@ struct VideoAdsTests {
         advanceClock(by: 31)   // the pause ad expired and nothing called the SDK since
         ads.destroy()
         #expect(old.invalidationReason == .expired && fresh.invalidationReason == .destroyed)
-        #expect(await notUsedBeacons(expecting: 1).map(\.adId) == ["img-d-new"], "one notice, for the valid ad")
+        #expect(await notUsedBeacons(expecting: 1).map(\.bidId) == ["img-d-new"], "one notice, for the valid ad")
         #expect(await notUsedBeacons().count == 1, "none for the expired one: the server knows expires")
     }
 

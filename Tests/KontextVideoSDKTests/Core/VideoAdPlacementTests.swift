@@ -24,7 +24,7 @@ struct VideoAdPlacementTests {
         owners.all.append(ads)
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return (ad, ads, nil)
     }
 
@@ -51,7 +51,7 @@ struct VideoAdPlacementTests {
         try ad.show(in: player)
         #expect(delegate.endReasons == [.interrupted] && !delegate.events.contains("impression"), "\(delegate.events)")
         await sleepMs(80)
-        #expect(!harness.server.beacons.contains { $0.adId == "o-clip" && $0.event == "impression" })
+        #expect(!harness.server.beacons.contains { $0.bidId == "o-clip" && $0.event == "impression" })
         #expect(KontextVideo.shared.adOnScreen == nil)
     }
 
@@ -84,7 +84,7 @@ struct VideoAdPlacementTests {
         }
         #expect(delegate.events.isEmpty, "no didEnd, no impression")
         await beaconsSettled()
-        #expect(!harness.server.beacons.contains { $0.adId == "p-page" && $0.event != "loaded" }, "nothing fired by the attempts")
+        #expect(!harness.server.beacons.contains { $0.bidId == "p-page" && $0.event != "loaded" }, "nothing fired by the attempts")
         // The page swiped into view: the same ad shows.
         neighbour.frame.origin.x = 0
         try ad.show(in: neighbour)
@@ -134,13 +134,13 @@ struct VideoAdPlacementTests {
         // Presented before the WebView reached a window: the meter's first tick, run at once, has nothing
         // to measure (a second one would take the view as gone).
         ad.reachedScreen()
-        ad.bridge.receive(["adId": ad.id, "type": "video.start", "playhead": 0], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "video.start", "playhead": 0], from: sender)
         #expect(exposures.isEmpty, "no exposure 0 before the first layout: \(exposures)")
         window.add(ad.bridge.webView)
         #expect(await waitUntil { exposures.first.map { $0 > 0 } == true }, "the first real measurement: \(exposures)")
         ad.bridge.webView.removeFromSuperview()
         #expect(await waitUntil { exposures.count >= 2 && exposures.last == 0 }, "a real 0 later still goes out: \(exposures)")
-        ad.bridge.receive(["adId": ad.id, "type": "video.skip", "playhead": 1000], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "video.skip", "playhead": 1000], from: sender)
     }
 
     @Test func showRefusesAViewTheViewerCannotSee() async throws {
@@ -255,7 +255,7 @@ struct VideoAdPlacementTests {
         #expect(KontextVideo.shared.adOnScreen == nil && player.subviews.isEmpty && window.root.presentedViewController == nil)
         #expect(delegate.events.isEmpty)
         await sleepMs(100)
-        let fired = harness.server.beacons.filter { ["p-front", "v-front"].contains($0.adId) }.map(\.event)
+        let fired = harness.server.beacons.filter { ["p-front", "v-front"].contains($0.bidId) }.map(\.event)
         #expect(!fired.contains("impression") && !fired.contains("creativeView"), "no impression for an ad nobody sees")
         // Back in front: the same ad shows.
         Environment.isWindowActive = { _ in true }

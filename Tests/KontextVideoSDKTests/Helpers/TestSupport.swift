@@ -388,7 +388,7 @@ enum WebKitWarmup {
         Environment.isApplicationActive = { true }
         defer { (Environment.parkingWindow, Environment.isApplicationActive) = (parking, active) }
         FramePageServer().install()
-        let bridge = FrameBridge(adId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
+        let bridge = FrameBridge(bidId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
         var loaded = false
         bridge.onEvent = { if case .loaded = $0 { loaded = true } }
         let timeout = FrameBridge.loadTimeout

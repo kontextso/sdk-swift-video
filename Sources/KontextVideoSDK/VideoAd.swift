@@ -126,7 +126,7 @@ public final class VideoAd {
         if let loadedBridge { return loadedBridge }
         // A linear ad's duration is its video's length; an overlay's is its time on screen, not the video's.
         // A fact of the linear format, not of its screen.
-        let bridge = FrameBridge(adId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video,
+        let bridge = FrameBridge(bidId: descriptor.id, url: descriptor.frameURL, isVideo: descriptor.creative == .video,
                                  videoDuration: descriptor.format == .linear ? descriptor.duration : nil)
         bridge.onEvent = { [weak self] event in self?.handle(event) }
         loadedBridge = bridge
@@ -375,7 +375,7 @@ public final class VideoAd {
         // The public call fits the format: a fact of the linear format, not of its screen.
         guard format == .linear else { throw wrongShowMethod("show(from:)", use: "show(in:)") }
         try checkShowable()
-        let presenter = try LinearScreen.presenter(from: viewController, adId: id)
+        let presenter = try LinearScreen.presenter(from: viewController, bidId: id)
         // Reserved first, so a completion that runs at once finds the ad shown and the slot taken, and before
         // the WebView leaves its parking window, whose overridable hooks are the app's code (a show from
         // there finds the slot taken; a destroy ends this ad, checked below). The page is shown, and the

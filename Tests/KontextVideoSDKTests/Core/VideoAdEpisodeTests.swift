@@ -37,7 +37,7 @@ struct VideoAdEpisodeTests {
     private func loadedAd(_ payload: [String: Any], of ads: VideoAds) throws -> VideoAd {
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return ad
     }
 

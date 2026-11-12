@@ -16,7 +16,7 @@ struct FrameProtocolTableTests {
     }
 
     private func core(_ stage: Stage = .loading, videoDuration: TimeInterval? = nil, started: Bool = true) -> FrameProtocol {
-        var core = FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: videoDuration)
+        var core = FrameProtocol(bidId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: videoDuration)
         guard stage != .loading else { return core }
         _ = core.accept(message("ad.loaded"), from: main, now: 0)
         guard stage != .loaded else { return core }
@@ -26,8 +26,8 @@ struct FrameProtocolTableTests {
         return core
     }
 
-    private func message(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> [String: Any] {
-        var body: [String: Any] = ["adId": adId, "type": type]
+    private func message(_ type: String, _ extra: [String: Any] = [:], bidId: String = "ad-1") -> [String: Any] {
+        var body: [String: Any] = ["bidId": bidId, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         return body
     }
@@ -111,7 +111,7 @@ struct FrameProtocolTableTests {
             guard case .error(let code)? = event(step) else { Issue.record("expected an error in \(stage)"); continue }
             #expect(code == expected, "\(stage), code \(String(describing: sent))")
         }
-        let image = FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: false, videoDuration: nil)
+        let image = FrameProtocol(bidId: "ad-1", pageURL: Self.page, isVideo: false, videoDuration: nil)
         #expect(image.loadErrorCode == 500 && image.failureCode == 500)
         #expect(core(.shown).failureCode == 405 && core(.loaded).failureCode == 400)
     }
@@ -174,10 +174,10 @@ struct FrameProtocolTableTests {
 
     @Test func aNegativeOrZeroVideoDurationBoundsThePlayheadAtTheGrace() {
         for duration in [-30.0, 0, -0.0] {
-            let core = FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: duration)
+            let core = FrameProtocol(bidId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: duration)
             #expect(core.playheadLimitMs == FrameProtocol.playheadGraceMs, "\(duration)")
         }
-        #expect(FrameProtocol(adId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: 15.0004).playheadLimitMs == 16_000, "rounded")
+        #expect(FrameProtocol(bidId: "ad-1", pageURL: Self.page, isVideo: true, videoDuration: 15.0004).playheadLimitMs == 16_000, "rounded")
         var core = core(.shown, videoDuration: -30)
         guard case .video(_, let playhead)? = event(core.accept(message("video.pause", ["playhead": 5000]), from: main, now: 0)) else {
             Issue.record("expected a video event"); return
@@ -232,17 +232,17 @@ struct FrameProtocolTableTests {
             #expect(holds6, "\(sender)")
         }
         // A message of exactly `maxMessageBytes` bytes parses; one byte more is dropped.
-        let head = "{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
+        let head = "{\"bidId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
         let atLimit = head + String(repeating: "x", count: FrameMessage.maxMessageBytes - head.utf8.count - tail.utf8.count) + tail
         #expect(FrameMessage.maxMessageBytes == 1024 * 1024 && atLimit.utf8.count == FrameMessage.maxMessageBytes)
         let bodies: [(Any, String)] = [
-            (message("ad.loaded", adId: "ad-2"), "drop"),
-            (["adId": "ad-1"], "drop"),
+            (message("ad.loaded", bidId: "ad-2"), "drop"),
+            (["bidId": "ad-1"], "drop"),
             ("not json", "drop"),
             ("[1, 2]", "drop"),
             (head + "x" + atLimit.dropFirst(head.utf8.count), "drop"),
             (atLimit, "loaded"),
-            ("{\"adId\":\"ad-1\",\"type\":\"ad.loaded\"}", "loaded"),
+            ("{\"bidId\":\"ad-1\",\"type\":\"ad.loaded\"}", "loaded"),
         ]
         for (body, expected) in bodies {
             var core = core()

@@ -37,7 +37,7 @@ struct ErrorReporterTests {
     private func loadedAd(_ payload: [String: Any], in ads: VideoAds) throws -> VideoAd {
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return ad
     }
 
@@ -246,10 +246,10 @@ struct ErrorReporterTests {
         await enableReports()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         let ad = try loadedAd(Fixtures.ad(id: "p-er-p"), in: ads)
-        ad.bridge.receive(["adId": "someone-else", "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": "someone-else", "type": "ad.loaded"], from: sender)
         ad.bridge.receive(["type": "ad.loaded"], from: sender)
-        ad.bridge.receive(["adId": ad.id, "type": "ad.fromTheFuture"], from: sender)   // a newer page: not a violation
-        ad.bridge.receive(["adId": "x"], from: FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "creative.test", port: 443))
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.fromTheFuture"], from: sender)   // a newer page: not a violation
+        ad.bridge.receive(["bidId": "x"], from: FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "creative.test", port: 443))
         ad.bridge.receive("[\"not an object\"]", from: sender)   // a JSON string that is no envelope: the same fault
         ad.bridge.receive(String(repeating: " ", count: FrameMessage.maxMessageBytes + 1), from: sender)
         #expect(await waitUntil { !self.reports("frame.protocol_violation").isEmpty })
@@ -275,7 +275,7 @@ struct ErrorReporterTests {
             var errorDescription: String? { "contains user-secret-2" }
         }
         harness.skAdNetwork.onStart = { throw Refused() }
-        let impression = SKAdNetworkImpression(skan: try #require(Fixtures.descriptor(Fixtures.installAd(Fixtures.ad(id: "p-er-s"), itunesItem: "1")).skan), adId: "p-er-s")
+        let impression = SKAdNetworkImpression(skan: try #require(Fixtures.descriptor(Fixtures.installAd(Fixtures.ad(id: "p-er-s"), itunesItem: "1")).skan), bidId: "p-er-s")
         impression.start()
         #expect(await waitUntil { !self.reports("skan.failed").isEmpty })
         let report = try #require(reports("skan.failed").first)

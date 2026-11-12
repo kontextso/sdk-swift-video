@@ -37,7 +37,7 @@ struct LinearViewControllerTests {
         defer { window.tearDown() }
         let presenter = LandscapeOnly()
         window.window.rootViewController = presenter
-        LinearPresentation.present(controller, from: presenter, adId: "orientation", timeout: 1, isPending: { false },
+        LinearPresentation.present(controller, from: presenter, bidId: "orientation", timeout: 1, isPending: { false },
                                    onPresented: {}, onFailed: {})
         #expect(await waitUntil { controller.presentingViewController === presenter })
         #expect(controller.supportedInterfaceOrientations == .landscape)
@@ -56,7 +56,7 @@ struct LinearViewControllerTests {
         defer { window.tearDown() }
         let presenter = ForwardingPresenter()
         window.window.rootViewController = presenter
-        LinearPresentation.present(controller, from: presenter, adId: "orientation", timeout: 1, isPending: { false },
+        LinearPresentation.present(controller, from: presenter, bidId: "orientation", timeout: 1, isPending: { false },
                                    onPresented: {}, onFailed: {})
         #expect(await waitUntil { controller.presentingViewController === presenter })
         // Asking the presenter now would ask the ad again, without end: the mask is the one taken at presentation.

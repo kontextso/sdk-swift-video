@@ -66,7 +66,7 @@ struct FrameProtocol {
     /// The playhead's bound when the video's duration is not known.
     static let dayMs = 86_400_000
 
-    let adId: String
+    let bidId: String
     /// The page the bridge loaded: its origin is the only one whose messages count.
     let pageURL: URL
     /// The page's navigations, held to its origin.
@@ -88,8 +88,8 @@ struct FrameProtocol {
 
     /// `videoDuration`: the video's length when the server gives one (a linear ad), the playhead's bound with a
     /// grace; without it a day.
-    init(adId: String, pageURL: URL, isVideo: Bool, videoDuration: TimeInterval?) {
-        self.adId = adId
+    init(bidId: String, pageURL: URL, isVideo: Bool, videoDuration: TimeInterval?) {
+        self.bidId = bidId
         self.pageURL = pageURL
         navigation = FrameNavigation(pageURL: pageURL)
         loadErrorCode = isVideo ? 400 : 500
@@ -107,7 +107,7 @@ struct FrameProtocol {
     mutating func accept(_ rawBody: Any, from sender: Sender, now: TimeInterval) -> Step {
         guard state != .ended else { return .ignore }
         guard sender.isMainFrame, isFrameOrigin(sender) else { return .drop(log: "message from another frame dropped") }
-        guard let message = FrameMessage.parse(rawBody, adId: adId, playheadLimitMs: playheadLimitMs) else {
+        guard let message = FrameMessage.parse(rawBody, bidId: bidId, playheadLimitMs: playheadLimitMs) else {
             return .drop(log: "malformed message dropped", violation: violation("envelope"))
         }
         return accept(message, now: now)

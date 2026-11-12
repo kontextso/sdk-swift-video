@@ -51,8 +51,8 @@ struct StrictJSONTests {
     @Test func answersAndPageMessagesGoThroughIt() throws {
         let twice = Data(#"{"enabled": false, "enabled": true}"#.utf8)
         #expect(throws: (any Error).self) { try APIClient.decode(ConfigResponse.self, from: twice) }
-        let message = #"{"adId": "ad-1", "type": "ad.loaded", "type": "ad.close"}"#
-        #expect(FrameMessage.parse(message, adId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
+        let message = #"{"bidId": "ad-1", "type": "ad.loaded", "type": "ad.close"}"#
+        #expect(FrameMessage.parse(message, bidId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
     }
 
     /// A raw control character (U+0000 to U+001F) inside a string, key or value, is not JSON: answers and page
@@ -66,8 +66,8 @@ struct StrictJSONTests {
             Issue.record("expected disabled"); return
         }
         #expect(reason == "a\nb\u{0}", "escaped, it is text")
-        #expect(FrameMessage.parse("{\"adId\": \"ad-1\", \"type\": \"ad.close\", \"reason\": \"a\nb\"}", adId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
-        #expect(FrameMessage.parse(#"{"adId": "ad-1", "type": "ad.close", "reason": "a\nb"}"#, adId: "ad-1", playheadLimitMs: 1000)?.reason == "a\nb")
+        #expect(FrameMessage.parse("{\"bidId\": \"ad-1\", \"type\": \"ad.close\", \"reason\": \"a\nb\"}", bidId: "ad-1", playheadLimitMs: 1000) == nil, "a page message too")
+        #expect(FrameMessage.parse(#"{"bidId": "ad-1", "type": "ad.close", "reason": "a\nb"}"#, bidId: "ad-1", playheadLimitMs: 1000)?.reason == "a\nb")
     }
 
     // MARK: Nesting

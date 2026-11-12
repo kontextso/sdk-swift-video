@@ -37,11 +37,11 @@ struct FrameMessage: Equatable {
     /// The largest message string parsed, in UTF-8 bytes (1 MB); every message of the protocol is far smaller.
     static let maxMessageBytes = 1024 * 1024
 
-    /// Reads `rawBody` (a JSON string, or an object as WebKit converted it) as a message of the page of ad `adId`,
+    /// Reads `rawBody` (a JSON string, or an object as WebKit converted it) as a message of the page of ad `bidId`,
     /// its playhead clamped to `playheadLimitMs`. `nil` for a broken envelope: a string over `maxMessageBytes`
     /// (never parsed), an object whose text fields are over it, not a JSON object, another ad's id, or no type.
-    static func parse(_ rawBody: Any, adId: String, playheadLimitMs: Int) -> FrameMessage? {
-        guard let body = object(rawBody), body["adId"] as? String == adId, let type = body["type"] as? String else { return nil }
+    static func parse(_ rawBody: Any, bidId: String, playheadLimitMs: Int) -> FrameMessage? {
+        guard let body = object(rawBody), body["bidId"] as? String == bidId, let type = body["type"] as? String else { return nil }
         // Clamped: a playhead past the end would fire every checkpoint at once.
         let rawPlayhead = number(body["playhead"]) ?? 0
         let playhead = rawPlayhead.isFinite ? Int(min(max(0, rawPlayhead), Double(playheadLimitMs)).rounded()) : 0

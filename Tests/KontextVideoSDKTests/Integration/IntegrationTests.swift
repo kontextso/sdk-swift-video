@@ -29,8 +29,8 @@ struct IntegrationTests {
         _ = try? await ad.bridge.webView.evaluateJavaScript(script)
     }
 
-    private func events(for adId: String) -> [String] {
-        harness.server.beacons.filter { $0.adId == adId }.map { beacon in beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event }
+    private func events(for bidId: String) -> [String] {
+        harness.server.beacons.filter { $0.bidId == bidId }.map { beacon in beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event }
     }
 
     // MARK: Pause ad, image creative
@@ -55,7 +55,7 @@ struct IntegrationTests {
         // The one viewability check on real time and the meter's own timer (the others move the clock and tick it):
         // 50 % for 1 s, with room for a slow runner's late ticks, each gap of which restarts the second.
         #expect(await waitUntil(30) { self.events(for: "img-pause").contains("viewable") })
-        let impression = harness.server.beacons.first { $0.adId == "img-pause" && $0.event == "impression" }
+        let impression = harness.server.beacons.first { $0.bidId == "img-pause" && $0.event == "impression" }
         #expect(impression?.query["cph"] == "00:00:03.250", "the content playhead at the impression")
         let exposure = try await ad.bridge.webView.evaluateJavaScript("window.lastExposure") as? Double
         #expect(exposure == 100, "the page heard ad.exposure, in percent")
@@ -213,7 +213,7 @@ struct IntegrationTests {
         #expect(await waitUntil { ad.isCompleted }, "at video.complete")
         #expect(delegate.endReasons.isEmpty, "the end card is up")
         #expect(await waitUntil { Set(self.events(for: "vid-full")).isSuperset(of: ["start", "firstQuartile", "midpoint", "progress", "thirdQuartile", "complete", "creativeView(endCard)"]) })
-        let progress = harness.server.beacons.first { $0.adId == "vid-full" && $0.event == "progress" }
+        let progress = harness.server.beacons.first { $0.bidId == "vid-full" && $0.event == "progress" }
         #expect(progress?.query["offset"] == "5000")
 
         #expect(ad.isCompleted)
@@ -239,7 +239,7 @@ struct IntegrationTests {
         await inPage(ad, "window.skip(1500)")
         #expect(await waitUntil { delegate.endReasons == [.skipped] })
         #expect(await waitUntil { self.events(for: "vid-skip").contains("skip") })
-        #expect(harness.server.beacons.first { $0.adId == "vid-skip" && $0.event == "skip" }?.query["aph"] == "00:00:01.500")
+        #expect(harness.server.beacons.first { $0.bidId == "vid-skip" && $0.event == "skip" }?.query["aph"] == "00:00:01.500")
         #expect(!events(for: "vid-skip").contains("complete"))
     }
 
@@ -259,7 +259,7 @@ struct IntegrationTests {
         #expect(await waitUntil { delegate.endReasons == [.failed] })
         #expect(delegate.events.suffix(2) == ["fail", "end:failed"])
         #expect(await waitUntil { self.events(for: "vid-fail").contains("error") })
-        #expect(harness.server.beacons.first { $0.adId == "vid-fail" && $0.event == "error" }?.query["code"] == "405")
+        #expect(harness.server.beacons.first { $0.bidId == "vid-fail" && $0.event == "error" }?.query["code"] == "405")
     }
 
     // MARK: Invalidation and destruction

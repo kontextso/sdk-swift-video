@@ -29,7 +29,7 @@ struct VideoAdCoverTests {
         owners.all.append(ads)
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         return (ad, delegate, ads)

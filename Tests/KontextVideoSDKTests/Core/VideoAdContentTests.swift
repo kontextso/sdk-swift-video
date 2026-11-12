@@ -65,7 +65,7 @@ struct VideoAdContentTests {
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return (ad, delegate, ads)
     }
 
@@ -228,7 +228,7 @@ struct VideoAdContentTests {
         let (shown, shownDelegate, ads) = try await makeAd(first.payload("c-hand"))
         let next = VideoAd(descriptor: try Fixtures.descriptor(first.other.payload("c-hand-next")), owner: ads)
         next.bridge.load()
-        next.bridge.receive(["adId": next.id, "type": "ad.loaded"], from: sender)
+        next.bridge.receive(["bidId": next.id, "type": "ad.loaded"], from: sender)
         harness.player.isPlaying = first.isShownWhilePlaying
         try shown.show(in: view)
         harness.player.isPlaying = !first.isShownWhilePlaying
@@ -255,7 +255,7 @@ struct VideoAdContentTests {
         let (overlay, _, ads) = try await makeAd(Fixtures.overlayAd(id: "o-c-block"))
         let pause = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p-c-block")), owner: ads)
         pause.bridge.load()
-        pause.bridge.receive(["adId": pause.id, "type": "ad.loaded"], from: sender)
+        pause.bridge.receive(["bidId": pause.id, "type": "ad.loaded"], from: sender)
         try overlay.show(in: view)
         do {
             try pause.show(in: view)
@@ -303,7 +303,7 @@ struct VideoAdContentTests {
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         return (ad, delegate)
     }
 

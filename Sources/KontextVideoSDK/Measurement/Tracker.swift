@@ -22,7 +22,7 @@ final class Tracker {
     /// pause counts); each occurrence gets its own fire id. Everything else fires once per entry.
     static let repeatable: Set<String> = ["click", "pause", "resume", "mute", "unmute"]
 
-    private let adId: String
+    private let bidId: String
     private let entries: [AdPayload.TrackingEvent]
     /// The entries' indices by event, in the answer's order: a beacon looks at its own entries only. An answer may
     /// carry thousands of progress checkpoints, and a catch-up over all of them must not rescan every entry per
@@ -111,7 +111,7 @@ final class Tracker {
     @discardableResult
     func fire(_ event: String, part: String? = nil, offset: Int? = nil, errorCode: Int? = nil, viewDurationMs: Int? = nil, notUsed: NotUsed? = nil) -> String {
         // One fire id per event occurrence, shared by every URL of it: the server dedupes on
-        // (adId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
+        // (bidId, event, fid), so a retry one day, or a duplicate for any reason, counts once.
         let fireID = UUID().uuidString.lowercased()
         let candidates = event == "progress" && offset != nil ? progressByOffset[offset ?? 0] ?? [] : indicesByEvent[event] ?? []
         for index in candidates where !fired.contains(index) {
@@ -120,7 +120,7 @@ final class Tracker {
             if let offset, entry.offset != offset { continue }
             if !Self.repeatable.contains(event) { fired.insert(index) }
             guard let url = URL(string: substitute(entry.url, errorCode: errorCode, fireID: fireID, viewDurationMs: viewDurationMs, notUsed: notUsed)) else {
-                Logger.warning("ad \(adId.prefix(8)): \(event) beacon has an invalid URL")
+                Logger.warning("ad \(bidId.prefix(8)): \(event) beacon has an invalid URL")
                 continue
             }
             send(url, event: event, part: part)

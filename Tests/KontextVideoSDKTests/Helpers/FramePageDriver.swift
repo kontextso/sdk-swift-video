@@ -17,9 +17,9 @@ final class FramePageDriver {
     /// The clock a touch is measured on, as `Environment.now` is the bridge's; a test moves it.
     var now: TimeInterval = 1000
 
-    init(adId: String = "ad-1", url: URL = URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: Bool = false,
+    init(bidId: String = "ad-1", url: URL = URL(string: "https://server.kontext.so/frame/ad-1")!, isVideo: Bool = false,
          videoDuration: TimeInterval? = nil) {
-        frameProtocol = FrameProtocol(adId: adId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
+        frameProtocol = FrameProtocol(bidId: bidId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
     }
 
     func receive(_ rawBody: Any, from sender: FrameProtocol.Sender) {

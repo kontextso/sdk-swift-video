@@ -20,7 +20,7 @@ struct OnScreenTimeClockTests {
 
     @Test func anElapsedDurationIsReportedOnceWhateverTheActivityDoesAfter() async {
         var elapsed = 0
-        let clock = OnScreenTimeClock(duration: 0.01, adId: "clock-1") { elapsed += 1 }
+        let clock = OnScreenTimeClock(duration: 0.01, bidId: "clock-1") { elapsed += 1 }
         defer { clock.stop() }
         clock.start(in: nil)
         #expect(await waitUntil { elapsed == 1 })
@@ -38,7 +38,7 @@ struct OnScreenTimeClockTests {
         OnScreenTimeClock.longestWait = 0.05   // a day, shortened
         defer { OnScreenTimeClock.longestWait = 86_400 }
         var elapsed = 0
-        let clock = OnScreenTimeClock(duration: 0.3, adId: "clock-long") { elapsed += 1 }
+        let clock = OnScreenTimeClock(duration: 0.3, bidId: "clock-long") { elapsed += 1 }
         defer { clock.stop() }
         clock.start(in: nil)
         #expect(await waitUntil { elapsed == 1 })
@@ -46,7 +46,7 @@ struct OnScreenTimeClockTests {
     }
 
     @Test func itCountsOnlyWhileTheMeterSaysTheAdIsSeen() {
-        let clock = OnScreenTimeClock(duration: nil, adId: "clock-seen") {}
+        let clock = OnScreenTimeClock(duration: nil, bidId: "clock-seen") {}
         defer { clock.stop() }
         clock.start(in: nil)
         #expect(clock.isCounting)
@@ -59,7 +59,7 @@ struct OnScreenTimeClockTests {
     @Test func aStoppedClockNeverReportsAndKeepsItsTime() async {
         var elapsed = 0
         // A duration no runner's delay reaches: a 50 ms one could run out during a 20 ms sleep on a busy runner.
-        let clock = OnScreenTimeClock(duration: 60, adId: "clock-2") { elapsed += 1 }
+        let clock = OnScreenTimeClock(duration: 60, bidId: "clock-2") { elapsed += 1 }
         clock.start(in: nil)
         await sleepMs(20)
         let counted = clock.stop()
@@ -73,7 +73,7 @@ struct OnScreenTimeClockTests {
     @Test func aDurationOfZeroOrLessElapsesAtOnce() async {
         for duration in [0, -5, -.infinity] as [TimeInterval] {
             var elapsed = 0
-            let clock = OnScreenTimeClock(duration: duration, adId: "clock-zero") { elapsed += 1 }
+            let clock = OnScreenTimeClock(duration: duration, bidId: "clock-zero") { elapsed += 1 }
             clock.start(in: nil)
             #expect(await waitUntil { elapsed == 1 }, "\(duration)")
             clock.stop()
@@ -81,13 +81,13 @@ struct OnScreenTimeClockTests {
     }
 
     @Test func nothingCountsBeforeTheStartOrInAnInactiveApp() async {
-        let clock = OnScreenTimeClock(duration: 0.01, adId: "clock-idle") {}
+        let clock = OnScreenTimeClock(duration: 0.01, bidId: "clock-idle") {}
         defer { clock.stop() }
         await sleepMs(20)
         #expect(clock.elapsed == 0 && !clock.isCounting && clock.timer == nil, "not started")
         Environment.isApplicationActive = { false }
         var elapsed = 0
-        let inactive = OnScreenTimeClock(duration: 0.01, adId: "clock-inactive") { elapsed += 1 }
+        let inactive = OnScreenTimeClock(duration: 0.01, bidId: "clock-inactive") { elapsed += 1 }
         defer { inactive.stop() }
         inactive.start(in: nil)
         await sleepMs(50)
@@ -98,7 +98,7 @@ struct OnScreenTimeClockTests {
 
     @Test func aSecondStartAndAStartAfterStopDoNothing() {
         var resumes = 0
-        let clock = OnScreenTimeClock(duration: nil, adId: "clock-twice") {}
+        let clock = OnScreenTimeClock(duration: nil, bidId: "clock-twice") {}
         clock.onResume = { resumes += 1 }
         clock.start(in: nil)
         let observers = clock.observers.count
@@ -113,7 +113,7 @@ struct OnScreenTimeClockTests {
 
     @Test func onResumeIsCalledOnEveryReturnToCounting() {
         var resumes = 0
-        let clock = OnScreenTimeClock(duration: nil, adId: "clock-resume") {}
+        let clock = OnScreenTimeClock(duration: nil, bidId: "clock-resume") {}
         defer { clock.stop() }
         clock.onResume = { resumes += 1 }
         clock.start(in: nil)
@@ -132,7 +132,7 @@ struct OnScreenTimeClockTests {
         let host = TestWindow()
         defer { host.tearDown() }
         let scene = try #require(host.window.windowScene, "the test host has a window scene")
-        let clock = OnScreenTimeClock(duration: 60, adId: "clock-3") {}
+        let clock = OnScreenTimeClock(duration: 60, bidId: "clock-3") {}
         defer { clock.stop() }
         clock.start(in: host.window)
         #expect(clock.timer != nil, "counting: the scene is active")

@@ -30,7 +30,7 @@ struct VideoAdTests {
         owners.all.append(ads)
         let ad = makeLoose(payload, in: ads)
         if loaded {
-            ad.bridge.receive(message("ad.loaded", adId: ad.id), from: sender)
+            ad.bridge.receive(message("ad.loaded", bidId: ad.id), from: sender)
         }
         let delegate = RecordingDelegate()
         ad.delegate = delegate
@@ -44,8 +44,8 @@ struct VideoAdTests {
         return ad
     }
 
-    private func message(_ type: String, _ extra: [String: Any] = [:], adId: String) -> [String: Any] {
-        var body: [String: Any] = ["adId": adId, "type": type]
+    private func message(_ type: String, _ extra: [String: Any] = [:], bidId: String) -> [String: Any] {
+        var body: [String: Any] = ["bidId": bidId, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         return body
     }
@@ -62,7 +62,7 @@ struct VideoAdTests {
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
-        ad.bridge.receive(message(type, extra, adId: ad.id), from: sender)
+        ad.bridge.receive(message(type, extra, bidId: ad.id), from: sender)
     }
 
     private func beacons() async -> [String] {
@@ -220,7 +220,7 @@ struct VideoAdTests {
         let otherVideo = harness.player.ads(for: .init(id: "other", language: "en"))
         owners.all.append(otherVideo)
         let pause = makeLoose(Fixtures.ad(id: "p9b"), in: otherVideo)
-        pause.bridge.receive(message("ad.loaded", adId: pause.id), from: sender)
+        pause.bridge.receive(message("ad.loaded", bidId: pause.id), from: sender)
         do { try pause.show(in: harness.player.view) } catch VideoAdError.anotherAdShowing {} catch { Issue.record("expected anotherAdShowing, got \(error)") }
         #expect(pause.isReady, "untouched")
         #expect(pause.wasShown == false)
@@ -627,7 +627,7 @@ struct VideoAdTests {
         send(skipped, "video.skip", ["playhead": 6000])
         #expect(await harness.beaconArrives("skip"))
         _ = await beacons()
-        #expect(!harness.server.beacons.contains { $0.adId == "v-pre-skip" && $0.event == "progress" },
+        #expect(!harness.server.beacons.contains { $0.bidId == "v-pre-skip" && $0.event == "progress" },
                 "the skip of a video not started passed no checkpoint")
     }
 

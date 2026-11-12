@@ -135,7 +135,7 @@ final class InlineScreen: AdScreen {
     /// content with it.
     func reachedScreen() {
         let ad = self.ad
-        let clock = OnScreenTimeClock(duration: ad.contentRule.wallClockDuration, adId: ad.id) { [weak ad] in
+        let clock = OnScreenTimeClock(duration: ad.contentRule.wallClockDuration, bidId: ad.id) { [weak ad] in
             guard let ad, !ad.hasEnded else { return }
             Logger.debug("ad \(ad.id.prefix(8)): overlay duration of \(ad.duration ?? 0) s on screen elapsed")
             ad.state.markCompleted()
