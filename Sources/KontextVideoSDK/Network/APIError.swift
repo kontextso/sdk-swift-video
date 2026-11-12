@@ -28,6 +28,20 @@ enum APIError: Error, CustomStringConvertible {
 
 /// Reading what a request threw as the public `RequestFailure`: next to the errors it reads.
 extension VideoAdError.RequestFailure {
+    /// The case's name without its status, for a debug event's `kind`: `offline`, `timedOut`, `server`,
+    /// `badResponse`, `missingUser`.
+    var kind: String {
+        if case .server = self { return "server" }
+        return description
+    }
+
+    /// A debug event's properties for this failure: `kind`, and `httpStatus` for a server error.
+    var reportProperties: [String: ReportFormat.Value] {
+        var properties: [String: ReportFormat.Value] = ["kind": .string(kind)]
+        if case .server(let status) = self { properties["httpStatus"] = .number(Double(status)) }
+        return properties
+    }
+
     /// From what the request threw: `APIClient`'s errors, and a bare `URLError` the same way. Cancellation
     /// never reaches the app (only `destroy()` or the release cancels a request, and that throws
     /// `destroyed`), so a cancelled transfer reads as `offline`. Anything else is a request the SDK

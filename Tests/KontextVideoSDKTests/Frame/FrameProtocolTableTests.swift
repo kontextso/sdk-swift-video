@@ -131,7 +131,7 @@ struct FrameProtocolTableTests {
         }
         // As the page posts it, a JSON string: a number past a Double is no code the SDK can read.
         var core = core(.shown)
-        let step = core.accept(#"{"adId":"ad-1","type":"ad.error","code":1e400}"#, from: main, now: 0)
+        let step = core.accept(#"{"bidId":"ad-1","type":"ad.error","code":1e400}"#, from: main, now: 0)
         switch event(step) {
         case .error(let code)?: #expect(code == 900 || code == 405, "\(code)")
         case nil: #expect(kind(step) == "drop", "or the envelope is refused")

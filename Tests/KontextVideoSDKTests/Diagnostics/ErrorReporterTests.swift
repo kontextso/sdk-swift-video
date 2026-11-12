@@ -230,7 +230,7 @@ struct ErrorReporterTests {
         try terminated.show(in: harness.player.view)
         terminated.bridge.webViewWebContentProcessDidTerminate(terminated.bridge.webView)
         let pageError = try loadedAd(Fixtures.ad(id: "p-er-e"), in: ads)
-        pageError.bridge.receive(["adId": pageError.id, "type": "ad.error", "code": 405], from: sender)
+        pageError.bridge.receive(["bidId": pageError.id, "type": "ad.error", "code": 405], from: sender)
         #expect(await waitUntil { self.reports().count == 2 })
         let process = try #require(reports("frame.process_terminated").first)
         #expect(process["vastCode"] as? Int == 405)

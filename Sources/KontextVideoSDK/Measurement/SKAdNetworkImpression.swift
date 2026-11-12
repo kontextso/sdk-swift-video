@@ -102,11 +102,11 @@ final class SKAdNetworkImpression {
     /// domain and code only, since its text can carry anything (the console line itself is forwarded while `/config`
     /// asks for the debug log).
     private func report(_ step: String, _ error: Error) {
-        Logger.warning("ad \(adId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
+        Logger.warning("ad \(bidId.prefix(8)): SKAdNetwork \(step) failed: \(error)")
         let cause = ErrorReport.Cause(error)
-        DebugReporter.shared.event("ad.skanFailed", bidId: adId, level: .warning,
+        DebugReporter.shared.event("ad.skanFailed", bidId: bidId, level: .warning,
                                    properties: ["step": .string(step), "domain": .string(cause.domain), "code": .number(Double(cause.code))])
-        ErrorReporter.shared.report(.skanFailed, bidId: adId, cause: cause, detail: step)
+        ErrorReporter.shared.report(.skanFailed, bidId: bidId, cause: cause, detail: step)
     }
 }
 

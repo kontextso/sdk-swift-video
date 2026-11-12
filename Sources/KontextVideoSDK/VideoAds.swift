@@ -347,7 +347,7 @@ extension VideoAds {
             }
             ad.tracker.withContentPlayhead {
                 ad.invalidate(.destroyed)
-                ad.tracker.fire("notUsed", notUsed: .destroyed)
+                ad.fireNotUsed(.destroyed)
             }
         }
         showing?.end(.destroyed)

@@ -20,6 +20,7 @@ extension VideoAd {
     /// that could not load, or a terminated web process all fire the same VAST codes.
     func reportCreativeError(vastCode: Int) {
         let code = (loadedBridge?.failureCause ?? .page).reportCode
+        DebugReporter.shared.event("ad.error", sessionId: owner?.sessionId, bidId: id, level: .error, properties: ["code": .number(Double(vastCode))])
         ErrorReporter.shared.report(code, sessionId: owner?.sessionId, bidId: id, vastCode: vastCode, cause: loadedBridge?.failureUnderlying)
     }
 }

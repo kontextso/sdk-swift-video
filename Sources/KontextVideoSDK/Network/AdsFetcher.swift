@@ -77,20 +77,31 @@ final class AdsFetcher {
                 // Its callers stop waiting for the dialog, which goes on.
                 throw VideoAdError.destroyed
             }
-            // 3. What is held, and the playhead, are read after every wait (`/config`, the ATT dialog, the device
-            // facts with the user agent, inside `make`): an ad shown, rejected or expired during them is not sent as
-            // held, or the server would re-serve it and the format answer no-fill.
-            let body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
-                                                 content: content, labels: labels, player: .make(playhead: current().playhead), sessionId: sessionId,
-                                                 held: current().validHeldIDs())
-            let held = body.held
-            // Another video's response may have switched the SDK off during the dialog or the build: nothing leaves.
+            // 3. The playhead, read after every wait (`/config`, the ATT dialog, the device facts with the user agent,
+            // inside `make`).
+            let body: AdsRequest
+            do {
+                body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
+                                                 content: content, section: section, variantId: variantId,
+                                                 player: .make(playhead: current().playhead), sessionId: sessionId)
+            } catch VideoAdError.request(let failure) {
+                // The user was cleared during the waits.
+                throw Self.failed(failure, sessionId: sessionId)
+            }
+            // 4. The outcomes this `VideoAds` just sent (a reject's `notUsed`, a creative's `error`) reach the server first,
+            // or it may re-serve the rejected bid; at most `PendingBeacons.maxWait`.
+            if !(await pendingBeacons.settled(within: PendingBeacons.maxWait)) {
+                Logger.debug("\(content.id): \(pendingBeacons.inFlight) beacon(s) still in flight after \(PendingBeacons.maxWait) s; requesting anyway")
+            }
+            // Another video's response may have switched the SDK off during the dialog, the build or the wait: nothing leaves.
             try current().checkStillUsable()
             try current().requestWasSent(body.requestId)
-            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms, holding \(held.count)")
-            DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: ["held": .number(Double(held.count)), "playhead": .number(Double(body.player.playhead))])
+            Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms")
+            var properties: [String: ReportFormat.Value] = ["playhead": .number(Double(body.player.playhead))]
+            if let section = body.section { properties["section"] = .string(section) }
+            DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: properties)
 
-            // 4. The POST, and the ids against what is held.
+            // 5. The POST, and the ids against what is held.
             let response: AdsResponse
             do {
                 response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
@@ -114,6 +125,12 @@ final class AdsFetcher {
         }
         request = task
         return task
+    }
+
+    /// A request that failed, as its debug event (`ads.requestFailed`) and the error every caller gets.
+    private static func failed(_ failure: VideoAdError.RequestFailure, sessionId: String) -> VideoAdError {
+        DebugReporter.shared.event("ads.requestFailed", sessionId: sessionId, level: .warning, properties: failure.reportProperties)
+        return .request(failure)
     }
 
     /// The answer, for a `VideoAds` still in use. The kill switch in it switches the whole SDK off and drops every

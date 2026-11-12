@@ -63,8 +63,8 @@ struct VideoAdLoadingTests {
         let sender = FrameProtocol.Sender(isMainFrame: true, scheme: "kontext-test", host: "frames", port: 0)
         let loading = Task { try await ad.load() }
         #expect(await waitUntil { ad.loadedBridge?.state == .loading })
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
-        ad.bridge.receive(["adId": ad.id, "type": "ad.error", "code": 405], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.error", "code": 405], from: sender)
         for failure in [await error { try await loading.value }, await error { try await ad.load() }] {
             guard case .creativeFailed(let code)? = failure else { Issue.record("expected creativeFailed, got \(String(describing: failure))"); continue }
             #expect(code == 405)

@@ -59,13 +59,13 @@ struct FrameMessageTests {
         #expect(message.url == "https://a.test" && message.fallbackUrl == "https://b.test")
         #expect(message.area == "endCard" && message.purpose == "adChoices" && message.reason == "userClose")
         #expect(message.code == 403 && message.offset == 2500.5)
-        let bare = try #require(parse(["adId": "ad-1", "type": "ad.close", "url": 5, "offset": "10", "code": "403"]))
+        let bare = try #require(parse(["bidId": "ad-1", "type": "ad.close", "url": 5, "offset": "10", "code": "403"]))
         #expect(bare.url == nil && bare.offset == nil && bare.code == nil, "a field of the wrong type is absent")
         // JSONSerialization gives true and false as NSNumbers: they are not numbers, in a string or an object body.
-        let json = #"{"adId":"ad-1","type":"ad.error","playhead":true,"offset":false,"code":true}"#
-        let object: [String: Any] = ["adId": "ad-1", "type": "ad.error", "playhead": true, "offset": false, "code": true]
+        let json = #"{"bidId":"ad-1","type":"ad.error","playhead":true,"offset":false,"code":true}"#
+        let object: [String: Any] = ["bidId": "ad-1", "type": "ad.error", "playhead": true, "offset": false, "code": true]
         for raw in [json as Any, object as Any] {
-            let booleans = try #require(FrameMessage.parse(raw, adId: "ad-1", playheadLimitMs: 60_000))
+            let booleans = try #require(FrameMessage.parse(raw, bidId: "ad-1", playheadLimitMs: 60_000))
             #expect(booleans.playheadMs == 0 && booleans.offset == nil && booleans.code == nil, "\(raw)")
         }
     }

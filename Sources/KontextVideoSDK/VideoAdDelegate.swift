@@ -64,6 +64,15 @@ extension VideoAd {
             /// A label of the page's own (`cta`, `logo`, ...), passed through unchanged.
             case other(String)
 
+            /// The area in a debug event: `creative`, `endCard`, or the page's own label.
+            var reportName: String {
+                switch self {
+                case .creative: return "creative"
+                case .endCard: return "endCard"
+                case .other(let label): return label
+                }
+            }
+
             /// From the page's `area`: absent is the creative.
             init(_ raw: String?) {
                 switch raw {

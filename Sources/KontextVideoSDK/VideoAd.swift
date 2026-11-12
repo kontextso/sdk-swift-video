@@ -227,7 +227,7 @@ public final class VideoAd {
             Logger.info("\(format) ad \(id.prefix(8)): rejected (\(reason))")
             // Committed before the beacon: the rejection is final the moment the app asked for it.
             invalidate(.rejected)
-            tracker.fire("notUsed", notUsed: Tracker.NotUsed(reason))
+            fireNotUsed(Tracker.NotUsed(reason))
         }
     }
 
@@ -584,6 +584,7 @@ public final class VideoAd {
         // The delegate hears nothing after `didEnd`. Opening the click-through does not end the ad today; the check
         // keeps that rule if it ever does.
         guard !hasEnded else { return }
+        DebugReporter.shared.event("ad.clicked", sessionId: owner?.sessionId, bidId: id, properties: ["area": .string(area.reportName)])
         delegate?.videoAd(self, didClick: Click(area: area))
     }
 
@@ -716,6 +717,7 @@ public final class VideoAd {
         guard state.moveTo(.invalidated(reason)) else { return }
         Logger.debug("\(format) ad \(id.prefix(8)) ended before show: \(reason)")
         DebugReporter.shared.event("ad.invalidated", sessionId: owner?.sessionId, bidId: id, properties: reason.reportProperties)
+        if reason == .expired { DebugReporter.shared.event("ad.expired", sessionId: owner?.sessionId, bidId: id) }
         loadedBridge?.hide()
         loadedBridge = nil
         if let continuation = loadContinuation {
@@ -723,5 +725,11 @@ public final class VideoAd {
             continuation.resume(throwing: Self.error(for: reason))
         }
         owner?.adDidLeave(self)
+    }
+
+    /// The `notUsed` beacon of an ad the app did not use (`reject`, `destroy`), and its debug event.
+    func fireNotUsed(_ reason: Tracker.NotUsed) {
+        DebugReporter.shared.event("ad.notUsed", sessionId: owner?.sessionId, bidId: id, properties: ["reason": .string(reason.reason)])
+        tracker.fire("notUsed", notUsed: reason)
     }
 }
