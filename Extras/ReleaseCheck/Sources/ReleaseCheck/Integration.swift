@@ -13,6 +13,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
     static func start() async {
         let configuration = KontextVideo.Configuration(publisherToken: "<your-publisher-token>")
         _ = await KontextVideo.shared.initialize(with: configuration)
+        KontextVideo.shared.user = KontextVideo.User(id: "guest-1234", keywords: ["romance"])
     }
 
     func prepare() async {
@@ -24,7 +25,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
             genre: "romance",
             series: .init(id: "series-42", title: "Series", episodeCount: 6)
         )
-        let ads = VideoAds(content: content, labels: ["stage": "first_episode"])
+        let ads = VideoAds(content: content, section: "episode", variantId: "b")
         ads.track(player)
         self.ads = ads
         do {
@@ -33,6 +34,8 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
             try await ad.load()
             ad.delegate = self
             overlayAd = ad
+        } catch VideoAdError.request(.missingUser) {
+            print("set KontextVideo.shared.user first")
         } catch let error as VideoAdError {
             print(error)
         } catch {
@@ -46,6 +49,11 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
         } catch {
             overlayAd?.reject()
         }
+    }
+
+    func showPause(_ ad: VideoAd) {
+        guard ad.format == .pause || ad.format == .pauseFullscreen else { return }
+        try? ad.show(in: view)
     }
 
     func showLinear(_ ad: VideoAd) {

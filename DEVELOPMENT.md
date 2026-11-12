@@ -17,14 +17,14 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 ```
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
-│   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory, variantID
-│   ├── VideoAds.swift                              one video's ads: format(_:), the shared request, the session and held bids, destroy, the playhead
+│   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory
+│   ├── VideoAds.swift                              one video's ads: format(_:), section and variantId, the shared request, the session and held bids, destroy, the playhead
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference
 │   ├── Model/        the model: what the app passes in (Configuration, Content, User, Regulatory, AdFormat), the public types alone (their rules live in Payloads/AppInputs, the configuration check next to initialize) and the ad as the SDK keeps it (AdDescriptor)
 │   ├── State/        the state of the SDK and of each ad, and their legal moves: SdkLifecycle and AdLifecycle (the phases and the moves between them, stateless), SdkState (the SDK's phase, its configuration, what /config said of the reports) and AdState (every fact of an ad's life, its phase, its milestones and the flags they give), AdStore (what one VideoAds holds, and the plan an answer makes of it)
-│   ├── Network/      HTTP: APIClient (our server, any route), AdsFetcher (one ads request at a time per VideoAds), ConfigFetcher (/config, once), BeaconClient (tracking GETs), RedirectLimit (10 redirects at most), APIError
+│   ├── Network/      HTTP: APIClient (our server, any route), AdsFetcher (one ads request at a time per VideoAds), ConfigFetcher (/config, once), BeaconClient (tracking GETs), PendingBeacons (the outcome beacons the next ads request waits for), RedirectLimit (10 redirects at most), APIError
 │   ├── Payloads/     every body sent or received, named as in the spec: Config and Ads requests and responses, AdPayload (decoded once into AdDescriptor; nothing else reads it), AppInputs (how the app's Content, User and Regulatory go on the wire, and the request's rules for them: what is left out, a COPPA user; the public types are not Codable), ErrorResponse, SDKInfo
 │   ├── Device/       what the SDK reads from the device: DeviceInfo (the device facts, no state), UserAgent (the user agent's shared lookup, its wait and its fallback), Privacy (ATT, IFA, the consent merge)
 │   ├── Frame/        the ad's web page and its messages: FrameMessage (one page message read: the envelope and its fields), FrameProtocol (the protocol's rules: accept(message) → Step; the frame's phase, FramePhase: where the ad's frame, its web page, is), TouchGate (one tap, one URL), FrameNavigation (the page's navigations), FrameBridge (carries out each Step), FrameWebView (the WebView locked down for one ad) and its events, VideoAd+FrameEvents (what the ad does with each message)
@@ -46,8 +46,8 @@ sdk-swift-video/
 ```
 
 The lifecycle these files implement is the Notion page *SDK Lifecycle*: every `format(_:)` asks for all formats
-with the `VideoAds`'s `sessionId` and the ids it holds (`held`); the server owns the bid state and re-serves held bids
-until they expire; the SDK follows the response. One request and one load at a time, shared by every caller.
+with the `VideoAds`'s `sessionId`; the server owns the bid state and re-serves a session's unshown bids until it hears
+their outcome or they expire (the request waits briefly for a `reject()`'s `notUsed` beacon); the SDK follows the response. One request and one load at a time, shared by every caller.
 
 The rule for the tree: the root is what the app calls, `Model/` is the model, `State/` is the state of the SDK and of each ad and their legal moves, `Network/` talks to the server, `Payloads/` is what it sends and receives, `Device/` is what the SDK reads from the device, `Frame/` is the ad's
 web page and its messages, `Screen/` puts the ad on screen, `Measurement/` is what the viewer saw (visibility, time on screen) and the beacons that report it (together the Notion hub's "Rendering" section), `Diagnostics/` is what the SDK tells (logs, error and debug reports), `Platform/` the system calls and seams under the rest.
@@ -256,7 +256,8 @@ type, match the Kotlin counterpart, or leave a comment saying why not.
 
 Where the two differ on purpose, each language's convention wins:
 
-- Initialisms: Swift cases them as Swift does (`variantID`, `lastRequestID`, `gppSID`), Kotlin keeps `Id`.
+- Initialisms: Swift cases them as Swift does (`lastRequestID`, `gppSID`), Kotlin keeps `Id`. One exception, so both
+  SDKs read the same: `VideoAds.variantId`, as the contract names it.
 - `dismiss()` does not throw (Kotlin drops its checked exception the same way); `reject(_:)` does not throw
   in Swift, where an ad already ended or shown makes it a no-op with a console line.
 - The custom player: Swift's `ContentPlayer` reports through optional publishers (`isPlayingPublisher`,

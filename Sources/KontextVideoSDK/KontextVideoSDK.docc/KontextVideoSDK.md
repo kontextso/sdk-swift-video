@@ -1,6 +1,6 @@
 # ``KontextVideoSDK``
 
-Overlay, pause and linear video ads for short-drama and other video-first iOS apps.
+Overlay, pause, full-screen pause and linear video ads for short-drama and other video-first iOS apps.
 
 ## Overview
 
@@ -10,10 +10,10 @@ you what happens on screen through a delegate.
 
 Three types carry an integration:
 
-- ``KontextVideo``: the shared instance. Initialize it once at launch; it also holds what you know about the
-  viewer (``KontextVideo/user``) and their consent (``KontextVideo/regulatory``).
-- ``VideoAds``: the ads of one episode. Create one per episode, track its player, and
-  ``VideoAds/destroy()`` it when the viewer leaves.
+- ``KontextVideo``: the shared instance. Initialize it once at launch; it also holds the viewer
+  (``KontextVideo/user``, required before the first ads request) and their consent (``KontextVideo/regulatory``).
+- ``VideoAds``: the ads of one episode, in one section of the app. Create one per episode, track its player,
+  and ``VideoAds/destroy()`` it when the viewer leaves.
 - ``VideoAd``: one ad. Read its ``VideoAd/price``, ``VideoAd/load()`` it or ``VideoAd/reject(_:)`` it, then
   show it.
 
@@ -22,16 +22,21 @@ Requirements: iOS 14 or later, Swift 5.9, Swift Package Manager. The integration
 
 ## Getting started
 
-Initialize the SDK at app launch with your publisher token:
+Initialize the SDK at app launch with your publisher token, and set the viewer before the first ads request,
+a guest id until they sign in, then the account id (without a user, ``VideoAds/format(_:)`` throws
+``VideoAdError/RequestFailure/missingUser`` and sends nothing):
 
 ```swift
 KontextVideo.shared.initialize(with: .init(publisherToken: "yourapp-dev"))
+KontextVideo.shared.user = .init(id: viewerId)
 ```
 
-Create a ``VideoAds`` for each episode and track the player it plays in:
+Create a ``VideoAds`` for each episode and track the player it plays in. Its `section` names where in the app
+the player is, as agreed with Kontext; the server's configuration picks the formats it offers there. An A/B
+variant agreed with Kontext goes in `variantId`.
 
 ```swift
-let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"))
+let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), section: "episode")
 ads.track(player)   // an AVPlayer, or your own player conformed to ContentPlayer
 ```
 
@@ -54,13 +59,16 @@ Call ``VideoAds/destroy()`` when the viewer leaves the episode.
 
 ## Formats
 
-``AdFormat`` names the three formats. Every request asks for all of them; ``VideoAds/format(_:)`` returns
-one.
+``AdFormat`` names the four formats. Every request asks for all of them that the section offers;
+``VideoAds/format(_:)`` returns one.
 
 - ``AdFormat/overlay``: a strip across the player while the content plays. Show it with
   ``VideoAd/show(in:insets:)``; it ends after its ``VideoAd/duration`` of video, or when the content stops.
-- ``AdFormat/pause``: a card, or the whole player, while the content is paused. Show it with
-  ``VideoAd/show(in:insets:)``; it ends when the viewer closes it or resumes, or with ``VideoAd/dismiss()``.
+- ``AdFormat/pause``: a card over the top or the bottom of the player while the content is paused. Show it
+  with ``VideoAd/show(in:insets:)``; it ends when the viewer closes it or the content plays again, or with
+  ``VideoAd/dismiss()``.
+- ``AdFormat/pauseFullscreen``: the whole player while the content is paused, the same way: its Resume ends it
+  as `.resumed`, its ✕ as `.closed`, the content playing again as `.interrupted`.
 - ``AdFormat/linear``: a full-screen video at a moment you pick. Show it with ``VideoAd/show(from:)``; only
   the SDK dismisses it.
 
@@ -85,8 +93,8 @@ from your `format(_:)` call.
 The SDK reads consent from your consent management platform's IAB keys and lets you fill in what it did not
 write through ``KontextVideo/Regulatory``; COPPA can only come from you. It sends the advertising identifier
 only when the viewer allowed tracking, and shows the App Tracking Transparency dialog only when you ask it to
-(``KontextVideo/Configuration/requestTrackingAuthorization``). A COPPA request carries no advertising id and
-no user id or email. The package ships a privacy manifest.
+(``KontextVideo/Configuration/requestTrackingAuthorization``). A COPPA request carries no advertising id, no
+IDFV and no email or email hash; the user id is still sent, and the server keeps it from buyers. The package ships a privacy manifest.
 
 ## Topics
 
