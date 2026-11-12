@@ -86,7 +86,7 @@ struct VideoAdLoadingTests {
         let (ad, ads) = try await make(Fixtures.ad(id: "img-1", moreSizes: [["width": 200, "height": 200, "scalable": true, "maintainAspectRatio": true]]))
         #expect(ad.id == "img-1")
         #expect(ad.format == .pause)
-        #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD", precision: .exact))
+        #expect(ad.price == VideoAd.Price(value: 7.5, currency: "USD"))
         #expect(ad.descriptor.position == .top)
         #expect(ad.descriptor.size == VideoAd.Size(width: 300, height: 300))
         #expect(ad.descriptor.sizes.count == 2)

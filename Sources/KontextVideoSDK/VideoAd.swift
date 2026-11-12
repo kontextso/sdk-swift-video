@@ -16,8 +16,9 @@ import UIKit
 /// }
 /// ```
 ///
-/// One type serves every format, so `format(_:)` and an auction read the same way for all three; the format
-/// decides how it is shown: `show(in:)` for an overlay or pause ad, `show(from:)` for a linear ad. The
+/// One type serves every format, so `format(_:)` and an auction read the same way for all four; the format
+/// decides how it is shown: `show(in:)` for an overlay or pause ad (`pause` or `pauseFullscreen`), `show(from:)`
+/// for a linear ad. The
 /// other call is a programmer error, caught at that call: it stops a debug build and throws
 /// `wrongShowMethod` in a release build. Code that shows an ad of a format it does not fix switches on
 /// `format`.
@@ -43,11 +44,11 @@ import UIKit
 /// - A linear ad's `hasEnded` comes when it begins to end; `didEnd` follows once its dismissal finished.
 @MainActor
 public final class VideoAd {
-    // Format differences. One type serves the three formats; what differs lives in two places, chosen once
+    // Format differences. One type serves the four formats; what differs lives in two places, chosen once
     // per ad, so this class asks "which format?" only for the public guards and the linear facts below:
     //
-    //   how it follows the content   ContentRule   OverlayRule / PauseRule / NoContentRule (linear)
-    //   where it is on screen        AdScreen      InlineScreen (overlay, pause) / LinearScreen (linear)
+    //   how it follows the content   ContentRule   OverlayRule / PauseRule (both pauses) / NoContentRule (linear)
+    //   where it is on screen        AdScreen      InlineScreen (overlay, both pauses) / LinearScreen (linear)
     //
     // This class keeps what every format shares: show's checks, the page's events and beacons, and the
     // one terminal path, end(_:) then finish(_:). Rules and screens end an ad only through end(_:).
@@ -63,14 +64,15 @@ public final class VideoAd {
     // The facts an app decides on before rendering. Where the ad goes and how big it is are the SDK's
     // business at `show`; nothing of that is exposed.
 
-    /// The server's id of this ad: unique per auction win, the same while the server re-serves it.
+    /// The server's bid id of this ad: the same id in its beacons, in error and debug reports, and in support
+    /// requests. Unique per auction win, the same while the server re-serves it.
     public var id: String { descriptor.id }
-    /// Which moment the ad is for: `.pause`, `.overlay` or `.linear`.
+    /// Which moment the ad is for: `.overlay`, `.pause`, `.pauseFullscreen` or `.linear`.
     public var format: AdFormat { descriptor.format }
     /// What the ad pays, for the app's own auction against other networks.
     public var price: Price { descriptor.price }
     /// Overlay: how long the SDK keeps it on screen, `nil` when it stays until the app ends it. Linear:
-    /// the video's length. Seconds; always `nil` for a pause ad.
+    /// the video's length. Seconds; always `nil` for a pause ad of either kind.
     public var duration: TimeInterval? { descriptor.duration }
 
     /// The page reported the creative ready: `load()` finished.
@@ -272,7 +274,7 @@ public final class VideoAd {
 
     /// Shows an overlay or pause ad inside `view`, the one the content plays in (the view that fills the
     /// video area, not the screen), where the server placed it, at the size its creative was built for; a
-    /// full-screen pause ad fills it.
+    /// `pauseFullscreen` ad fills it.
     /// Throws when the show cannot begin, with nothing fired: `wrongShowMethod` (a linear ad),
     /// `alreadyShown`, `anotherAdShowing`, `invalidated` (`.contentChanged` too: show an episode's ads only in
     /// that episode, see `VideoAds.track(_:)`), `destroyed`, `disabled`, `cannotShowNow`
@@ -296,7 +298,7 @@ public final class VideoAd {
     /// `insets` keep an overlay or a pause card clear of your own controls: they add to the view's safe area,
     /// as UIKit's `additionalSafeAreaInsets` do, so `bottom: 80` places a bottom strip 80 points above the
     /// safe area's edge. Kept while the ad is shown, through resizes and rotations, and counted in
-    /// `containerTooSmall`'s minimum. A full-screen pause ad ignores them: it fills the view. A negative or
+    /// `containerTooSmall`'s minimum. A `pauseFullscreen` ad ignores them: it fills the view. A negative or
     /// non-finite value counts as zero.
     ///
     /// A show of this same ad made by your own code that this call ran (an overlay over paused content ends here,

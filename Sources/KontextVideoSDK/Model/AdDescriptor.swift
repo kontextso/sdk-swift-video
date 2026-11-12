@@ -35,7 +35,7 @@ struct AdDescriptor {
     init(payload ad: AdPayload, receivedAt: TimeInterval) {
         id = ad.id
         format = ad.format
-        price = VideoAd.Price(value: ad.price.value, currency: ad.price.currency, precision: ad.price.precision == .exact ? .exact : .estimated)
+        price = VideoAd.Price(value: ad.price.value, currency: ad.price.currency)
         self.receivedAt = receivedAt
         lifetime = TimeInterval(ad.expires) / 1000
         creative = ad.creative
@@ -58,8 +58,12 @@ struct AdDescriptor {
             switch wirePosition {
             case .top: position = .top
             case .bottom: position = .bottom
-            case .fullscreen: position = .fullscreen
             }
+            duration = nil
+            skipOffset = nil
+        case .pauseFullscreen:
+            position = .fullscreen
+            sizes = []
             duration = nil
             skipOffset = nil
         case .linear(let wireDuration, let wireSkipOffset):

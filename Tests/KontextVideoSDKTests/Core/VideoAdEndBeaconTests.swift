@@ -58,7 +58,7 @@ struct VideoAdEndBeaconTests {
     @Test func aVideoAdEndedBeforeItsFirstFrame() async throws {
         for reason in Self.reasons {
             let id = "ev-\(reason)"
-            let (ad, delegate) = try await makeAd(Fixtures.ad(id: id, creative: "video", position: "fullscreen", size: nil))
+            let (ad, delegate) = try await makeAd(Fixtures.pauseFullscreenAd(id: id, creative: "video"))
             try ad.show(in: harness.player.view)
             ad.end(reason)
             #expect(delegate.endReasons == [reason])

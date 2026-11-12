@@ -70,10 +70,10 @@ enum Fixtures {
             "format": format,
             "creative": creative,
             "trigger": trigger,
-            "price": ["model": "cpm", "value": 7.5, "currency": "USD", "precision": "exact"],
+            "price": ["model": "cpm", "value": 7.5, "currency": "USD"],
             "expires": expires,
             "rendering": ["kind": "frame", "url": frameURL ?? "\(frameOrigin)/frame/\(id)"],
-            "tracking": tracking(video: creative == "video", nonLinear: format != "linear", adId: id),
+            "tracking": tracking(video: creative == "video", nonLinear: format != "linear", bidId: id),
             "vastUrl": "https://ads.test/v2/video/ads/\(id)/vast",
         ]
         if let position { ad["position"] = position }
@@ -88,9 +88,17 @@ enum Fixtures {
         ad(id: id, format: "overlay", creative: creative, position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
+    /// A pause ad over the whole player: no position to choose, no sizes.
+    static func pauseFullscreenAd(id: String = "ad-f", creative: String = "image") -> [String: Any] {
+        ad(id: id, format: "pauseFullscreen", creative: creative, position: "fullscreen", size: nil)
+    }
+
     static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000) -> [String: Any] {
         ad(id: id, format: "linear", creative: "video", position: nil, size: nil, duration: duration, skipOffset: skipOffset)
     }
+
+    /// Every format the server answers, by wire name.
+    static let allFormats = ["overlay", "pause", "pauseFullscreen", "linear"]
 
     /// Every format answered: `ad` for its own format, a no-fill for the others.
     static func adsResponse(_ ad: [String: Any]) -> [String: Any] {
@@ -100,7 +108,7 @@ enum Fixtures {
     /// Every format answered, in the server's order: an ad (or a no-fill entry) from `entries` by format
     /// name, `noAdMatch` for the rest. An entry is an ad (it has an `id`) or a whole entry (`noFillEntry`).
     static func adsResponse(formats entries: [String: [String: Any]]) -> [String: Any] {
-        let formats = ["overlay", "pause", "linear"].map { format -> [String: Any] in
+        let formats = allFormats.map { format -> [String: Any] in
             guard let entry = entries[format] else { return noFillEntry(format: format) }
             return entry["id"] == nil ? entry : ["format": format, "ads": [entry]]
         }
@@ -109,7 +117,7 @@ enum Fixtures {
 
     /// Every format a no-fill with `reason`.
     static func noFill(_ reason: String = "noAdMatch") -> [String: Any] {
-        ["enabled": true, "formats": ["overlay", "pause", "linear"].map { noFillEntry(reason, format: $0) }]
+        ["enabled": true, "formats": allFormats.map { noFillEntry(reason, format: $0) }]
     }
 
     static func noFillEntry(_ reason: String = "noAdMatch", format: String = "pause", nextRequestAt: Int? = nil) -> [String: Any] {

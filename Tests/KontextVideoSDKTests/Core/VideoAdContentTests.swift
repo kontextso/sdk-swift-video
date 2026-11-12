@@ -608,7 +608,7 @@ struct VideoAdContentTests {
         ContentPlayback.tickInterval = 30   // the rate notifications alone
         let player = try await playingPlayer()
         defer { player.pause() }
-        let (pause, delegate, ads) = try await makeAd(Fixtures.ad(id: "p-c-ended", position: "fullscreen", size: nil)) { $0.track(player) }
+        let (pause, delegate, ads) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p-c-ended")) { $0.track(player) }
         player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: player.currentTime().seconds + 0.2, preferredTimescale: 600)
         try #require(await waitUntil { !ads.playback.isPlaying })
         #expect(player.rate != 0, "actionAtItemEnd .none keeps the rate")

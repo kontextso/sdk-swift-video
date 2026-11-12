@@ -147,8 +147,9 @@ struct ModelEncodingTests {
     @Test func adFormatRawValuesMatchTheWire() {
         #expect(AdFormat.overlay.rawValue == "overlay")
         #expect(AdFormat.pause.rawValue == "pause")
+        #expect(AdFormat.pauseFullscreen.rawValue == "pauseFullscreen")
         #expect(AdFormat.linear.rawValue == "linear")
-        #expect(AdFormat.allCases == [.overlay, .pause, .linear], "the order a response lists them")
+        #expect(AdFormat.allCases == [.overlay, .pause, .pauseFullscreen, .linear], "the order a response lists them")
     }
 
     // MARK: Configuration

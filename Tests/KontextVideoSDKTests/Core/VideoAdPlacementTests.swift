@@ -173,7 +173,7 @@ struct VideoAdPlacementTests {
         hiddenWindow.add(inHiddenWindow)
         hiddenWindow.window.isHidden = true
         refused(ad, inHiddenWindow, "in a hidden window")
-        let (fullscreen, _, _) = try await makeAd(Fixtures.ad(id: "p10z", position: "fullscreen", size: nil))
+        let (fullscreen, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p10z"))
         let empty = UIView(frame: .zero)
         window.add(empty)
         refused(fullscreen, empty, "a view without an area, for an ad that fills it")
@@ -311,7 +311,7 @@ struct VideoAdPlacementTests {
     }
 
     @Test func aFullscreenPauseAdFollowsAResizedPlayer() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6r", position: "fullscreen", size: nil))
+        let (ad, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p6r"))
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
         window.add(player)
         try ad.show(in: player)
@@ -356,7 +356,7 @@ struct VideoAdPlacementTests {
     }
 
     @Test func aFullscreenPauseAdIgnoresTheInsets() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p-in-f", position: "fullscreen", size: nil))
+        let (ad, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p-in-f"))
         let player = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.add(player)
         try ad.show(in: player, insets: UIEdgeInsets(top: 40, left: 10, bottom: 80, right: 10))
@@ -461,7 +461,7 @@ struct VideoAdPlacementTests {
     }
 
     @Test func aFullscreenPauseAdKeepsItsPageInsideTheSafeAreaOnBlack() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.ad(id: "p6f", position: "fullscreen", size: nil))
+        let (ad, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p6f"))
         // A landscape iPhone: the island's cutout on the left, the home indicator at the bottom.
         let player = SafeAreaView(frame: CGRect(x: 0, y: 0, width: 844, height: 390), insets: UIEdgeInsets(top: 0, left: 59, bottom: 21, right: 59))
         window.add(player)

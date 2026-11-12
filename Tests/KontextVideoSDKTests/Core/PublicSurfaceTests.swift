@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct PublicSurfaceTests {
     @Test func anAppCanMakeThePricesAndClicksItsOwnTestsNeed() {
-        let price = VideoAd.Price(value: 2.5, currency: "USD", precision: .estimated)
-        #expect(price.value >= 2 && price.currency == "USD" && price.precision == .estimated)
+        let price = VideoAd.Price(value: 2.5, currency: "USD")
+        #expect(price.value >= 2 && price.currency == "USD")
         #expect(VideoAd.Click(area: .endCard).area == .endCard)
     }
 

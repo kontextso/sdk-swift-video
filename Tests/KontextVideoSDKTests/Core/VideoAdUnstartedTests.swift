@@ -42,7 +42,7 @@ struct VideoAdUnstartedTests {
 
     /// A full-screen video pause ad: a video creative shown inline.
     private func videoPause(_ id: String) -> [String: Any] {
-        Fixtures.ad(id: id, creative: "video", position: "fullscreen", size: nil)
+        Fixtures.pauseFullscreenAd(id: id, creative: "video")
     }
 
     /// `show(from:)` plus what UIKit's presentation completion does; the runner never completes a transition.
