@@ -16,7 +16,7 @@ extension VideoAd {
         return .wrongShowMethod
     }
 
-    /// The creative's error as a fault report. The bridge says why it failed: the page, a load timeout, a page
+    /// The creative's error as a debug event (`ad.error`) and a fault report. The bridge says why it failed: the page, a load timeout, a page
     /// that could not load, or a terminated web process all fire the same VAST codes.
     func reportCreativeError(vastCode: Int) {
         let code = (loadedBridge?.failureCause ?? .page).reportCode

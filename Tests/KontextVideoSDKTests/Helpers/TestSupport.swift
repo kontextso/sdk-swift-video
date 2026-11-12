@@ -279,6 +279,8 @@ struct SDKHarness {
 
     init() {
         SDKHarness.reset()
+        // Every ads request needs the viewer's id; the tests of a missing user clear it.
+        KontextVideo.shared.user = KontextVideo.User(id: "test-user")
         server.install()
         server.on("/v2/config", .json(Fixtures.initEnabled()))
         server.on("/events/", .empty())

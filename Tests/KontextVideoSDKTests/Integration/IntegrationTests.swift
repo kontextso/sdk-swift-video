@@ -294,7 +294,6 @@ struct IntegrationTests {
         let next = try await ads.format(.pause)
         try await next.load()
         #expect(next.id == "img-exp2")
-        #expect(harness.server.requests(to: "/v2/video/ads").last?.body?["held"] as? [String] == [])
     }
 
     /// The loop from the SDK Lifecycle page: prepare early (format + load), show at the pause, the publisher's
@@ -311,7 +310,6 @@ struct IntegrationTests {
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-loop2"), "overlay": Fixtures.overlayAd(id: "img-loopo")])
         let next = try await ads.format(.pause)
         #expect(next.id == "img-loop2", "the shown bid is never served again")
-        #expect(harness.server.requests(to: "/v2/video/ads").last?.body?["held"] as? [String] == ["img-loopo"], "the overlay bid is still held")
         next.reject(.outbid(winningPrice: 3))
         #expect(await waitUntil { self.events(for: "img-loop2") == ["notUsed"] }, "nothing rendered, one notice")
         let overlay = try await ads.format(.overlay)

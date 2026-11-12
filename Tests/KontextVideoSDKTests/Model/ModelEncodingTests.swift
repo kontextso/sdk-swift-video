@@ -18,7 +18,7 @@ struct ModelEncodingTests {
     @Test func contentEncodesEverythingInMilliseconds() throws {
         let content = KontextVideo.Content(
             id: "100001-6", language: "pt-BR", mediaRating: .explicit, url: URL(string: "https://p.test/ep/6"),
-            title: "Episode 6", categories: ["640"], description: "d", duration: 92.4, episodeNumber: 6,
+            title: "Episode 6", description: "d", duration: 92.4, episodeNumber: 6,
             keywords: ["love"], genre: "romance", series: .init(id: "100001", title: "S", description: "sd", episodeCount: 40)
         )
         let json = try Fixtures.encode(content)
@@ -31,7 +31,7 @@ struct ModelEncodingTests {
         // The whole object, so no field can drop out unnoticed.
         let expected: [String: Any] = [
             "id": "100001-6", "language": "pt-BR", "mediaRating": "explicit", "url": "https://p.test/ep/6",
-            "title": "Episode 6", "categories": ["640"], "description": "d", "duration": 92_400, "episodeNumber": 6,
+            "title": "Episode 6", "description": "d", "duration": 92_400, "episodeNumber": 6,
             "keywords": ["love"], "genre": "romance",
             "series": ["id": "100001", "title": "S", "description": "sd", "episodeCount": 40],
         ]
@@ -73,12 +73,13 @@ struct ModelEncodingTests {
         #expect(both["id"] as? String == "u1" && both["email"] as? String == "viewer@example.com")
         #expect(both["emailHash"] as? String == "md5-or-anything", "any hash function, sent as given")
         #expect(both["keywords"] as? [String] == [])
-        let hashOnly = try Fixtures.encode(KontextVideo.User(emailHash: "abc"))
-        #expect(hashOnly.keys.sorted() == ["emailHash"])
-        let empty = KontextVideo.User(id: "", email: "", emailHash: "")
-        #expect(try Fixtures.encode(empty).isEmpty)
-        #expect(empty.emptyFields == ["id", "email", "emailHash"])
-        #expect(try Fixtures.encode(KontextVideo.User()).isEmpty)
+        let hashOnly = try Fixtures.encode(KontextVideo.User(id: "u2", emailHash: "abc"))
+        #expect(hashOnly.keys.sorted() == ["emailHash", "id"])
+        let empty = KontextVideo.User(id: "u3", email: "", emailHash: "")
+        #expect(try Fixtures.encode(empty) as? [String: String] == ["id": "u3"], "an empty email or hash is left out")
+        #expect(empty.emptyFields == ["email", "emailHash"])
+        #expect(KontextVideo.User(id: "").emptyFields == ["id"])
+        #expect(try Fixtures.encode(KontextVideo.User(id: "u4")) as? [String: String] == ["id": "u4"], "the id is always sent")
     }
 
     @Test func theProblemsNameWhatThePublisherPassedWrong() {

@@ -1,7 +1,8 @@
 import Foundation
 
 /// The checks of how the app uses the SDK: a call before `initialize(with:)`, an unusable configuration, a
-/// video's content the server would refuse, a user with empty fields. Each is a mistake in the app's code, not a
+/// video's content the server would refuse, an ads request without a user, a user with empty fields, a
+/// `section` or `variantId` the server would refuse. Each is a mistake in the app's code, not a
 /// runtime condition, and each is handled the same way: a debug build stops at it (`Environment.assertionFailure`,
 /// with the message), a release build logs it and carries on, and what Kontext should hear of is reported
 /// (`ErrorReporter`, stage `integration`).
@@ -78,11 +79,34 @@ enum IntegrationGuard {
         hasWarnedAboutTrackingUsageDescription = false
     }
 
-    /// The viewer the app set: an empty field is left out of the requests; an empty `id` is a programmer error.
+    /// The viewer the app set: an empty email or hash is left out of the requests; an empty `id` is a programmer
+    /// error, and no request leaves with it.
     static func checkUser(_ user: KontextVideo.User?) {
         guard let empty = user?.emptyFields, !empty.isEmpty else { return }
         if empty.contains("id") { Environment.assertionFailure("KontextVideo.User: id is empty") }
-        Logger.warning("user: \(empty.joined(separator: ", ")) empty, left out of the requests")
+        Logger.warning("user: \(empty.joined(separator: ", ")) empty, \(empty.contains("id") ? "no ads request is sent" : "left out of the requests")")
+    }
+
+    /// Guards an ads request: the server requires the viewer's id (`KontextVideo.shared.user`). Returns the user
+    /// when it has one; without it (or with an empty id) a debug build stops here, a release build logs, and the
+    /// caller fails the request with `missingUser`, sending nothing.
+    static func requireUser(_ user: KontextVideo.User?) -> KontextVideo.User? {
+        if let user, !user.id.isEmpty { return user }
+        Environment.assertionFailure("KontextVideo: set KontextVideo.shared.user before requesting ads; the server requires the viewer's id")
+        Logger.error("no user set (KontextVideo.shared.user, a non-empty id): the ads request is not sent")
+        return nil
+    }
+
+    /// The `section` and `variantId` of a `VideoAds`: one non-empty string of at most `maxPlacementLength`
+    /// characters each, as the server takes them. Anything else would make every request fail: a programmer
+    /// error, which stops a debug build; a release build logs it and leaves the value out of the requests.
+    static func checkPlacement(section: String?, variantId: String?) {
+        for (name, value) in [("section", section), ("variantId", variantId)] {
+            guard let value, VideoAds.sendable(value) == nil else { continue }
+            let problem = value.isEmpty ? "is empty" : "is longer than \(VideoAds.maxPlacementLength) characters"
+            Environment.assertionFailure("VideoAds: \(name) \(problem)")
+            Logger.error("VideoAds: \(name) \(problem); left out of the requests")
+        }
     }
 }
 

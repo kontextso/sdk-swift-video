@@ -13,7 +13,7 @@ struct ContentPayload: Encodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, language, mediaRating, url, title, categories, description, duration, episodeNumber, keywords, genre, series
+        case id, language, mediaRating, url, title, description, duration, episodeNumber, keywords, genre, series
     }
 
     func encode(to encoder: Encoder) throws {
@@ -23,7 +23,6 @@ struct ContentPayload: Encodable, Sendable {
         try container.encodeIfPresent(content.mediaRating?.rawValue, forKey: .mediaRating)
         try container.encodeIfPresent(content.url, forKey: .url)
         try container.encodeIfPresent(content.title, forKey: .title)
-        try container.encodeIfPresent(content.categories, forKey: .categories)
         try container.encodeIfPresent(content.description, forKey: .description)
         // A NaN (`AVPlayerItem.duration.seconds` before the item is ready, or live), infinite, negative or
         // absurd duration is left out rather than trapped on: it is contextual signal, not the ad.
@@ -56,7 +55,8 @@ struct SeriesPayload: Encodable, Sendable {
     }
 }
 
-/// The `user` object: empty strings are left out, an empty id, address or hash identifies nobody.
+/// The `user` object: `id` always (the request is not built without one), empty optional strings left out: an
+/// empty address or hash identifies nobody.
 struct UserPayload: Encodable, Sendable {
     let user: KontextVideo.User
 
@@ -70,7 +70,7 @@ struct UserPayload: Encodable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(user.id.flatMap { $0.isEmpty ? nil : $0 }, forKey: .id)
+        try container.encode(user.id, forKey: .id)
         try container.encodeIfPresent(user.email.flatMap { $0.isEmpty ? nil : $0 }, forKey: .email)
         try container.encodeIfPresent(user.emailHash.flatMap { $0.isEmpty ? nil : $0 }, forKey: .emailHash)
         try container.encodeIfPresent(user.keywords, forKey: .keywords)
@@ -128,15 +128,15 @@ extension KontextVideo.Content {
 }
 
 // COPPA: a child's request carries no identifier for advertising: no advertising id, no IDFV (Apple's Kids rules
-// name device identifiers), no user id or email. The install id stays: the server needs it. The rule is here, in
-// one place; the request sends what these return.
+// name device identifiers), no email or email hash. The user id and the install id stay: the server needs them, and
+// its privacy decision keeps them from buyers. The rule is here, in one place; the request sends what these return.
 extension Optional where Wrapped == KontextVideo.Regulatory {
     /// Whether the request is for a child: the publisher said COPPA applies (`coppa`).
     var isChild: Bool { self?.coppa == true }
 
-    /// The user the request sends: for a child only what does not identify them (`withoutIdentity`).
-    func userToSend(_ user: KontextVideo.User?) -> KontextVideo.User? {
-        isChild ? user?.withoutIdentity : user
+    /// The user the request sends: for a child without the email and its hash (`withoutEmail`).
+    func userToSend(_ user: KontextVideo.User) -> KontextVideo.User {
+        isChild ? user.withoutEmail : user
     }
 
     /// A device identifier the request sends (the advertising id, the IDFV): none for a child.
@@ -147,14 +147,17 @@ extension Optional where Wrapped == KontextVideo.Regulatory {
 
 /// The request's rules for the app's user: a COPPA request's user, the fields left out.
 extension KontextVideo.User {
-    /// The user without what identifies the viewer (id, email, email hash), for a COPPA request; `nil`
-    /// when nothing else is left.
-    var withoutIdentity: KontextVideo.User? {
-        keywords == nil ? nil : KontextVideo.User(keywords: keywords)
+    /// The user without the email and its hash, for a COPPA request: the id and the keywords stay.
+    var withoutEmail: KontextVideo.User {
+        KontextVideo.User(id: id, keywords: keywords)
     }
 
-    /// Fields set to an empty string, which the request leaves out; an empty `id` is also an assertion.
+    /// Fields set to an empty string: an empty `id` stops every request and is an assertion; an empty email or
+    /// hash is left out.
     var emptyFields: [String] {
-        [("id", id), ("email", email), ("emailHash", emailHash)].compactMap { $0.1?.isEmpty == true ? $0.0 : nil }
+        var fields = id.isEmpty ? ["id"] : []
+        if email?.isEmpty == true { fields.append("email") }
+        if emailHash?.isEmpty == true { fields.append("emailHash") }
+        return fields
     }
 }

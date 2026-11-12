@@ -43,49 +43,44 @@ struct RequestTests {
 
     // MARK: AdsRequest
 
-    private func makeAdsRequest(playhead: TimeInterval = 12.345) async -> AdsRequest {
+    private func makeAdsRequest(playhead: TimeInterval = 12.345) async throws -> AdsRequest {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
-        KontextVideo.shared.variantID = "exp-b"
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: false)
-        return await AdsRequest.make(
+        return try await AdsRequest.make(
             sdk: KontextVideo.shared,
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
-            labels: ["stage": "first_episode", "layout": "fullscreen"],
+            section: "feed",
+            variantId: "exp-b",
             player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: Int((playhead * 1000).rounded())),
-            sessionId: "s-1",
-            held: ["a-1", "a-2"]
+            sessionId: "s-1"
         )
     }
 
-    @Test func aCOPPARequestCarriesNoIdentifierForAdvertising() async throws {
+    /// A request with nothing optional: no section, no variant, the screen's player.
+    private func bareRequest(tracking: TrackingInfo = TrackingInfo(ifa: nil, status: .denied), sessionId: String = "s") async throws -> [String: Any] {
+        try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration, tracking: tracking,
+            content: KontextVideo.Content(id: "v", language: "en"), section: nil, variantId: nil, player: .make(playhead: 0), sessionId: sessionId
+        ))
+    }
+
+    @Test func aCOPPARequestCarriesTheUserIdButNoOtherIdentifier() async throws {
         KontextVideo.shared.user = KontextVideo.User(id: "u1", email: "kid@example.com", emailHash: "h", keywords: ["cartoons"])
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: true)
-        let request = await AdsRequest.make(
-            sdk: KontextVideo.shared,
-            configuration: configuration,
-            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
-            content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
-            labels: [:],
-            player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: 0),
-            sessionId: "s-1",
-            held: []
-        )
-        let json = try Fixtures.encode(request)
+        let json = try await bareRequest(tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized))
         #expect(json["ifa"] == nil, "no advertising id for a child")
         #expect(json["idfv"] == nil, "no IDFV for a child")
         #expect(json["installId"] is String, "the install id stays")
-        #expect(json["user"] as? [String: [String]] == ["keywords": ["cartoons"]], "no id, email or hash; keywords stay")
+        let user = json["user"] as? [String: Any]
+        #expect(user?["id"] as? String == "u1", "the user id stays: the server keeps it from buyers")
+        #expect(user?["keywords"] as? [String] == ["cartoons"])
+        #expect(user?["email"] == nil && user?["emailHash"] == nil, "no email or hash for a child")
         #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == true)
 
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
-        let withoutKeywords = try Fixtures.encode(await AdsRequest.make(
-            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v1", language: "en", duration: 92), labels: [:],
-            player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: 0), sessionId: "s-1", held: []
-        ))
-        #expect(withoutKeywords["user"] == nil, "nothing left of the user")
+        #expect(try await bareRequest()["user"] as? [String: String] == ["id": "u1"], "the id alone")
     }
 
     @Test func adsRequestBodyHasEveryField() async throws {
@@ -95,6 +90,7 @@ struct RequestTests {
         #expect(json["installId"] as? String == KontextVideo.installId)
         #expect((json["user"] as? [String: Any])?["id"] as? String == "u1")
         #expect(json["variantId"] as? String == "exp-b")
+        #expect(json["section"] as? String == "feed")
         #expect((json["ifa"] as? [String: Any])?["type"] as? String == "idfa")
         #expect((json["ifa"] as? [String: Any])?["limitAdTracking"] as? Bool == false)
         #expect(json["attStatus"] as? String == "authorized")
@@ -103,9 +99,10 @@ struct RequestTests {
         #expect(json["formats"] == nil, "no formats: the server answers every one")
         #expect(json["placementId"] == nil, "no placement ids on the wire")
         #expect(json["sessionId"] as? String == "s-1")
-        #expect(json["held"] as? [String] == ["a-1", "a-2"])
-        #expect(json["labels"] as? [String: String] == ["stage": "first_episode", "layout": "fullscreen"])
+        #expect(json["held"] == nil, "the server keeps the session's bids: no held ids")
+        #expect(json["labels"] == nil, "no labels: section replaced them")
         #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
+        #expect((json["video"] as? [String: Any])?["categories"] == nil, "no categories")
         let player = json["player"] as? [String: Any]
         #expect(player?["width"] as? Int == 390)
         #expect(player?["height"] as? Int == 844)
@@ -119,43 +116,50 @@ struct RequestTests {
     }
 
     @Test func anAdsRequestCarriesExactlyWhatWasSetAndNothingElse() async throws {
-        KontextVideo.shared.user = nil
-        KontextVideo.shared.variantID = nil
+        KontextVideo.shared.user = KontextVideo.User(id: "u0")
         KontextVideo.shared.regulatory = nil
-        let bare = try Fixtures.encode(await AdsRequest.make(
-            sdk: KontextVideo.shared, configuration: configuration,
-            tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
-            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
-        ))
+        let bare = try await bareRequest(tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized))
         #expect((bare["ifa"] as? [String: Any])?["id"] as? String == "6D92078A-8246-4BA4-AE5B-76104861E7DC", "the IDFA as given")
-        #expect(bare["user"] == nil && bare["variantId"] == nil, "nothing the app did not set")
-        #expect(bare["labels"] == nil, "no labels: the field is left out")
-        let again = try Fixtures.encode(await AdsRequest.make(
-            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
-        ))
+        #expect(bare["user"] as? [String: String] == ["id": "u0"], "the id, nothing the app did not set")
+        #expect(bare["variantId"] == nil && bare["section"] == nil, "no section or variant: the fields are left out")
+        let again = try await bareRequest()
         #expect(bare["requestId"] as? String != again["requestId"] as? String, "a new id per request")
         KontextVideo.shared.user = KontextVideo.User(id: "later")
-        let later = try Fixtures.encode(await AdsRequest.make(
-            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0), sessionId: "s", held: []
-        ))
+        let later = try await bareRequest()
         #expect((later["user"] as? [String: Any])?["id"] as? String == "later", "a change reaches the next request")
-        KontextVideo.shared.user = nil
+    }
+
+    @Test func withoutAUserNoRequestIsBuilt() async throws {
+        let assertions = AssertionLog()
+        for user in [nil, KontextVideo.User(id: "")] {
+            KontextVideo.shared.user = user
+            await #expect(throws: VideoAdError.request(.missingUser)) { try await bareRequest() }
+        }
+        #expect(assertions.all.contains { $0.contains("KontextVideo.shared.user") }, "a debug build stops: \(assertions.all)")
+    }
+
+    @Test func aSectionOrVariantTheServerWouldRefuseIsLeftOut() async throws {
+        KontextVideo.shared.user = KontextVideo.User(id: "u1")
+        let longest = String(repeating: "s", count: 128)
+        let fits = try Fixtures.encode(await AdsRequest.make(
+            sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
+            content: KontextVideo.Content(id: "v", language: "en"), section: longest, variantId: "v", player: .make(playhead: 0), sessionId: "s"
+        ))
+        #expect(fits["section"] as? String == longest && fits["variantId"] as? String == "v", "128 characters fit")
+        for bad in ["", String(repeating: "s", count: 129), String(repeating: "😀", count: 65)] {
+            let json = try Fixtures.encode(await AdsRequest.make(
+                sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
+                content: KontextVideo.Content(id: "v", language: "en"), section: bad, variantId: bad, player: .make(playhead: 0), sessionId: "s"
+            ))
+            #expect(json["section"] == nil && json["variantId"] == nil, "\(bad.utf16.count) UTF-16 units: left out")
+        }
     }
 
     @Test func adsRequestOmitsIfaWhenNotAuthorized() async throws {
-        var request = await makeAdsRequest()
-        request = await AdsRequest.make(
-            sdk: KontextVideo.shared, configuration: configuration,
-            tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), labels: [:], player: .make(playhead: 0),
-            sessionId: "s-2", held: []
-        )
-        let json = try Fixtures.encode(request)
+        KontextVideo.shared.user = KontextVideo.User(id: "u1")
+        let json = try await bareRequest(sessionId: "s-2")
         #expect(json["ifa"] == nil)
         #expect(json["attStatus"] as? String == "denied")
-        #expect(json["held"] as? [String] == [], "nothing held: an empty list, never absent")
     }
 
     // MARK: PlayerSnapshot

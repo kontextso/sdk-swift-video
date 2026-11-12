@@ -1,14 +1,17 @@
 import Foundation
 import UIKit
 
-/// The body of `POST /video/ads`: every format, for one video, for one `VideoAds` session.
+/// The body of `POST /video/ads`: every format, for one video, for one `VideoAds` session. Nothing about the ads
+/// the SDK holds: the server keeps a session's bids and re-serves an unshown one until it hears its outcome.
 struct AdsRequest: Encodable, Sendable {
     /// Where to send it; not part of the body.
     let adServerURL: URL
     let requestId: String
     let publisherToken: String
     let installId: String
-    let user: UserPayload?
+    /// Always: the server requires the viewer's id, and no request is built without one.
+    let user: UserPayload
+    /// The `VideoAds`'s A/B variant; left out when it has none.
     let variantId: String?
     let ifa: IFA?
     let idfv: String?
@@ -19,31 +22,28 @@ struct AdsRequest: Encodable, Sendable {
     let device: AdsDevice
     let player: PlayerSnapshot
     let video: ContentPayload
-    /// The labels given to `VideoAds(content:labels:)`; left out when there are none.
-    let labels: [String: String]?
+    /// Where in the app the player is, as the `VideoAds` names it; left out when it names none.
+    let section: String?
     /// One per `VideoAds`: the server keeps the bids it gave out per session.
     let sessionId: String
-    /// Ids of the unshown bids the SDK holds: the server re-serves them, anything else it gave this session
-    /// is spent.
-    let held: [String]
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, labels, sessionId, held
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, section, sessionId
     }
 
     /// Every wait first (the device facts, the user agent among them), then, with nothing left to wait for,
-    /// what the viewer or the app may change at any moment: the user, the variant, the consent, the
-    /// tracking status, the playhead and the held ids (`tracking`, `player` and `held` are read here, after the
-    /// waits; the last two throw for a `VideoAds` gone meanwhile). A consent update, an ATT answer or a reject
-    /// made while the request was being built is what it sends.
+    /// what the viewer or the app may change at any moment: the user, the consent, the tracking status and the
+    /// playhead (`tracking` and `player` are read here, after the waits; `player` throws for a `VideoAds` gone
+    /// meanwhile). A consent update or an ATT answer made while the request was being built is what it sends.
+    /// Without a user (cleared during the waits) it throws `missingUser` and nothing is sent. `section` and
+    /// `variantId` are the `VideoAds`'s, left out when the server would refuse them.
     @MainActor
     static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: @autoclosure () -> TrackingInfo, content: KontextVideo.Content,
-                     labels: [String: String], player: @autoclosure () throws -> PlayerSnapshot, sessionId: String,
-                     held: @autoclosure () throws -> [String]) async rethrows -> AdsRequest {
+                     section: String?, variantId: String?, player: @autoclosure () throws -> PlayerSnapshot, sessionId: String) async throws -> AdsRequest {
         let device = await AdsDevice.current()
         let tracking = tracking()
         let player = try player()
-        let held = try held()
+        guard let user = IntegrationGuard.requireUser(sdk.user) else { throw VideoAdError.request(.missingUser) }
         // A usable CMP value wins per field; the publisher fills in the rest. COPPA comes only from the publisher.
         let regulatory = ConsentStorage.read(merging: sdk.regulatory)
         return AdsRequest(
@@ -51,8 +51,8 @@ struct AdsRequest: Encodable, Sendable {
             requestId: UUID().uuidString.lowercased(),
             publisherToken: configuration.publisherToken,
             installId: KontextVideo.installId,
-            user: regulatory.userToSend(sdk.user).map(UserPayload.init),
-            variantId: sdk.variantID,
+            user: UserPayload(regulatory.userToSend(user)),
+            variantId: VideoAds.sendable(variantId),
             ifa: regulatory.deviceIdentifierToSend(tracking.ifa),
             idfv: regulatory.deviceIdentifierToSend(UIDevice.current.identifierForVendor?.uuidString),
             attStatus: tracking.attStatus,
@@ -62,9 +62,8 @@ struct AdsRequest: Encodable, Sendable {
             device: device,
             player: player,
             video: ContentPayload(content),
-            labels: labels.isEmpty ? nil : labels,
-            sessionId: sessionId,
-            held: held
+            section: VideoAds.sendable(section),
+            sessionId: sessionId
         )
     }
 }

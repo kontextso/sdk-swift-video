@@ -9,7 +9,7 @@ extension KontextVideo {
     /// Times are seconds in Swift and milliseconds on the wire. A plain value: the SDK encodes it itself.
     public struct Content: Sendable, Equatable, Hashable {
         /// A simplified rating: `explicit` content gets no ads that require safe content. Leave it unset
-        /// when you do not know: OpenRTB's media rating has no "unknown" value, so the SDK never defaults it.
+        /// when you do not know: the SDK never defaults it, and the server reads unset as unknown, not safe.
         public enum Rating: String, Sendable, Hashable {
             /// Suitable for every advertiser.
             case safe
@@ -42,14 +42,13 @@ extension KontextVideo {
         public let id: String
         /// BCP-47, for example "en" or "pt-BR". Required and non-empty, as `id`.
         public let language: String
-        /// Whether the video suits every advertiser; `nil` when you do not know.
+        /// Whether the video suits every advertiser; `nil` when you do not know. Unset means unknown, not safe:
+        /// the server then serves only ads that accept content of unknown rating, so set `.safe` when it is.
         public let mediaRating: Rating?
         /// The episode's public page.
         public let url: URL?
         /// The episode's public name.
         public let title: String?
-        /// IAB Content Taxonomy 3.0 ids.
-        public let categories: [String]?
         /// A short synopsis of the episode.
         public let description: String?
         /// Seconds, rounded to the nearest whole millisecond. Left out of the request when negative,
@@ -72,7 +71,6 @@ extension KontextVideo {
             mediaRating: Rating? = nil,
             url: URL? = nil,
             title: String? = nil,
-            categories: [String]? = nil,
             description: String? = nil,
             duration: TimeInterval? = nil,
             episodeNumber: Int? = nil,
@@ -85,7 +83,6 @@ extension KontextVideo {
             self.mediaRating = mediaRating
             self.url = url
             self.title = title
-            self.categories = categories
             self.description = description
             self.duration = duration
             self.episodeNumber = episodeNumber
@@ -99,7 +96,7 @@ extension KontextVideo {
         /// itself and break `Set` and dictionary keys.
         public static func == (lhs: Content, rhs: Content) -> Bool {
             lhs.id == rhs.id && lhs.language == rhs.language && lhs.mediaRating == rhs.mediaRating && lhs.url == rhs.url
-                && lhs.title == rhs.title && lhs.categories == rhs.categories && lhs.description == rhs.description
+                && lhs.title == rhs.title && lhs.description == rhs.description
                 && lhs.durationMs == rhs.durationMs && lhs.episodeNumber == rhs.episodeNumber && lhs.keywords == rhs.keywords
                 && lhs.genre == rhs.genre && lhs.series == rhs.series
         }

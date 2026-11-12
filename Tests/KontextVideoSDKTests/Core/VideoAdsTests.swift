@@ -118,7 +118,6 @@ struct VideoAdsTests {
         // Nothing held and nothing said: a no-fill, reason unknown.
         guard case .noFill(let reason)? = await error({ try await ads.format(.linear) }) else { Issue.record("expected noFill"); return }
         #expect(reason == .unknown)
-        #expect((harness.adsRequests.last?.body?["held"] as? [String])?.contains("img-p-kept") == true, "still listed in held")
         // An explicit no-fill for pause drops it, as before.
         harness.server.on("/v2/video/ads") { _ in .json(Fixtures.noFill()) }
         _ = await error { try await ads.format(.pause) }
@@ -193,7 +192,7 @@ struct VideoAdsTests {
         #expect(lookups == 1, "one lookup, not restarted by the request that gave up on it")
     }
 
-    @Test func anAdRejectedWhileTheUserAgentIsLookedUpIsNotSentAsHeld() async throws {
+    @Test func thePlayheadIsReadAfterTheUserAgentWait() async throws {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-ua-held"))
         let held = try await ads.format(.pause)
@@ -214,7 +213,7 @@ struct VideoAdsTests {
         release?.resume()
         _ = try await call.value
         let body = try #require(harness.adsRequests.last?.body)
-        #expect(body["held"] as? [String] == [], "rejected during the wait: not held")
+        #expect(body["held"] == nil, "no held ids on the wire: the server keeps the session's bids")
         #expect((body["player"] as? [String: Any])?["playhead"] as? Int == 7000, "the playhead after the wait")
     }
 
@@ -224,50 +223,82 @@ struct VideoAdsTests {
         #expect(harness.adsRequests.isEmpty)
     }
 
-    @Test func formatAsksForAllFormatsWithTheSessionAndWhatItHolds() async throws {
+    @Test func formatAsksForAllFormatsWithTheSession() async throws {
         let ads = await makeAds()
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p1"), "linear": Fixtures.linearAd(id: "vid-l1")])
         let pause = try await ads.format(.pause)
         #expect(pause.id == "img-p1")
         let first = harness.adsRequests[0].body
         #expect(first?["formats"] == nil, "no formats: every request is for all of them")
-        #expect(first?["held"] as? [String] == [])
+        #expect(first?["held"] == nil, "nothing about what the SDK holds")
         let session = first?["sessionId"] as? String
         #expect(session?.isEmpty == false)
 
         _ = try await ads.format(.linear)
         let second = harness.adsRequests[1].body
         #expect(second?["sessionId"] as? String == session, "one session per VideoAds")
-        #expect(Set(second?["held"] as? [String] ?? []) == ["img-p1", "vid-l1"], "both unshown bids are listed")
+        #expect(second?["held"] == nil)
     }
 
-    @Test func labelsGoWithEveryRequest() async throws {
+    @Test func theSectionAndTheVariantGoWithEveryRequest() async throws {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-l", language: "en"), labels: ["stage": "first_episode", "layout": "inline"])
+        let ads = VideoAds(content: .init(id: "ep-l", language: "en"), section: "feed", variantId: "exp-b")
+        #expect(ads.section == "feed" && ads.variantId == "exp-b")
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-l1")])
         _ = try await ads.format(.pause)
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.map { $0.body?["labels"] as? [String: String] } == Array(repeating: ["stage": "first_episode", "layout": "inline"], count: 2))
+        #expect(harness.adsRequests.map { $0.body?["section"] as? String } == ["feed", "feed"])
+        #expect(harness.adsRequests.map { $0.body?["variantId"] as? String } == ["exp-b", "exp-b"])
+        #expect(harness.adsRequests.allSatisfy { $0.body?["labels"] == nil }, "no labels on the wire")
         let bare = harness.player.ads(for: .init(id: "ep-n", language: "en"))
         _ = try await bare.format(.pause)
-        #expect(harness.adsRequests[2].body?["labels"] == nil, "none: left out")
+        #expect(harness.adsRequests[2].body?["section"] == nil && harness.adsRequests[2].body?["variantId"] == nil, "none: left out")
     }
 
-    @Test func labelsAreSentExactlyAsGivenWithoutChecks() async throws {
+    @Test func aSectionOrVariantTheServerWouldRefuseStopsADebugBuildAndIsLeftOut() async throws {
         _ = await harness.initialize()
-        Logger.level = .warning
-        defer { Logger.level = .warning }
-        var warnings: [String] = []
-        Logger.sink = { level, message in if level == .warning { warnings.append(message) } }
-        // A free format on purpose: any key, any value, any number of them.
-        var labels = ["stage": "unlock", "my-ad": "x", "Player Layout": String(repeating: "é", count: 80), "empty": ""]
-        for index in 1...25 { labels["k\(index)"] = "v" }
-        let ads = VideoAds(content: .init(id: "ep-d", language: "en"), labels: labels)
-        #expect(ads.labels == labels)
-        #expect(!warnings.contains { $0.contains("label") }, "no warning: \(warnings)")
+        let assertions = AssertionLog()
+        let ads = VideoAds(content: .init(id: "ep-d", language: "en"), section: "", variantId: String(repeating: "v", count: 129))
+        #expect(assertions.all == ["VideoAds: section is empty", "VideoAds: variantId is longer than 128 characters"])
+        _ = VideoAds(content: .init(id: "ep-ok", language: "en"), section: String(repeating: "s", count: 128), variantId: "b")
+        #expect(assertions.all.count == 2, "128 characters fit")
         harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
         _ = try await ads.format(.linear)
-        #expect(harness.adsRequests[0].body?["labels"] as? [String: String] == labels, "what the app gave is what goes")
+        #expect(harness.adsRequests[0].body?["section"] == nil && harness.adsRequests[0].body?["variantId"] == nil, "a release build leaves them out")
+    }
+
+    @Test func withoutAUserFormatThrowsMissingUserAndSendsNothing() async throws {
+        let ads = await makeAds()
+        let assertions = AssertionLog()
+        KontextVideo.shared.user = nil
+        harness.serve(Fixtures.ad(id: "img-nu"))
+        #expect(await error { try await ads.format(.pause) } == .request(.missingUser))
+        #expect(harness.adsRequests.isEmpty, "no network call")
+        #expect(assertions.all.count == 1 && assertions.all.first?.contains("KontextVideo.shared.user") == true, "\(assertions.all)")
+        KontextVideo.shared.user = KontextVideo.User(id: "u-later")
+        #expect(try await ads.format(.pause).id == "img-nu", "set: the next call asks")
+        #expect((harness.adsRequests.first?.body?["user"] as? [String: Any])?["id"] as? String == "u-later")
+    }
+
+    @Test func aUserClearedWhileTheRequestWaitsStopsIt() async throws {
+        let ads = await makeAds()
+        let assertions = AssertionLog()
+        harness.serve(Fixtures.ad(id: "img-nu2"))
+        UserAgent.lookup = nil
+        var released = false
+        var asked = false
+        Environment.userAgent = {
+            asked = true
+            while !released { await sleepMs(5) }
+            return "Mozilla/5.0 (test)"
+        }
+        let call = Task { try await ads.format(.pause) }
+        #expect(await waitUntil { asked })
+        KontextVideo.shared.user = nil
+        released = true
+        #expect(await error { try await call.value } == .request(.missingUser))
+        #expect(harness.adsRequests.isEmpty, "nothing sent")
+        #expect(assertions.all.count == 1)
     }
 
     @Test func everyVideoAdsHasItsOwnSession() async throws {
@@ -295,13 +326,11 @@ struct VideoAdsTests {
         Environment.consentDefaults.set("TC-STR", forKey: "IABTCF_TCString")
         let ads = await makeAds()
         KontextVideo.shared.user = KontextVideo.User(id: "someone")
-        KontextVideo.shared.variantID = "b"
         harness.serve(Fixtures.ad(id: "img-p3"))
         _ = try await ads.format(.pause)
         let body = harness.adsRequests.first?.body
         #expect((body?["regulatory"] as? [String: Any])?["gdprConsent"] as? String == "TC-STR")
         #expect((body?["user"] as? [String: Any])?["id"] as? String == "someone")
-        #expect(body?["variantId"] as? String == "b")
     }
 
     // MARK: Following the server
@@ -338,7 +367,6 @@ struct VideoAdsTests {
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-p6"), "overlay": Fixtures.overlayAd(id: "img-o6")])
         let overlay = try await ads.format(.overlay)
         #expect(overlay.id == "img-o6")
-        #expect(Set(harness.adsRequests[1].body?["held"] as? [String] ?? []) == ["img-p6", "img-o6"])
     }
 
     @Test func aNewIdReplacesTheHeldBidWhateverTheSDKsClockSays() async throws {
@@ -370,7 +398,6 @@ struct VideoAdsTests {
         #expect(held.invalidationReason == .expired)
         harness.serve(Fixtures.ad(id: "img-p10"))
         #expect(try await ads.format(.pause).id == "img-p10", "the next call asks again")
-        #expect(harness.adsRequests[2].body?["held"] as? [String] == [])
     }
 
     @Test func aFormatWithoutAConfigurationIsANoFill() async {
@@ -410,7 +437,6 @@ struct VideoAdsTests {
         advanceClock(by: 31)
         harness.serve(Fixtures.ad(id: "img-p12"))
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests[1].body?["held"] as? [String] == [], "an expired bid is not listed")
         #expect(ad.invalidationReason == .expired)
         #expect(await notUsedBeacons().isEmpty, "no expiry notice: the server knows expires")
     }
@@ -447,7 +473,6 @@ struct VideoAdsTests {
         let pause = Task { try await ads.format(.pause) }
         let linear = Task { try await ads.format(.linear) }
         #expect(await waitUntil { self.harness.adsRequests.count == 2 })
-        #expect(harness.adsRequests[1].body?["held"] as? [String] == ["img-e1"], "valid when the request left: held")
         advanceClock(by: 31)
         gate.open()
         #expect(try await linear.value.id == "vid-e1")
@@ -494,7 +519,6 @@ struct VideoAdsTests {
         harness.serve(Fixtures.ad(id: "img-after-failure"))
         #expect(try await ads.format(.pause).id == "img-after-failure", "the failed request is not reused")
         #expect(harness.adsRequests.count == 2)
-        #expect(harness.adsRequests[1].body?["held"] as? [String] == [])
     }
 
     @Test func serverErrorsAreRequestErrorsNeverRetried() async {
@@ -814,7 +838,6 @@ struct VideoAdsTests {
         let pause = Task { try await ads.format(.pause) }
         let linear = Task { try await ads.format(.linear) }
         #expect(await waitUntil { self.harness.adsRequests.count == 2 })
-        #expect(Set(harness.adsRequests.last?.body?["held"] as? [String] ?? []) == ["img-p20", "vid-l20"], "the request listed it before the reject")
         ad.reject()
         gate.open()
         do {
@@ -870,7 +893,7 @@ struct VideoAdsTests {
 
         ads.destroy()
         #expect(delegate.endReasons == [.destroyed])
-        #expect(Set(await notUsedBeacons(expecting: 2).map(\.adId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
+        #expect(Set(await notUsedBeacons(expecting: 2).map(\.bidId)) == ["img-p22", "vid-l22"], "every held bid, loaded or not; not the ad on screen")
         #expect(await notUsedBeacons().allSatisfy { $0.reason == "destroyed" })
         #expect(loaded.invalidationReason == .destroyed && unloaded.invalidationReason == .destroyed)
         do { try loaded.show(in: harness.player.view) } catch VideoAdError.destroyed {} catch {

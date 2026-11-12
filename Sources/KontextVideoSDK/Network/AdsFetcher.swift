@@ -50,7 +50,8 @@ final class AdsFetcher {
                 guard let owner, !owner.isDestroyed else { throw VideoAdError.destroyed }
                 return owner
             }
-            // 1. `/config`.
+            // 1. The user, then `/config`. Without the viewer's id the server refuses every request: nothing is sent.
+            guard IntegrationGuard.requireUser(KontextVideo.shared.user) != nil else { throw Self.failed(.missingUser, sessionId: sessionId) }
             let isEnabled: Bool
             do {
                 isEnabled = try await KontextVideo.shared.waitUntilEnabled()
@@ -97,16 +98,16 @@ final class AdsFetcher {
                 if case .disabled(let reason) = response { KontextVideo.shared.disable(reason: reason) }
                 try Self.checkIdsAgainstHeld(response, held: current().store.ads)
             } catch {
-                // 5. Once per request, here in the request every caller shares, not once per waiting caller.
+                // 6. Once per request, here in the request every caller shares, not once per waiting caller.
                 try current().checkStillUsable()
                 Logger.error("\(content.id): request \(body.requestId) failed, \(error)")
                 let failure = ErrorReport.FailedRequest(error)
                 let isDecoding: Bool = (error as? APIError)?.isDecoding ?? false
                 ErrorReporter.shared.report(isDecoding ? .adsDecodeFailed : .adsRequestFailed, requestId: body.requestId,
                                             sessionId: sessionId, failure: failure)
-                throw VideoAdError.request(VideoAdError.RequestFailure(error))
+                throw Self.failed(VideoAdError.RequestFailure(error), sessionId: sessionId)
             }
-            // 6. The answer.
+            // 7. The answer.
             return try Self.receive(response, requestId: body.requestId, owner: current())
         }
         request = task

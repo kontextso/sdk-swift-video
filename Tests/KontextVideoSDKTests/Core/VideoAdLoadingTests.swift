@@ -178,7 +178,6 @@ struct VideoAdLoadingTests {
         #expect(ad.invalidationReason == .creativeFailed(code: 502))
         harness.serve(Fixtures.ad(id: "img-8"))
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a failed ad is not held")
     }
 
     @Test func aCreativeThatNeverLoadsThrowsTheGeneralCode() async throws {
@@ -288,7 +287,6 @@ struct VideoAdLoadingTests {
         guard case .invalidated(.rejected) = failure else { Issue.record("expected invalidated(.rejected), got \(String(describing: failure))"); return }
         harness.serve(Fixtures.ad(id: "img-16"))
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.last?.body?["held"] as? [String] == [], "a rejected ad is not held")
     }
 
     @Test func rejectOutbidCarriesTheWinningPriceAndTheWinner() async throws {

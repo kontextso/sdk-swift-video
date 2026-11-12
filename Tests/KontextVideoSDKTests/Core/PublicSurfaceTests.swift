@@ -26,6 +26,7 @@ struct PublicSurfaceTests {
             case .timedOut: return "later"
             case .server(let status): return "later (\(status))"
             case .badResponse: return "report"
+            case .missingUser: return "set KontextVideo.shared.user"
             }
         }
         let error: Error = VideoAdError.request(.server(status: 503))
