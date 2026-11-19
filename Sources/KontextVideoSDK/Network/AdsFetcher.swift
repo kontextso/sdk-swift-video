@@ -41,7 +41,7 @@ final class AdsFetcher {
     private func start() -> Task<NoFills, Error> {
         guard let owner else { return Task { throw VideoAdError.destroyed } }
         let content = owner.content
-        let section = owner.section
+        let page = owner.page
         let variantId = owner.variantId
         let pendingBeacons = owner.pendingBeacons
         let sessionId = owner.sessionId
@@ -88,7 +88,7 @@ final class AdsFetcher {
             let body: AdsRequest
             do {
                 body = try await AdsRequest.make(sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo.read(answered: answered),
-                                                 content: content, section: section, variantId: variantId,
+                                                 content: content, page: page, variantId: variantId,
                                                  player: .make(playhead: current().playhead), sessionId: sessionId)
             } catch VideoAdError.request(let failure) {
                 // The user was cleared during the waits: nothing is sent.
@@ -99,7 +99,7 @@ final class AdsFetcher {
             try current().requestWasSent(body.requestId)
             Logger.debug("\(content.id): requesting at playhead \(body.player.playhead) ms")
             var properties: [String: ReportFormat.Value] = ["playhead": .number(Double(body.player.playhead))]
-            if let section = body.section { properties["section"] = .string(section) }
+            if let page = body.page { properties["page"] = .string(page) }
             DebugReporter.shared.event("ads.request", sessionId: sessionId, properties: properties)
 
             // 5. The POST, and the ids against what is held.

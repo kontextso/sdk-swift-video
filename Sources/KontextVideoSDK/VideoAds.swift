@@ -14,11 +14,11 @@ public final class VideoAds {
     /// `true` after `destroy()`: the object does nothing any more.
     public private(set) var isDestroyed = false
     /// Where in the app the player is, as given at creation; every request carries it.
-    public let section: String?
+    public let page: String?
     /// The A/B variant, as given at creation; every request carries it.
     public let variantId: String?
 
-    /// The longest `section` or `variantId` the server takes, in characters as it counts them (UTF-16 code units).
+    /// The longest `page` or `variantId` the server takes, in characters as it counts them (UTF-16 code units).
     static let maxPlacementLength = 128
 
     /// `value` as a request sends it: `nil` when it is empty or longer than `maxPlacementLength`, which the server
@@ -64,18 +64,18 @@ public final class VideoAds {
     /// one non-empty string of at most 128 characters (a debug build stops on anything else, a release build
     /// leaves it out).
     ///
-    /// - `section`: where in the app the player is, in the name agreed with Kontext (`"feed"`, `"episode"`).
+    /// - `page`: where in the app the player is, in the name agreed with Kontext (`"feed"`, `"episode"`).
     ///   The server's configuration picks the placements, and so the formats, that answer for it; `nil` is
     ///   the publisher's default. It describes where the ads play, never the viewer: no personal data.
     /// - `variantId`: the A/B variant these ads are for, agreed with Kontext; `nil` for none.
-    public init(content: KontextVideo.Content, section: String? = nil, variantId: String? = nil) {
+    public init(content: KontextVideo.Content, page: String? = nil, variantId: String? = nil) {
         self.content = content
-        self.section = section
+        self.page = page
         self.variantId = variantId
         Self.live.add(self)
         IntegrationGuard.requireInitialized("VideoAds(content:)")
         IntegrationGuard.checkContent(content, sessionId: sessionId)
-        IntegrationGuard.checkPlacement(section: section, variantId: variantId)
+        IntegrationGuard.checkPlacement(page: page, variantId: variantId)
         // An expired ad is otherwise dropped only at the next call; under memory pressure its renderer (the
         // WebView) is released at once. WebKit decides when its processes exit. Valid ads stay loaded: `show`
         // must stay instant.
@@ -110,7 +110,7 @@ public final class VideoAds {
     // MARK: Getting an ad
 
     /// The ad for one format: `try await ads.format(.pause)`, then its `price` and other facts, then
-    /// `load()` or `reject()`. Every call asks the server for all formats, and the answer carries those configured for the `section`; the server re-serves
+    /// `load()` or `reject()`. Every call asks the server for all formats, and the answer carries those configured for the `page`; the server re-serves
     /// an ad it gave this `VideoAds` unchanged until it is shown, rejected or expired, so the same ad (loaded or
     /// not) comes back, and ads for the other formats wait for their own `format(_:)` call. Calls made while a
     /// request runs share it (`async let` for several formats at once). A failed request returns the held

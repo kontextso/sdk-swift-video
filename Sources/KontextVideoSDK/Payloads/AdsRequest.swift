@@ -23,23 +23,23 @@ struct AdsRequest: Encodable, Sendable {
     let player: PlayerSnapshot
     let video: ContentPayload
     /// Where in the app the player is, as the `VideoAds` names it; left out when it names none.
-    let section: String?
+    let page: String?
     /// One per `VideoAds`: the server keeps the bids it gave out per session.
     let sessionId: String
 
     private enum CodingKeys: String, CodingKey {
-        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, section, sessionId
+        case requestId, publisherToken, installId, user, variantId, ifa, idfv, attStatus, regulatory, sdk, app, device, player, video, page, sessionId
     }
 
     /// Every wait first (the device facts, the user agent among them), then, with nothing left to wait for,
     /// what the viewer or the app may change at any moment: the user, the consent, the tracking status and the
     /// playhead (`tracking` and `player` are read here, after the waits; `player` throws for a `VideoAds` gone
     /// meanwhile). A consent update or an ATT answer made while the request was being built is what it sends.
-    /// Without a user (cleared during the waits) it throws `missingUser` and nothing is sent. `section` and
+    /// Without a user (cleared during the waits) it throws `missingUser` and nothing is sent. `page` and
     /// `variantId` are the `VideoAds`'s, left out when the server would refuse them.
     @MainActor
     static func make(sdk: KontextVideo, configuration: KontextVideo.Configuration, tracking: @autoclosure () -> TrackingInfo, content: KontextVideo.Content,
-                     section: String?, variantId: String?, player: @autoclosure () throws -> PlayerSnapshot, sessionId: String) async throws -> AdsRequest {
+                     page: String?, variantId: String?, player: @autoclosure () throws -> PlayerSnapshot, sessionId: String) async throws -> AdsRequest {
         let device = await AdsDevice.current()
         let tracking = tracking()
         let player = try player()
@@ -62,7 +62,7 @@ struct AdsRequest: Encodable, Sendable {
             device: device,
             player: player,
             video: ContentPayload(content),
-            section: VideoAds.sendable(section),
+            page: VideoAds.sendable(page),
             sessionId: sessionId
         )
     }

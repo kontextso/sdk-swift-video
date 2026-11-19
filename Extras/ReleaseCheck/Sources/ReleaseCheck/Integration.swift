@@ -25,7 +25,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
             genre: "romance",
             series: .init(id: "series-42", title: "Series", episodeCount: 6)
         )
-        let ads = VideoAds(content: content, section: "episode", variantId: "b")
+        let ads = VideoAds(content: content, page: "episode", variantId: "b")
         ads.track(player)
         self.ads = ads
         do {

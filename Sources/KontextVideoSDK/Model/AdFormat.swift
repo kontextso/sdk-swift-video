@@ -1,5 +1,5 @@
 /// The four ad formats. Every request asks for all of them; the answer carries the formats the publisher configured
-/// for the `VideoAds`'s `section`, and `ads.format(_:)` returns one. Top level on
+/// for the `VideoAds`'s `page`, and `ads.format(_:)` returns one. Top level on
 /// purpose, the one public type not nested under `KontextVideo` or `VideoAd`: it names the formats
 /// everywhere, and an app type of this name is not a realistic collision.
 public enum AdFormat: String, Sendable, CaseIterable {

@@ -18,7 +18,7 @@ The SDK imports UIKit and WebKit, so `swift build` on the host does not work; bu
 sdk-swift-video/
 ├── Sources/KontextVideoSDK/
 │   ├── KontextVideo.swift                          the shared instance: initialize, user, regulatory
-│   ├── VideoAds.swift                              one video's ads: format(_:), section and variantId, the shared request, the session and held bids, destroy, the playhead
+│   ├── VideoAds.swift                              one video's ads: format(_:), page and variantId, the shared request, the session and held bids, destroy, the playhead
 │   ├── VideoAd.swift                               one ad: the facts, load() (shared), reject(), show, dismiss, the one didEnd
 │   ├── VideoAdDelegate.swift, VideoAdError.swift   the on-screen callbacks; what format, load and show throw
 │   ├── KontextVideoSDK.docc                       the DocC catalog: the landing page of the API reference

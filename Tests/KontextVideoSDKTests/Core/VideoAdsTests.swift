@@ -240,31 +240,31 @@ struct VideoAdsTests {
         #expect(second?["held"] == nil)
     }
 
-    @Test func theSectionAndTheVariantGoWithEveryRequest() async throws {
+    @Test func thePageAndTheVariantGoWithEveryRequest() async throws {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-l", language: "en"), section: "feed", variantId: "exp-b")
-        #expect(ads.section == "feed" && ads.variantId == "exp-b")
+        let ads = VideoAds(content: .init(id: "ep-l", language: "en"), page: "feed", variantId: "exp-b")
+        #expect(ads.page == "feed" && ads.variantId == "exp-b")
         harness.serve(formats: ["pause": Fixtures.ad(id: "img-l1")])
         _ = try await ads.format(.pause)
         _ = try await ads.format(.pause)
-        #expect(harness.adsRequests.map { $0.body?["section"] as? String } == ["feed", "feed"])
+        #expect(harness.adsRequests.map { $0.body?["page"] as? String } == ["feed", "feed"])
         #expect(harness.adsRequests.map { $0.body?["variantId"] as? String } == ["exp-b", "exp-b"])
         #expect(harness.adsRequests.allSatisfy { $0.body?["labels"] == nil }, "no labels on the wire")
         let bare = harness.player.ads(for: .init(id: "ep-n", language: "en"))
         _ = try await bare.format(.pause)
-        #expect(harness.adsRequests[2].body?["section"] == nil && harness.adsRequests[2].body?["variantId"] == nil, "none: left out")
+        #expect(harness.adsRequests[2].body?["page"] == nil && harness.adsRequests[2].body?["variantId"] == nil, "none: left out")
     }
 
-    @Test func aSectionOrVariantTheServerWouldRefuseStopsADebugBuildAndIsLeftOut() async throws {
+    @Test func aPageOrVariantTheServerWouldRefuseStopsADebugBuildAndIsLeftOut() async throws {
         _ = await harness.initialize()
         let assertions = AssertionLog()
-        let ads = VideoAds(content: .init(id: "ep-d", language: "en"), section: "", variantId: String(repeating: "v", count: 129))
-        #expect(assertions.all == ["VideoAds: section is empty", "VideoAds: variantId is longer than 128 characters"])
-        _ = VideoAds(content: .init(id: "ep-ok", language: "en"), section: String(repeating: "s", count: 128), variantId: "b")
+        let ads = VideoAds(content: .init(id: "ep-d", language: "en"), page: "", variantId: String(repeating: "v", count: 129))
+        #expect(assertions.all == ["VideoAds: page is empty", "VideoAds: variantId is longer than 128 characters"])
+        _ = VideoAds(content: .init(id: "ep-ok", language: "en"), page: String(repeating: "s", count: 128), variantId: "b")
         #expect(assertions.all.count == 2, "128 characters fit")
         harness.serve(formats: ["linear": Fixtures.linearAd(id: "vid-d1")])
         _ = try await ads.format(.linear)
-        #expect(harness.adsRequests[0].body?["section"] == nil && harness.adsRequests[0].body?["variantId"] == nil, "a release build leaves them out")
+        #expect(harness.adsRequests[0].body?["page"] == nil && harness.adsRequests[0].body?["variantId"] == nil, "a release build leaves them out")
     }
 
     @Test func withoutAUserFormatThrowsMissingUserAndSendsNothing() async throws {

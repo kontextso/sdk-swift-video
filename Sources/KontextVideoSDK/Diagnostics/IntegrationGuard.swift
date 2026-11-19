@@ -2,7 +2,7 @@ import Foundation
 
 /// The checks of how the app uses the SDK: a call before `initialize(with:)`, an unusable configuration, a
 /// video's content the server would refuse, an ads request without a user, a user with empty fields, a
-/// `section` or `variantId` the server would refuse. Each is a mistake in the app's code, not a
+/// `page` or `variantId` the server would refuse. Each is a mistake in the app's code, not a
 /// runtime condition, and each is handled the same way: a debug build stops at it (`Environment.assertionFailure`,
 /// with the message), a release build logs it and carries on, and what Kontext should hear of is reported
 /// (`ErrorReporter`, stage `integration`).
@@ -101,11 +101,11 @@ enum IntegrationGuard {
         return nil
     }
 
-    /// The `section` and `variantId` of a `VideoAds`: one non-empty string of at most `maxPlacementLength`
+    /// The `page` and `variantId` of a `VideoAds`: one non-empty string of at most `maxPlacementLength`
     /// characters each, as the server takes them. Anything else would make every request fail: a programmer
     /// error, which stops a debug build; a release build logs it and leaves the value out of the requests.
-    static func checkPlacement(section: String?, variantId: String?) {
-        for (name, value) in [("section", section), ("variantId", variantId)] {
+    static func checkPlacement(page: String?, variantId: String?) {
+        for (name, value) in [("page", page), ("variantId", variantId)] {
             guard let value, VideoAds.sendable(value) == nil else { continue }
             let problem = value.isEmpty ? "is empty" : "is longer than \(VideoAds.maxPlacementLength) characters"
             Environment.assertionFailure("VideoAds: \(name) \(problem)")

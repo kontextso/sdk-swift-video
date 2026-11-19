@@ -98,7 +98,7 @@ final class Playback: ObservableObject {
         playerView.playerLayer.videoGravity = .resizeAspectFill
         // Creating it sends nothing; the request goes out in prepare(). The SDK reads the playhead from the
         // player, and follows its playback: an overlay lives only while the content plays.
-        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), section: video.section)
+        ads = VideoAds(content: .init(id: video.id, language: "en", title: video.title, genre: "romance"), page: video.page)
         ads.track(player)
     }
 

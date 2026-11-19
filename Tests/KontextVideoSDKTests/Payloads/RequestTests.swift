@@ -51,18 +51,18 @@ struct RequestTests {
             configuration: configuration,
             tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized),
             content: KontextVideo.Content(id: "v1", language: "en", duration: 92),
-            section: "feed",
+            page: "feed",
             variantId: "exp-b",
             player: PlayerSnapshot(width: 390, height: 844, isFullscreen: true, playhead: Int((playhead * 1000).rounded())),
             sessionId: "s-1"
         )
     }
 
-    /// A request with nothing optional: no section, no variant, the screen's player.
+    /// A request with nothing optional: no page, no variant, the screen's player.
     private func bareRequest(tracking: TrackingInfo = TrackingInfo(ifa: nil, status: .denied), sessionId: String = "s") async throws -> [String: Any] {
         try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration, tracking: tracking,
-            content: KontextVideo.Content(id: "v", language: "en"), section: nil, variantId: nil, player: .make(playhead: 0), sessionId: sessionId
+            content: KontextVideo.Content(id: "v", language: "en"), page: nil, variantId: nil, player: .make(playhead: 0), sessionId: sessionId
         ))
     }
 
@@ -90,7 +90,7 @@ struct RequestTests {
         #expect(json["installId"] as? String == KontextVideo.installId)
         #expect((json["user"] as? [String: Any])?["id"] as? String == "u1")
         #expect(json["variantId"] as? String == "exp-b")
-        #expect(json["section"] as? String == "feed")
+        #expect(json["page"] as? String == "feed")
         #expect((json["ifa"] as? [String: Any])?["type"] as? String == "idfa")
         #expect((json["ifa"] as? [String: Any])?["limitAdTracking"] as? Bool == false)
         #expect(json["attStatus"] as? String == "authorized")
@@ -100,7 +100,7 @@ struct RequestTests {
         #expect(json["placementId"] == nil, "no placement ids on the wire")
         #expect(json["sessionId"] as? String == "s-1")
         #expect(json["held"] == nil, "the server keeps the session's bids: no held ids")
-        #expect(json["labels"] == nil, "no labels: section replaced them")
+        #expect(json["labels"] == nil, "no labels: page replaced them")
         #expect((json["video"] as? [String: Any])?["duration"] as? Int == 92_000)
         #expect((json["video"] as? [String: Any])?["categories"] == nil, "no categories")
         let player = json["player"] as? [String: Any]
@@ -121,7 +121,7 @@ struct RequestTests {
         let bare = try await bareRequest(tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized))
         #expect((bare["ifa"] as? [String: Any])?["id"] as? String == "6D92078A-8246-4BA4-AE5B-76104861E7DC", "the IDFA as given")
         #expect(bare["user"] as? [String: String] == ["id": "u0"], "the id, nothing the app did not set")
-        #expect(bare["variantId"] == nil && bare["section"] == nil, "no section or variant: the fields are left out")
+        #expect(bare["variantId"] == nil && bare["page"] == nil, "no page or variant: the fields are left out")
         let again = try await bareRequest()
         #expect(bare["requestId"] as? String != again["requestId"] as? String, "a new id per request")
         KontextVideo.shared.user = KontextVideo.User(id: "later")
@@ -141,20 +141,20 @@ struct RequestTests {
         #expect((try await bareRequest()["user"] as? [String: Any])?["id"] as? String == String(repeating: "u", count: 256), "256 fit")
     }
 
-    @Test func aSectionOrVariantTheServerWouldRefuseIsLeftOut() async throws {
+    @Test func aPageOrVariantTheServerWouldRefuseIsLeftOut() async throws {
         KontextVideo.shared.user = KontextVideo.User(id: "u1")
         let longest = String(repeating: "s", count: 128)
         let fits = try Fixtures.encode(await AdsRequest.make(
             sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-            content: KontextVideo.Content(id: "v", language: "en"), section: longest, variantId: "v", player: .make(playhead: 0), sessionId: "s"
+            content: KontextVideo.Content(id: "v", language: "en"), page: longest, variantId: "v", player: .make(playhead: 0), sessionId: "s"
         ))
-        #expect(fits["section"] as? String == longest && fits["variantId"] as? String == "v", "128 characters fit")
+        #expect(fits["page"] as? String == longest && fits["variantId"] as? String == "v", "128 characters fit")
         for bad in ["", String(repeating: "s", count: 129), String(repeating: "😀", count: 65)] {
             let json = try Fixtures.encode(await AdsRequest.make(
                 sdk: KontextVideo.shared, configuration: configuration, tracking: TrackingInfo(ifa: nil, status: .denied),
-                content: KontextVideo.Content(id: "v", language: "en"), section: bad, variantId: bad, player: .make(playhead: 0), sessionId: "s"
+                content: KontextVideo.Content(id: "v", language: "en"), page: bad, variantId: bad, player: .make(playhead: 0), sessionId: "s"
             ))
-            #expect(json["section"] == nil && json["variantId"] == nil, "\(bad.utf16.count) UTF-16 units: left out")
+            #expect(json["page"] == nil && json["variantId"] == nil, "\(bad.utf16.count) UTF-16 units: left out")
         }
     }
 

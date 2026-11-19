@@ -39,11 +39,11 @@ struct DebugEventsTests {
 
     @Test func theRequestAndItsFailuresAreDebugEvents() async throws {
         _ = await harness.initialize()
-        let ads = VideoAds(content: .init(id: "ep-dbg", language: "en"), section: "feed")
+        let ads = VideoAds(content: .init(id: "ep-dbg", language: "en"), page: "feed")
         harness.serve(Fixtures.ad(id: "img-dbg1"))
         _ = try await ads.format(.pause)
         let request = try #require(events("ads.request").last)
-        #expect(request.properties?["section"] == .string("feed"))
+        #expect(request.properties?["page"] == .string("feed"))
         #expect(request.properties?["held"] == nil, "no held count: nothing held goes on the wire")
         #expect(request.properties?["playhead"] != nil)
 

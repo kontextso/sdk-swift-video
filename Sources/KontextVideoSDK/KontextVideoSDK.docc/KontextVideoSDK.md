@@ -12,7 +12,7 @@ Three types carry an integration:
 
 - ``KontextVideo``: the shared instance. Initialize it once at launch; it also holds the viewer
   (``KontextVideo/user``, required before the first ads request) and their consent (``KontextVideo/regulatory``).
-- ``VideoAds``: the ads of one episode, in one section of the app. Create one per episode, track its player,
+- ``VideoAds``: the ads of one episode, in one page of the app. Create one per episode, track its player,
   and ``VideoAds/destroy()`` it when the viewer leaves.
 - ``VideoAd``: one ad. Read its ``VideoAd/price``, ``VideoAd/load()`` it or ``VideoAd/reject(_:)`` it, then
   show it.
@@ -31,12 +31,12 @@ KontextVideo.shared.initialize(with: .init(publisherToken: "yourapp-dev"))
 KontextVideo.shared.user = .init(id: viewerId)
 ```
 
-Create a ``VideoAds`` for each episode and track the player it plays in. Its `section` names where in the app
+Create a ``VideoAds`` for each episode and track the player it plays in. Its `page` names where in the app
 the player is, as agreed with Kontext; the server's configuration picks the formats it offers there. An A/B
 variant agreed with Kontext goes in `variantId`.
 
 ```swift
-let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), section: "episode")
+let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), page: "episode")
 ads.track(player)   // an AVPlayer, or your own player conformed to ContentPlayer
 ```
 
@@ -60,7 +60,7 @@ Call ``VideoAds/destroy()`` when the viewer leaves the episode.
 ## Formats
 
 ``AdFormat`` names the four formats. Every request asks for all of them; the answer carries the formats the
-publisher configured for the ``VideoAds/section``, and ``VideoAds/format(_:)`` returns one.
+publisher configured for the ``VideoAds/page``, and ``VideoAds/format(_:)`` returns one.
 
 - ``AdFormat/overlay``: a strip across the player while the content plays. Show it with
   ``VideoAd/show(in:insets:)``; it ends after its ``VideoAd/duration`` of video, or when the content stops.

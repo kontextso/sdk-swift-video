@@ -42,8 +42,8 @@ KontextVideo.shared.initialize(with: .init(publisherToken: "yourapp-dev"))
 // The viewer, before the first ads request: a guest id until they sign in, then the account id.
 KontextVideo.shared.user = .init(id: viewerId)
 
-// One VideoAds per episode, tracking the player it plays in; the section names where in the app it plays.
-let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), section: "episode")
+// One VideoAds per episode, tracking the player it plays in; the page names where in the app it plays.
+let ads = VideoAds(content: .init(id: "series-1-ep-6", language: "en"), page: "episode")
 ads.track(player)
 
 // Before the moment: get the ad and render it, so show is instant.

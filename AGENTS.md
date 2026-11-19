@@ -53,7 +53,7 @@ linear, two pause); the overlay and linear ads show 3 s in, a pause ad when the 
 
 - `KontextVideo.shared`: initialize (`/config`), `user` (required before an ads request), `regulatory`, the one ad on screen; the shell
   that moves `SdkState`.
-- `VideoAds`: one per video, with its `section` and `variantId`. `format(_:)` asks the server for all formats with the
+- `VideoAds`: one per video, with its `page` and `variantId`. `format(_:)` asks the server for all formats with the
   `VideoAds`'s `sessionId`; the server owns the bid state and re-serves a session's unshown bids until they
   expire; the SDK follows the response. One request at a time, shared by every caller (`Platform/AwaitShared.swift`).
 - `VideoAd`: what `format(_:)` returns, nothing rendered yet; the facts (`price`, `duration`), `load()` (shared)
