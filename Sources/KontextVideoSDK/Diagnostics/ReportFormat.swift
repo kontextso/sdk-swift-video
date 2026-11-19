@@ -18,7 +18,7 @@ enum ReportFormat {
     }
 
     /// A string, a number or a boolean: a debug event's properties, and so an error report's history.
-    enum Value: Encodable, Sendable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
+    enum Value: Encodable, Sendable, Equatable, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, ExpressibleByBooleanLiteral {
         case string(String)
         case number(Double)
         case bool(Bool)

@@ -18,27 +18,19 @@ struct AdPayload: Decodable, Sendable {
         case frame(URL)
     }
 
+    /// `model` is not read: the contract has one, `cpm`. A `precision` an older server still sends is ignored.
     struct Price: Decodable, Sendable, Equatable {
-        enum Precision: String, Decodable, Sendable {
-            /// A DSP's clearing price.
-            case exact
-            /// Our own or house demand, a forecast.
-            case estimated
-        }
-
         /// Per 1,000 impressions.
         let value: Double
         /// ISO 4217.
         let currency: String
-        let precision: Precision
 
-        init(value: Double, currency: String, precision: Precision) {
+        init(value: Double, currency: String) {
             self.value = value
             self.currency = currency
-            self.precision = precision
         }
 
-        private enum CodingKeys: String, CodingKey { case value, currency, precision }
+        private enum CodingKeys: String, CodingKey { case value, currency }
 
         /// A finite, non-negative CPM in a three-letter currency: the publisher's auction compares it.
         init(from decoder: Decoder) throws {
@@ -52,7 +44,6 @@ struct AdPayload: Decodable, Sendable {
             guard currency.utf8.count == 3, currency.utf8.allSatisfy({ (65...90).contains($0) }) else {
                 throw DecodingError.dataCorruptedError(forKey: .currency, in: container, debugDescription: "the currency must be an ISO 4217 code")
             }
-            precision = try container.decode(Precision.self, forKey: .precision)
         }
     }
 
@@ -229,9 +220,9 @@ struct AdPayload: Decodable, Sendable {
         case top, bottom
     }
 
-    /// Where a pause ad sits.
+    /// Where a pause card sits; the full player is the `pauseFullscreen` format.
     enum PausePosition: String, Decodable, Sendable {
-        case top, bottom, fullscreen
+        case top, bottom
     }
 
     /// What each format adds to the common fields.
@@ -241,8 +232,10 @@ struct AdPayload: Decodable, Sendable {
         /// assets for, at least one, the first built for the request's player; the SDK picks the best fit
         /// for the real box at show.
         case overlay(position: OverlayPosition, sizes: [Size], duration: Int?)
-        /// `sizes` is empty for the fullscreen variant.
+        /// `sizes`: as an overlay's.
         case pause(position: PausePosition, sizes: [Size])
+        /// The whole player: no position to choose, no sizes.
+        case pauseFullscreen
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
         case linear(duration: Int, skipOffset: Int?)
     }
@@ -346,8 +339,13 @@ struct AdPayload: Decodable, Sendable {
                 duration: try nonNegative(.duration, in: container)
             )
         case .pause:
-            let position = try container.decode(PausePosition.self, forKey: .position)
-            return .pause(position: position, sizes: position == .fullscreen ? [] : try sizes(from: container))
+            // A `fullscreen` pause ad is the `pauseFullscreen` format now: dropped at `position`, as any unknown one.
+            return .pause(position: try container.decode(PausePosition.self, forKey: .position), sizes: try sizes(from: container))
+        case .pauseFullscreen:
+            guard try container.decode(String.self, forKey: .position) == "fullscreen" else {
+                throw DecodingError.dataCorruptedError(forKey: .position, in: container, debugDescription: "a pauseFullscreen ad is fullscreen")
+            }
+            return .pauseFullscreen
         case .linear:
             let duration = try milliseconds(.duration, in: container)
             // A video of no length has nothing to play, and its progress beacons no moment to fire at.

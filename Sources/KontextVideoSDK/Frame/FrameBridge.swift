@@ -47,7 +47,7 @@ final class FrameBridge: NSObject {
         }
     }
 
-    let adId: String
+    let bidId: String
     let webView: FrameWebView
     /// The protocol's rules and state: what each message means, and whether it counts now.
     private(set) var frameProtocol: FrameProtocol
@@ -62,9 +62,9 @@ final class FrameBridge: NSObject {
 
     /// `videoDuration`: the video's length when the server gives one (a linear ad); without it the playhead is
     /// capped at a day.
-    init(adId: String, url: URL, isVideo: Bool, videoDuration: TimeInterval? = nil) {
-        self.adId = adId
-        frameProtocol = FrameProtocol(adId: adId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
+    init(bidId: String, url: URL, isVideo: Bool, videoDuration: TimeInterval? = nil) {
+        self.bidId = bidId
+        frameProtocol = FrameProtocol(bidId: bidId, pageURL: url, isVideo: isVideo, videoDuration: videoDuration)
 
         webView = FrameWebView(asksBeforeMediaCapture: Environment.asksBeforeMediaCapture(), schemeHandlers: Environment.schemeHandlers)
         super.init()
@@ -83,7 +83,7 @@ final class FrameBridge: NSObject {
         // state after that (Swift 6), and the logger's message is a closure.
         let webView = self.webView
         let timeout = loadTimeoutTask
-        let id = adId.prefix(8)
+        let id = bidId.prefix(8)
         Logger.debug("frame \(id): released")
         let teardown: @MainActor () -> Void = {
             timeout?.cancel()
@@ -113,7 +113,7 @@ final class FrameBridge: NSObject {
     /// to park in; the same active-time check parks it on the first tick the app is active again, or a video
     /// creative would never buffer and the timeout would fail a working ad.
     func load() {
-        Logger.debug("frame \(adId.prefix(8)): loading \(frameProtocol.pageURL)")
+        Logger.debug("frame \(bidId.prefix(8)): loading \(frameProtocol.pageURL)")
         parkOffscreen()
         webView.load(URLRequest(url: frameProtocol.pageURL))
         // The app's return from a suspension, for the ticks below.
@@ -142,7 +142,7 @@ final class FrameBridge: NSObject {
                 last = now
             }
             guard let self, state == .loading else { return }
-            Logger.warning("frame \(adId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
+            Logger.warning("frame \(bidId.prefix(8)): no ad.loaded within \(Int(Self.loadTimeout)) s")
             fail(.error(code: frameProtocol.loadErrorCode), cause: .loadTimeout)
         }
     }
@@ -184,7 +184,7 @@ final class FrameBridge: NSObject {
     /// the choice is the screen's (`InlineScreen.chosenSize`).
     func show(size: VideoAd.Size? = nil) {
         guard frameProtocol.show() else {
-            Logger.warning("frame \(adId.prefix(8)): show() in state \(state), ignored")
+            Logger.warning("frame \(bidId.prefix(8)): show() in state \(state), ignored")
             return
         }
         if let size {
@@ -216,11 +216,11 @@ final class FrameBridge: NSObject {
     /// Every message sent to the page, for tests.
     var onSend: ((String, [String: Any]) -> Void)?
 
-    /// The envelope as the page receives it: `{ adId, type, ...payload }`; `nil` when it is not valid JSON.
+    /// The envelope as the page receives it: `{ bidId, type, ...payload }`; `nil` when it is not valid JSON.
     /// Checked first: `JSONSerialization` raises an Objective-C exception, which no `try` catches, for a NaN or
     /// infinite number (an exposure measured on a view with a degenerate transform), and the app would crash.
-    static func envelope(adId: String, type: String, payload: [String: Any]) -> String? {
-        var message: [String: Any] = ["adId": adId, "type": type]
+    static func envelope(bidId: String, type: String, payload: [String: Any]) -> String? {
+        var message: [String: Any] = ["bidId": bidId, "type": type]
         payload.forEach { message[$0.key] = $0.value }
         guard JSONSerialization.isValidJSONObject(message),
               let data = try? JSONSerialization.data(withJSONObject: message, options: [.sortedKeys]) else { return nil }
@@ -229,9 +229,9 @@ final class FrameBridge: NSObject {
 
     private func send(_ type: String, _ payload: [String: Any] = [:]) {
         onSend?(type, payload)
-        guard let json = Self.envelope(adId: adId, type: type, payload: payload) else { return }
+        guard let json = Self.envelope(bidId: bidId, type: type, payload: payload) else { return }
         webView.evaluateJavaScript("window.postMessage(\(json), window.location.origin)") { _, error in
-            if let error { Logger.debug("frame \(self.adId.prefix(8)): \(type) not delivered, \(error.localizedDescription)") }
+            if let error { Logger.debug("frame \(self.bidId.prefix(8)): \(type) not delivered, \(error.localizedDescription)") }
         }
     }
 
@@ -248,22 +248,22 @@ final class FrameBridge: NSObject {
             return
         case .drop(let log, let warning, let violation):
             if warning {
-                Logger.warning("frame \(adId.prefix(8)): \(log)")
+                Logger.warning("frame \(bidId.prefix(8)): \(log)")
             } else {
-                Logger.debug("frame \(adId.prefix(8)): \(log)")
+                Logger.debug("frame \(bidId.prefix(8)): \(log)")
             }
             if let violation {
-                ErrorReporter.shared.report(.protocolViolation, bidId: adId, detail: violation)
+                ErrorReporter.shared.report(.protocolViolation, bidId: bidId, detail: violation)
             }
         case .loaded:
-            Logger.debug("frame \(adId.prefix(8)): ← ad.loaded")
+            Logger.debug("frame \(bidId.prefix(8)): ← ad.loaded")
             loadTimeoutTask?.cancel()
             onEvent?(.loaded)
         case .deliver(let event):
-            Logger.debug("frame \(adId.prefix(8)): ← \(event)")
+            Logger.debug("frame \(bidId.prefix(8)): ← \(event)")
             onEvent?(event)
         case .endThenDeliver(let event):
-            Logger.debug("frame \(adId.prefix(8)): ← \(event)")
+            Logger.debug("frame \(bidId.prefix(8)): ← \(event)")
             // The page's own error; its close and skip end the page as plainly.
             if case .error = event { failureCause = .page }
             end()
@@ -303,7 +303,7 @@ final class FrameBridge: NSObject {
     /// the load timeout as a timeout.
     func redirectedWhileLoading(to target: URL) {
         guard state == .loading else { return }
-        Logger.warning("frame \(adId.prefix(8)): the page redirected to \(target.host ?? "another origin") while loading; the load fails")
+        Logger.warning("frame \(bidId.prefix(8)): the page redirected to \(target.host ?? "another origin") while loading; the load fails")
         fail(.error(code: frameProtocol.loadErrorCode), cause: .loadFailed)
     }
 
@@ -312,7 +312,7 @@ final class FrameBridge: NSObject {
     /// page loads (a tag's popunder, from any frame) is dropped like that and does not fail the load.
     func externalNavigation(to target: URL) {
         guard let click = frameProtocol.externalNavigation(to: target, now: Environment.now()) else {
-            Logger.warning("frame \(adId.prefix(8)): navigation to \(target.absoluteString) cancelled")
+            Logger.warning("frame \(bidId.prefix(8)): navigation to \(target.absoluteString) cancelled")
             return
         }
         onEvent?(click)

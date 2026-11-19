@@ -35,6 +35,7 @@ struct PublicTypesTests {
         let requests: [(VideoAdError.RequestFailure, String)] = [
             (.offline, "request failed (offline)"), (.timedOut, "request failed (timedOut)"),
             (.server(status: 503), "request failed (server(503))"), (.badResponse, "request failed (badResponse)"),
+            (.missingUser, "request failed (missingUser)"),
         ]
         for (failure, expected) in requests {
             let error = VideoAdError.request(failure)

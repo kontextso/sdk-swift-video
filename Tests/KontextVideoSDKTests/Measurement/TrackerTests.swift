@@ -17,11 +17,11 @@ struct TrackerTests {
 
     private func makeTracker(video: Bool = true) throws -> Tracker {
         let entries = try Fixtures.payload(video ? Fixtures.linearAd(id: "ad-1") : Fixtures.ad(id: "ad-1")).tracking
-        return Tracker(adId: "ad-1", entries: entries)
+        return Tracker(bidId: "ad-1", entries: entries)
     }
 
     /// The beacons once `expected` arrived, plus a short settle so a stray extra one would show.
-    private func fired(_ expected: Int) async -> [(adId: String, event: String, query: [String: String])] {
+    private func fired(_ expected: Int) async -> [(bidId: String, event: String, query: [String: String])] {
         _ = await waitUntil { self.server.beacons.count >= expected }
         await sleepMs(50)
         return server.beacons
@@ -30,7 +30,7 @@ struct TrackerTests {
     @Test func aBeaconNeverDownloadsTheBodyOfItsResponse() async throws {
         server.on("/big/", .streamed(6 * 1024 * 1024))
         server.on("/chunked/", .streamed(6 * 1024 * 1024, chunked: true))
-        let tracker = Tracker(adId: "ad-1", entries: [
+        let tracker = Tracker(bidId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/big/impression", offset: nil, part: nil),
             AdPayload.TrackingEvent(event: "creativeView", url: "https://ads.test/chunked/creativeView", offset: nil, part: nil),
         ])
@@ -53,6 +53,29 @@ struct TrackerTests {
         let tracker = try makeTracker()
         tracker.fire("impression")
         #expect(await waitUntil { lines.all.contains { $0.contains("impression beacon answered 500") } })
+    }
+
+    @Test func onlyTheOutcomeBeaconsAreCountedUntilTheyEndAnsweredOrFailed() async throws {
+        let gate = StubServer.Gate()
+        defer { gate.open() }
+        var held = StubServer.Response.empty()
+        held.gate = gate
+        server.on("/events/ad-1/notUsed", held)
+        server.on("/events/ad-1/error", .failure(.cannotConnectToHost))
+        let tracker = try makeTracker()
+        let pending = PendingBeacons()
+        tracker.pending = pending
+        tracker.fire("impression")
+        tracker.fire("click")
+        #expect(pending.inFlight == 0, "nothing the server needs before the next request")
+        tracker.fire("error", errorCode: 405)
+        tracker.fire("notUsed", notUsed: .notUsed)
+        #expect(pending.inFlight == 2)
+        #expect(await waitUntil { pending.inFlight == 1 }, "a failed beacon ended too")
+        #expect(await pending.settled(within: 0.05) == false, "the notUsed is still out: the cap ends the wait")
+        gate.open()
+        #expect(await pending.settled(within: 10), "answered: nothing in flight")
+        #expect(pending.inFlight == 0)
     }
 
     /// Log lines collected from URLSession's queue.
@@ -97,7 +120,7 @@ struct TrackerTests {
         let entry = { (event: String, copy: Int) in
             AdPayload.TrackingEvent(event: event, url: "https://ads.test/events/ad-1/\(event)?copy=\(copy)&fid=[KONTEXT_FIREID]", offset: nil, part: nil)
         }
-        let tracker = Tracker(adId: "ad-1", entries: [entry("impression", 1), entry("impression", 2), entry("click", 1), entry("click", 2), entry("click", 3)])
+        let tracker = Tracker(bidId: "ad-1", entries: [entry("impression", 1), entry("impression", 2), entry("click", 1), entry("click", 2), entry("click", 3)])
         let impression = tracker.fire("impression")
         let click = tracker.fire("click")
         let beacons = await fired(5)
@@ -140,7 +163,7 @@ struct TrackerTests {
         let entry = { (offset: Int) in
             AdPayload.TrackingEvent(event: "progress", url: "https://ads.test/events/ad-1/progress?offset=\(offset)&fid=[KONTEXT_FIREID]", offset: offset, part: nil)
         }
-        let tracker = Tracker(adId: "ad-1", entries: [entry(5000), entry(10_000), entry(15_000)])
+        let tracker = Tracker(bidId: "ad-1", entries: [entry(5000), entry(10_000), entry(15_000)])
         tracker.fireProgress(upTo: 4999)
         tracker.fireProgress(upTo: 10_200)   // the page skipped 5000 and rounded 10 000 up
         tracker.fireProgress(upTo: 10_200)
@@ -199,7 +222,7 @@ struct TrackerTests {
     }
 
     @Test func theDeprecatedContentPlayheadIsFilledLikeMediaPlayhead() async throws {
-        let tracker = Tracker(adId: "ad-1", entries: [
+        let tracker = Tracker(bidId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?old=[CONTENTPLAYHEAD]&new=[MEDIAPLAYHEAD]&x=[KONTEXT_UNKNOWN]", offset: nil, part: nil),
         ])
         var reads = 0
@@ -214,7 +237,7 @@ struct TrackerTests {
     }
 
     @Test func aPartlyEncodedPlayheadMacroIsStillFilled() async throws {
-        let tracker = Tracker(adId: "ad-1", entries: [
+        let tracker = Tracker(bidId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?new=%5BMEDIAPLAYHEAD]&old=[CONTENTPLAYHEAD%5D", offset: nil, part: nil),
         ])
         var reads = 0
@@ -239,7 +262,7 @@ struct TrackerTests {
     }
 
     @Test func theContentPlayheadIsNotReadWhenNoURLAsksForIt() async throws {
-        let tracker = Tracker(adId: "ad-1", entries: [
+        let tracker = Tracker(bidId: "ad-1", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?cb=[CACHEBUSTING]", offset: nil, part: nil),
         ])
         var reads = 0
@@ -253,7 +276,7 @@ struct TrackerTests {
         let entry = { (offset: Int, copy: Int) in
             AdPayload.TrackingEvent(event: "progress", url: "https://ads.test/events/ad-1/progress?offset=\(offset)&copy=\(copy)&fid=[KONTEXT_FIREID]", offset: offset, part: nil)
         }
-        let tracker = Tracker(adId: "ad-1", entries: [entry(10_000, 1), entry(5000, 1), entry(10_000, 2), entry(15_000, 1)])
+        let tracker = Tracker(bidId: "ad-1", entries: [entry(10_000, 1), entry(5000, 1), entry(10_000, 2), entry(15_000, 1)])
         tracker.fireProgress(upTo: 12_000)
         tracker.fireProgress(upTo: 12_000)
         let beacons = await fired(3)
@@ -286,7 +309,7 @@ struct TrackerTests {
     @Test func invalidURLsAreSkippedWithoutStoppingOthers() async throws {
         let invalid = AdPayload.TrackingEvent(event: "impression", url: "", offset: nil, part: nil)   // the one string URL(string:) still refuses
         let valid = { (copy: Int) in AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ad-1/impression?copy=\(copy)", offset: nil, part: nil) }
-        let tracker = Tracker(adId: "ad-1", entries: [invalid, valid(1), invalid, valid(2), invalid])
+        let tracker = Tracker(bidId: "ad-1", entries: [invalid, valid(1), invalid, valid(2), invalid])
         tracker.fire("impression")
         let copies = await fired(2).compactMap { $0.query["copy"] }.sorted()
         #expect(copies == ["1", "2"], "invalid entries before and between valid ones stop nothing")
@@ -294,11 +317,11 @@ struct TrackerTests {
 
     // MARK: Page events
 
-    /// Every beacon name the SDK fires, once each, for ad `adId`; progress at 1 s and 5 s; the end card's view.
-    private func everyEntry(_ adId: String) -> [AdPayload.TrackingEvent] {
+    /// Every beacon name the SDK fires, once each, for ad `bidId`; progress at 1 s and 5 s; the end card's view.
+    private func everyEntry(_ bidId: String) -> [AdPayload.TrackingEvent] {
         let names = ["impression", "loaded", "error", "iconClick", "creativeView", "start", "firstQuartile", "midpoint", "thirdQuartile",
                      "pause", "resume", "mute", "unmute", "skip", "complete", "click", "close", "notUsed"]
-        let base = "https://ads.test/events/\(adId)/"
+        let base = "https://ads.test/events/\(bidId)/"
         return names.map { AdPayload.TrackingEvent(event: $0, url: base + "\($0)?aph=[ADPLAYHEAD]&code=[ERRORCODE]", offset: nil, part: nil) }
             + [1000, 5000].map { (offset: Int) in
                 AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=\(offset)", offset: offset, part: nil)
@@ -307,7 +330,7 @@ struct TrackerTests {
     }
 
     /// A beacon written short: `name`, `name(part)`, `progress@offset`.
-    private func short(_ beacon: (adId: String, event: String, query: [String: String])) -> String {
+    private func short(_ beacon: (bidId: String, event: String, query: [String: String])) -> String {
         if let offset = beacon.query["offset"] { return "\(beacon.event)@\(offset)" }
         return beacon.query["part"].map { "\(beacon.event)(\($0))" } ?? beacon.event
     }
@@ -339,29 +362,29 @@ struct TrackerTests {
             ("completeTwice", [.complete(playhead: 9000), .complete(playhead: 9000)], true,
              ["start", "progress@1000", "progress@5000", "complete", "creativeView(endCard)"]),
         ]
-        for (adId, events, started, _) in rows {
-            let tracker = Tracker(adId: adId, entries: everyEntry(adId))
+        for (bidId, events, started, _) in rows {
+            let tracker = Tracker(bidId: bidId, entries: everyEntry(bidId))
             if started { tracker.record(.video(.start, playhead: 0)) }
             events.forEach(tracker.record)
         }
         let total = rows.reduce(0) { $0 + $1.3.count }
         let beacons = await fired(total)
         #expect(beacons.count == total, "\(beacons.count) beacons, \(total) expected")
-        for (adId, _, _, expected) in rows {
-            let seen = beacons.filter { $0.adId == adId }.map(short).sorted()
-            #expect(seen == expected.sorted(), "\(adId)")
+        for (bidId, _, _, expected) in rows {
+            let seen = beacons.filter { $0.bidId == bidId }.map(short).sorted()
+            #expect(seen == expected.sorted(), "\(bidId)")
         }
-        let skip = try #require(beacons.first { $0.adId == "skip" && $0.event == "skip" })
+        let skip = try #require(beacons.first { $0.bidId == "skip" && $0.event == "skip" })
         #expect(skip.query["aph"] == "00:00:06.000", "the beacon carries the event's playhead")
-        let error = try #require(beacons.first { $0.adId == "error" })
+        let error = try #require(beacons.first { $0.bidId == "error" })
         #expect(error.query["code"] == "405" && error.query["aph"] == "00:00:00.000")
-        let loaded = try #require(beacons.first { $0.adId == "loaded" })
+        let loaded = try #require(beacons.first { $0.bidId == "loaded" })
         #expect(loaded.query["code"]?.isEmpty == true, "[ERRORCODE] is empty on any other beacon")
     }
 
     @Test func aPartAndAnOffsetSelectOnlyTheirOwnEntries() async throws {
         let base = "https://ads.test/events/parts/"
-        let tracker = Tracker(adId: "parts", entries: [
+        let tracker = Tracker(bidId: "parts", entries: [
             AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=1000&part=endCard", offset: 1000, part: "endCard"),
             AdPayload.TrackingEvent(event: "progress", url: base + "progress?offset=none", offset: nil, part: nil),
             AdPayload.TrackingEvent(event: "click", url: base + "click?part=endCard", offset: nil, part: "endCard"),
@@ -378,9 +401,9 @@ struct TrackerTests {
 
     // MARK: The content playhead
 
-    private func playheadTracker(_ adId: String) -> Tracker {
-        Tracker(adId: adId, entries: ["impression", "start", "pause"].map {
-            AdPayload.TrackingEvent(event: $0, url: "https://ads.test/events/\(adId)/\($0)?m=[MEDIAPLAYHEAD]", offset: nil, part: nil)
+    private func playheadTracker(_ bidId: String) -> Tracker {
+        Tracker(bidId: bidId, entries: ["impression", "start", "pause"].map {
+            AdPayload.TrackingEvent(event: $0, url: "https://ads.test/events/\(bidId)/\($0)?m=[MEDIAPLAYHEAD]", offset: nil, part: nil)
         })
     }
 
@@ -413,7 +436,7 @@ struct TrackerTests {
     }
 
     @Test func thePlayerIsNotReadWhenNothingAsksForItUnlessAClickThroughDoes() {
-        let tracker = Tracker(adId: "ph-none", entries: [
+        let tracker = Tracker(bidId: "ph-none", entries: [
             AdPayload.TrackingEvent(event: "impression", url: "https://ads.test/events/ph-none/impression", offset: nil, part: nil),
         ])
         var reads = 0

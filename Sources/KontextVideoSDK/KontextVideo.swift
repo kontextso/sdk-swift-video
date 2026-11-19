@@ -1,7 +1,7 @@
 import KontextKit
 
 /// The Kontext Video SDK's entry point, the one shared instance an app talks to: `initialize(with:)` once at launch,
-/// then the viewer's facts (`user`, `regulatory`, `variantID`) whenever they change, and `state` to read.
+/// then the viewer's facts (`user`, `regulatory`) whenever they change, and `state` to read.
 ///
 /// Why one shared instance: the SDK has one configuration, one `/config` and one ad on screen per app, as
 /// established ad SDKs do. It is the shell around `SdkState`: it starts `/config` (`ConfigFetcher`), retries it
@@ -54,8 +54,10 @@ public final class KontextVideo {
     /// once the SDK is disabled. Nothing notifies a change: read it when you decide.
     public var state: State { sdkState.phase }
 
-    /// What the publisher knows about the viewer. Set it whenever you learn it, for example after login;
-    /// the next ads request carries it. Ads already loaded or fetched keep the targeting they were requested with.
+    /// The viewer: required before the first ads request, whose `format(_:)` otherwise throws
+    /// `request(.missingUser)` without sending anything (a debug build stops on an assertion). Set it as soon as
+    /// you know who watches (a guest id the app keeps, then the account id after login); the next ads request
+    /// carries it. Ads already loaded or fetched keep the targeting they were requested with.
     public var user: User? {
         get { sdkState.user }
         set {
@@ -69,11 +71,6 @@ public final class KontextVideo {
     public var regulatory: Regulatory? {
         get { sdkState.regulatory }
         set { sdkState.recordRegulatory(newValue) }
-    }
-    /// Selects which type of ad to render, for A/B testing. Agreed between the publisher and Kontext.
-    public var variantID: String? {
-        get { sdkState.variantID }
-        set { sdkState.recordVariantID(newValue) }
     }
 
     /// Whether `initialize(with:)` was called; not whether `/config` succeeded, which is `state`.

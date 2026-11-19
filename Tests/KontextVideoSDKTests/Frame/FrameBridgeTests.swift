@@ -18,7 +18,7 @@ struct FrameBridgeTests {
     init() { SDKHarness.reset() }
 
     private func makeBridge(isVideo: Bool = false, url: URL? = nil, videoDuration: TimeInterval? = nil) -> (FrameBridge, Recorder) {
-        let bridge = FrameBridge(adId: "ad-1", url: url ?? self.url, isVideo: isVideo, videoDuration: videoDuration)
+        let bridge = FrameBridge(bidId: "ad-1", url: url ?? self.url, isVideo: isVideo, videoDuration: videoDuration)
         let recorder = Recorder()
         bridge.onEvent = { recorder.events.append($0) }
         return (bridge, recorder)
@@ -29,8 +29,8 @@ struct FrameBridgeTests {
         var last: FrameEvent? { events.last }
     }
 
-    private func message(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> [String: Any] {
-        var body: [String: Any] = ["adId": adId, "type": type]
+    private func message(_ type: String, _ extra: [String: Any] = [:], bidId: String = "ad-1") -> [String: Any] {
+        var body: [String: Any] = ["bidId": bidId, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         return body
     }
@@ -53,8 +53,8 @@ struct FrameBridgeTests {
     }
 
     /// `message` as the page posts it: `JSON.stringify(message)`.
-    private func json(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> String {
-        String(data: try! JSONSerialization.data(withJSONObject: message(type, extra, adId: adId)), encoding: .utf8)!
+    private func json(_ type: String, _ extra: [String: Any] = [:], bidId: String = "ad-1") -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: message(type, extra, bidId: bidId)), encoding: .utf8)!
     }
 
     @Test func aMessagePostedAsAJSONStringIsTheSameMessage() {
@@ -70,7 +70,7 @@ struct FrameBridgeTests {
         bridge.receive(json("ad.click", ["url": "https://brand.test/landing", "area": "cta"]), from: main)
         guard case .click(let url, _, _)? = recorder.last else { Issue.record("expected click"); return }
         #expect(url.absoluteString == "https://brand.test/landing")
-        bridge.receive(json("ad.loaded", adId: "ad-2"), from: main)
+        bridge.receive(json("ad.loaded", bidId: "ad-2"), from: main)
         #expect(recorder.events.count == 4, "the same checks: another ad's id is dropped")
     }
 
@@ -213,7 +213,7 @@ struct FrameBridgeTests {
         Environment.isApplicationActive = { true }
         Environment.parkingWindow = { ParkingWindow.window }
         FrameBridge.loadTimeout = 30
-        let bridge = FrameBridge(adId: "img-blank", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-blank")!, isVideo: false)
+        let bridge = FrameBridge(bidId: "img-blank", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-blank")!, isVideo: false)
         defer { bridge.hide() }
         let recorder = Recorder()
         bridge.onEvent = { recorder.events.append($0) }
@@ -356,17 +356,18 @@ struct FrameBridgeTests {
     }
 
     @Test func envelopeIsTheProtocolsShape() throws {
-        let json = try #require(FrameBridge.envelope(adId: "ad-1", type: "ad.exposure", payload: ["exposedPercentage": 0.75]))
+        let json = try #require(FrameBridge.envelope(bidId: "ad-1", type: "ad.exposure", payload: ["exposedPercentage": 0.75]))
         let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
-        #expect(object?["adId"] as? String == "ad-1")
+        #expect(object?["bidId"] as? String == "ad-1")
+        #expect(object?["adId"] == nil, "the id is the bid's, under its own name")
         #expect(object?["type"] as? String == "ad.exposure")
         #expect(object?["exposedPercentage"] as? Double == 0.75)
     }
 
     @Test func anEnvelopeWithANonFiniteNumberIsDroppedNotACrash() {
         // JSONSerialization raises an Objective-C exception for these, which would take the app down.
-        #expect(FrameBridge.envelope(adId: "ad-1", type: "ad.exposure", payload: ["exposedPercentage": Double.nan]) == nil)
-        #expect(FrameBridge.envelope(adId: "ad-1", type: "ad.exposure", payload: ["visibleRectangle": ["x": CGFloat.infinity]]) == nil)
+        #expect(FrameBridge.envelope(bidId: "ad-1", type: "ad.exposure", payload: ["exposedPercentage": Double.nan]) == nil)
+        #expect(FrameBridge.envelope(bidId: "ad-1", type: "ad.exposure", payload: ["visibleRectangle": ["x": CGFloat.infinity]]) == nil)
     }
 
     // MARK: Parking
@@ -464,7 +465,7 @@ struct FrameBridgeTests {
         func loadedBridge() async -> FrameBridge? {
             var causes: [String] = []
             for _ in 0..<2 {
-                let bridge = FrameBridge(adId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
+                let bridge = FrameBridge(bidId: "img-capture", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-capture")!, isVideo: false)
                 var loaded = false
                 bridge.onEvent = { if case .loaded = $0 { loaded = true } }
                 bridge.load()

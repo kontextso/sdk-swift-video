@@ -35,7 +35,7 @@ enum LinearPresentation {
     /// watchdog stops once `isPending` turns false (the ad ended, or was presented). After `timeout`, a
     /// controller that never reached a window failed; one that did, without the completion, is taken as
     /// presented after five times that.
-    static func present(_ controller: LinearAdViewController, from presenter: UIViewController, adId: String, timeout: TimeInterval,
+    static func present(_ controller: LinearAdViewController, from presenter: UIViewController, bidId: String, timeout: TimeInterval,
                         isPending: @escaping @MainActor () -> Bool, onPresented: @escaping @MainActor () -> Void,
                         onFailed: @escaping @MainActor () -> Void) {
         // Asked now, while the presenter presents nothing it could forward the question to.
@@ -56,10 +56,10 @@ enum LinearPresentation {
             guard isPending() else { return }
             // Taken as presented only on evidence the viewer can see it: a visible window, an active app.
             if let window = controller.viewIfLoaded?.window, !window.isHidden, window.alpha > ViewExposure.transparent, Environment.isWindowActive(window) {
-                Logger.warning("ad \(adId.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
+                Logger.warning("ad \(bidId.prefix(8)): UIKit never confirmed the presentation, but the controller is on screen; taken as presented")
                 onPresented()
             } else {
-                Logger.error("ad \(adId.prefix(8)): UIKit did not present the linear ad; ended as failed")
+                Logger.error("ad \(bidId.prefix(8)): UIKit did not present the linear ad; ended as failed")
                 onFailed()
             }
         }

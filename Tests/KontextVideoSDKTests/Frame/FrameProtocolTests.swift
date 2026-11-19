@@ -24,15 +24,15 @@ struct FrameProtocolTests {
         var last: FrameEvent? { events.last }
     }
 
-    private func message(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> [String: Any] {
-        var body: [String: Any] = ["adId": adId, "type": type]
+    private func message(_ type: String, _ extra: [String: Any] = [:], bidId: String = "ad-1") -> [String: Any] {
+        var body: [String: Any] = ["bidId": bidId, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         return body
     }
 
     /// `message` as the page posts it: `JSON.stringify(message)`.
-    private func json(_ type: String, _ extra: [String: Any] = [:], adId: String = "ad-1") -> String {
-        String(data: try! JSONSerialization.data(withJSONObject: message(type, extra, adId: adId)), encoding: .utf8)!
+    private func json(_ type: String, _ extra: [String: Any] = [:], bidId: String = "ad-1") -> String {
+        String(data: try! JSONSerialization.data(withJSONObject: message(type, extra, bidId: bidId)), encoding: .utf8)!
     }
 
     /// `ad.loaded` then `ad.show`: the state most messages need.
@@ -49,7 +49,7 @@ struct FrameProtocolTests {
 
     @Test func aStringThatIsNotAJSONObjectOrIsTooLongIsDropped() {
         let (page, recorder) = makePage()
-        for body in ["[1, 2]", "\"ad.loaded\"", "42", "not json", "", "{\"adId\": \"ad-1\", \"type\": "] {
+        for body in ["[1, 2]", "\"ad.loaded\"", "42", "not json", "", "{\"bidId\": \"ad-1\", \"type\": "] {
             page.receive(body, from: main)
         }
         let padding = String(repeating: "x", count: FrameMessage.maxMessageBytes)
@@ -61,10 +61,10 @@ struct FrameProtocolTests {
 
     @Test func messagesFromAnotherAdMalformedOrFromAnotherFrameAreDropped() {
         let cases: [(label: String, body: Any, sender: FrameProtocol.Sender)] = [
-            ("another ad's id", message("ad.loaded", adId: "ad-2"), main),
+            ("another ad's id", message("ad.loaded", bidId: "ad-2"), main),
             ("not an object", "ad.loaded", main),
-            ("no type", ["adId": "ad-1"], main),
-            ("no adId", ["type": "ad.loaded"], main),
+            ("no type", ["bidId": "ad-1"], main),
+            ("no bidId", ["type": "ad.loaded"], main),
             ("a subframe", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: false, scheme: "https", host: "server.kontext.so", port: 0)),
             ("another host", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: true, scheme: "https", host: "evil.test", port: 0)),
             ("another scheme", message("ad.loaded"), FrameProtocol.Sender(isMainFrame: true, scheme: "http", host: "server.kontext.so", port: 0)),

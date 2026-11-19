@@ -123,8 +123,8 @@ final class StubServer: @unchecked Sendable {
         requests.filter { $0.path.hasPrefix(path) }
     }
 
-    /// Beacons as `(event, query)` in arrival order, from the mock-shaped `/events/{adId}/{event}` URLs.
-    var beacons: [(adId: String, event: String, query: [String: String])] {
+    /// Beacons as `(event, query)` in arrival order, from the mock-shaped `/events/{bidId}/{event}` URLs.
+    var beacons: [(bidId: String, event: String, query: [String: String])] {
         requests(to: "/events/").compactMap { recorded in
             let parts = recorded.path.split(separator: "/")
             guard parts.count >= 3 else { return nil }

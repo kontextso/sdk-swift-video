@@ -28,14 +28,14 @@ struct VideoAdReentrancyTests {
         owners.all.append(ads)
         let ad = VideoAd(descriptor: try Fixtures.descriptor(payload), owner: ads)
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         return (ad, delegate, ads)
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
-        var body: [String: Any] = ["adId": ad.id, "type": type]
+        var body: [String: Any] = ["bidId": ad.id, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         ad.bridge.receive(body, from: sender)
     }
@@ -72,7 +72,7 @@ struct VideoAdReentrancyTests {
         }
         try ad.show(in: harness.player.view)
         #expect(reads == 1)
-        let shows = { self.harness.server.beacons.filter { $0.adId == "p11i" && ["creativeView", "iconView", "impression"].contains($0.event) } }
+        let shows = { self.harness.server.beacons.filter { $0.bidId == "p11i" && ["creativeView", "iconView", "impression"].contains($0.event) } }
         #expect(await waitUntil { shows().count == 3 })
         let playheads = Set(shows().compactMap { $0.query["cph"] })
         #expect(playheads == ["00:00:01.000"], "creativeView, iconView and the impression: one moment, \(playheads)")
@@ -110,7 +110,7 @@ struct VideoAdReentrancyTests {
     }
 
     @Test func aClickWhoseURLsAloneAskForThePlayheadReadsItOnce() async throws {
-        let tracking = Fixtures.tracking(video: false, adId: "p11u").map { entry -> [String: Any] in
+        let tracking = Fixtures.tracking(video: false, bidId: "p11u").map { entry -> [String: Any] in
             var entry = entry
             entry["url"] = (entry["url"] as? String ?? "").replacingOccurrences(of: "&cph=[MEDIAPLAYHEAD]", with: "")
             return entry
@@ -290,7 +290,7 @@ struct VideoAdReentrancyTests {
         try overlay.show(in: harness.player.view)
         let pause = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p13p")), owner: ads)
         pause.bridge.load()
-        pause.bridge.receive(["adId": pause.id, "type": "ad.loaded"], from: sender)
+        pause.bridge.receive(["bidId": pause.id, "type": "ad.loaded"], from: sender)
         let pauseDelegate = RecordingDelegate()
         pause.delegate = pauseDelegate
         var inner: Error?
@@ -354,7 +354,7 @@ struct VideoAdReentrancyTests {
         var ads: VideoAds? = harness.player.ads(for: .init(id: "ep-release", language: "en"))
         let ad = VideoAd(descriptor: try Fixtures.descriptor(Fixtures.ad(id: "p17r")), owner: try #require(ads))
         ad.bridge.load()
-        ad.bridge.receive(["adId": ad.id, "type": "ad.loaded"], from: sender)
+        ad.bridge.receive(["bidId": ad.id, "type": "ad.loaded"], from: sender)
         let delegate = RecordingDelegate()
         ad.delegate = delegate
         delegate.onEnd = { _, _ in ads = nil }

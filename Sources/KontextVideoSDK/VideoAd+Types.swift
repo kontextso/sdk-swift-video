@@ -2,29 +2,18 @@
 /// (`RejectReason`), what it finds out (`InvalidationReason`), and the SDK's own view of where the ad goes
 /// (`Size`, `Position`). The delegate's types, `Click` and `EndReason`, live with the delegate.
 extension VideoAd {
-    /// What an ad pays: a CPM in a currency, and whether that figure is a clearing price or a forecast.
+    /// What an ad pays: a CPM in a currency.
     public struct Price: Sendable, Equatable {
-        /// How firm `value` is.
-        public enum Precision: Sendable {
-            /// A DSP's clearing price.
-            case exact
-            /// Our own or house demand, a forecast.
-            case estimated
-        }
-
         /// Per 1,000 impressions.
         public let value: Double
         /// ISO 4217.
         public let currency: String
-        /// Whether `value` is a DSP's clearing price or a forecast.
-        public let precision: Precision
 
         /// For your own tests, such as an auction against other networks' prices: the SDK makes the prices of
         /// real ads from the server's answer.
-        public init(value: Double, currency: String, precision: Precision) {
+        public init(value: Double, currency: String) {
             self.value = value
             self.currency = currency
-            self.precision = precision
         }
     }
 

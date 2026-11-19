@@ -279,6 +279,8 @@ struct SDKHarness {
 
     init() {
         SDKHarness.reset()
+        // Every ads request needs the viewer's id; the tests of a missing user clear it.
+        KontextVideo.shared.user = KontextVideo.User(id: "test-user")
         server.install()
         server.on("/v2/config", .json(Fixtures.initEnabled()))
         server.on("/events/", .empty())
@@ -365,6 +367,7 @@ struct SDKHarness {
         ErrorReporter.retryDelay = 30
         ErrorReporter.maxRetryDelay = 300
         SKAdNetworkImpression.queue = nil
+        PendingBeacons.maxWait = 2
     }
 }
 
@@ -388,7 +391,7 @@ enum WebKitWarmup {
         Environment.isApplicationActive = { true }
         defer { (Environment.parkingWindow, Environment.isApplicationActive) = (parking, active) }
         FramePageServer().install()
-        let bridge = FrameBridge(adId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
+        let bridge = FrameBridge(bidId: "img-warmup", url: URL(string: "\(Fixtures.frameOrigin)/frame/img-warmup")!, isVideo: false)
         var loaded = false
         bridge.onEvent = { if case .loaded = $0 { loaded = true } }
         let timeout = FrameBridge.loadTimeout

@@ -7,27 +7,31 @@ import Testing
 @Suite
 struct FrameMessageTests {
     private func parse(_ raw: Any, limit: Int = 10_000) -> FrameMessage? {
-        FrameMessage.parse(raw, adId: "ad-1", playheadLimitMs: limit)
+        FrameMessage.parse(raw, bidId: "ad-1", playheadLimitMs: limit)
     }
 
     @Test func aBrokenEnvelopeIsNil() {
-        let head = "{\"adId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
+        let head = "{\"bidId\":\"ad-1\",\"type\":\"ad.loaded\",\"padding\":\"", tail = "\"}"
         let atLimit = head + String(repeating: "x", count: FrameMessage.maxMessageBytes - head.utf8.count - tail.utf8.count) + tail
         let cases: [(Any, Bool)] = [
-            (["adId": "ad-1", "type": "ad.loaded"], true),
-            ("{\"adId\":\"ad-1\",\"type\":\"ad.loaded\"}", true),
+            (["bidId": "ad-1", "type": "ad.loaded"], true),
+            ("{\"bidId\":\"ad-1\",\"type\":\"ad.loaded\"}", true),
             (atLimit, true),
             (head + "x" + atLimit.dropFirst(head.utf8.count), false),
-            (["adId": "ad-2", "type": "ad.loaded"], false),
+            (["bidId": "ad-2", "type": "ad.loaded"], false),
             (["type": "ad.loaded"], false),
-            (["adId": "ad-1"], false),
-            (["adId": "ad-1", "type": 7], false),
+            (["bidId": "ad-1"], false),
+            // The envelope's id is `bidId`; the old name alone, or with the wrong id under the new one, is another ad's.
+            (["adId": "ad-1", "type": "ad.loaded"], false),
+            (["adId": "ad-1", "bidId": "ad-2", "type": "ad.loaded"], false),
+            (["adId": "ad-1", "bidId": "ad-1", "type": "ad.loaded"], true),
+            (["bidId": "ad-1", "type": 7], false),
             ("not json", false),
             ("[1, 2]", false),
             (42, false),
             // An object's text within the string's budget, and over it.
-            (["adId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes / 2)], true),
-            (["adId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes + 1)], false),
+            (["bidId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes / 2)], true),
+            (["bidId": "ad-1", "type": "ad.click", "url": String(repeating: "x", count: FrameMessage.maxMessageBytes + 1)], false),
         ]
         for (index, (raw, parses)) in cases.enumerated() {
             #expect((parse(raw) != nil) == parses, "case \(index)")
@@ -40,7 +44,7 @@ struct FrameMessageTests {
             (Double.infinity, 0), ("100", 0),
         ]
         for (raw, expected) in cases {
-            var body: [String: Any] = ["adId": "ad-1", "type": "video.start"]
+            var body: [String: Any] = ["bidId": "ad-1", "type": "video.start"]
             body["playhead"] = raw
             #expect(parse(body)?.playheadMs == expected, "\(String(describing: raw))")
         }
@@ -48,20 +52,20 @@ struct FrameMessageTests {
 
     @Test func theFieldsAreReadAsSent() throws {
         let message = try #require(parse([
-            "adId": "ad-1", "type": "ad.click", "url": "https://a.test", "fallbackUrl": "https://b.test",
+            "bidId": "ad-1", "type": "ad.click", "url": "https://a.test", "fallbackUrl": "https://b.test",
             "area": "endCard", "purpose": "adChoices", "reason": "userClose", "code": 403, "offset": 2500.5,
         ]))
         #expect(message.type == "ad.click")
         #expect(message.url == "https://a.test" && message.fallbackUrl == "https://b.test")
         #expect(message.area == "endCard" && message.purpose == "adChoices" && message.reason == "userClose")
         #expect(message.code == 403 && message.offset == 2500.5)
-        let bare = try #require(parse(["adId": "ad-1", "type": "ad.close", "url": 5, "offset": "10", "code": "403"]))
+        let bare = try #require(parse(["bidId": "ad-1", "type": "ad.close", "url": 5, "offset": "10", "code": "403"]))
         #expect(bare.url == nil && bare.offset == nil && bare.code == nil, "a field of the wrong type is absent")
         // JSONSerialization gives true and false as NSNumbers: they are not numbers, in a string or an object body.
-        let json = #"{"adId":"ad-1","type":"ad.error","playhead":true,"offset":false,"code":true}"#
-        let object: [String: Any] = ["adId": "ad-1", "type": "ad.error", "playhead": true, "offset": false, "code": true]
+        let json = #"{"bidId":"ad-1","type":"ad.error","playhead":true,"offset":false,"code":true}"#
+        let object: [String: Any] = ["bidId": "ad-1", "type": "ad.error", "playhead": true, "offset": false, "code": true]
         for raw in [json as Any, object as Any] {
-            let booleans = try #require(FrameMessage.parse(raw, adId: "ad-1", playheadLimitMs: 60_000))
+            let booleans = try #require(FrameMessage.parse(raw, bidId: "ad-1", playheadLimitMs: 60_000))
             #expect(booleans.playheadMs == 0 && booleans.offset == nil && booleans.code == nil, "\(raw)")
         }
     }

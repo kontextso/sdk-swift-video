@@ -9,7 +9,8 @@ import Foundation
 /// ```
 /// OverlayRule    lives while the content plays: a pause, the end, another item ends it (.interrupted);
 ///                its duration counts seconds of video; it cannot be shown over paused content
-/// PauseRule      lives while the content is paused: content playing again ends it (.interrupted)
+/// PauseRule      lives while the content is paused (pause, pauseFullscreen): content playing again ends it
+///                (.interrupted)
 /// NoContentRule  a linear ad: full screen over the content, which it never follows
 /// ```
 ///
@@ -81,7 +82,7 @@ protocol ContentRule: AnyObject {
 func makeContentRule(for ad: VideoAd) -> any ContentRule {
     switch ad.format {
     case .overlay: OverlayRule(ad: ad)
-    case .pause: PauseRule(ad: ad)
+    case .pause, .pauseFullscreen: PauseRule(ad: ad)
     case .linear: NoContentRule()
     }
 }

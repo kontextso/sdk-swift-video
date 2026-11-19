@@ -31,15 +31,15 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
 
     nonisolated func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         let url = urlSchemeTask.request.url!
-        let adId = url.lastPathComponent
+        let bidId = url.lastPathComponent
         let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let step = Int(query.first { $0.name == "step" }?.value ?? "") ?? 60
         let json = query.contains { $0.name == "json" }
         let cover = query.contains { $0.name == "cover" }
         Task { @MainActor in
-            served.append(adId)
+            served.append(bidId)
         }
-        let html = Self.page(adId: adId, step: step, json: json, cover: cover)
+        let html = Self.page(bidId: bidId, step: step, json: json, cover: cover)
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/html; charset=utf-8"])!
         urlSchemeTask.didReceive(response)
         urlSchemeTask.didReceive(Data(html.utf8))
@@ -48,23 +48,23 @@ final class FramePageServer: NSObject, WKURLSchemeHandler {
 
     nonisolated func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
-    nonisolated static func page(adId: String, step: Int, json: Bool = false, cover: Bool = false) -> String {
-        let kind = adId.split(separator: "-").first.map(String.init) ?? "img"
+    nonisolated static func page(bidId: String, step: Int, json: Bool = false, cover: Bool = false) -> String {
+        let kind = bidId.split(separator: "-").first.map(String.init) ?? "img"
         return """
-        <!doctype html><html data-ad-id="\(adId)"><head><meta name="viewport" content="width=device-width\(cover ? ", initial-scale=1, viewport-fit=cover" : "")"></head>
+        <!doctype html><html data-ad-id="\(bidId)"><head><meta name="viewport" content="width=device-width\(cover ? ", initial-scale=1, viewport-fit=cover" : "")"></head>
         <body style="margin:0;background:#246;color:#fff;font:14px sans-serif">
-        <div id="box" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">\(adId)</div>
+        <div id="box" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">\(bidId)</div>
         <script>
-        var adId = "\(adId)";
+        var bidId = "\(bidId)";
         var kind = "\(kind)";
         var step = \(step);
         var shown = false, completed = false;
         function send(type, payload) {
-          var m = Object.assign({ adId: adId, type: type }, payload || {});
+          var m = Object.assign({ bidId: bidId, type: type }, payload || {});
           window.webkit.messageHandlers.kontext.postMessage(\(json ? "JSON.stringify(m)" : "m"));
         }
         window.addEventListener('message', function (e) {
-          var m = e.data; if (!m || m.adId !== adId) return;
+          var m = e.data; if (!m || m.bidId !== bidId) return;
           if (m.type === 'ad.show') { shown = true; if (kind === 'vid') playVideo(); }
           if (m.type === 'ad.hide') { shown = false; }
           if (m.type === 'ad.exposure') { window.lastExposure = m.exposedPercentage; }

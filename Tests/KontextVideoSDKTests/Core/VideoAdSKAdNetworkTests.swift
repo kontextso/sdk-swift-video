@@ -34,7 +34,7 @@ struct VideoAdSKAdNetworkTests {
     }
 
     private func send(_ ad: VideoAd, _ type: String, _ extra: [String: Any] = [:]) {
-        var body: [String: Any] = ["adId": ad.id, "type": type]
+        var body: [String: Any] = ["bidId": ad.id, "type": type]
         extra.forEach { body[$0.key] = $0.value }
         ad.bridge.receive(body, from: sender)
     }

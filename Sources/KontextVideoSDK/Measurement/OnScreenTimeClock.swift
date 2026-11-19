@@ -30,7 +30,7 @@ final class OnScreenTimeClock {
     private let onElapsed: () -> Void
     /// The overlay's `duration`, seconds; `nil` when nothing should end the ad on time.
     private let duration: TimeInterval?
-    private let adId: String
+    private let bidId: String
     /// When the current active stretch began; `nil` while the app is not active.
     private var since: TimeInterval?
     /// Active time before the current stretch, seconds.
@@ -46,9 +46,9 @@ final class OnScreenTimeClock {
     /// `nonisolated(unsafe)` only so `deinit`, which is not on the main actor, may read it for the teardown.
     nonisolated(unsafe) private(set) var observers: [any NSObjectProtocol] = []
 
-    init(duration: TimeInterval?, adId: String, onElapsed: @escaping () -> Void) {
+    init(duration: TimeInterval?, bidId: String, onElapsed: @escaping () -> Void) {
         self.duration = duration
-        self.adId = adId
+        self.bidId = bidId
         self.onElapsed = onElapsed
     }
 
@@ -122,7 +122,7 @@ final class OnScreenTimeClock {
         guard let since else { return }
         accumulated += ProcessInfo.processInfo.systemUptime - since
         self.since = nil
-        if !isStopped { Logger.debug("ad \(adId.prefix(8)): clock frozen at \(accumulated) s on screen") }
+        if !isStopped { Logger.debug("ad \(bidId.prefix(8)): clock frozen at \(accumulated) s on screen") }
     }
 
     private func resume() {

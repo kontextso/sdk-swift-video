@@ -369,7 +369,7 @@ struct DecodingTests {
 
     @Test func aPriceIsAFiniteNonNegativeCPMInAThreeLetterCurrency() throws {
         func price(_ fields: String) throws -> AdPayload.Price {
-            try JSONDecoder().decode(AdPayload.Price.self, from: Data("{\(fields), \"precision\": \"exact\"}".utf8))
+            try JSONDecoder().decode(AdPayload.Price.self, from: Data("{\(fields)}".utf8))
         }
         #expect(try price(#""value": 7.5, "currency": "USD""#).value == 7.5)
         #expect(try price(#""value": 0, "currency": "EUR""#).value == 0)
@@ -388,18 +388,46 @@ struct DecodingTests {
         #expect(ad.format == .pause)
         #expect(ad.creative == .image)
         #expect(ad.expires == 3_600_000)
-        #expect(ad.price == AdPayload.Price(value: 7.5, currency: "USD", precision: .exact))
+        #expect(ad.price == AdPayload.Price(value: 7.5, currency: "USD"))
         #expect(ad.rendering == .frame(URL(string: "kontext-test://frames/frame/ad-1")!))
         guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
         #expect(position == .top)
         #expect(sizes == [AdPayload.Size(width: 300, height: 300)])
     }
 
-    @Test func fullscreenPauseAdHasNoSizes() throws {
-        let ad = try Fixtures.payload(Fixtures.ad(position: "fullscreen", size: nil))
-        guard case .pause(let position, let sizes) = ad.details else { Issue.record("expected pause"); return }
-        #expect(position == .fullscreen)
-        #expect(sizes.isEmpty)
+    @Test func aPauseFullscreenAdIsTheWholePlayerWithoutSizes() throws {
+        let ad = try Fixtures.payload(Fixtures.pauseFullscreenAd())
+        #expect(ad.format == .pauseFullscreen)
+        #expect(ad.details == .pauseFullscreen)
+        let descriptor = try Fixtures.descriptor(Fixtures.pauseFullscreenAd())
+        #expect(descriptor.position == .fullscreen && descriptor.sizes.isEmpty && descriptor.duration == nil)
+        #expect(try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: "fullscreen")).details == .pauseFullscreen, "sizes sent anyway are ignored")
+        for position in ["top", "bottom", "middle"] {
+            #expect(throws: DecodingError.self, "\(position)") { try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: position, size: nil)) }
+        }
+        #expect(throws: DecodingError.self, "a position is required") { try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: nil, size: nil)) }
+    }
+
+    @Test func aPauseAdIsTopOrBottomOnlyAndAFullscreenOneIsDroppedAtItsPosition() throws {
+        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(position: "fullscreen", size: nil)) }
+        #expect(throws: DecodingError.self, "sizes do not make it valid") { try Fixtures.payload(Fixtures.ad(position: "fullscreen")) }
+        let answer = try decode(AdsResponse.self, ["enabled": true, "formats": [
+            ["format": "pause", "ads": [Fixtures.ad(id: "p-full", position: "fullscreen", size: nil)]],
+            Fixtures.filledEntry(Fixtures.pauseFullscreenAd(id: "pf-1")),
+        ]])
+        #expect(answer.result(for: .pause)?.ads.isEmpty == true && answer.result(for: .pause)?.dropped == ["position"], "reported as pause:position")
+        #expect(answer.result(for: .pause)?.noFillReason == .unknown)
+        #expect(answer.result(for: .pauseFullscreen)?.ads.map(\.id) == ["pf-1"])
+    }
+
+    @Test func aPriceWithoutPrecisionDecodesAndOneWithItIgnoresIt() throws {
+        let plain = try Fixtures.descriptor(Fixtures.ad())
+        #expect(plain.price == VideoAd.Price(value: 7.5, currency: "USD"))
+        var older = Fixtures.ad()
+        older["price"] = ["model": "cpm", "value": 3.25, "currency": "EUR", "precision": "estimated"]
+        #expect(try Fixtures.descriptor(older).price == VideoAd.Price(value: 3.25, currency: "EUR"), "an older server's precision is ignored")
+        older["price"] = ["model": "cpm", "value": 3.25, "currency": "EUR", "precision": 42]
+        #expect(try Fixtures.descriptor(older).price.value == 3.25, "whatever its type")
     }
 
     @Test func anEmptySizesListIsRejected() {
@@ -534,10 +562,9 @@ struct DecodingTests {
     }
 
     @Test func adPayloadEdges() throws {
-        var estimated = Fixtures.ad()
-        estimated["price"] = ["model": "cpm", "value": 3.25, "currency": "EUR", "precision": "estimated"]
-        let descriptor = try Fixtures.descriptor(estimated)
-        #expect(descriptor.price == VideoAd.Price(value: 3.25, currency: "EUR", precision: .estimated))
+        var euro = Fixtures.ad()
+        euro["price"] = ["model": "cpm", "value": 3.25, "currency": "EUR"]
+        #expect(try Fixtures.descriptor(euro).price == VideoAd.Price(value: 3.25, currency: "EUR"))
         #expect(try Fixtures.payload(Fixtures.overlayAd(duration: 0)).id == "ad-o", "a zero duration is valid")
         for bad in ["FILE://localhost/etc/passwd", "JavaScript://x/alert(1)", "Data://x/y"] {
             #expect(throws: DecodingError.self, "\(bad)") { try Fixtures.payload(Fixtures.ad(frameURL: bad)) }
