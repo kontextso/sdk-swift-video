@@ -25,16 +25,13 @@ struct Video: Identifiable {
         Video(id: "demo-linear", title: "The CEO's Secret", format: .linear,
               page: "unlock", cover: [.pink, .purple], url: clip,
               caption: "A linear ad after 3 s of playing"),
-        Video(id: "demo-pause-fullscreen", title: "The Heir's Return", format: .pauseFullscreen,
-              page: "first_episode", cover: [.teal, .green], url: clip,
-              caption: "Tap to pause: a full-screen pause ad shows, its Resume plays on"),
         Video(id: "demo-pause", title: "Moonlit Contract", format: .pause,
               page: "first_episode", cover: [.indigo, .blue], url: clip,
-              caption: "Tap to pause: a pause ad shows, tap again to resume"),
+              caption: "Tap to pause: a pause ad shows, a card or the whole player as its page's configuration says; tap again, or the ad's Resume, to play on"),
     ]
 
     /// Its ad shows while the content is paused.
-    var isPause: Bool { format == .pause || format == .pauseFullscreen }
+    var isPause: Bool { format == .pause }
 
     /// A bundled portrait clip; every video plays it.
     private static let clip = Bundle.main.url(forResource: "sample-episode", withExtension: "mp4")!

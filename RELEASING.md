@@ -11,7 +11,7 @@ How to cut a release of the **Kontext Video SDK**. Replace `0.1.0` with the vers
 
 1. Checkout `main` and pull.
 2. Build the SDK and run the tests (commands in [DEVELOPMENT.md](DEVELOPMENT.md)).
-3. Run the example on a device against the ad server: open each of the five videos and watch its ad from
+3. Run the example on a device against the ad server: open each of the four videos and watch its ad from
    start to end. The status line under the title must show the impression, then the one `didEnd`.
 
 ## 2. Update the changelog

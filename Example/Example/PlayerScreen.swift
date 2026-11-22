@@ -164,7 +164,7 @@ final class Playback: ObservableObject {
         switch video.format {
         case .linear: showLinear()
         case .overlay: showInPlayer()      // ends by itself after its duration
-        case .pause, .pauseFullscreen: break   // the viewer pauses; nothing happens on its own
+        case .pause: break                 // the viewer pauses; nothing happens on its own
         }
     }
 
@@ -226,8 +226,8 @@ extension Playback: VideoAdDelegate {
         switch ad.format {
         case .linear:
             player.play()                  // the content paused for the ad; every other way it ends lands here
-        case .pause, .pauseFullscreen:
-            if reason == .resumed { resume() }   // the viewer tapped Resume on the full-screen ad itself
+        case .pause:
+            if reason == .resumed { resume() }   // the viewer tapped Resume on a full-screen pause ad itself
         case .overlay:
             break
         }

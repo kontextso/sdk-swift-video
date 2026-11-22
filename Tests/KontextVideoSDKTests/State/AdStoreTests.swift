@@ -89,7 +89,6 @@ struct AdStoreTests {
             switch format {
             case .overlay: ["keep:overlay"]
             case .pause: ["drop:pause", "replace:pause:P2"]
-            case .pauseFullscreen: ["leftOut:pauseFullscreen"]
             case .linear: ["leftOut:linear"]
             }
         }, "\(steps)")

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+### Breaking
+* `AdFormat.pauseFullscreen` is removed: there are three formats, `.overlay`, `.pause` and `.linear`. A pause ad is a card over the top or the bottom of the player, or the whole player; the server decides which for the publisher (the new `VideoAd.position` says it), and `format(.pause)` returns the one it answered. `show(in:)` shows either, and nothing else changes: the ad that is the whole player fills the view, ignores `insets`, and ends as before (Resume: `.resumed`; ✕: `.closed`; the content playing again: `.interrupted`). Replace `format(.pauseFullscreen)` with `format(.pause)`, drop the case from a switch over `AdFormat`, and resume the content on `.resumed` for any pause ad.
+### Added
+* `VideoAd.position` (`VideoAd.Position`: `.top`, `.bottom`, `.fullscreen`): where the server placed the ad, known before anything renders. `.fullscreen` is a pause ad that is the whole player; an overlay and a pause card say `.top` or `.bottom`; `nil` for a linear ad.
+### Changed
+* A `pause` ad with position `fullscreen` is valid, and `sizes` sent with it are ignored; a pause card (`top`, `bottom`) still needs its `sizes`. An answer's entry for the format `pauseFullscreen` (an older server) is an unknown format, ignored as any other.
+* The example app has one pause video: its ad is a card or the whole player, as the page's configuration says.
+
 ## 0.3.0
 ### Breaking
 * `KontextVideo.User(id:)`: `id` is a required `String` of 1 to 256 characters (`email`, `emailHash` and `keywords` stay optional). Set `KontextVideo.shared.user` before the first ads request, a guest id the app keeps until the viewer signs in, then the account id: without a user (or with an id empty or over 256 characters), `format(_:)` throws `request(.missingUser)` (even when it holds a valid ad for the format), the new `VideoAdError.RequestFailure` case (a switch over it needs the case), and sends nothing; a debug build stops on an assertion. A COPPA request (`Regulatory(coppa: true)`) now carries the user id too (the server keeps it from buyers); it still leaves out the email and its hash, the advertising id and the IDFV.

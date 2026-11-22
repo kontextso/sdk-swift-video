@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Five videos, one per situation. Tapping one opens the full-screen player.
+/// Four videos, one per situation. Tapping one opens the full-screen player.
 struct HomeView: View {
     @State private var selected: Video?
 
@@ -27,8 +27,7 @@ struct HomeView: View {
         }
         .onAppear {
             // Hands-free: `SIMCTL_CHILD_KONTEXT_OPEN=linear xcrun simctl launch ...` opens that video at once
-            // (a format opens its `demo-<format>` video, `pause` the inline one; `demo-pause-fullscreen` and the
-            // other ids work too).
+            // (a format opens its `demo-<format>` video; the other ids work too).
             if let id = ProcessInfo.processInfo.environment["KONTEXT_OPEN"] {
                 selected = Video.all.first { $0.id == id || $0.id == "demo-\(id)" }
                     ?? Video.all.first { $0.format.rawValue == id }

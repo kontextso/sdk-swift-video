@@ -1,6 +1,6 @@
-/// The value types of a `VideoAd`: what the app reads before deciding (`Price`), what it passes back
-/// (`RejectReason`), what it finds out (`InvalidationReason`), and the SDK's own view of where the ad goes
-/// (`Size`, `Position`). The delegate's types, `Click` and `EndReason`, live with the delegate.
+/// The value types of a `VideoAd`: what the app reads before deciding (`Price`, `Position`), what it passes back
+/// (`RejectReason`), what it finds out (`InvalidationReason`), and the SDK's own view of how big the ad is
+/// (`Size`). The delegate's types, `Click` and `EndReason`, live with the delegate.
 extension VideoAd {
     /// What an ad pays: a CPM in a currency.
     public struct Price: Sendable, Equatable {
@@ -26,10 +26,13 @@ extension VideoAd {
         var isScalable = true
     }
 
-    /// Where the server placed the ad.
-    enum Position: Sendable, Equatable {
+    /// Where the server placed an overlay or pause ad in the player.
+    public enum Position: Sendable, Equatable {
+        /// A strip or a card over the top of the player.
         case top
+        /// A strip or a card over the bottom of the player.
         case bottom
+        /// The whole player: a pause ad only, with Resume and ✕ of its own.
         case fullscreen
     }
 

@@ -88,9 +88,9 @@ enum Fixtures {
         ad(id: id, format: "overlay", creative: creative, position: position, size: ["width": 320, "height": 90, "scalable": true, "maintainAspectRatio": true], duration: duration)
     }
 
-    /// A pause ad over the whole player: no position to choose, no sizes.
-    static func pauseFullscreenAd(id: String = "ad-f", creative: String = "image") -> [String: Any] {
-        ad(id: id, format: "pauseFullscreen", creative: creative, position: "fullscreen", size: nil)
+    /// A pause ad over the whole player: position `fullscreen`, no sizes.
+    static func fullscreenPauseAd(id: String = "ad-f", creative: String = "image") -> [String: Any] {
+        ad(id: id, format: "pause", creative: creative, position: "fullscreen", size: nil)
     }
 
     static func linearAd(id: String = "ad-i", duration: Int = 10_000, skipOffset: Int? = 5000) -> [String: Any] {
@@ -98,7 +98,7 @@ enum Fixtures {
     }
 
     /// Every format the server answers, by wire name.
-    static let allFormats = ["overlay", "pause", "pauseFullscreen", "linear"]
+    static let allFormats = ["overlay", "pause", "linear"]
 
     /// Every format answered: `ad` for its own format, a no-fill for the others.
     static func adsResponse(_ ad: [String: Any]) -> [String: Any] {

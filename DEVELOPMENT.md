@@ -75,7 +75,7 @@ pnpm install && pnpm dev
 xcodegen generate && open Example.xcodeproj      # run on a simulator
 ```
 
-The home screen lists five videos: a bottom and a top overlay, a linear ad, an inline and a full-screen pause ad. Opening one plays a bundled clip full screen, prepares that
+The home screen lists four videos: a bottom and a top overlay, a linear ad, and a pause ad (a card or the whole player, as the server decides). Opening one plays a bundled clip full screen, prepares that
 format's ad (`format` then `load`). 3 s in, a linear ad shows over the screen or an overlay inside the player; a
 pause ad waits until the viewer taps to pause, a tap resumes, and the next pause gets its own ad. Leaving the screen
 calls `destroy()`. The whole integration is `Example/Example/PlayerScreen.swift`.
