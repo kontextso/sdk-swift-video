@@ -17,16 +17,16 @@ struct Video: Identifiable {
 
     static let all: [Video] = [
         Video(id: "demo-overlay", title: "Revenge of the Heiress", format: .overlay,
-              page: "free_episodes", cover: [.orange, .red], url: clip,
+              page: "freeEpisodes", cover: [.orange, .red], url: clip,
               caption: "An overlay after 3 s of playing; pausing ends it"),
         Video(id: "demo-overlay-top", title: "Midnight Vows", format: .overlay,
-              page: "free_episodes_top", cover: [.yellow, .orange], url: clip,
+              page: "freeEpisodesTop", cover: [.yellow, .orange], url: clip,
               caption: "An overlay after 3 s of playing, placed as its page's configuration says (the top, for example); pausing ends it"),
         Video(id: "demo-linear", title: "The CEO's Secret", format: .linear,
               page: "unlock", cover: [.pink, .purple], url: clip,
               caption: "A linear ad after 3 s of playing"),
         Video(id: "demo-pause", title: "Moonlit Contract", format: .pause,
-              page: "first_episode", cover: [.indigo, .blue], url: clip,
+              page: "firstEpisode", cover: [.indigo, .blue], url: clip,
               caption: "Tap to pause: a pause ad shows, a card or the whole player as its page's configuration says; tap again, or the ad's Resume, to play on"),
     ]
 
