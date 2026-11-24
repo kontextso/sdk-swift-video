@@ -98,7 +98,7 @@ struct PublicTypesTests {
         let known: [(String, VideoAdError.NoFillReason)] = [
             ("noAdMatch", .noAdMatch), ("contentUnsafe", .contentUnsafe), ("formatNotEnabled", .formatNotEnabled),
             ("frequencyCap", .frequencyCap), ("geoRestricted", .geoRestricted), ("temporaryError", .temporaryError),
-            ("alreadyUsed", .alreadyUsed), ("unknown", .unknown),
+            ("invalidTraffic", .invalidTraffic), ("alreadyUsed", .alreadyUsed), ("unknown", .unknown),
         ]
         for (wire, reason) in known {
             #expect(VideoAdError.NoFillReason(wire) == reason, "\(wire)")

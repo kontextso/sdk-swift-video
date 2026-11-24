@@ -156,6 +156,7 @@ extension VideoAdError.NoFillReason {
         case "frequencyCap": self = .frequencyCap
         case "geoRestricted": self = .geoRestricted
         case "temporaryError": self = .temporaryError
+        case "invalidTraffic": self = .invalidTraffic
         case "alreadyUsed": self = .alreadyUsed
         case "unknown": self = .unknown
         case let raw? where raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty: self = .unknown
