@@ -13,7 +13,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
     static func start() async {
         let configuration = KontextVideo.Configuration(publisherToken: "<your-publisher-token>")
         _ = await KontextVideo.shared.initialize(with: configuration)
-        KontextVideo.shared.user = KontextVideo.User(id: "guest-1234", keywords: ["romance"])
+        KontextVideo.shared.user = KontextVideo.User(id: "guest-1234")
     }
 
     func prepare() async {

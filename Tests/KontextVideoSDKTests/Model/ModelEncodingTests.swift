@@ -39,9 +39,9 @@ struct ModelEncodingTests {
     }
 
     @Test func aUserIsSentExactlyAsGiven() throws {
-        let user = KontextVideo.User(id: "U-42", email: "  Viewer.Name@Example.COM ", emailHash: "AbC123==", keywords: ["Romance", " CEO "])
+        let user = KontextVideo.User(id: "U-42", email: "  Viewer.Name@Example.COM ", emailHash: "AbC123==")
         let json = try Fixtures.encode(user)
-        let expected: [String: Any] = ["id": "U-42", "email": "  Viewer.Name@Example.COM ", "emailHash": "AbC123==", "keywords": ["Romance", " CEO "]]
+        let expected: [String: Any] = ["id": "U-42", "email": "  Viewer.Name@Example.COM ", "emailHash": "AbC123=="]
         #expect(NSDictionary(dictionary: json) == NSDictionary(dictionary: expected), "no trimming, no lowercasing: \(json)")
     }
 
@@ -69,10 +69,9 @@ struct ModelEncodingTests {
     }
 
     @Test func aUserSendsWhatIsSetAndLeavesEmptyStringsOut() throws {
-        let both = try Fixtures.encode(KontextVideo.User(id: "u1", email: "viewer@example.com", emailHash: "md5-or-anything", keywords: []))
+        let both = try Fixtures.encode(KontextVideo.User(id: "u1", email: "viewer@example.com", emailHash: "md5-or-anything"))
         #expect(both["id"] as? String == "u1" && both["email"] as? String == "viewer@example.com")
         #expect(both["emailHash"] as? String == "md5-or-anything", "any hash function, sent as given")
-        #expect(both["keywords"] as? [String] == [])
         let hashOnly = try Fixtures.encode(KontextVideo.User(id: "u2", emailHash: "abc"))
         #expect(hashOnly.keys.sorted() == ["emailHash", "id"])
         let empty = KontextVideo.User(id: "u3", email: "", emailHash: "")
@@ -107,12 +106,11 @@ struct ModelEncodingTests {
     // MARK: User, Regulatory
 
     @Test func userEncodesOnlySetFields() throws {
-        let json = try Fixtures.encode(KontextVideo.User(id: "u1", email: "a@b.c", keywords: ["drama"]))
+        let json = try Fixtures.encode(KontextVideo.User(id: "u1", email: "a@b.c"))
         #expect(json["id"] as? String == "u1")
         #expect(json["email"] as? String == "a@b.c")
-        #expect(json["keywords"] as? [String] == ["drama"])
         #expect(json["emailHash"] == nil)
-        #expect(json.count == 3, "no demographics: yob and gender are deprecated in OpenRTB 2.6")
+        #expect(json.count == 2, "no demographics: yob and gender are deprecated in OpenRTB 2.6")
     }
 
     @Test func userEquality() {

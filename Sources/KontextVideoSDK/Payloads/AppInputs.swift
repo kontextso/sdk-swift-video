@@ -65,7 +65,7 @@ struct UserPayload: Encodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, email, emailHash, keywords
+        case id, email, emailHash
     }
 
     func encode(to encoder: Encoder) throws {
@@ -73,7 +73,6 @@ struct UserPayload: Encodable, Sendable {
         try container.encode(user.id, forKey: .id)
         try container.encodeIfPresent(user.email.flatMap { $0.isEmpty ? nil : $0 }, forKey: .email)
         try container.encodeIfPresent(user.emailHash.flatMap { $0.isEmpty ? nil : $0 }, forKey: .emailHash)
-        try container.encodeIfPresent(user.keywords, forKey: .keywords)
     }
 }
 
@@ -147,9 +146,9 @@ extension Optional where Wrapped == KontextVideo.Regulatory {
 
 /// The request's rules for the app's user: a COPPA request's user, the fields left out.
 extension KontextVideo.User {
-    /// The user without the email and its hash, for a COPPA request: the id and the keywords stay.
+    /// The user without the email and its hash, for a COPPA request: only the id stays.
     var withoutEmail: KontextVideo.User {
-        KontextVideo.User(id: id, keywords: keywords)
+        KontextVideo.User(id: id)
     }
 
     /// The longest `id` the server takes, in characters as it counts them (UTF-16 code units).

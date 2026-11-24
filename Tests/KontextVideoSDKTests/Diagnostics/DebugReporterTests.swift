@@ -97,7 +97,7 @@ struct DebugReporterTests {
         // Canaries in every private field, then a request and its answer, which report the most.
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportDebug: true)))
         _ = await harness.initialize()
-        KontextVideo.shared.user = KontextVideo.User(id: "canary-user-id", email: "canary@viewer.test", emailHash: "canary-hash", keywords: ["canary-keyword"])
+        KontextVideo.shared.user = KontextVideo.User(id: "canary-user-id", email: "canary@viewer.test", emailHash: "canary-hash")
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(gdprConsent: "canary-tc-string", gpp: "canary-gpp", usPrivacy: "canary-usp")
         let ads = harness.player.ads(for: .init(id: "ep", language: "en", title: "canary-title"))
         harness.serve(Fixtures.ad(id: "img-priv"))
@@ -105,7 +105,7 @@ struct DebugReporterTests {
         #expect(await waitUntil { self.allNames().contains("ads.response") })
         for body in harness.server.requests(to: "/v2/debug").compactMap(\.body) {
             let text = try #require(String(bytes: JSONSerialization.data(withJSONObject: body), encoding: .utf8))
-            for canary in ["canary-user-id", "canary@viewer.test", "canary-hash", "canary-keyword", "canary-tc-string", "canary-gpp", "canary-usp", "canary-title"] {
+            for canary in ["canary-user-id", "canary@viewer.test", "canary-hash", "canary-tc-string", "canary-gpp", "canary-usp", "canary-title"] {
                 #expect(!text.contains(canary), "\(canary) reached a debug report")
             }
             #expect(!text.contains("idfv") && !text.contains("email") && !text.contains("gdprConsent"), "never the forbidden fields")

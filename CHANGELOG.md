@@ -2,6 +2,7 @@
 
 ## 0.4.0
 ### Breaking
+* `KontextVideo.User.keywords` is removed: a viewer is `id`, `email` and `emailHash`. Drop the argument from `KontextVideo.User(id:email:emailHash:keywords:)`. A video's own `Content.keywords` stay.
 * `AdFormat.pauseFullscreen` is removed: there are three formats, `.overlay`, `.pause` and `.linear`. A pause ad is a card over the top or the bottom of the player, or the whole player; the server decides which for the publisher (the new `VideoAd.position` says it), and `format(.pause)` returns the one it answered. `show(in:)` shows either, and nothing else changes: the ad that is the whole player fills the view, ignores `insets`, and ends as before (Resume: `.resumed`; ✕: `.closed`; the content playing again: `.interrupted`). Replace `format(.pauseFullscreen)` with `format(.pause)`, drop the case from a switch over `AdFormat`, and resume the content on `.resumed` for any pause ad.
 ### Added
 * `VideoAd.position` (`VideoAd.Position`: `.top`, `.bottom`, `.fullscreen`): where the server placed the ad, known before anything renders. `.fullscreen` is a pause ad that is the whole player; an overlay and a pause card say `.top` or `.bottom`; `nil` for a linear ad.
