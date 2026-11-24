@@ -2,7 +2,7 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// Every branch of the wire's answers: `/config`, `/video/ads`, the ad payload for each format.
+/// Every branch of the wire's answers: `/config`, `/preload`, the ad payload for each format.
 struct DecodingTests {
     private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
         try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))

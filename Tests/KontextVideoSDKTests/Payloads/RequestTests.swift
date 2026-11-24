@@ -5,7 +5,7 @@ import Foundation
 import Testing
 import UIKit
 
-/// What the SDK sends: the `/config` and `/video/ads` bodies, the player snapshot, device facts, privacy.
+/// What the SDK sends: the `/config` and `/preload` bodies, the player snapshot, device facts, privacy.
 extension SerialSuites {
 @Suite
 @MainActor

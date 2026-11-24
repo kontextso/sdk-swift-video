@@ -47,13 +47,13 @@ struct DebugEventsTests {
         #expect(request.properties?["held"] == nil, "no held count: nothing held goes on the wire")
         #expect(request.properties?["playhead"] != nil)
 
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("internal"), status: 503))
+        harness.server.on("/v2/preload", .json(Fixtures.errors("internal"), status: 503))
         _ = await error { try await ads.format(.linear) }
         let server = try #require(events("ads.requestFailed").last)
         #expect(server.level == .warning && server.sessionId == ads.sessionId)
         #expect(server.properties == ["failure": .string("server"), "httpStatus": .number(503)])
 
-        harness.server.on("/v2/video/ads", .failure(.notConnectedToInternet))
+        harness.server.on("/v2/preload", .failure(.notConnectedToInternet))
         _ = await error { try await ads.format(.linear) }
         #expect(events("ads.requestFailed").last?.properties == ["failure": .string("offline")])
 

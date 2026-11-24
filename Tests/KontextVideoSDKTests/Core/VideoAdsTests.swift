@@ -73,7 +73,7 @@ struct VideoAdsTests {
         harness.serve(Fixtures.ad(id: "img-p-held"))
         let held = try await ads.format(.pause)
         for order in [["overlay", "pause"], ["pause", "overlay"]] {
-            harness.server.on("/v2/video/ads") { _ in
+            harness.server.on("/v2/preload") { _ in
                 .json(["enabled": true, "formats": order.map { format -> [String: Any] in
                     format == "overlay" ? Fixtures.filledEntry(Fixtures.overlayAd(id: "img-dup")) : Fixtures.filledEntry(Fixtures.ad(id: "img-dup"))
                 }])
@@ -89,17 +89,17 @@ struct VideoAdsTests {
         for (heldFormat, askedFormat) in [(AdFormat.overlay, AdFormat.pause), (.pause, .overlay)] {
             let id = "img-x-\(heldFormat.rawValue)"
             let entry = { (format: AdFormat) in Fixtures.filledEntry(format == .overlay ? Fixtures.overlayAd(id: id) : Fixtures.ad(id: id)) }
-            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(heldFormat)]]) }
+            harness.server.on("/v2/preload") { _ in .json(["enabled": true, "formats": [entry(heldFormat)]]) }
             let held = try await ads.format(heldFormat)
             // The next answer leaves the held format out (so its ad is kept) and brings the same id under the other.
-            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
+            harness.server.on("/v2/preload") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
             let failure = await error { try await ads.format(askedFormat) }
             #expect(failure == .request(.badResponse), "\(heldFormat): a malformed answer")
             #expect(held.invalidationReason == nil, "\(heldFormat): the held ad stays")
             #expect(try await ads.format(heldFormat) === held, "\(heldFormat): a malformed answer, the held ad comes back")
             held.reject()
             // One bid, rejected once: nothing of it is left, under either format.
-            harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
+            harness.server.on("/v2/preload") { _ in .json(["enabled": true, "formats": [entry(askedFormat)]]) }
             guard case .noFill(let reason)? = await error({ try await ads.format(askedFormat) }) else { Issue.record("\(heldFormat): expected noFill"); continue }
             #expect(reason == .alreadyUsed, "\(heldFormat)")
         }
@@ -111,7 +111,7 @@ struct VideoAdsTests {
         let pause = try await ads.format(.pause)
         try await pause.load()
         // An answer with only an overlay entry: nothing said about pause.
-        harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.overlayAd(id: "img-o-new"))]]) }
+        harness.server.on("/v2/preload") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.overlayAd(id: "img-o-new"))]]) }
         #expect(try await ads.format(.overlay).id == "img-o-new")
         #expect(pause.isReady && pause.invalidationReason == nil, "the held pause ad stays as it is, loaded")
         #expect(try await ads.format(.pause) === pause)
@@ -119,7 +119,7 @@ struct VideoAdsTests {
         guard case .noFill(let reason)? = await error({ try await ads.format(.linear) }) else { Issue.record("expected noFill"); return }
         #expect(reason == .unknown)
         // An explicit no-fill for pause drops it, as before.
-        harness.server.on("/v2/video/ads") { _ in .json(Fixtures.noFill()) }
+        harness.server.on("/v2/preload") { _ in .json(Fixtures.noFill()) }
         _ = await error { try await ads.format(.pause) }
         #expect(pause.invalidationReason == .expired && !pause.isReady)
     }
@@ -289,7 +289,7 @@ struct VideoAdsTests {
         #expect(await error { try await ads.format(.pause) } == .request(.missingUser), "an integration error, not hidden by the held ad")
         #expect(held.invalidationReason == nil, "the held ad stays")
         #expect(assertions.all.count == 1)
-        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        harness.server.on("/v2/preload", .failure(.timedOut))
         KontextVideo.shared.user = KontextVideo.User(id: "back")
         #expect(try await ads.format(.pause) === held, "a network failure still returns it")
     }
@@ -405,7 +405,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p9"))
         let held = try await ads.format(.pause)
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("frequencyCap")))
+        harness.server.on("/v2/preload", .json(Fixtures.noFill("frequencyCap")))
         let noFill = await error { try await ads.format(.pause) }
         guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
         #expect(reason == .frequencyCap)
@@ -416,7 +416,7 @@ struct VideoAdsTests {
 
     @Test func aFormatWithoutAConfigurationIsANoFill() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill("formatNotEnabled")))
+        harness.server.on("/v2/preload", .json(Fixtures.noFill("formatNotEnabled")))
         let noFill = await error { try await ads.format(.linear) }
         guard case .noFill(let reason) = noFill else { Issue.record("expected noFill"); return }
         #expect(reason == .formatNotEnabled)
@@ -429,7 +429,7 @@ struct VideoAdsTests {
         defer { Logger.level = .warning; Logger.sink = nil }
         var logged: [(level: KontextVideo.Configuration.LogLevel, message: String)] = []
         Logger.sink = { level, message in logged.append((level, message)) }
-        harness.server.on("/v2/video/ads", .json(["enabled": true, "formats": [
+        harness.server.on("/v2/preload", .json(["enabled": true, "formats": [
             Fixtures.filledEntry(Fixtures.ad(id: "img-p-ne")), Fixtures.noFillEntry("formatNotEnabled", format: "overlay"),
         ]]))
         _ = try await ads.format(.pause)
@@ -479,7 +479,7 @@ struct VideoAdsTests {
         let gate = StubServer.Gate()
         defer { gate.open() }
         // The answer says nothing about pause: only a linear ad.
-        harness.server.on("/v2/video/ads") { _ in
+        harness.server.on("/v2/preload") { _ in
             var response = StubServer.Response.json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd(id: "vid-e1"))]])
             response.gate = gate
             return response
@@ -501,7 +501,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-e2", expires: 30_000))
         let ad = try await ads.format(.pause)
-        harness.server.on("/v2/video/ads") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd(id: "vid-e2"))]]) }
+        harness.server.on("/v2/preload") { _ in .json(["enabled": true, "formats": [Fixtures.filledEntry(Fixtures.linearAd(id: "vid-e2"))]]) }
         // The clock passes the pause ad's expiry after the answer swept the expired ads, before the waiter resumes.
         Logger.level = .info
         defer { Logger.level = .warning }
@@ -519,7 +519,7 @@ struct VideoAdsTests {
         let ads = await makeAds()
         harness.serve(Fixtures.ad(id: "img-p14"))
         let held = try await ads.format(.pause)
-        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        harness.server.on("/v2/preload", .failure(.timedOut))
         #expect(try await ads.format(.pause) === held)
         let nothing = await error { try await ads.format(.linear) }
         #expect(nothing == .request(.timedOut))
@@ -527,7 +527,7 @@ struct VideoAdsTests {
 
     @Test func aFailedRequestLeavesNothingBehindAndTheNextCallSendsAFreshOne() async throws {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .failure(.timedOut))
+        harness.server.on("/v2/preload", .failure(.timedOut))
         let failure = await error { try await ads.format(.pause) }
         #expect(failure == .request(.timedOut))
         harness.serve(Fixtures.ad(id: "img-after-failure"))
@@ -537,7 +537,7 @@ struct VideoAdsTests {
 
     @Test func serverErrorsAreRequestErrorsNeverRetried() async {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("invalidRequest"), status: 400))
+        harness.server.on("/v2/preload", .json(Fixtures.errors("invalidRequest"), status: 400))
         let failure = await error { try await ads.format(.pause) }
         #expect(failure == .request(.server(status: 400)))
         #expect(harness.adsRequests.count == 1)
@@ -557,7 +557,7 @@ struct VideoAdsTests {
             (StubServer.Response(status: 200, body: Data("<html></html>".utf8)), .badResponse),
         ]
         for (response, reason) in failures {
-            harness.server.on("/v2/video/ads", response)
+            harness.server.on("/v2/preload", response)
             let failure = await error { try await ads.format(.pause) }
             #expect(failure == .request(reason), "\(reason)")
         }
@@ -672,7 +672,7 @@ struct VideoAdsTests {
         let loaded = try await other.format(.pause)
         try await loaded.load()
         let held = try await ads.format(.pause)
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("publisherDisabled")))
         let off = await error { try await ads.format(.linear) }
         guard case .disabled(let reason) = off else { Issue.record("expected disabled"); return }
         #expect(reason == "publisherDisabled")
@@ -691,7 +691,7 @@ struct VideoAdsTests {
         let ad = try await ads.format(.pause)
         let load = Task { try await ad.load() }
         await sleepMs(100)
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("publisherDisabled")))
         _ = await error { try await ads.format(.linear) }
         do {
             _ = try await load.value
@@ -708,7 +708,7 @@ struct VideoAdsTests {
         let ad = try await ads.format(.pause)
         let load = Task { await error { try await ad.load() } }
         await sleepMs(100)
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("publisherDisabled")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("publisherDisabled")))
         _ = await error { try await other.format(.linear) }   // another video's answer switches the SDK off
         let failure = await load.value
         guard case .disabled(let reason)? = failure else { Issue.record("expected disabled, got \(String(describing: failure))"); return }
@@ -740,7 +740,7 @@ struct VideoAdsTests {
 
     @Test func aKillSwitchInTheAnswerToADestroyedVideoAdsStillSwitchesTheSDKOff() async throws {
         let ads = await makeAds()
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("killed")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("killed")))
         // The app destroys the VideoAds as the answer is back, before the request reads it (a destroy earlier
         // cancels the POST, and nothing arrives).
         Environment.adsAnswerArrived = { ads.destroy() }
@@ -773,7 +773,7 @@ struct VideoAdsTests {
         defer { gate.open() }
         var failing = StubServer.Response.failure(.timedOut)
         failing.gate = gate
-        harness.server.on("/v2/video/ads", failing)
+        harness.server.on("/v2/preload", failing)
         let call = Task { await error { try await ads.format(.pause) } }
         #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         KontextVideo.shared.disable(reason: "publisherDisabled")

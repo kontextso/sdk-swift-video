@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// The body of `POST /video/ads`: every format, for one video, for one `VideoAds` session. Nothing about the ads
+/// The body of `POST /preload`: every format, for one video, for one `VideoAds` session. Nothing about the ads
 /// the SDK holds: the server keeps a session's bids and re-serves an unshown one until it hears its outcome.
 struct AdsRequest: Encodable, Sendable {
     /// Where to send it; not part of the body.

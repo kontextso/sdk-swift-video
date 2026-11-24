@@ -109,7 +109,7 @@ struct SdkStatesTests {
 
     @Test func aKillSwitchInAnAdsAnswerMovesEnabledToDisabled() async {
         #expect(await harness.initialize() == .enabled)
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("killed")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("killed")))
         guard case .disabled(let reason)? = await formatError() else { Issue.record("expected disabled"); return }
         #expect(reason == "killed" && sdk.state == .disabled(reason: "killed"))
         await expectSecondInitializeIgnored()
@@ -169,7 +169,7 @@ struct SdkStatesTests {
     @Test func errorReportsStayOnAfterTheKillSwitch() async {
         harness.server.on("/v2/config", .json(Fixtures.initEnabled(reportErrors: true)))
         _ = await harness.initialize()
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("killed")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("killed")))
         _ = await formatError()
         #expect(sdk.state == .disabled(reason: "killed") && errors.mode == .on)
         report("after")
@@ -190,7 +190,7 @@ struct SdkStatesTests {
         #expect(await waitUntil { heard != nil })
         #expect(DebugReporter.shared.isEnabled)
         #expect(await waitUntil { self.debugNames().contains("config.response") })
-        harness.server.on("/v2/video/ads", .json(Fixtures.disabled("killed")))
+        harness.server.on("/v2/preload", .json(Fixtures.disabled("killed")))
         _ = await formatError()
         #expect(sdk.state == .disabled(reason: "killed"))
         #expect(DebugReporter.shared.isEnabled, "on after the kill switch")

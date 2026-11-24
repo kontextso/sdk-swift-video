@@ -10,7 +10,7 @@ import Foundation
 ///
 /// ```
 /// reject()  ── notUsed beacon ──────────── answered ──┐
-/// format()  ── /config ── the body ── waits ──────────┴── POST /video/ads
+/// format()  ── /config ── the body ── waits ──────────┴── POST /preload
 ///                                     (at most 2 s)
 /// ```
 ///
