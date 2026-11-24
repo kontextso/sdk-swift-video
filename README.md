@@ -22,7 +22,7 @@ In Xcode: File → Add Package Dependencies, then `https://github.com/kontextso/
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.3.0")),
+    .package(url: "https://github.com/kontextso/sdk-swift-video.git", .upToNextMinor(from: "0.4.0")),
 ],
 targets: [
     .target(name: "YourApp", dependencies: [.product(name: "KontextVideoSDK", package: "sdk-swift-video")]),
@@ -53,7 +53,7 @@ ad.delegate = self   // a VideoAdDelegate: the impression, clicks, and exactly o
 
 // At the moment.
 player.pause()
-try ad.show(in: playerView)   // also for .pauseFullscreen; show(from:) for a linear ad
+try ad.show(in: playerView)   // a card or the whole player, as the server decided; show(from:) for a linear ad
 
 // When the viewer leaves the episode.
 ads.destroy()
@@ -69,7 +69,7 @@ VideoPlayerView(player: player)
 ```
 
 Each episode's ads show only in that episode; at most one ad is on screen in the whole app. The guide covers
-the four formats, the delegate, consent and App Tracking Transparency, and custom players. For a TTSDK
+the three formats, the delegate, consent and App Tracking Transparency, and custom players. For a TTSDK
 player, see [KontextVideoTTSDK](Sources/KontextVideoTTSDK/README.md).
 
 ## Good to know

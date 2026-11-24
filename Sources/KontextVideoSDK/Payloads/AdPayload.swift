@@ -220,9 +220,9 @@ struct AdPayload: Decodable, Sendable {
         case top, bottom
     }
 
-    /// Where a pause card sits; the full player is the `pauseFullscreen` format.
+    /// Where a pause card sits, or `fullscreen`: the whole player.
     enum PausePosition: String, Decodable, Sendable {
-        case top, bottom
+        case top, bottom, fullscreen
     }
 
     /// What each format adds to the common fields.
@@ -232,10 +232,8 @@ struct AdPayload: Decodable, Sendable {
         /// assets for, at least one, the first built for the request's player; the SDK picks the best fit
         /// for the real box at show.
         case overlay(position: OverlayPosition, sizes: [Size], duration: Int?)
-        /// `sizes`: as an overlay's.
+        /// `sizes`: as an overlay's for a card; empty for `fullscreen`, the whole player.
         case pause(position: PausePosition, sizes: [Size])
-        /// The whole player: no position to choose, no sizes.
-        case pauseFullscreen
         /// `skipOffset`: milliseconds until the Close may appear; `nil` means no Close before complete.
         case linear(duration: Int, skipOffset: Int?)
     }
@@ -339,13 +337,9 @@ struct AdPayload: Decodable, Sendable {
                 duration: try nonNegative(.duration, in: container)
             )
         case .pause:
-            // A `fullscreen` pause ad is the `pauseFullscreen` format now: dropped at `position`, as any unknown one.
-            return .pause(position: try container.decode(PausePosition.self, forKey: .position), sizes: try sizes(from: container))
-        case .pauseFullscreen:
-            guard try container.decode(String.self, forKey: .position) == "fullscreen" else {
-                throw DecodingError.dataCorruptedError(forKey: .position, in: container, debugDescription: "a pauseFullscreen ad is fullscreen")
-            }
-            return .pauseFullscreen
+            let position = try container.decode(PausePosition.self, forKey: .position)
+            // A card needs its sizes. The whole player has none: any sent with it are not read, as an unknown field is not.
+            return .pause(position: position, sizes: position == .fullscreen ? [] : try sizes(from: container))
         case .linear:
             let duration = try milliseconds(.duration, in: container)
             // A video of no length has nothing to play, and its progress beacons no moment to fire at.

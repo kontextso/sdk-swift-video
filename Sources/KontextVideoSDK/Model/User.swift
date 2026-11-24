@@ -4,7 +4,7 @@
 extension KontextVideo {
     /// What the publisher knows about the viewer. `id` is required: the server keys its frequency caps and
     /// reports on it, so no ads request leaves without a user. No demographics: OpenRTB 2.6 and AdCOM deprecated
-    /// `user.yob` and `user.gender`; `keywords` (OpenRTB `kwarray`) and the identity fields are what buyers still read.
+    /// `user.yob` and `user.gender`; the identity fields are what buyers still read.
     public struct User: Sendable, Equatable, Hashable {
         /// The publisher's own unique identifier of the viewer: the account id once they signed in, or a guest
         /// id the app keeps for the install before that. Required: non-empty and at most 256 characters, as the
@@ -20,20 +20,16 @@ extension KontextVideo {
         /// one you already use; tell us which. When `email` is set too, both are sent and the server
         /// matches on `email`. Never sent for a child (COPPA).
         public let emailHash: String?
-        /// The viewer's interests, in the publisher's own words.
-        public let keywords: [String]?
 
         /// `id` is required; set what else you know.
         public init(
             id: String,
             email: String? = nil,
-            emailHash: String? = nil,
-            keywords: [String]? = nil
+            emailHash: String? = nil
         ) {
             self.id = id
             self.email = email
             self.emailHash = emailHash
-            self.keywords = keywords
         }
     }
 }

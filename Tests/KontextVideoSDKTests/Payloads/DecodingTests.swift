@@ -2,7 +2,7 @@ import Foundation
 @testable import KontextVideoSDK
 import Testing
 
-/// Every branch of the wire's answers: `/config`, `/video/ads`, the ad payload for each format.
+/// Every branch of the wire's answers: `/config`, `/preload`, the ad payload for each format.
 struct DecodingTests {
     private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
         try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
@@ -395,29 +395,27 @@ struct DecodingTests {
         #expect(sizes == [AdPayload.Size(width: 300, height: 300)])
     }
 
-    @Test func aPauseFullscreenAdIsTheWholePlayerWithoutSizes() throws {
-        let ad = try Fixtures.payload(Fixtures.pauseFullscreenAd())
-        #expect(ad.format == .pauseFullscreen)
-        #expect(ad.details == .pauseFullscreen)
-        let descriptor = try Fixtures.descriptor(Fixtures.pauseFullscreenAd())
+    @Test func aFullscreenPauseAdIsTheWholePlayerWithoutSizes() throws {
+        let ad = try Fixtures.payload(Fixtures.fullscreenPauseAd())
+        #expect(ad.format == .pause)
+        #expect(ad.details == .pause(position: .fullscreen, sizes: []))
+        let descriptor = try Fixtures.descriptor(Fixtures.fullscreenPauseAd())
         #expect(descriptor.position == .fullscreen && descriptor.sizes.isEmpty && descriptor.duration == nil)
-        #expect(try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: "fullscreen")).details == .pauseFullscreen, "sizes sent anyway are ignored")
-        for position in ["top", "bottom", "middle"] {
-            #expect(throws: DecodingError.self, "\(position)") { try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: position, size: nil)) }
-        }
-        #expect(throws: DecodingError.self, "a position is required") { try Fixtures.payload(Fixtures.ad(format: "pauseFullscreen", position: nil, size: nil)) }
+        #expect(try Fixtures.payload(Fixtures.ad(position: "fullscreen")).details == .pause(position: .fullscreen, sizes: []), "sizes sent anyway are ignored")
+        #expect(try Fixtures.payload(Fixtures.ad(position: "fullscreen", extra: ["sizes": 7])).details == .pause(position: .fullscreen, sizes: []), "whatever they hold")
     }
 
-    @Test func aPauseAdIsTopOrBottomOnlyAndAFullscreenOneIsDroppedAtItsPosition() throws {
-        #expect(throws: DecodingError.self) { try Fixtures.payload(Fixtures.ad(position: "fullscreen", size: nil)) }
-        #expect(throws: DecodingError.self, "sizes do not make it valid") { try Fixtures.payload(Fixtures.ad(position: "fullscreen")) }
+    @Test func aPauseCardNeedsItsSizesAndAKnownPosition() throws {
+        for position in ["top", "bottom"] {
+            #expect(throws: DecodingError.self, "\(position) without sizes") { try Fixtures.payload(Fixtures.ad(position: position, size: nil)) }
+        }
+        #expect(throws: DecodingError.self, "an unknown position") { try Fixtures.payload(Fixtures.ad(position: "middle")) }
+        #expect(throws: DecodingError.self, "a position is required") { try Fixtures.payload(Fixtures.ad(position: nil, size: nil)) }
         let answer = try decode(AdsResponse.self, ["enabled": true, "formats": [
-            ["format": "pause", "ads": [Fixtures.ad(id: "p-full", position: "fullscreen", size: nil)]],
-            Fixtures.filledEntry(Fixtures.pauseFullscreenAd(id: "pf-1")),
+            ["format": "pause", "ads": [Fixtures.ad(id: "p-card", position: "top", size: nil), Fixtures.fullscreenPauseAd(id: "pf-1")]],
         ]])
-        #expect(answer.result(for: .pause)?.ads.isEmpty == true && answer.result(for: .pause)?.dropped == ["position"], "reported as pause:position")
-        #expect(answer.result(for: .pause)?.noFillReason == .unknown)
-        #expect(answer.result(for: .pauseFullscreen)?.ads.map(\.id) == ["pf-1"])
+        #expect(answer.result(for: .pause)?.dropped == ["sizes"], "reported as pause:sizes")
+        #expect(answer.result(for: .pause)?.ads.map(\.id) == ["pf-1"])
     }
 
     @Test func aPriceWithoutPrecisionDecodesAndOneWithItIgnoresIt() throws {

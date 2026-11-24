@@ -13,7 +13,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
     static func start() async {
         let configuration = KontextVideo.Configuration(publisherToken: "<your-publisher-token>")
         _ = await KontextVideo.shared.initialize(with: configuration)
-        KontextVideo.shared.user = KontextVideo.User(id: "guest-1234", keywords: ["romance"])
+        KontextVideo.shared.user = KontextVideo.User(id: "guest-1234")
     }
 
     func prepare() async {
@@ -30,7 +30,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
         self.ads = ads
         do {
             let ad = try await ads.format(.overlay)
-            print(ad.id, ad.format, ad.price, ad.duration ?? 0, ad.isReady)
+            print(ad.id, ad.format, ad.price, ad.position == .fullscreen, ad.duration ?? 0, ad.isReady)
             try await ad.load()
             ad.delegate = self
             overlayAd = ad
@@ -52,7 +52,7 @@ final class EpisodeScreen: UIViewController, VideoAdDelegate {
     }
 
     func showPause(_ ad: VideoAd) {
-        guard ad.format == .pause || ad.format == .pauseFullscreen else { return }
+        guard ad.format == .pause else { return }
         try? ad.show(in: view)
     }
 

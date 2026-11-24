@@ -340,9 +340,9 @@ struct IntegrationTests {
         let next = VideoAds(content: .init(id: "100001-7", language: "en"))
         harness.serve(Fixtures.linearAd(id: "vid-next"))
         try await next.format(.linear).load()
-        let player = harness.server.requests(to: "/v2/video/ads").last?.body?["player"] as? [String: Any]
+        let player = harness.server.requests(to: "/v2/preload").last?.body?["player"] as? [String: Any]
         #expect(player?["playhead"] as? Int == 0, "the player's 80 s belong to the current episode")
-        #expect((harness.server.requests(to: "/v2/video/ads").last?.body?["video"] as? [String: Any])?["id"] as? String == "100001-7")
+        #expect((harness.server.requests(to: "/v2/preload").last?.body?["video"] as? [String: Any])?["id"] as? String == "100001-7")
         withExtendedLifetime(current) {}
     }
 

@@ -59,16 +59,16 @@ Call ``VideoAds/destroy()`` when the viewer leaves the episode.
 
 ## Formats
 
-``AdFormat`` names the four formats. Every request asks for all of them; the answer carries the formats the
+``AdFormat`` names the three formats. Every request asks for all of them; the answer carries the formats the
 publisher configured for the ``VideoAds/page``, and ``VideoAds/format(_:)`` returns one.
 
 - ``AdFormat/overlay``: a strip across the player while the content plays. Show it with
   ``VideoAd/show(in:insets:)``; it ends after its ``VideoAd/duration`` of video, or when the content stops.
-- ``AdFormat/pause``: a card over the top or the bottom of the player while the content is paused. Show it
-  with ``VideoAd/show(in:insets:)``; it ends when the viewer closes it or the content plays again, or with
-  ``VideoAd/dismiss()``.
-- ``AdFormat/pauseFullscreen``: the whole player while the content is paused, the same way: its Resume ends it
-  as `.resumed`, its ✕ as `.closed`, the content playing again as `.interrupted`.
+- ``AdFormat/pause``: over the player while the content is paused, a card over its top or bottom or the whole
+  player; the server decides which, and ``VideoAd/position`` says it. Show either with
+  ``VideoAd/show(in:insets:)``; it ends when the viewer closes it or the content plays again, or with
+  ``VideoAd/dismiss()``. An ad that is the whole player (`.fullscreen`) fills the view and has a Resume of
+  its own, which ends it as `.resumed`: play the content then.
 - ``AdFormat/linear``: a full-screen video at a moment you pick. Show it with ``VideoAd/show(from:)``; only
   the SDK dismisses it.
 

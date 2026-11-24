@@ -9,7 +9,8 @@ struct AdDescriptor {
     let price: VideoAd.Price
     /// `nil` for a linear ad.
     let position: VideoAd.Position?
-    /// Every size the creative was built for, the default first; the SDK picks one at `show`.
+    /// Every size the creative was built for, the default first; the SDK picks one at `show`. Empty for a
+    /// linear ad and a full-screen pause ad.
     let sizes: [VideoAd.Size]
     /// The default variant.
     var size: VideoAd.Size? { sizes.first }
@@ -58,12 +59,8 @@ struct AdDescriptor {
             switch wirePosition {
             case .top: position = .top
             case .bottom: position = .bottom
+            case .fullscreen: position = .fullscreen
             }
-            duration = nil
-            skipOffset = nil
-        case .pauseFullscreen:
-            position = .fullscreen
-            sizes = []
             duration = nil
             skipOffset = nil
         case .linear(let wireDuration, let wireSkipOffset):

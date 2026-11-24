@@ -90,6 +90,8 @@ extension VideoAdError {
         case geoRestricted
         /// The server's side; ask again later.
         case temporaryError
+        /// The server turned the request away as invalid traffic (a data centre address, an automated client).
+        case invalidTraffic
         /// The SDK's own: the answer was an ad the app had just shown or rejected while the request ran.
         case alreadyUsed
         /// The server gave no reason, or one the SDK could not read.
@@ -106,6 +108,7 @@ extension VideoAdError {
             case .frequencyCap: return "frequencyCap"
             case .geoRestricted: return "geoRestricted"
             case .temporaryError: return "temporaryError"
+            case .invalidTraffic: return "invalidTraffic"
             case .alreadyUsed: return "alreadyUsed"
             case .unknown: return "unknown"
             case .other(let raw): return raw

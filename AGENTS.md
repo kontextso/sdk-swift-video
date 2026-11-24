@@ -45,8 +45,8 @@ swiftlint analyze --strict --compiler-log-path xcodebuild.log
 
 Check the exit status of `xcodebuild` itself, not of a `grep` piped after it: a red test run must not pass for
 green. CI builds with Xcode 16.4 (iOS 18 SDK), which can warn where a newer local Xcode does not. The example (`Example/`, XcodeGen) talks to
-the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: five videos (two overlay, one
-linear, two pause); the overlay and linear ads show 3 s in, a pause ad when the viewer pauses. See
+the ad server by default, or the mock `sdk-video-mock-server` on `localhost:5175` through `adServerURL`: four videos (two overlay, one
+linear, one pause); the overlay and linear ads show 3 s in, a pause ad when the viewer pauses. See
 [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Architecture

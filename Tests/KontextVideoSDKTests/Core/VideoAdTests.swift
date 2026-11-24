@@ -89,19 +89,21 @@ struct VideoAdTests {
     @Test func overlayAdExposesSeconds() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.ad(id: "o1", format: "overlay", position: "bottom", duration: 6000))
         #expect(ad.format == .overlay)
-        #expect(ad.descriptor.position == .bottom)
+        #expect(ad.position == .bottom)
         #expect(ad.duration == 6)
         #expect(ad.isReady)
     }
 
     @Test func linearAdExposesVideoFacts() async throws {
         let (ad, _, _) = try await makeAd(Fixtures.linearAd(id: "i1", duration: 15_000, skipOffset: 5000))
-        #expect(ad.descriptor.position == nil)
+        #expect(ad.position == nil, "a linear ad has no position")
         #expect(ad.descriptor.size == nil)
         #expect(ad.duration == 15)
         #expect(ad.descriptor.skipOffset == 5)
-        let (fullscreen, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p2"))
-        #expect(fullscreen.descriptor.position == .fullscreen)
+        let (fullscreen, _, _) = try await makeAd(Fixtures.fullscreenPauseAd(id: "p2"))
+        #expect(fullscreen.format == .pause && fullscreen.position == .fullscreen, "the whole player, known before show")
+        let (card, _, _) = try await makeAd(Fixtures.ad(id: "p2c", position: "top"))
+        #expect(card.format == .pause && card.position == .top)
         #expect(fullscreen.descriptor.size == nil)
     }
 
@@ -163,7 +165,7 @@ struct VideoAdTests {
     }
 
     @Test func fullscreenPauseAdFillsThePlayer() async throws {
-        let (ad, _, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p6"))
+        let (ad, _, _) = try await makeAd(Fixtures.fullscreenPauseAd(id: "p6"))
         try ad.show(in: harness.player.view)
         let frame = try #require(adFrame(in: harness.player.view))
         #expect(frame == harness.player.view.bounds)
@@ -366,14 +368,14 @@ struct VideoAdTests {
     }
 
     @Test func resumeEndsWithResumed() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p13"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.fullscreenPauseAd(id: "p13"))
         try ad.show(in: harness.player.view)
         send(ad, "ad.close", ["reason": "resume"])
         #expect(delegate.endReasons == [.resumed])
     }
 
     @Test func aPauseAdsVideoCompletingDoesNotChangeHowItsCloseEnds() async throws {
-        let (ad, delegate, _) = try await makeAd(Fixtures.pauseFullscreenAd(id: "p13v", creative: "video"))
+        let (ad, delegate, _) = try await makeAd(Fixtures.fullscreenPauseAd(id: "p13v", creative: "video"))
         try ad.show(in: harness.player.view)
         send(ad, "video.start", ["playhead": 0])
         send(ad, "video.complete", ["playhead": 6000])

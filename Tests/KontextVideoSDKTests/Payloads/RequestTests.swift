@@ -5,7 +5,7 @@ import Foundation
 import Testing
 import UIKit
 
-/// What the SDK sends: the `/config` and `/video/ads` bodies, the player snapshot, device facts, privacy.
+/// What the SDK sends: the `/config` and `/preload` bodies, the player snapshot, device facts, privacy.
 extension SerialSuites {
 @Suite
 @MainActor
@@ -67,7 +67,7 @@ struct RequestTests {
     }
 
     @Test func aCOPPARequestCarriesTheUserIdButNoOtherIdentifier() async throws {
-        KontextVideo.shared.user = KontextVideo.User(id: "u1", email: "kid@example.com", emailHash: "h", keywords: ["cartoons"])
+        KontextVideo.shared.user = KontextVideo.User(id: "u1", email: "kid@example.com", emailHash: "h")
         KontextVideo.shared.regulatory = KontextVideo.Regulatory(coppa: true)
         let json = try await bareRequest(tracking: TrackingInfo(ifa: IFA(id: "6D92078A-8246-4BA4-AE5B-76104861E7DC"), status: .authorized))
         #expect(json["ifa"] == nil, "no advertising id for a child")
@@ -75,7 +75,7 @@ struct RequestTests {
         #expect(json["installId"] is String, "the install id stays")
         let user = json["user"] as? [String: Any]
         #expect(user?["id"] as? String == "u1", "the user id stays: the server keeps it from buyers")
-        #expect(user?["keywords"] as? [String] == ["cartoons"])
+        #expect(user?.count == 1, "the id only")
         #expect(user?["email"] == nil && user?["emailHash"] == nil, "no email or hash for a child")
         #expect((json["regulatory"] as? [String: Any])?["coppa"] as? Bool == true)
 

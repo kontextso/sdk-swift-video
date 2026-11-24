@@ -318,7 +318,7 @@ struct SDKHarness {
 
     /// Answers every ads request with `ad` for its own format and a no-fill for the others.
     func serve(_ ad: [String: Any], delay: TimeInterval = 0, gate: StubServer.Gate? = nil) {
-        server.on("/v2/video/ads") { _ in
+        server.on("/v2/preload") { _ in
             var response = StubServer.Response.json(Fixtures.adsResponse(ad))
             response.delay = delay
             response.gate = gate
@@ -328,7 +328,7 @@ struct SDKHarness {
 
     /// Answers every ads request with one entry per format: `entries` by format name, a no-fill for the rest.
     func serve(formats entries: [String: [String: Any]], delay: TimeInterval = 0, gate: StubServer.Gate? = nil) {
-        server.on("/v2/video/ads") { _ in
+        server.on("/v2/preload") { _ in
             var response = StubServer.Response.json(Fixtures.adsResponse(formats: entries))
             response.delay = delay
             response.gate = gate
@@ -347,8 +347,8 @@ struct SDKHarness {
         await waitUntil { self.beaconNames().contains(name) }
     }
 
-    /// The `/video/ads` requests the SDK sent, in order.
-    var adsRequests: [StubServer.Recorded] { server.requests(to: "/v2/video/ads") }
+    /// The `/preload` requests the SDK sent, in order.
+    var adsRequests: [StubServer.Recorded] { server.requests(to: "/v2/preload") }
 
     static func reset() {
         KontextVideo.shared.resetForTesting()

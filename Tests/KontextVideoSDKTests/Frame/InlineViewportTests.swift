@@ -40,8 +40,8 @@ struct InlineViewportTests {
         _ = await KontextVideo.shared.initialize(with: harness.configuration)
         let ads = harness.player.ads(for: .init(id: "100001-6", language: "en", title: "Episode 6", duration: 92))
         let id = "img-viewport-\(position)"
-        let format: AdFormat = position == "fullscreen" ? .pauseFullscreen : .pause
-        harness.serve(Fixtures.ad(id: id, format: format.rawValue, position: position, size: format == .pause ? ["width": 300, "height": 300] : nil,
+        let format = AdFormat.pause
+        harness.serve(Fixtures.ad(id: id, format: format.rawValue, position: position, size: position == "fullscreen" ? nil : ["width": 300, "height": 300],
                                   frameURL: "\(Fixtures.frameOrigin)/frame/\(id)?cover=1"))
         let ad = try await ads.format(format)
         try await ad.load()

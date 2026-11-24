@@ -81,7 +81,7 @@ struct ErrorReporterTests {
         defer { gate.open() }
         var failing = StubServer.Response.json(Fixtures.errors("internal", status: 500), status: 500)
         failing.gate = gate
-        harness.server.on("/v2/video/ads", failing)
+        harness.server.on("/v2/preload", failing)
         let calls = AdFormat.allCases.map { format in Task { try? await ads.format(format) } }
         #expect(await waitUntil { self.harness.adsRequests.count == 1 })
         gate.open()
@@ -106,7 +106,7 @@ struct ErrorReporterTests {
     @Test func anAnswerThatBreaksTheContractIsADecodeFailure() async {
         await enableReports()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
-        harness.server.on("/v2/video/ads", .json(["nonsense": true]))
+        harness.server.on("/v2/preload", .json(["nonsense": true]))
         _ = try? await ads.format(.pause)
         #expect(await waitUntil { !self.reports("ads.decode_failed").isEmpty })
         #expect(reports("ads.request_failed").isEmpty)
@@ -117,7 +117,7 @@ struct ErrorReporterTests {
         KontextVideo.shared.user = .init(id: "user-secret-1", email: "secret@example.com")
         KontextVideo.shared.regulatory = .init(gdprConsent: "CONSENT-SECRET")
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
-        harness.server.on("/v2/video/ads", .json(Fixtures.errors("internal", status: 500), status: 500))
+        harness.server.on("/v2/preload", .json(Fixtures.errors("internal", status: 500), status: 500))
         _ = try? await ads.format(.pause)
         #expect(await waitUntil { !self.harness.server.requests(to: "/v2/error").isEmpty })
         let request = try #require(harness.server.requests(to: "/v2/error").first)
@@ -291,7 +291,7 @@ struct ErrorReporterTests {
         await enableReports()
         let ads = harness.player.ads(for: .init(id: "ep", language: "en"))
         let free = "contact secret@example.com at https://evil.test/x"
-        harness.server.on("/v2/video/ads", .json(Fixtures.noFill(free)))
+        harness.server.on("/v2/preload", .json(Fixtures.noFill(free)))
         _ = try? await ads.format(.pause)
         reporter.report(.skanFailed, detail: "start")   // any fault after it carries the history
         #expect(await waitUntil { !self.reports("skan.failed").isEmpty })
@@ -353,7 +353,7 @@ struct ErrorReporterTests {
         defer { gate.open() }
         var failing = StubServer.Response.json(Fixtures.errors("internal", status: 500), status: 500)
         failing.gate = gate
-        harness.server.on("/v2/video/ads", failing)
+        harness.server.on("/v2/preload", failing)
         let call = Task { try? await ads.format(.pause) }
         #expect(await waitUntil { self.harness.adsRequests.count == 2 })
         advanceClock(by: 31)   // the held ad expires while the request is out

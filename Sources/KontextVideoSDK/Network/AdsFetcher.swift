@@ -105,7 +105,7 @@ final class AdsFetcher {
             // 5. The POST, and the ids against what is held.
             let response: AdsResponse
             do {
-                response = try await APIClient(baseURL: body.adServerURL).post("video/ads", body: body)
+                response = try await APIClient(baseURL: body.adServerURL).post("preload", body: body)
                 Environment.adsAnswerArrived()
                 // The kill switch before anything asks for the owner: it switches the whole SDK off even when this
                 // `VideoAds` was destroyed or released as the answer came, or other videos would go on requesting.

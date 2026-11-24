@@ -58,9 +58,9 @@ struct RedirectLimitTests {
     }
 
     @Test func theDelegateRefusesADowngradeOfAnAPIRequest() {
-        let task = URLSession.shared.dataTask(with: URL(string: "https://a.test/v2/video/ads")!)
-        let response = HTTPURLResponse(url: URL(string: "https://a.test/v2/video/ads")!, statusCode: 307, httpVersion: nil, headerFields: nil)!
-        let downgrade = URLRequest(url: URL(string: "http://a.test/v2/video/ads")!)
+        let task = URLSession.shared.dataTask(with: URL(string: "https://a.test/v2/preload")!)
+        let response = HTTPURLResponse(url: URL(string: "https://a.test/v2/preload")!, statusCode: 307, httpVersion: nil, headerFields: nil)!
+        let downgrade = URLRequest(url: URL(string: "http://a.test/v2/preload")!)
         for (allowsDowngrade, expected) in [(false, false), (true, true)] {
             let followed = Followed()
             RedirectLimit(allowsDowngrade: allowsDowngrade).urlSession(.shared, task: task, willPerformHTTPRedirection: response,
